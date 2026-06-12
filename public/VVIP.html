@@ -250,7 +250,7 @@ html.dark .brand-text { color: #f1f5f9; }
 .tbl-wrap { overflow-x: auto; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tbl th { background: var(--bg); color: var(--text-muted); text-align: start; padding: 12px 14px; font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
-.tbl td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.tbl td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13.5px; }
 .tbl tr:hover td { background: var(--bg); }
 .tbl tbody tr:last-child td { border-bottom: 0; }
 
@@ -716,8 +716,7 @@ function nextId(db, key) { const id = db.nextId[key]||1; db.nextId[key] = id+1; 
 
 // ============ HELPERS ============
 function fmtMoney(n) {
-  const v = Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  return `${v} ${lang==='ar'?'ر.س':'SAR'}`;
+  return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtDate(s) {
   try { return new Date(s).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); } catch { return s; }
@@ -752,7 +751,7 @@ function showToast(msg, type='success') {
   toastTimer = setTimeout(() => { el.style.display='none'; }, 3000);
 }
 function icon(name, size=18) { return `<i data-lucide="${name}" style="width:${size}px;height:${size}px;display:inline-block;vertical-align:middle;"></i>`; }
-function refreshIcons() { if(window.lucide) lucide.createIcons(); }
+function refreshIcons() { if(window.lucide) lucide.createIcons({icons: lucide.icons}); }
 function el(id) { return document.getElementById(id); }
 function $q(sel,ctx) { return (ctx||document).querySelector(sel); }
 function $qa(sel,ctx) { return [...(ctx||document).querySelectorAll(sel)]; }
@@ -1772,7 +1771,7 @@ function renderPOS(sc) {
       <div style="padding:12px;border-top:1px solid var(--border);background:var(--bg);">
         <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
           ${icon('tag',14)}
-          <input class="input" type="number" placeholder="${t('discount')} ر.س"
+          <input class="input" type="number" placeholder="${t('discount')}"
             value="${posDiscount||''}" oninput="posDiscount=this.value;updatePOSTotals()"
             style="flex:1;" />
         </div>
@@ -2226,10 +2225,10 @@ function printPOSReceipt(id) {
     <span style="text-align:end;" class="bold">${Number(i.line_total||i.qty*i.price).toFixed(2)}</span>
   </div>`).join('')}
   <div class="dashed"></div>
-  <div class="row muted"><span>المجموع قبل الضريبة:</span><span>${Number(inv.subtotal).toFixed(2)} ر.س</span></div>
-  ${inv.discount?`<div class="row" style="color:#dc2626;"><span>الخصم:</span><span>- ${Number(inv.discount).toFixed(2)} ر.س</span></div>`:''}
-  <div class="row muted"><span>ضريبة القيمة المضافة (15%):</span><span>${Number(inv.vat_total).toFixed(2)} ر.س</span></div>
-  <div class="total-line"><span>الإجمالي النهائي:</span><span>${Number(inv.grand_total).toFixed(2)} ر.س</span></div>
+  <div class="row muted"><span>المجموع قبل الضريبة:</span><span>${Number(inv.subtotal).toFixed(2)}</span></div>
+  ${inv.discount?`<div class="row" style="color:#dc2626;"><span>الخصم:</span><span>- ${Number(inv.discount).toFixed(2)}</span></div>`:''}
+  <div class="row muted"><span>ضريبة القيمة المضافة (15%):</span><span>${Number(inv.vat_total).toFixed(2)}</span></div>
+  <div class="total-line"><span>الإجمالي النهائي:</span><span>${Number(inv.grand_total).toFixed(2)}</span></div>
   <div class="dashed"></div>
   <div id="qr-div"></div>
   <div class="center muted" style="font-size:10px;margin-bottom:4px;">امسح رمز QR للتحقق من الفاتورة</div>
@@ -2468,7 +2467,7 @@ function showNewInvoiceModal() {
         <!-- Left: summary -->
         <div style="background:var(--bg);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;height:fit-content;position:sticky;top:0;">
           <div style="font-weight:800;font-size:14px;margin-bottom:4px;">📊 ${lang==='ar'?'ملخص الحسابات':'Summary'}</div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'المجموع الجزئي:':'Subtotal:'}</span><span id="ni-sum-sub">0.00 ر.س</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'المجموع الجزئي:':'Subtotal:'}</span><span id="ni-sum-sub">0.00</span></div>
           <div>
             <label class="form-label" style="font-size:11px;">${lang==='ar'?'الخصم المالي:':'Discount:'}</label>
             <div style="display:flex;gap:6px;">
@@ -2485,17 +2484,17 @@ function showNewInvoiceModal() {
             <span style="font-weight:700;font-size:13px;">${db.settings?.vat_number?'✅':''} ${lang==='ar'?'ضريبة القيمة المضافة 15%':'VAT 15%'}${!db.settings?.vat_number?` <span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'يتطلب رقم ضريبي':'requires VAT number'})</span>`:''}</span>
           </label>
           <hr style="border-color:var(--border);">
-          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'قيمة الخصم:':'Discount:'}</span><span id="ni-sum-disc" style="color:var(--danger);">0.00 ر.س</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'ضريبة القيمة المضافة:':'VAT:'}</span><span id="ni-sum-vat">0.00 ر.س</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'قيمة الخصم:':'Discount:'}</span><span id="ni-sum-disc" style="color:var(--danger);">0.00</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'ضريبة القيمة المضافة:':'VAT:'}</span><span id="ni-sum-vat">0.00</span></div>
           <div style="display:flex;justify-content:space-between;font-weight:900;font-size:18px;color:var(--primary);border-top:2px solid var(--primary-soft);padding-top:10px;">
-            <span>${lang==='ar'?'الإجمالي النهائي:':'Total:'}</span><span id="ni-sum-total">0.00 ر.س</span>
+            <span>${lang==='ar'?'الإجمالي النهائي:':'Total:'}</span><span id="ni-sum-total">0.00</span>
           </div>
           <div id="ni-partial-field" style="display:none;">
             <label class="form-label">${lang==='ar'?'المبلغ المسدد الآن:':'Amount Paid Now:'}</label>
             <input class="input" type="number" id="ni-partial-amount" value="0" min="0" oninput="calcNewInvTotals()" />
             <div id="ni-remaining-display" style="margin-top:8px;padding:10px 14px;background:#fee2e2;border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
               <span style="font-size:13px;font-weight:700;color:#b91c1c;">${lang==='ar'?'المتبقي على العميل (يُضاف لذمم العميل):':'Remaining (added to customer balance):'}</span>
-              <span id="ni-remaining-val" style="font-size:15px;font-weight:900;color:#dc2626;">0.00 ر.س</span>
+              <span id="ni-remaining-val" style="font-size:15px;font-weight:900;color:#dc2626;">0.00</span>
             </div>
           </div>
         </div>
@@ -3129,12 +3128,12 @@ function showAddOpexPurchase() {
         </div>
         <div>
           <label class="form-label">${lang==='ar'?'ضريبة 15%':'VAT 15%'}</label>
-          <input class="input" id="p-vat" readonly value="0.00 ر.س" style="background:var(--bg);" />
+          <input class="input" id="p-vat" readonly value="0.00" style="background:var(--bg);" />
         </div>
       </div>
       <div style="background:var(--bg);padding:12px;border-radius:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
         <span style="font-weight:700;">${lang==='ar'?'الإجمالي شامل الضريبة:':'Total incl. VAT:'}</span>
-        <span style="font-size:18px;font-weight:900;color:var(--primary);" id="opex-total">0.00 ر.س</span>
+        <span style="font-size:18px;font-weight:900;color:var(--primary);" id="opex-total">0.00</span>
       </div>
       <div style="margin-bottom:16px;">
         <label class="form-label">${lang==='ar'?'التاريخ':'Date'}</label>
@@ -3195,9 +3194,9 @@ function showAddGoodsPurchase(keepItems) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div>
           <div style="background:var(--bg);padding:12px;border-radius:10px;margin-bottom:12px;">
-            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${lang==='ar'?'المجموع قبل الضريبة:':'Subtotal:'}</span><span id="gp-sub">0.00 ر.س</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${lang==='ar'?'ضريبة 15%:':'VAT 15%:'}</span><span id="gp-vat-val">0.00 ر.س</span></div>
-            <div style="display:flex;justify-content:space-between;font-weight:900;font-size:16px;color:var(--primary);border-top:2px solid var(--border);padding-top:8px;margin-top:4px;"><span>${lang==='ar'?'الإجمالي:':'Total:'}</span><span id="gp-total">0.00 ر.س</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${lang==='ar'?'المجموع قبل الضريبة:':'Subtotal:'}</span><span id="gp-sub">0.00</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${lang==='ar'?'ضريبة 15%:':'VAT 15%:'}</span><span id="gp-vat-val">0.00</span></div>
+            <div style="display:flex;justify-content:space-between;font-weight:900;font-size:16px;color:var(--primary);border-top:2px solid var(--border);padding-top:8px;margin-top:4px;"><span>${lang==='ar'?'الإجمالي:':'Total:'}</span><span id="gp-total">0.00</span></div>
           </div>
         </div>
         <div>
@@ -4265,7 +4264,7 @@ function printARAPReport(section='all') {
   const totalCustOutstanding = custData.reduce((s,r)=>s+r.outstanding,0);
   const totalSuppOutstanding = suppData.reduce((s,r)=>s+r.outstanding,0);
 
-  const fmt = n => n.toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2})+' ر.س';
+  const fmt = n => n.toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2})+'';
 
   const custRows = custData.map(r=>`
     <tr>
@@ -6047,10 +6046,10 @@ function showReturnModal(type) {
 
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'الضريبة المسترجعة 15%':'VAT Refund 15%'}</label>
-          <input class="input" id="rt-vat" readonly value="0.00 ر.س" style="background:var(--bg);" />
+          <input class="input" id="rt-vat" readonly value="0.00" style="background:var(--bg);" />
         </div>
         <div><label class="form-label">${lang==='ar'?'المبلغ قبل الضريبة':'Amount before VAT'}</label>
-          <input class="input" id="rt-base" readonly value="0.00 ر.س" style="background:var(--bg);" />
+          <input class="input" id="rt-base" readonly value="0.00" style="background:var(--bg);" />
         </div>
       </div>
 
@@ -7653,19 +7652,19 @@ function printShiftReport(shiftId) {
   <div class="row"><span>مدة الوردية:</span><span>${Math.floor(dur/60)}h ${dur%60}m</span></div>
   <div class="row"><span>عدد الفواتير:</span><b>${shift.invoices_count||0}</b></div>
   <div style="margin-top:16px;background:#f8fafc;padding:14px;border-radius:8px;">
-    <div class="row"><span>💵 نقدي:</span><b style="color:#16a34a;">${Number(shift.sales_cash||0).toFixed(2)} ر.س</b></div>
-    <div class="row"><span>💳 شبكة:</span><b style="color:#1e40af;">${Number(shift.sales_card||0).toFixed(2)} ر.س</b></div>
-    <div class="row"><span>🏦 تحويل:</span><b style="color:#0ea5e9;">${Number(shift.sales_transfer||0).toFixed(2)} ر.س</b></div>
-    <div class="row"><span>📋 آجل:</span><b style="color:#dc2626;">${Number(shift.sales_credit||0).toFixed(2)} ر.س</b></div>
-    <div class="row total"><span>الإجمالي:</span><span>${Number(total).toFixed(2)} ر.س</span></div>
+    <div class="row"><span>💵 نقدي:</span><b style="color:#16a34a;">${Number(shift.sales_cash||0).toFixed(2)}</b></div>
+    <div class="row"><span>💳 شبكة:</span><b style="color:#1e40af;">${Number(shift.sales_card||0).toFixed(2)}</b></div>
+    <div class="row"><span>🏦 تحويل:</span><b style="color:#0ea5e9;">${Number(shift.sales_transfer||0).toFixed(2)}</b></div>
+    <div class="row"><span>📋 آجل:</span><b style="color:#dc2626;">${Number(shift.sales_credit||0).toFixed(2)}</b></div>
+    <div class="row total"><span>الإجمالي:</span><span>${Number(total).toFixed(2)}</span></div>
   </div>
   <div style="margin-top:12px;background:#dcfce7;padding:12px;border-radius:8px;font-weight:800;">
-    💡 الكاش المتوقع في الدرج: <span style="color:#15803d;font-size:18px;">${Number(shift.sales_cash||0).toFixed(2)} ر.س</span>
+    💡 الكاش المتوقع في الدرج: <span style="color:#15803d;font-size:18px;">${Number(shift.sales_cash||0).toFixed(2)}</span>
   </div>
   ${invs.length>0?`<table><thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الوقت</th><th>الإجمالي</th><th>الدفع</th></tr></thead>
   <tbody>${invs.map(i=>`<tr><td>${i.invoice_no}</td><td>${i.customer_name}</td>
     <td>${new Date(i.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
-    <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)} ر.س</td>
+    <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
     <td>${i.payment_method}</td></tr>`).join('')}</tbody></table>`:''}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
@@ -8476,9 +8475,9 @@ function renderSettingsGeneral(c) {
     ${(()=>{
       const planMeta = {
         trial:  {label:'تجريبية', color:'#0891b2', bg:'#cffafe', icon:'🎁', desc:'جميع الميزات · 14 يوم مجاناً'},
-        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 149 ر.س/شهر'},
-        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 299 ر.س/شهر'},
-        pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499 ر.س/شهر'},
+        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 149/شهر'},
+        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 299/شهر'},
+        pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499/شهر'},
       };
       const cur = getCurrentPlan();
       const p = planMeta[cur] || planMeta.trial;
@@ -9353,7 +9352,7 @@ function exportCustomerStatementPDF(customerId) {
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
     <div><div style="font-weight:900;font-size:16px;">${customer.name}</div><div style="font-size:12px;color:#64748b;">${customer.phone||''}</div>${customer.vat_num?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${customer.vat_num}</div>`:''}</div>
-    <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">الرصيد المستحق</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)} ر.س</div></div>
+    <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">الرصيد المستحق</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>
     <thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
@@ -9402,7 +9401,7 @@ function exportSupplierStatementPDF(supplierName) {
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
     <div><div style="font-weight:900;font-size:16px;">${supplier.name}</div><div style="font-size:12px;color:#64748b;">${supplier.phone||''}</div></div>
-    <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">المستحق للمورد</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)} ر.س</div></div>
+    <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">المستحق للمورد</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>
     <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
