@@ -64,7 +64,6 @@ html.dark .login-card { background: #1e293b; }
 html.dark .user-pill { background: #0f172a; }
 html.dark .tabs { background: #0f172a; }
 html.dark .tab-btn.active { background: #1e293b; }
-html.dark .demo-card { background: #1e3a5f; border-color: #2563eb; }
 html.dark .qty-btn { background: #0f172a; border-color: var(--border); color: var(--text-main); }
 html.dark .search-dropdown { background: #1e293b; }
 html.dark .search-item:hover { background: var(--primary-soft); }
@@ -285,8 +284,7 @@ html.dark .brand-text { color: #f1f5f9; }
 }
 .login-title { font-size: 26px; font-weight: 900; text-align: center; color: var(--text-main); }
 .login-sub { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 28px; margin-top: 4px; }
-.demo-card { background: linear-gradient(135deg, var(--primary-soft) 0%, #e0f2fe 100%); border-radius: 12px; padding: 14px; margin-top: 16px; border: 1px solid #bfdbfe; }
-.demo-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; }
+
 
 /* Modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -791,12 +789,6 @@ function renderLogin() {
       <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
-      <div class="demo-card">
-        <div style="font-weight:800;font-size:12px;margin-bottom:8px;color:var(--primary-dark);">🔑 ${t('demoAccounts')}</div>
-        <div class="demo-row"><span>👑 ${t('owner')}</span><code style="background:white;padding:2px 8px;border-radius:6px;">owner / 1234</code></div>
-        <div class="demo-row"><span>📋 ${t('accountant')}</span><code style="background:white;padding:2px 8px;border-radius:6px;">accountant / 1234</code></div>
-        <div class="demo-row"><span>💰 ${t('cashier')}</span><code style="background:white;padding:2px 8px;border-radius:6px;">cashier / 1234</code></div>
-      </div>
     </div>
   </div>`;
   el('l-user').focus();
