@@ -8675,9 +8675,10 @@ function doGlobalSearch(q) {
   // زر AI — للباقات التي تملك ai_analyze فقط (لا الأساسية)
   const token = localStorage.getItem('yaqiz_access_token');
   if (token && q.trim().length >= 2 && hasPlanFeature('ai_analyze')) {
+    window._lastAIQuery = q;
     html += `
     <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
-      <div class="search-item" onclick="runAISearchQuery('${q.replace(/'/g,"\\'")}')" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-radius:8px;">
+      <div class="search-item" onclick="runAISearchQuery(window._lastAIQuery)" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-radius:8px;">
         <div class="search-item-icon" style="color:#6366f1;">✨</div>
         <div>
           <div class="search-item-name" style="color:#4f46e5;">${lang==='ar'?'اسأل يقظ الذكي:':'Ask Yaqiz AI:'} "${q}"</div>
