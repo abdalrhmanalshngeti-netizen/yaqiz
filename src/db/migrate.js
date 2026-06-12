@@ -26,4 +26,12 @@ async function migrate() {
   await db.pool.end();
 }
 
-migrate();
+// timeout يضمن خروج العملية خلال 60 ثانية حتى لو تعلقت
+const killer = setTimeout(() => {
+  console.log('⏱ Migration timeout — continuing to app start');
+  process.exit(0);
+}, 60000);
+
+migrate()
+  .then(() => { clearTimeout(killer); process.exit(0); })
+  .catch(err => { clearTimeout(killer); console.error('Migration fatal:', err.message); process.exit(0); });
