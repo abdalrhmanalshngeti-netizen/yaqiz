@@ -7770,14 +7770,39 @@ function showAddInventoryMenu() {
           onclick="closeModal();showProductModal()">
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
-        <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;"
-          onclick="closeModal();showImportModal('inventory')">
-          ${icon('upload',18)} ${lang==='ar'?'استيراد ملف (Excel أو PDF)':'Import File (Excel or PDF)'}
-        </button>
+        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;">
+          ${icon('upload',18)} ${lang==='ar'?'رفع ملف (Excel أو PDF أو صورة)':'Upload File (Excel, PDF or Image)'}
+          <input type="file" accept=".xlsx,.xls,.csv,.pdf,image/*" style="display:none"
+            onchange="closeModal();handleInventoryFileImport(this.files[0])"/>
+        </label>
       </div>
     </div>
   </div>`;
   refreshIcons();
+}
+
+function handleInventoryFileImport(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (['xlsx','xls','csv'].includes(ext)) {
+    showImportModal('inventory');
+  } else {
+    handleSilentAIImport(file, 'inventory');
+  }
+}
+
+function openInventoryFormWithAIData(data) {
+  if (!data || typeof data !== 'object') { showToast(lang==='ar'?'⚠️ لم يتمكن من قراءة البيانات':'Could not read data'); return; }
+  const items = Array.isArray(data.items) && data.items.length > 0 ? data.items : [{description: data.vendor||'منتج', qty:1, unit_price: data.grand_total||0, total: data.grand_total||0}];
+  const first = items[0];
+  closeModal();
+  showProductModal();
+  setTimeout(() => {
+    if (el('pr-name'))  el('pr-name').value  = first.description || data.vendor || '';
+    if (el('pr-buy'))   el('pr-buy').value   = parseFloat(first.unit_price) || parseFloat(first.total) || 0;
+    if (el('pr-sell'))  el('pr-sell').value  = parseFloat(first.unit_price) || parseFloat(first.total) || 0;
+    if (el('pr-qty'))   el('pr-qty').value   = parseFloat(first.qty) || 1;
+  }, 100);
 }
 
 function downloadTemplate(type) {
@@ -9565,7 +9590,11 @@ async function handleSilentAIImport(file, docType) {
       payload = { image_base64: b64, mime_type: 'image/jpeg' };
     }
     const result = await _aiApiFetch('extract', payload);
-    openPurchaseFormWithAIData(result.data, null);
+    if (docType === 'inventory') {
+      openInventoryFormWithAIData(result.data);
+    } else {
+      openPurchaseFormWithAIData(result.data, null);
+    }
   } catch (err) {
     mc.innerHTML = `
     <div class="modal-bg" onclick="closeModal()">
