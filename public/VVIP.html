@@ -9759,12 +9759,15 @@ async function runAIAnalysis() {
 }
 
 async function runAISearchQuery(q) {
-  const dd = el('search-dropdown');
-  if (!dd) return;
-  dd.style.display = 'block';
-  dd.innerHTML = `<div style="padding:16px;text-align:center;">
-    <div style="font-size:28px;margin-bottom:8px;animation:spin 2s linear infinite;display:inline-block;">🤖</div>
-    <div style="color:#4f46e5;font-weight:700;">${lang==='ar'?'يقظ الذكي يفكر...':'Yaqiz AI thinking...'}</div>
+  closeSearch();
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg">
+    <div class="modal" style="max-width:420px;text-align:center;padding:40px 24px;">
+      <div style="font-size:44px;margin-bottom:12px;animation:spin 2s linear infinite;display:inline-block;">🤖</div>
+      <div style="font-weight:700;font-size:16px;color:#4f46e5;">${lang==='ar'?'يقظ الذكي يفكر...':'Yaqiz AI thinking...'}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">"${q}"</div>
+    </div>
   </div>`;
 
   try {
@@ -9798,23 +9801,33 @@ async function runAISearchQuery(q) {
     clearTimeout(timer);
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.message || 'خطأ');
-    dd.innerHTML = `
-      <div style="padding:16px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-          <span style="font-size:20px;">🤖</span>
-          <span style="font-weight:800;color:#4f46e5;">${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}</span>
-          <span style="font-size:11px;color:var(--text-muted);margin-inline-start:auto;">${q}</span>
+    mc.innerHTML = `
+    <div class="modal-bg" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:520px;">
+        <div class="modal-head">
+          <h3 style="color:#4f46e5;">🤖 ${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}</h3>
+          <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
         </div>
-        <div style="font-size:13px;line-height:1.9;color:var(--text);background:var(--bg);border-radius:10px;padding:12px;">
+        <div style="padding:0 20px 8px;font-size:12px;color:var(--text-muted);">"${q}"</div>
+        <div style="padding:0 20px 20px;font-size:14px;line-height:2;color:var(--text-main);">
           ${(data.answer||'').replace(/\n/g,'<br>')}
         </div>
-        <div style="margin-top:10px;text-align:end;">
-          <button class="btn btn-outline btn-sm" onclick="closeSearch()">${lang==='ar'?'إغلاق':'Close'}</button>
+        <div style="padding:0 20px 20px;text-align:end;">
+          <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إغلاق':'Close'}</button>
         </div>
-      </div>`;
+      </div>
+    </div>`;
+    refreshIcons();
   } catch (err) {
     const msg = err.name==='AbortError'?(lang==='ar'?'انتهت المهلة':'Timed out'):err.message;
-    dd.innerHTML = `<div style="padding:16px;text-align:center;"><div style="font-size:28px;">⚠️</div><div style="color:var(--danger);font-size:13px;margin-top:8px;">${msg}</div><button class="btn btn-outline btn-sm" onclick="closeSearch()" style="margin-top:12px;">${lang==='ar'?'إغلاق':'Close'}</button></div>`;
+    mc.innerHTML = `
+    <div class="modal-bg" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+        <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
+        <div style="font-size:13px;color:var(--danger);margin-bottom:16px;">${msg}</div>
+        <button class="btn btn-primary" onclick="closeModal()">${lang==='ar'?'حسناً':'OK'}</button>
+      </div>
+    </div>`;
   }
 }
 </script>
