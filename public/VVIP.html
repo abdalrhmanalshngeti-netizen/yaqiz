@@ -9549,11 +9549,17 @@ async function handleSilentAIImport(file, docType) {
   try {
     let payload;
     if (file.type === 'application/pdf') {
+      // تحويل أول صفحة من الـ PDF لصورة وإرسالها للـ AI
       const ab = await file.arrayBuffer();
-      const bytes = new Uint8Array(ab);
-      let bin = ''; const cs = 8192;
-      for (let i = 0; i < bytes.length; i += cs) bin += String.fromCharCode(...bytes.subarray(i, i + cs));
-      payload = { pdf_base64: btoa(bin) };
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await pdfjsLib.getDocument({data: ab}).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({scale: 2.0});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+      const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+      payload = { image_base64: b64, mime_type: 'image/jpeg' };
     } else {
       const b64 = await _resizeImage(file);
       payload = { image_base64: b64, mime_type: 'image/jpeg' };
