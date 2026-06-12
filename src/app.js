@@ -9,6 +9,7 @@ const app = express();
 
 // ── Security & parsing ────────────────────────────────────────
 const isProduction = process.env.NODE_ENV === 'production';
+app.set('trust proxy', 1);
 
 // إعادة توجيه HTTP → HTTPS في الإنتاج
 if (isProduction) {
@@ -43,6 +44,8 @@ app.use(cors({
     if (!origin) return cb(null, true); // Postman أو server-to-server
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
     if (origin.startsWith('file://')) return cb(null, true);
+    const productionOrigins = ['https://yaqiz-production.up.railway.app', 'https://yaqiz.me', 'https://www.yaqiz.me'];
+    if (productionOrigins.includes(origin)) return cb(null, true);
     const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
     if (allowed.includes(origin) || allowed.includes('*')) return cb(null, true);
     cb(new Error('CORS not allowed for: ' + origin));
