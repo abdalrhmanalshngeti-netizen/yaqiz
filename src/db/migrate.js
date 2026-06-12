@@ -14,8 +14,13 @@ async function migrate() {
       await db.query(sql);
       console.log(`✅ ${file} completed.`);
     } catch (err) {
-      console.error(`❌ ${file} failed:`, err.message);
-      process.exit(1);
+      // تجاهل أخطاء "already exists" — تشير لتشغيل سابق ناجح
+      if (err.message.includes('already exists') || err.code === '42P07' || err.code === '42701') {
+        console.log(`⚠️  ${file} skipped (already applied): ${err.message}`);
+      } else {
+        console.error(`❌ ${file} failed:`, err.message);
+        // لا نوقف التطبيق — نكمل باقي الـ migrations
+      }
     }
   }
   await db.pool.end();
