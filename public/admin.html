@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>يقظ — لوحة المالك</title>
+<link rel="icon" type="image/svg+xml" id="adm-favicon">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="/public/chart.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070d1a;--surface:#0d1629;--card:#111d33;--border:#1a2942;--border2:#243352;
+  --blue:#3b82f6;--blue-d:#1d4ed8;--green:#10b981;--amber:#f59e0b;
+  --red:#ef4444;--purple:#8b5cf6;--cyan:#06b6d4;
+  --text:#f0f4ff;--muted:#6b7fa3;--muted2:#4a5878;
+}
+body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;font-weight:500}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at center,#0d1a3a 0%,#070d1a 70%)}
+.login-wrap{width:400px;background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:48px 40px;box-shadow:0 32px 80px rgba(0,0,0,.6)}
+.login-logo{width:72px;height:72px;border-radius:16px;overflow:hidden;margin:0 auto 12px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.login-title{font-size:26px;font-weight:900;text-align:center;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:32px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.field input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:13px 16px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;outline:none;transition:.2s}
+.field input:focus{border-color:var(--blue);background:#0a1428}
+.btn-login{width:100%;margin-top:8px;background:linear-gradient(135deg,var(--blue-d),var(--blue));color:#fff;border:none;border-radius:10px;padding:14px;font-family:'Tajawal',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;box-shadow:0 4px 24px rgba(59,130,246,.35)}
+.btn-login:hover{transform:translateY(-1px);box-shadow:0 8px 32px rgba(59,130,246,.5)}
+.btn-login:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.err-msg{color:#f87171;font-size:13px;font-weight:700;margin-bottom:10px;display:none;text-align:center}
+
+/* APP */
+#app{display:none}
+
+/* TOPBAR */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.brand-name{font-size:18px;font-weight:900}
+.brand-sub{font-size:11px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.status-dot{display:flex;align-items:center;gap:6px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;color:#34d399}
+.status-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.admin-badge{font-size:13px;font-weight:700;color:var(--muted)}
+.btn-logout{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#f87171;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:.2s}
+.btn-logout:hover{background:rgba(239,68,68,.2)}
+
+/* NAV TABS */
+.nav-tabs{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:4px;position:sticky;top:60px;z-index:99;overflow-x:auto}
+.nav-tab{display:flex;align-items:center;gap:7px;padding:14px 18px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;transition:.15s;margin-bottom:-1px}
+.nav-tab:hover{color:var(--text)}
+.nav-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.nav-tab .tab-badge{background:var(--red);color:#fff;border-radius:100px;min-width:18px;height:18px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+
+/* MAIN */
+.main{padding:24px 28px;max-width:1440px;margin:auto}
+.section{display:none}
+.section.active{display:block}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden;transition:.2s}
+.kpi-card:hover{transform:translateY(-2px)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.kpi-card.blue::before{background:var(--blue)}
+.kpi-card.green::before{background:var(--green)}
+.kpi-card.amber::before{background:var(--amber)}
+.kpi-card.red::before{background:var(--red)}
+.kpi-icon{font-size:26px;margin-bottom:10px}
+.kpi-label{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+.kpi-value{font-size:36px;font-weight:900;line-height:1;margin-bottom:5px;font-variant-numeric:tabular-nums}
+.kpi-sub{font-size:12px;font-weight:600;color:var(--muted)}
+.kpi-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:800;padding:3px 10px;border-radius:100px;margin-top:6px}
+.kpi-badge.up{background:rgba(16,185,129,.12);color:#34d399}
+.kpi-badge.warn{background:rgba(245,158,11,.12);color:#fbbf24}
+.kpi-badge.down{background:rgba(239,68,68,.12);color:#f87171}
+
+/* CHARTS */
+.charts-row{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px}
+.chart-card{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px}
+.chart-title{font-size:14px;font-weight:900;margin-bottom:3px}
+.chart-sub{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:16px}
+.chart-wrap{position:relative;height:200px}
+.status-legend{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.legend-item{display:flex;justify-content:space-between;align-items:center}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* PANEL */
+.panel{background:var(--card);border:1px solid var(--border2);border-radius:16px;overflow:hidden;margin-bottom:24px}
+.panel-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.panel-title{font-size:15px;font-weight:900}
+.panel-sub{font-size:12px;font-weight:600;color:var(--muted);margin-top:2px}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface);padding:10px 16px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.5px}
+td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;color:#c4d0e8}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* SECTION HEADER */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.sec-title{font-size:18px;font-weight:900}
+.sec-sub{font-size:12px;font-weight:600;color:var(--muted);margin-top:3px}
+.search-input{background:var(--card);border:1.5px solid var(--border2);border-radius:10px;padding:9px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;outline:none;transition:.2s;width:220px}
+.search-input:focus{border-color:var(--blue)}
+
+/* COST */
+.cost-section{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;margin-bottom:24px}
+.cost-settings{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.cost-input-wrap{flex:1;min-width:150px}
+.cost-input-wrap label{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.cost-input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;font-weight:700;outline:none;transition:.2s;text-align:center}
+.cost-input:focus{border-color:var(--blue)}
+.cost-body{display:grid;grid-template-columns:1fr 1.4fr;gap:20px}
+.cost-chart-wrap{position:relative;min-height:240px}
+.cost-table-wrap{overflow-x:auto}
+.cost-table{width:100%;border-collapse:collapse;font-size:13px}
+.cost-table th{background:var(--surface);padding:10px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.cost-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600;color:#c4d0e8}
+.cost-table tr:last-child td{border-bottom:none}
+.cost-table .total-row td{background:rgba(59,130,246,.08);border-top:2px solid var(--border2);color:var(--text);font-weight:900;font-size:14px}
+.cost-bar-inline{height:6px;border-radius:3px;background:var(--blue);opacity:.8;margin-top:4px}
+
+/* ACTIVITY */
+.activity-item{display:flex;align-items:flex-start;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:.15s}
+.activity-item:last-child{border-bottom:none}
+.activity-item:hover{background:rgba(255,255,255,.02)}
+.act-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:var(--blue);box-shadow:0 0 6px var(--blue)}
+.act-text{font-size:13px;font-weight:600;color:#c4d0e8;margin-bottom:2px}
+.act-meta{font-size:11px;font-weight:600;color:var(--muted)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:800}
+.badge.green{background:rgba(16,185,129,.12);color:#34d399;border:1px solid rgba(16,185,129,.2)}
+.badge.red{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+.badge.amber{background:rgba(245,158,11,.12);color:#fbbf24;border:1px solid rgba(245,158,11,.2)}
+.badge.blue{background:rgba(59,130,246,.12);color:#93c5fd;border:1px solid rgba(59,130,246,.2)}
+.badge.purple{background:rgba(139,92,246,.12);color:#c4b5fd;border:1px solid rgba(139,92,246,.2)}
+
+/* FILTER BTNS */
+.filter-btns{display:flex;gap:6px;flex-wrap:wrap}
+.fbtn{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
+.fbtn:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.fbtn.active{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:#93c5fd}
+
+/* ACTION BTNS */
+.abtn{border:none;border-radius:7px;padding:5px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
+.abtn.suspend{background:rgba(245,158,11,.12);color:#fbbf24}
+.abtn.activate{background:rgba(16,185,129,.12);color:#34d399}
+.abtn.cancel{background:rgba(239,68,68,.12);color:#f87171}
+.abtn.prog{background:rgba(245,158,11,.12);color:#fbbf24}
+.abtn.done{background:rgba(16,185,129,.12);color:#34d399}
+.abtn.open{background:rgba(239,68,68,.12);color:#f87171}
+
+/* HELPERS */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader{padding:30px;text-align:center;color:var(--muted);font-weight:700}
+.empty-state{text-align:center;padding:30px;color:var(--muted);font-size:13px;font-weight:600}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;z-index:9999;display:none;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login-screen">
+  <div class="login-wrap">
+    <div class="login-logo" id="adm-login-logo"></div>
+    <div class="login-title">لوحة المالك</div>
+    <div class="login-sub">منصة يقظ للمحاسبة — وصول حصري للمالك</div>
+    <div class="err-msg" id="l-err">بيانات غير صحيحة، حاول مجدداً</div>
+    <div class="field">
+      <label>اسم المستخدم</label>
+      <input type="text" id="l-user" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>كلمة المرور</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" onclick="doAdminLogin()">دخول</button>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:9px;overflow:hidden;flex-shrink:0;" id="adm-topbar-logo"></div>
+        <div>
+          <div class="brand-name">يقظ — لوحة المالك</div>
+          <div class="brand-sub">Owner Dashboard · منصة المحاسبة السعودية</div>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot">المنصة تعمل</div>
+      <div class="admin-badge">👤 <span id="admin-name">المالك</span></div>
+      <button class="btn-logout" onclick="doLogout()">خروج</button>
+    </div>
+  </div>
+
+  <!-- NAV TABS -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('dashboard')" id="tab-dashboard">📊 لوحة التحكم</button>
+    <button class="nav-tab" onclick="switchTab('companies')"  id="tab-companies">🏢 الشركات</button>
+    <button class="nav-tab" onclick="switchTab('users')"      id="tab-users">👥 المستخدمون</button>
+    <button class="nav-tab" onclick="switchTab('tickets')"    id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
+    <button class="nav-tab" onclick="switchTab('costs')"      id="tab-costs">💰 تحليل التكلفة</button>
+    <button class="nav-tab" onclick="switchTab('plans')"      id="tab-plans">📦 الباقات والإيرادات</button>
+    <button class="nav-tab" onclick="switchTab('log')"        id="tab-log">📋 سجل النشاط</button>
+  </div>
+
+  <div class="main">
+
+    <!-- ══ لوحة التحكم ══ -->
+    <div class="section active" id="sec-dashboard">
+      <div class="kpi-grid" id="kpi-grid"><div class="loader"><span class="spinner"></span></div></div>
+      <div id="dash-plan-bar" style="display:none;margin-bottom:24px;">
+        <div class="chart-card" style="display:flex;align-items:stretch;gap:0;padding:0;overflow:hidden;">
+          <div style="padding:22px 28px;min-width:200px;display:flex;flex-direction:column;justify-content:center;border-left:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💰 الإيرادات الشهرية المتوقعة</div>
+            <div id="dash-mrr" style="font-size:36px;font-weight:900;color:#34d399;line-height:1">0</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-top:5px">ريال سعودي / شهر</div>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:0;" id="dash-plan-mini"></div>
+        </div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">📈 التسجيلات اليومية</div>
+          <div class="chart-sub">آخر 14 يوم</div>
+          <div class="chart-wrap"><canvas id="chart-reg"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🏢 توزيع الشركات</div>
+          <div class="chart-sub">حسب الحالة</div>
+          <div class="chart-wrap" style="height:160px"><canvas id="chart-status"></canvas></div>
+          <div class="status-legend" id="status-legend"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="panel">
+          <div class="panel-head"><div><div class="panel-title">🕐 آخر الأنشطة</div><div class="panel-sub">أحدث 10 أحداث</div></div></div>
+          <div id="dash-activity"><div class="loader"><span class="spinner"></span></div></div>
+        </div>
+        <div class="panel" id="issues-panel" style="display:none">
+          <div class="panel-head"><div><div class="panel-title">⚠️ تحتاج مراجعة</div><div class="panel-sub">معلّقة أو ملغاة</div></div></div>
+          <div style="overflow-x:auto"><table><thead><tr><th>الشركة</th><th>الحالة</th><th>المستخدمون</th><th>التاريخ</th></tr></thead><tbody id="issues-tbody"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ الشركات ══ -->
+    <div class="section" id="sec-companies">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">🏢 الشركات</div>
+          <div class="sec-sub" id="companies-label">جاري التحميل...</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input class="search-input" type="text" id="co-search" placeholder="🔍 بحث باسم الشركة..." oninput="filterCompanies()">
+          <div class="filter-btns">
+            <button class="fbtn active" id="cf-all"       onclick="filterCompanies('all')">الكل</button>
+            <button class="fbtn"        id="cf-active"    onclick="filterCompanies('active')">نشطة</button>
+            <button class="fbtn"        id="cf-suspended" onclick="filterCompanies('suspended')">معلّقة</button>
+            <button class="fbtn"        id="cf-cancelled" onclick="filterCompanies('cancelled')">ملغاة</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>#</th><th>اسم الشركة</th><th>الحالة</th><th>الخطة</th>
+              <th>المستخدمون</th><th>الفواتير</th><th>الإيرادات (ر.س)</th>
+              <th>تاريخ الانضمام</th><th>إجراء</th>
+            </tr></thead>
+            <tbody id="companies-tbody"><tr><td colspan="9" class="loader"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ المستخدمون ══ -->
+    <div class="section" id="sec-users">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">👥 المستخدمون</div>
+          <div class="sec-sub" id="users-label">جاري التحميل...</div>
+        </div>
+        <input class="search-input" type="text" id="user-search" placeholder="🔍 بحث..." oninput="filterUsers()">
+      </div>
+      <div class="panel">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>#</th><th>الحساب الرئيسي</th><th>الشركة</th><th>حالة الشركة</th>
+              <th>الحسابات التابعة</th><th>آخر دخول</th><th>تاريخ الإنشاء</th><th>الحالة</th>
+            </tr></thead>
+            <tbody id="users-tbody"><tr><td colspan="8" class="loader"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ تذاكر الدعم ══ -->
+    <div class="section" id="sec-tickets">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">🎧 تذاكر الدعم</div>
+          <div class="sec-sub" id="tickets-label">جاري التحميل...</div>
+        </div>
+        <div class="filter-btns">
+          <button class="fbtn active" id="tf-open"        onclick="loadTickets('open')">مفتوحة</button>
+          <button class="fbtn"        id="tf-in_progress" onclick="loadTickets('in_progress')">قيد المعالجة</button>
+          <button class="fbtn"        id="tf-resolved"    onclick="loadTickets('resolved')">محلولة</button>
+          <button class="fbtn"        id="tf-all"         onclick="loadTickets('all')">الكل</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>#</th><th>الشركة</th><th>المستخدم</th><th>القسم</th>
+              <th>القسم الفرعي</th><th>الملاحظة</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th>
+            </tr></thead>
+            <tbody id="tickets-tbody"><tr><td colspan="9" class="loader"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ تحليل التكلفة ══ -->
+    <!-- ══ الباقات ══ -->
+    <div class="section" id="sec-plans">
+      <div class="sec-head" style="margin-bottom:20px;">
+        <div>
+          <div class="sec-title">📦 إدارة الباقات</div>
+          <div class="sec-sub">عدد المشتركين في كل باقة وبيانات كل شركة</div>
+        </div>
+        <button class="btn-action" onclick="loadPlans()">🔄 تحديث</button>
+      </div>
+      <div id="plans-content"><div class="loader"><span class="spinner"></span></div></div>
+    </div>
+
+    <div class="section" id="sec-costs">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">💰 تحليل التكلفة</div>
+          <div class="sec-sub">احسب كم تكلّفك كل شركة من تكلفة التشغيل الشهرية</div>
+        </div>
+      </div>
+      <div class="cost-section">
+        <div class="cost-settings">
+          <div class="cost-input-wrap">
+            <label>💻 تكلفة السيرفر / شهر (ر.س)</label>
+            <input class="cost-input" type="number" id="cost-server" value="75" min="0" step="1" oninput="recalcCost()">
+          </div>
+          <div class="cost-input-wrap">
+            <label>🧾 تكلفة كل فاتورة (ر.س)</label>
+            <input class="cost-input" type="number" id="cost-inv" value="0.02" min="0" step="0.01" oninput="recalcCost()">
+          </div>
+          <div class="cost-input-wrap">
+            <label>👤 تكلفة كل مستخدم (ر.س)</label>
+            <input class="cost-input" type="number" id="cost-user" value="1.00" min="0" step="0.10" oninput="recalcCost()">
+          </div>
+          <div class="cost-input-wrap" style="display:flex;align-items:flex-end">
+            <div id="cost-total-badge" style="width:100%;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 14px;text-align:center">
+              <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">إجمالي التكلفة / شهر</div>
+              <div id="cost-total-val" style="font-size:22px;font-weight:900;color:#93c5fd">— ر.س</div>
+            </div>
+          </div>
+        </div>
+        <div class="cost-body" id="cost-body"><div class="loader"><span class="spinner"></span></div></div>
+      </div>
+    </div>
+
+    <!-- ══ سجل النشاط ══ -->
+    <div class="section" id="sec-log">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">📋 سجل النشاط</div>
+          <div class="sec-sub">آخر 100 حدث على المنصة</div>
+        </div>
+        <button class="fbtn active" onclick="loadLog()">🔄 تحديث</button>
+      </div>
+      <div class="panel">
+        <div id="log-list"><div class="loader"><span class="spinner"></span></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%"><rect width="100" height="100" rx="17" fill="#0d0f14"/><circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/><circle cx="43" cy="42" r="12" fill="white"/><path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/><path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/><g fill="white"><g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g></g><polygon points="49,58 60,68 83,91 71,88" fill="white"/><polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/></svg>`;
+(function(){
+  const l=document.getElementById('adm-favicon');
+  if(l)l.href='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(LOGO_SVG);
+  const ll=document.getElementById('adm-login-logo');
+  if(ll)ll.innerHTML=LOGO_SVG;
+  const tl=document.getElementById('adm-topbar-logo');
+  if(tl)tl.innerHTML=LOGO_SVG;
+})();
+
+const TOKEN_KEY = 'yaqiz_admin_token';
+let _regChart = null, _statusChart = null, _costChart = null;
+let _allCompanies = [], _allUsers = [];
+let _coFilter = 'all', _ticketFilter = 'open';
+
+const $   = id => document.getElementById(id);
+const n   = v  => Number(v||0);
+const fmt = v  => n(v).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2});
+const fmtSAR = v => n(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtD = d => d ? new Date(d).toLocaleDateString('ar-SA',{year:'numeric',month:'short',day:'numeric'}) : '—';
+
+// ── Helpers ────────────────────────────────────────────
+function badge(s) {
+  const m = {
+    active:   '<span class="badge green">● نشطة</span>',
+    suspended:'<span class="badge amber">● معلّقة</span>',
+    cancelled:'<span class="badge red">● ملغاة</span>',
+  };
+  return m[s] || `<span class="badge">${s||'—'}</span>`;
+}
+function planBadge(p) {
+  const m = {
+    trial:  '<span class="badge blue">تجريبي</span>',
+    basic:  '<span class="badge green">أساسي</span>',
+    growth: '<span class="badge amber">نمو</span>',
+    pro:    '<span class="badge purple">احترافي</span>',
+  };
+  return m[p] || `<span class="badge">${p||'—'}</span>`;
+}
+function toast(msg, color) {
+  const t = $('toast');
+  t.textContent = msg; t.style.color = color||''; t.style.display='block';
+  setTimeout(()=>t.style.display='none',3000);
+}
+
+// ── Auth ───────────────────────────────────────────────
+function decodeToken(tok) {
+  try { return JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch { return {}; }
+}
+async function doAdminLogin() {
+  const username = $('l-user').value.trim();
+  const password = $('l-pass').value;
+  const errEl = $('l-err');
+  const btn = document.querySelector('.btn-login');
+  errEl.style.display='none';
+  if (!username || !password) { errEl.textContent='يرجى إدخال اسم المستخدم وكلمة المرور'; errEl.style.display='block'; return; }
+  btn.disabled=true; btn.textContent='جاري التحقق...';
+  try {
+    const res  = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const data = await res.json();
+    if(!data.success){ errEl.textContent=data.message||'بيانات غير صحيحة، حاول مجدداً'; errEl.style.display='block'; btn.disabled=false; btn.textContent='دخول'; return; }
+    localStorage.setItem(TOKEN_KEY,data.token);
+    showApp(data.username);
+    loadAll();
+  } catch { errEl.textContent='تعذر الاتصال بالخادم'; errEl.style.display='block'; btn.disabled=false; btn.textContent='دخول'; }
+}
+function doLogout(){localStorage.removeItem(TOKEN_KEY);location.reload();}
+function showApp(username){
+  $('admin-name').textContent=username||'المالك';
+  $('login-screen').style.display='none';
+  $('app').style.display='block';
+}
+async function apiFetch(path,opts={}){
+  const token=localStorage.getItem(TOKEN_KEY);
+  const res=await fetch(path,{...opts,headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`,...opts.headers}});
+  if(res.status===401||res.status===403){localStorage.removeItem(TOKEN_KEY);location.reload();return;}
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── Tab Navigation ─────────────────────────────────────
+const TABS = ['dashboard','companies','users','tickets','plans','costs','log'];
+function switchTab(name) {
+  TABS.forEach(t => {
+    $('tab-'+t)?.classList.toggle('active', t===name);
+    $('sec-'+t)?.classList.toggle('active', t===name);
+  });
+  if (name==='users'    && !_allUsers.length)     loadUsers();
+  if (name==='tickets'  )                          loadTickets(_ticketFilter);
+  if (name==='log'      )                          loadLog();
+  if (name==='plans'    )                          loadPlans();
+}
+
+// ── Plans ──────────────────────────────────────────────
+const PLAN_META = {
+  trial:  { label:'تجريبية',    color:'var(--cyan)',   price:0,   icon:'🎁' },
+  basic:  { label:'أساسي',      color:'var(--green)',  price:149, icon:'📗' },
+  growth: { label:'نمو',        color:'var(--blue)',   price:299, icon:'📘' },
+  pro:    { label:'احترافي',    color:'var(--purple)', price:499, icon:'📙' },
+};
+
+async function loadPlans() {
+  const box = $('plans-content');
+  box.innerHTML = '<div class="loader"><span class="spinner"></span></div>';
+  try {
+    const data = await apiFetch('/api/admin/plans');
+    renderPlansSection(data.data);
+  } catch(e) { box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل الباقات</p>'; }
+}
+
+function renderPlansSection(data) {
+  const box = $('plans-content');
+  const plans = data.plans || {};
+  const companies = data.companies || [];
+
+  // بطاقات الإحصاء
+  const cards = Object.entries(PLAN_META).map(([key, meta]) => {
+    const list = plans[key] || [];
+    const rev = list.length * meta.price;
+    return `
+    <div class="kpi-card" style="border-top:3px solid ${meta.color}">
+      <div class="kpi-icon">${meta.icon}</div>
+      <div class="kpi-label">${meta.label}</div>
+      <div class="kpi-value" style="color:${meta.color}">${list.length}</div>
+      <div class="kpi-sub">${meta.price > 0 ? rev.toLocaleString('ar-SA') + ' ر.س/شهر' : 'تجريبية مجانية'}</div>
+    </div>`;
+  }).join('');
+
+  // جداول لكل باقة
+  const tables = Object.entries(PLAN_META).map(([key, meta]) => {
+    const list = plans[key] || [];
+    if (!list.length) return '';
+    const rows = list.map(c => `
+      <tr>
+        <td><b>${c.name}</b></td>
+        <td>${c.contact_email || '—'}</td>
+        <td>${c.user_count || 0} مستخدم</td>
+        <td>${c.invoice_count || 0} فاتورة</td>
+        <td>${c.subscription_expires_at ? new Date(c.subscription_expires_at).toLocaleDateString('ar-SA') : '—'}</td>
+        <td>
+          <select onchange="changePlan(${c.id}, this.value)" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'Tajawal',sans-serif;font-size:12px;">
+            ${Object.entries(PLAN_META).map(([pk,pm]) => `<option value="${pk}" ${pk===key?'selected':''}>${pm.label}</option>`).join('')}
+          </select>
+        </td>
+      </tr>`).join('');
+
+    return `
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">${meta.icon} باقة ${meta.label}</div>
+          <div class="panel-sub">${list.length} شركة${meta.price > 0 ? ' · ' + (list.length * meta.price).toLocaleString('ar-SA') + ' ر.س/شهر' : ''}</div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>اسم الشركة</th><th>الإيميل</th><th>المستخدمون</th><th>الفواتير</th><th>انتهاء الاشتراك</th><th>تغيير الباقة</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:24px;">${cards}</div>
+    ${tables || '<p style="color:var(--muted);padding:20px;text-align:center;">لا توجد شركات بعد</p>'}`;
+}
+
+async function changePlan(companyId, newPlan) {
+  try {
+    await apiFetch(`/api/admin/companies/${companyId}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify({ plan: newPlan })
+    });
+    toast(`✅ تم تغيير الباقة إلى ${PLAN_META[newPlan]?.label || newPlan}`, 'var(--green)');
+    loadPlans();
+  } catch(e) { toast('❌ فشل تغيير الباقة', 'var(--red)'); }
+}
+
+// ── Plan Stats (Dashboard) ────────────────────────────
+function renderPlanStats(data) {
+  const box = $('dash-plan-bar');
+  if (!box) return;
+  const plans = data.plans || {};
+  let mrr = 0;
+  const mini = Object.entries(PLAN_META).map(([key, meta]) => {
+    const count = (plans[key] || []).length;
+    const rev = count * meta.price;
+    mrr += rev;
+    return `<div style="padding:18px 20px;border-left:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;">
+      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${meta.icon} ${meta.label}</div>
+      <div style="font-size:28px;font-weight:900;color:${meta.color};line-height:1">${count}</div>
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">${meta.price > 0 ? rev.toLocaleString('ar-SA') + ' ر.س/شهر' : 'مجانية'}</div>
+    </div>`;
+  }).join('');
+  $('dash-plan-mini').innerHTML = mini;
+  $('dash-mrr').textContent = mrr.toLocaleString('ar-SA');
+  box.style.display = 'block';
+}
+
+// ── Load All (Dashboard) ───────────────────────────────
+async function loadAll() {
+  try {
+    const [statsRes, costRes, plansRes] = await Promise.all([
+      apiFetch('/api/admin/stats'),
+      apiFetch('/api/admin/cost-analysis'),
+      apiFetch('/api/admin/plans'),
+    ]);
+    renderKPI(statsRes.data);
+    renderCharts(statsRes.data);
+    renderDashActivity(statsRes.data);
+    renderIssues(statsRes.data);
+    _allCompanies = costRes.data||[];
+    renderCompaniesTable(_allCompanies);
+    renderCostSection(_allCompanies);
+    if (plansRes?.data) renderPlanStats(plansRes.data);
+    loadTicketsBadge();
+  } catch(e) { console.error(e); toast('خطأ في تحميل البيانات','#f87171'); }
+}
+
+// ── KPI ────────────────────────────────────────────────
+function renderKPI(data) {
+  const suspended = data.companies.by_status?.suspended||0;
+  const cancelled = data.companies.by_status?.cancelled||0;
+  const issues = suspended+cancelled;
+  const pct = data.companies.total>0 ? Math.round((data.companies.active/data.companies.total)*100) : 100;
+  $('kpi-grid').innerHTML = `
+    <div class="kpi-card blue">
+      <div class="kpi-icon">🏢</div>
+      <div class="kpi-label">إجمالي الشركات</div>
+      <div class="kpi-value">${fmt(data.companies.total)}</div>
+      <div class="kpi-sub">${fmt(data.companies.active)} نشطة</div>
+      <div class="kpi-badge up">+${data.new_today} اليوم</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-label">إجمالي المستخدمين</div>
+      <div class="kpi-value">${fmt(data.users.total)}</div>
+      <div class="kpi-sub">عبر جميع الشركات</div>
+      <div class="kpi-badge up">صحة المنصة ${pct}%</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-icon">🧾</div>
+      <div class="kpi-label">إجمالي الفواتير</div>
+      <div class="kpi-value">${fmt(data.invoices.total)}</div>
+      <div class="kpi-sub">${fmtSAR(data.invoices.revenue)} ر.س إيرادات</div>
+    </div>
+    <div class="kpi-card ${issues>0?'red':'green'}">
+      <div class="kpi-icon">${issues>0?'⚠️':'✅'}</div>
+      <div class="kpi-label">تحتاج مراجعة</div>
+      <div class="kpi-value">${fmt(issues)}</div>
+      <div class="kpi-sub">${fmt(suspended)} معلّقة · ${fmt(cancelled)} ملغاة</div>
+      <div class="kpi-badge ${issues>0?'down':'up'}">${issues>0?'يحتاج تدخل':'كل شيء سليم'}</div>
+    </div>`;
+}
+
+// ── Charts ─────────────────────────────────────────────
+function renderCharts(data) {
+  const last14=[];
+  for(let i=13;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const key=d.toISOString().slice(0,10);
+    const found=data.daily_reg.find(r=>r.day===key);
+    last14.push({day:key.slice(5),count:found?Number(found.count):0});
+  }
+  if(_regChart) _regChart.destroy();
+  _regChart=new Chart($('chart-reg'),{
+    type:'bar',
+    data:{labels:last14.map(d=>d.day),datasets:[{label:'شركة',data:last14.map(d=>d.count),backgroundColor:'rgba(59,130,246,0.7)',borderColor:'#3b82f6',borderWidth:2,borderRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b7fa3',font:{family:'Tajawal',size:11}}},
+              y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#6b7fa3',font:{family:'Tajawal',size:11},stepSize:1,precision:0}}}}
+  });
+  const active=data.companies.by_status?.active||0;
+  const suspended=data.companies.by_status?.suspended||0;
+  const cancelled=data.companies.by_status?.cancelled||0;
+  if(_statusChart) _statusChart.destroy();
+  _statusChart=new Chart($('chart-status'),{
+    type:'doughnut',
+    data:{labels:['نشطة','معلّقة','ملغاة'],datasets:[{data:[Math.max(active,0.01),suspended,cancelled],backgroundColor:['#10b981','#f59e0b','#ef4444'],borderColor:['#0d1629','#0d1629','#0d1629'],borderWidth:3,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{display:false}}}
+  });
+  $('status-legend').innerHTML=[
+    {label:'نشطة',val:active,color:'#10b981'},
+    {label:'معلّقة',val:suspended,color:'#f59e0b'},
+    {label:'ملغاة',val:cancelled,color:'#ef4444'},
+  ].map(i=>`<div class="legend-item"><div style="display:flex;align-items:center;gap:8px"><div class="legend-dot" style="background:${i.color}"></div><span style="font-size:13px;font-weight:700;color:#c4d0e8">${i.label}</span></div><span style="font-size:16px;font-weight:900">${i.val}</span></div>`).join('');
+}
+
+// ── Dashboard Activity ─────────────────────────────────
+function renderDashActivity(data) {
+  const log=data.recent_log||[];
+  $('dash-activity').innerHTML=log.length ? log.map(l=>`
+    <div class="activity-item">
+      <div class="act-dot"></div>
+      <div>
+        <div class="act-text">${l.description||l.event_type||'—'}</div>
+        <div class="act-meta">${l.company_name||'النظام'} · ${fmtD(l.created_at)}</div>
+      </div>
+    </div>`).join('') : '<div class="empty-state">لا توجد أنشطة</div>';
+}
+function renderIssues(data) {
+  const issues=data.issues||[];
+  $('issues-panel').style.display=issues.length?'block':'none';
+  $('issues-tbody').innerHTML=issues.map(c=>`
+    <tr>
+      <td style="font-weight:800;color:#f0f4ff">${c.name}</td>
+      <td>${badge(c.status)}</td>
+      <td style="font-weight:700;color:#93c5fd">${fmt(c.user_count)}</td>
+      <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
+    </tr>`).join('');
+}
+
+// ── Companies ──────────────────────────────────────────
+let _coFilterStatus = 'all';
+function renderCompaniesTable(companies) {
+  const q = ($('co-search')?.value||'').toLowerCase().trim();
+  let list = companies.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  if(_coFilterStatus!=='all') list=list.filter(c=>c.status===_coFilterStatus);
+  if(q) list=list.filter(c=>c.name?.toLowerCase().includes(q));
+  $('companies-label').textContent=`${list.length} من ${companies.length} شركة`;
+  if(!list.length){$('companies-tbody').innerHTML='<tr><td colspan="9" class="empty-state">لا توجد نتائج</td></tr>';return;}
+  $('companies-tbody').innerHTML=list.map((c,i)=>`
+    <tr>
+      <td style="font-weight:800;color:var(--muted)">${i+1}</td>
+      <td style="font-weight:800;color:#f0f4ff">${c.name}</td>
+      <td>${badge(c.status)}</td>
+      <td>${planBadge(c.plan)}</td>
+      <td style="font-weight:900;color:#93c5fd">${fmt(c.user_count)}</td>
+      <td style="color:#6ee7b7">${fmt(c.invoice_count)}</td>
+      <td>${fmtSAR(c.total_revenue)}</td>
+      <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="abtn" style="background:rgba(139,92,246,.15);color:#c4b5fd;border:1px solid rgba(139,92,246,.3);" onclick="impersonateCompany(${c.id},'${(c.name||'').replace(/'/g,"\\'")}')">🔑 دخول</button>
+          ${c.status!=='active'    ?`<button class="abtn activate" onclick="setCoStatus(${c.id},'active')">تفعيل</button>`:''}
+          ${c.status!=='suspended' ?`<button class="abtn suspend"  onclick="setCoStatus(${c.id},'suspended')">تعليق</button>`:''}
+          ${c.status!=='cancelled' ?`<button class="abtn cancel"   onclick="setCoStatus(${c.id},'cancelled')">إلغاء</button>`:''}
+        </div>
+      </td>
+    </tr>`).join('');
+}
+function filterCompanies(status) {
+  if(status) {
+    _coFilterStatus=status;
+    ['all','active','suspended','cancelled'].forEach(s=>{
+      const b=$('cf-'+s); if(b) b.className='fbtn'+(s===status?' active':'');
+    });
+  }
+  renderCompaniesTable(_allCompanies);
+}
+async function impersonateCompany(id, name) {
+  try {
+    const res = await apiFetch(`/api/admin/impersonate/${id}`, {method:'POST'});
+    if (!res?.success) { toast('لم يُعثر على حساب owner للشركة', '#f87171'); return; }
+    const coName = res.company_name || name;
+    const url = `/VVIP.html?code=${encodeURIComponent(res.code)}&co=${encodeURIComponent(coName)}`;
+    window.open(url, '_blank');
+    toast(`✅ تم فتح حساب ${coName} — الرابط صالح 5 دقائق`, '#c4b5fd');
+  } catch { toast('خطأ في الاتصال', '#f87171'); }
+}
+
+async function setCoStatus(id,status){
+  try{
+    await apiFetch(`/api/admin/companies/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
+    toast('تم تحديث حالة الشركة','#34d399');
+    const res=await apiFetch('/api/admin/cost-analysis');
+    _allCompanies=res.data||[];
+    renderCompaniesTable(_allCompanies);
+    renderCostSection(_allCompanies);
+  }catch{toast('خطأ في التحديث','#f87171');}
+}
+
+// ── Users ──────────────────────────────────────────────
+async function loadUsers(){
+  $('users-tbody').innerHTML='<tr><td colspan="8" class="loader"><span class="spinner"></span></td></tr>';
+  try{
+    const res=await apiFetch('/api/admin/users');
+    _allUsers=res.data||[];
+    renderUsersTable(_allUsers);
+  }catch{$('users-tbody').innerHTML='<tr><td colspan="8" class="empty-state">خطأ في التحميل</td></tr>';}
+}
+function renderUsersTable(users){
+  const q=($('user-search')?.value||'').toLowerCase().trim();
+  let list=users;
+  if(q) list=list.filter(u=>u.full_name?.toLowerCase().includes(q)||u.username?.toLowerCase().includes(q)||u.company_name?.toLowerCase().includes(q));
+  $('users-label').textContent=`${list.length} حساب رئيسي`;
+  if(!list.length){$('users-tbody').innerHTML='<tr><td colspan="8" class="empty-state">لا توجد نتائج</td></tr>';return;}
+  $('users-tbody').innerHTML=list.map((u,i)=>`
+    <tr>
+      <td style="font-weight:800;color:var(--muted)">${i+1}</td>
+      <td>
+        <div style="font-weight:800;color:#f0f4ff">${u.full_name||'—'}</div>
+        <div style="font-size:11px;color:var(--muted)">@${u.username}</div>
+      </td>
+      <td style="font-weight:700;color:#c4d0e8">${u.company_name||'—'}</td>
+      <td>${badge(u.company_status)}</td>
+      <td>
+        <span style="font-size:20px;font-weight:900;color:#93c5fd">${u.sub_count}</span>
+        <span style="font-size:12px;color:var(--muted)"> حساب تابع</span>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">${u.last_login?fmtD(u.last_login):'لم يدخل بعد'}</td>
+      <td style="font-size:12px;color:var(--muted)">${fmtD(u.created_at)}</td>
+      <td>${u.active?'<span class="badge green">● نشط</span>':'<span class="badge red">● موقوف</span>'}</td>
+    </tr>`).join('');
+}
+function filterUsers(){renderUsersTable(_allUsers);}
+
+// ── Support Tickets ────────────────────────────────────
+async function loadTicketsBadge(){
+  try{
+    const res=await apiFetch('/api/admin/tickets?status=open');
+    const count=(res.data||[]).length;
+    const badge=$('tickets-badge');
+    if(count>0){badge.textContent=count;badge.style.display='inline-flex';}
+    else badge.style.display='none';
+  }catch{}
+}
+async function loadTickets(status){
+  _ticketFilter=status||'open';
+  ['open','in_progress','resolved','all'].forEach(s=>{
+    const b=$('tf-'+s); if(b) b.className='fbtn'+(_ticketFilter===s?' active':'');
+  });
+  $('tickets-tbody').innerHTML='<tr><td colspan="9" class="loader"><span class="spinner"></span></td></tr>';
+  try{
+    const res=await apiFetch(`/api/admin/tickets?status=${_ticketFilter}`);
+    renderTickets(res.data||[]);
+  }catch{$('tickets-tbody').innerHTML='<tr><td colspan="9" class="empty-state">خطأ في التحميل</td></tr>';}
+}
+function renderTickets(tickets){
+  const sLabel={open:'مفتوحة',in_progress:'قيد المعالجة',resolved:'محلولة'};
+  const sClass={open:'red',in_progress:'amber',resolved:'green'};
+  $('tickets-label').textContent=`${tickets.length} تذكرة — ${_ticketFilter==='all'?'جميع الحالات':sLabel[_ticketFilter]||''}`;
+  if(!tickets.length){$('tickets-tbody').innerHTML='<tr><td colspan="9" class="empty-state">لا توجد تذاكر</td></tr>';return;}
+  $('tickets-tbody').innerHTML=tickets.map(t=>`
+    <tr>
+      <td style="font-weight:800;color:var(--muted)">${t.id}</td>
+      <td style="font-weight:800;color:#f0f4ff;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.company_name||'—'}</td>
+      <td><div style="font-weight:700">${t.user_name||'—'}</div><div style="font-size:11px;color:var(--muted)">${t.user_role||''}</div></td>
+      <td style="color:#93c5fd;font-size:12px">${t.department||'—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${t.sub_dept||'—'}</td>
+      <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(t.note||'').replace(/"/g,'')}">${t.note||'—'}</td>
+      <td><span class="badge ${sClass[t.status]||'blue'}">● ${sLabel[t.status]||t.status}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${fmtD(t.created_at)}</td>
+      <td><div style="display:flex;gap:5px;flex-wrap:wrap;">
+        ${t.status!=='open'        ?`<button class="abtn open"    onclick="setTicketStatus(${t.id},'open')">مفتوحة</button>`:''}
+        ${t.status!=='in_progress' ?`<button class="abtn prog"    onclick="setTicketStatus(${t.id},'in_progress')">معالجة</button>`:''}
+        ${t.status!=='resolved'    ?`<button class="abtn done"    onclick="setTicketStatus(${t.id},'resolved')">محلولة</button>`:''}
+      </div></td>
+    </tr>`).join('');
+}
+async function setTicketStatus(id,status){
+  try{
+    await apiFetch(`/api/admin/tickets/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
+    toast('تم تحديث التذكرة','#34d399');
+    loadTickets(_ticketFilter);
+    loadTicketsBadge();
+  }catch{toast('خطأ في التحديث','#f87171');}
+}
+
+// ── Cost Analysis ──────────────────────────────────────
+function getCostParams(){return{server:parseFloat($('cost-server').value)||0,perInv:parseFloat($('cost-inv').value)||0,perUser:parseFloat($('cost-user').value)||0};}
+function calcCosts(companies){
+  const p=getCostParams();
+  const rows=companies.map(c=>({...c,varCost:n(c.invoice_count)*p.perInv+n(c.user_count)*p.perUser}));
+  const totalVar=rows.reduce((s,r)=>s+r.varCost,0);
+  const totalCost=p.server+totalVar;
+  return rows.map(r=>{
+    const base=totalVar>0?(r.varCost/totalVar)*p.server:(companies.length>0?p.server/companies.length:0);
+    const cost=r.varCost+base;
+    return{...r,cost,pct:totalCost>0?(cost/totalCost)*100:0};
+  }).sort((a,b)=>b.cost-a.cost);
+}
+function recalcCost(){if(_allCompanies.length)renderCostSection(_allCompanies);}
+function renderCostSection(companies){
+  if(!companies.length){$('cost-body').innerHTML='<div class="empty-state">لا توجد شركات</div>';$('cost-total-val').textContent='0.00 ر.س';return;}
+  const p=getCostParams();
+  const rows=calcCosts(companies);
+  const totalVar=rows.reduce((s,r)=>s+r.varCost,0);
+  const totalCost=p.server+totalVar;
+  const totalUsers=rows.reduce((s,r)=>s+n(r.user_count),0);
+  const totalInv=rows.reduce((s,r)=>s+n(r.invoice_count),0);
+  $('cost-total-val').textContent=fmtSAR(totalCost)+' ر.س';
+  const top10=rows.slice(0,10);
+  if(_costChart) _costChart.destroy();
+  $('cost-body').innerHTML=`
+    <div>
+      <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">أعلى ${top10.length} شركة (ر.س/شهر)</div>
+      <div class="cost-chart-wrap" style="min-height:${Math.max(top10.length*36+40,120)}px"><canvas id="chart-cost"></canvas></div>
+    </div>
+    <div class="cost-table-wrap">
+      <table class="cost-table">
+        <thead><tr><th>#</th><th>الشركة</th><th>مستخدمون</th><th>فواتير</th><th>التكلفة المتغيرة</th><th>إجمالي</th><th>%</th></tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>`<tr>
+            <td style="font-weight:800;color:var(--muted)">${i+1}</td>
+            <td style="font-weight:800;color:#f0f4ff;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</td>
+            <td style="color:#93c5fd">${fmt(r.user_count)}</td>
+            <td style="color:#6ee7b7">${fmt(r.invoice_count)}</td>
+            <td style="color:var(--muted)">${fmtSAR(r.varCost)}</td>
+            <td style="font-weight:900;color:#fbbf24">${fmtSAR(r.cost)} ر.س</td>
+            <td><div style="font-weight:800">${r.pct.toFixed(1)}%</div><div class="cost-bar-inline" style="width:${Math.min(r.pct*2,100)}%"></div></td>
+          </tr>`).join('')}
+          <tr class="total-row">
+            <td colspan="2">المجموع</td>
+            <td style="color:#93c5fd">${fmt(totalUsers)}</td>
+            <td style="color:#6ee7b7">${fmt(totalInv)}</td>
+            <td style="color:var(--muted)">${fmtSAR(totalVar)}</td>
+            <td style="font-size:16px;color:#fbbf24">${fmtSAR(totalCost)} ر.س</td>
+            <td style="font-weight:900">100%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  _costChart=new Chart($('chart-cost'),{
+    type:'bar',
+    data:{labels:top10.map(r=>r.name.length>12?r.name.slice(0,12)+'…':r.name),
+          datasets:[{label:'التكلفة (ر.س)',data:top10.map(r=>parseFloat(r.cost.toFixed(2))),
+            backgroundColor:top10.map((_,i)=>`hsla(${220+i*12},80%,65%,0.75)`),
+            borderColor:top10.map((_,i)=>`hsla(${220+i*12},80%,65%,1)`),borderWidth:1.5,borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${fmtSAR(ctx.raw)} ر.س`}}},
+      scales:{x:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7fa3',font:{family:'Tajawal',size:11}}},
+              y:{grid:{display:false},ticks:{color:'#c4d0e8',font:{family:'Tajawal',size:12,weight:'700'}}}}}
+  });
+}
+
+// ── Activity Log ───────────────────────────────────────
+async function loadLog(){
+  $('log-list').innerHTML='<div class="loader"><span class="spinner"></span></div>';
+  try{
+    const res=await apiFetch('/api/admin/log');
+    const log=res.data||[];
+    $('log-list').innerHTML=log.length?log.map(l=>`
+      <div class="activity-item">
+        <div class="act-dot"></div>
+        <div style="flex:1">
+          <div class="act-text">${l.description||l.event_type||'—'}</div>
+          <div class="act-meta">${l.company_name||'النظام'} · ${fmtD(l.created_at)}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:var(--muted2)">${l.event_type||''}</span>
+      </div>`).join(''):'<div class="empty-state">لا توجد أنشطة</div>';
+  }catch{$('log-list').innerHTML='<div class="empty-state">خطأ في التحميل</div>';}
+}
+
+// ── Startup ────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && $('login-screen').style.display!=='none') doAdminLogin();
+});
+(async()=>{
+  const token=localStorage.getItem(TOKEN_KEY);
+  if(!token) return;
+  try{
+    const res=await fetch('/api/admin/stats',{headers:{Authorization:'Bearer '+token}});
+    if(res.status===401||res.status===403){localStorage.removeItem(TOKEN_KEY);return;}
+    const body=await res.json();
+    if(!body.success){localStorage.removeItem(TOKEN_KEY);return;}
+    showApp(decodeToken(token).username || null); loadAll();
+  }catch{localStorage.removeItem(TOKEN_KEY);}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+const router = require('express').Router();
+const auth   = require('../middleware/auth');
+const can    = require('../middleware/permissions');
+const ctrl   = require('../controllers/customers.controller');
+
+router.use(auth);
+
+router.get ('/',                    can('customers.view'),   ctrl.list);
+router.post('/',                    can('customers.edit'),   ctrl.create);
+router.get ('/:id',                 can('customers.view'),   ctrl.getOne);
+router.put ('/:id',                 can('customers.edit'),   ctrl.update);
+router.delete('/:id',               can('customers.edit'),   ctrl.remove);
+router.get ('/:id/statement',       can('customers.view'),   ctrl.statement);
+
+module.exports = router;

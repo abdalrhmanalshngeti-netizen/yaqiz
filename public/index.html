@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="يقظ — نظام محاسبة سعودي ذكي متوافق مع ZATCA للشركات الصغيرة والمتوسطة. فواتير إلكترونية، إدارة مخزون، رواتب، وتقارير مالية متكاملة.">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type"        content="website">
+  <meta property="og:title"       content="يقظ — نظام المحاسبة السعودي">
+  <meta property="og:description" content="نظام محاسبة سعودي ذكي متوافق مع ZATCA — فواتير إلكترونية، مخزون، رواتب، وتقارير مالية للمنشآت الصغيرة والمتوسطة.">
+  <meta property="og:url"         content="https://yaqiz.me">
+  <meta property="og:locale"      content="ar_SA">
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:title"       content="يقظ — نظام المحاسبة السعودي">
+  <meta name="twitter:description" content="نظام محاسبة سعودي متوافق مع ZATCA للمنشآت الصغيرة والمتوسطة.">
+  <title>يقظ — نظام المحاسبة السعودي</title>
+  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      #070d1a;
+      --surface: #0d1629;
+      --card:    #111d33;
+      --border:  #1a2942;
+      --blue:    #3b82f6;
+      --blue-d:  #1d4ed8;
+      --green:   #10b981;
+      --purple:  #8b5cf6;
+      --amber:   #f59e0b;
+      --text:    #f0f4ff;
+      --muted:   #6b7fa3;
+      --light-bg:#f0f4ff;
+      --light-text:#0f172a;
+      --light-muted:#64748b;
+      --light-border:#e2e8f0;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family:'Tajawal',sans-serif; background:#fff; color:var(--light-text); overflow-x:hidden; font-weight:600; }
+
+    /* ── NAV ─────────────────────── */
+    nav {
+      position:fixed; top:0; width:100%; z-index:100;
+      background:rgba(7,13,26,0.97); backdrop-filter:blur(16px);
+      border-bottom:1px solid rgba(255,255,255,0.07);
+    }
+    .nav-inner {
+      max-width:1240px; margin:auto;
+      display:flex; align-items:center; justify-content:space-between;
+      height:70px; padding:0 2rem;
+    }
+    .logo { display:flex; align-items:center; gap:11px; text-decoration:none; }
+    .logo-icon { width:38px; height:38px; border-radius:9px; overflow:hidden; flex-shrink:0; }
+    .logo-name { color:#fff; font-size:1.5rem; font-weight:900; letter-spacing:-0.5px; }
+    .logo-sub  { color:rgba(255,255,255,0.4); font-size:0.72rem; font-weight:600; margin-top:-3px; }
+    .nav-links { display:flex; align-items:center; gap:6px; }
+    .nav-links a {
+      color:rgba(255,255,255,0.7); text-decoration:none;
+      font-size:0.9rem; font-weight:600; padding:7px 14px;
+      border-radius:8px; transition:.2s;
+    }
+    .nav-links a:hover { color:#fff; background:rgba(255,255,255,0.08); }
+    .btn-enter {
+      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      color:#fff !important; font-weight:800 !important;
+      border-radius:10px !important; padding:8px 20px !important;
+      box-shadow:0 4px 16px rgba(59,130,246,.35);
+    }
+    .btn-enter:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(59,130,246,.5) !important; }
+
+    /* ── HERO ────────────────────── */
+    .hero {
+      min-height:100vh;
+      background:radial-gradient(ellipse at 40% 50%, #0d2a6e 0%, #070d1a 65%);
+      display:flex; align-items:center; justify-content:center;
+      text-align:center; padding:120px 2rem 6rem;
+      position:relative; overflow:hidden;
+    }
+    .hero::before {
+      content:''; position:absolute; inset:0;
+      background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233b82f6' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      pointer-events:none;
+    }
+    .hero-content { position:relative; max-width:860px; }
+    .hero-badge {
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.3);
+      color:#fbbf24; padding:7px 20px; border-radius:100px;
+      font-size:0.85rem; font-weight:700; margin-bottom:2rem; letter-spacing:.3px;
+    }
+    .hero h1 {
+      color:#fff;
+      font-size:clamp(2.6rem, 6vw, 4.4rem);
+      font-weight:900; line-height:1.15; margin-bottom:1.5rem;
+      text-shadow:0 2px 40px rgba(59,130,246,.2);
+    }
+    .hero h1 em { font-style:normal; color:#60a5fa; }
+    .hero-sub {
+      color:rgba(255,255,255,.8); font-size:1.2rem; font-weight:600;
+      line-height:1.85; margin-bottom:2.75rem; max-width:640px; margin-inline:auto;
+    }
+    .hero-btns { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-bottom:3.5rem; }
+    .btn-cta {
+      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      color:#fff; padding:1rem 2.4rem; border-radius:14px;
+      text-decoration:none; font-weight:800; font-size:1.05rem;
+      box-shadow:0 6px 28px rgba(29,78,216,.5);
+      transition:.3s; border:none; cursor:pointer; font-family:inherit;
+    }
+    .btn-cta:hover { transform:translateY(-2px); box-shadow:0 10px 36px rgba(29,78,216,.65); }
+    .btn-ghost-cta {
+      background:rgba(255,255,255,.06); color:#fff;
+      padding:1rem 2.4rem; border-radius:14px;
+      text-decoration:none; font-weight:700; font-size:1.05rem;
+      border:1.5px solid rgba(255,255,255,.2); transition:.3s;
+      cursor:pointer; font-family:inherit;
+    }
+    .btn-ghost-cta:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); }
+    .hero-stats {
+      display:flex; justify-content:center; gap:0; flex-wrap:wrap;
+      padding-top:2.5rem; border-top:1px solid rgba(255,255,255,.08);
+    }
+    .hero-stat {
+      padding:0 2.5rem;
+      border-left:1px solid rgba(255,255,255,.1);
+    }
+    .hero-stat:last-child { border-left:none; }
+    .stat-n { color:#fff; font-size:2.2rem; font-weight:900; line-height:1; }
+    .stat-l { color:rgba(255,255,255,.65); font-size:0.85rem; font-weight:700; margin-top:4px; }
+
+    /* ── CONTAINER / SECTION ──── */
+    .section { padding:6rem 2rem; }
+    .section.bg-light { background:#f8fafc; }
+    .section.bg-dark  { background:var(--bg); }
+    .container { max-width:1240px; margin:auto; }
+    .sec-label {
+      font-size:0.78rem; font-weight:800; letter-spacing:2px; text-transform:uppercase;
+      color:var(--blue); margin-bottom:.5rem;
+    }
+    .sec-label.light { color:#60a5fa; }
+    .sec-title {
+      font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900;
+      color:var(--light-text); line-height:1.25; margin-bottom:.9rem;
+    }
+    .sec-title.light { color:#fff; }
+    .sec-sub {
+      color:var(--light-muted); font-size:1.08rem; font-weight:700;
+      max-width:560px; margin-inline:auto; line-height:1.8;
+    }
+    .sec-sub.light { color:rgba(255,255,255,.7); }
+    .text-center { text-align:center; }
+
+    /* ── FEATURES GRID ─────────── */
+    .feat-grid {
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+      gap:1.25rem; margin-top:3rem;
+    }
+    .feat-card {
+      background:#fff; border-radius:20px; padding:2rem 2rem 2rem;
+      border:1.5px solid var(--light-border); transition:.3s; position:relative;
+      overflow:hidden;
+    }
+    .feat-card:hover { transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.08); }
+    .feat-card::before {
+      content:''; position:absolute; top:0; right:0; left:0; height:3px;
+      border-radius:20px 20px 0 0;
+    }
+    .feat-card.c-blue::before   { background:var(--blue); }
+    .feat-card.c-green::before  { background:var(--green); }
+    .feat-card.c-purple::before { background:var(--purple); }
+    .feat-card.c-amber::before  { background:var(--amber); }
+    .feat-card.c-cyan::before   { background:#06b6d4; }
+    .feat-card.c-rose::before   { background:#f43f5e; }
+    .feat-icon {
+      width:52px; height:52px; border-radius:14px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.6rem; margin-bottom:1.1rem; flex-shrink:0;
+    }
+    .feat-card.c-blue   .feat-icon { background:rgba(59,130,246,.1); }
+    .feat-card.c-green  .feat-icon { background:rgba(16,185,129,.1); }
+    .feat-card.c-purple .feat-icon { background:rgba(139,92,246,.1); }
+    .feat-card.c-amber  .feat-icon { background:rgba(245,158,11,.1); }
+    .feat-card.c-cyan   .feat-icon { background:rgba(6,182,212,.1); }
+    .feat-card.c-rose   .feat-icon { background:rgba(244,63,94,.1); }
+    .feat-card h3 { font-size:1.12rem; font-weight:900; color:var(--light-text); margin-bottom:.5rem; }
+    .feat-card p  { color:var(--light-muted); font-size:.96rem; font-weight:600; line-height:1.75; }
+    .feat-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:1rem; }
+    .feat-tag {
+      font-size:.75rem; font-weight:700; padding:3px 10px; border-radius:100px;
+      background:#f1f5f9; color:var(--light-muted);
+    }
+
+    /* ── STEPS ──────────────────── */
+    .steps-grid {
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:2rem; margin-top:3rem;
+    }
+    .step-card { text-align:center; padding:1.5rem; }
+    .step-num {
+      width:68px; height:68px; border-radius:50%;
+      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      color:#fff; font-size:1.7rem; font-weight:900;
+      display:flex; align-items:center; justify-content:center;
+      margin:0 auto 1.5rem;
+      box-shadow:0 8px 28px rgba(29,78,216,.35);
+    }
+    .step-card h3 { font-size:1.15rem; font-weight:900; color:var(--light-text); margin-bottom:.5rem; }
+    .step-card p  { color:var(--light-muted); font-size:.96rem; font-weight:600; line-height:1.8; }
+
+    /* ── COMPLIANCE ─────────────── */
+    .comp-grid {
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+      gap:1.25rem; margin-top:3rem;
+    }
+    .comp-card {
+      background:#fff; border-radius:18px; padding:2rem 1.5rem;
+      border:1.5px solid var(--light-border); text-align:center; transition:.3s;
+    }
+    .comp-card:hover { border-color:var(--blue); box-shadow:0 6px 24px rgba(59,130,246,.1); }
+    .comp-card .ci { font-size:2.6rem; margin-bottom:.75rem; }
+    .comp-card h4 { font-size:1.05rem; font-weight:900; color:var(--light-text); margin-bottom:.3rem; }
+    .comp-card p  { color:var(--light-muted); font-size:.9rem; font-weight:600; line-height:1.65; }
+
+    /* ── PRICING ─────────────────── */
+    .pricing-row {
+      display:grid; grid-template-columns:repeat(3,1fr);
+      gap:1.5rem; margin-top:3rem; align-items:start;
+    }
+    .plan-card {
+      border-radius:24px; padding:2.5rem 2rem;
+      border:1px solid rgba(255,255,255,.1);
+      position:relative; transition:.3s;
+      display:flex; flex-direction:column;
+    }
+    .plan-card:hover { transform:translateY(-4px); }
+
+    /* basic — green */
+    .plan-card.basic {
+      background:linear-gradient(160deg,#071a12,#0a2218);
+      border-color:rgba(16,185,129,.25);
+    }
+    .plan-card.basic:hover { box-shadow:0 20px 60px rgba(16,185,129,.2); }
+
+    /* growth — blue (popular) */
+    .plan-card.growth {
+      background:linear-gradient(160deg,#071228,#0d1e4a);
+      border-color:rgba(59,130,246,.5);
+      box-shadow:0 0 0 1px rgba(59,130,246,.3), 0 16px 50px rgba(59,130,246,.2);
+    }
+    .plan-card.growth:hover { box-shadow:0 0 0 1px rgba(59,130,246,.5), 0 24px 70px rgba(59,130,246,.3); }
+
+    /* pro — purple */
+    .plan-card.pro {
+      background:linear-gradient(160deg,#120718,#1a0a28);
+      border-color:rgba(139,92,246,.25);
+    }
+    .plan-card.pro:hover { box-shadow:0 20px 60px rgba(139,92,246,.2); }
+
+    .popular-badge {
+      position:absolute; top:-14px; right:50%; transform:translateX(50%);
+      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      color:#fff; padding:5px 22px; border-radius:100px;
+      font-size:.76rem; font-weight:800; white-space:nowrap;
+      box-shadow:0 4px 16px rgba(59,130,246,.5);
+    }
+    .plan-header { margin-bottom:1.75rem; }
+    .plan-icon-badge {
+      width:52px; height:52px; border-radius:14px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.6rem; margin-bottom:1rem;
+    }
+    .basic  .plan-icon-badge { background:rgba(16,185,129,.15); }
+    .growth .plan-icon-badge { background:rgba(59,130,246,.15); }
+    .pro    .plan-icon-badge { background:rgba(139,92,246,.15); }
+    .plan-name-text { font-size:1.3rem; font-weight:900; color:#fff; margin-bottom:.25rem; }
+    .plan-tagline   { font-size:.88rem; font-weight:700; color:rgba(255,255,255,.65); }
+    .plan-price-block {
+      padding:1.5rem 0; border-top:1px solid rgba(255,255,255,.07);
+      border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:1.75rem;
+    }
+    .price-num {
+      font-size:3rem; font-weight:900; line-height:1; color:#fff;
+    }
+    .price-num sup { font-size:1.1rem; font-weight:700; color:rgba(255,255,255,.6); vertical-align:super; }
+    .price-period { font-size:.88rem; font-weight:700; color:rgba(255,255,255,.6); margin-top:5px; }
+    .feat-list { list-style:none; flex:1; margin-bottom:2rem; }
+    .feat-list li {
+      display:flex; align-items:flex-start; gap:10px;
+      padding:.55rem 0; font-size:.94rem; font-weight:700;
+      color:rgba(255,255,255,.9);
+      border-bottom:1px solid rgba(255,255,255,.05);
+    }
+    .feat-list li:last-child { border-bottom:none; }
+    .feat-list .ck { flex-shrink:0; margin-top:2px; font-size:1rem; }
+    .basic  .feat-list .ck { color:#34d399; }
+    .growth .feat-list .ck { color:#60a5fa; }
+    .pro    .feat-list .ck { color:#c4b5fd; }
+    .feat-list .sect {
+      font-size:.72rem; font-weight:800; text-transform:uppercase;
+      letter-spacing:1px; padding:.9rem 0 .4rem; border-bottom:none;
+      color:rgba(255,255,255,.28);
+    }
+    .btn-plan {
+      width:100%; padding:1rem; border-radius:12px; font-family:inherit;
+      font-size:1rem; font-weight:800; cursor:pointer; transition:.3s;
+      border:1.5px solid; letter-spacing:.2px;
+    }
+    .basic  .btn-plan { border-color:rgba(16,185,129,.5);  color:#34d399; background:rgba(16,185,129,.08); }
+    .growth .btn-plan { border-color:var(--blue);           color:#fff;    background:var(--blue); box-shadow:0 4px 20px rgba(59,130,246,.4); }
+    .pro    .btn-plan { border-color:rgba(139,92,246,.5);  color:#c4b5fd; background:rgba(139,92,246,.08); }
+    .basic  .btn-plan:hover { background:rgba(16,185,129,.15); }
+    .growth .btn-plan:hover { transform:translateY(-1px); box-shadow:0 8px 32px rgba(59,130,246,.55); }
+    .pro    .btn-plan:hover { background:rgba(139,92,246,.15); }
+    .pricing-note {
+      text-align:center; margin-top:2rem;
+      color:rgba(255,255,255,.6); font-size:.9rem; font-weight:700;
+    }
+    .pricing-note strong { color:#fbbf24; }
+
+    /* ── CTA BANNER ────────────── */
+    .cta-wrap {
+      background:linear-gradient(140deg,#070d1a,#0d2a6e);
+      text-align:center; padding:6rem 2rem;
+    }
+    .cta-wrap h2 { color:#fff; font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900; margin-bottom:1rem; }
+    .cta-wrap p  { color:rgba(255,255,255,.75); font-size:1.1rem; font-weight:700; margin-bottom:2rem; }
+
+    /* ── FOOTER ──────────────────── */
+    footer {
+      background:#050b17; color:rgba(255,255,255,.4);
+      text-align:center; padding:2.5rem 2rem; font-size:.88rem;
+    }
+    .footer-links { margin-bottom:.9rem; }
+    .footer-links a {
+      color:rgba(255,255,255,.5); text-decoration:none;
+      margin:0 .9rem; font-size:.88rem; font-weight:600; transition:.2s;
+    }
+    .footer-links a:hover { color:#fff; }
+
+    /* ── MODAL ───────────────────── */
+    .overlay {
+      display:none; position:fixed; inset:0; z-index:200;
+      background:rgba(0,0,0,.75); backdrop-filter:blur(5px);
+      align-items:center; justify-content:center; padding:1rem;
+    }
+    .overlay.show { display:flex; }
+    .modal {
+      background:#fff; border-radius:24px; padding:2.5rem;
+      width:100%; max-width:500px; max-height:92vh;
+      overflow-y:auto; position:relative;
+      box-shadow:0 32px 80px rgba(0,0,0,.4);
+    }
+    .modal-close {
+      position:absolute; top:1.2rem; left:1.2rem;
+      background:#f1f5f9; border:none; width:32px; height:32px;
+      border-radius:50%; cursor:pointer; font-size:1rem; color:#64748b;
+      display:flex; align-items:center; justify-content:center; transition:.2s;
+    }
+    .modal-close:hover { background:#e2e8f0; color:#0f172a; }
+    .modal h2 { font-size:1.45rem; font-weight:900; color:#0f172a; margin-bottom:.25rem; }
+    .modal-sub { color:#64748b; margin-bottom:1.75rem; font-size:.92rem; }
+    .fgroup { margin-bottom:1rem; }
+    .fgroup label { display:block; font-weight:700; font-size:.85rem; color:#1e293b; margin-bottom:.4rem; }
+    .fgroup input {
+      width:100%; padding:.78rem 1rem; border:2px solid #e2e8f0;
+      border-radius:10px; font-family:inherit; font-size:.95rem;
+      color:#0f172a; outline:none; transition:.2s;
+    }
+    .fgroup input:focus { border-color:var(--blue); }
+    .frow { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    .malert {
+      padding:.8rem 1rem; border-radius:10px;
+      margin-bottom:1rem; font-size:.88rem; display:none;
+    }
+    .malert.show { display:block; }
+    .malert-err { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+    .malert-ok  { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+    hr.div { border:none; border-top:1px solid #e2e8f0; margin:1.25rem 0; }
+    .btn-submit {
+      width:100%; padding:1rem; margin-top:.5rem;
+      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      color:#fff; border:none; border-radius:12px;
+      font-family:inherit; font-size:1rem; font-weight:800;
+      cursor:pointer; transition:.2s; box-shadow:0 4px 20px rgba(29,78,216,.4);
+    }
+    .btn-submit:hover { transform:translateY(-1px); box-shadow:0 8px 28px rgba(29,78,216,.55); }
+    .btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+
+    /* ── RESPONSIVE ─────────────── */
+    @media (max-width:960px) {
+      .pricing-row { grid-template-columns:1fr; max-width:460px; margin-inline:auto; }
+    }
+    @media (max-width:768px) {
+      .nav-links a:not(.btn-enter) { display:none; }
+      .hero-stat { padding:0 1.5rem; }
+      .frow { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ NAV ══ -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%">
+          <rect width="100" height="100" rx="17" fill="#0d0f14"/>
+          <circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/>
+          <circle cx="43" cy="42" r="12" fill="white"/>
+          <path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/>
+          <path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/>
+          <g fill="white">
+            <g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
+            <g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
+            <g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
+          </g>
+          <polygon points="49,58 60,68 83,91 71,88" fill="white"/>
+          <polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-name">يقظ</div>
+        <div class="logo-sub">Yaqiz Accounting</div>
+      </div>
+    </a>
+    <div class="nav-links">
+      <a href="#features">المميزات</a>
+      <a href="#pricing">الباقات</a>
+      <a href="#compliance">الامتثال</a>
+      <a href="/VVIP.html" class="btn-enter">دخول التطبيق</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ HERO ══ -->
+<section class="hero" id="home">
+  <div class="hero-content">
+    <div class="hero-badge">🇸🇦 &nbsp; متوافق مع هيئة الزكاة والضريبة والجمارك — ZATCA</div>
+    <h1>حاسب بذكاء<br><em>أدر بثقة</em></h1>
+    <p class="hero-sub">
+      فواتير إلكترونية معتمدة، إدارة مخزون وموظفين، تقارير مالية متكاملة —
+      كل ما تحتاجه لإدارة منشأتك من مكان واحد، بسيرفر داخل المملكة العربية السعودية
+    </p>
+    <div class="hero-btns">
+      <button class="btn-cta" onclick="openModal()">ابدأ تجربتك المجانية — 14 يوم</button>
+      <a href="#pricing" class="btn-ghost-cta">شاهد الباقات والأسعار</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="stat-n">14</div>
+        <div class="stat-l">يوم تجريبي مجاني</div>
+      </div>
+      <div class="hero-stat">
+        <div class="stat-n">15%</div>
+        <div class="stat-l">ضريبة القيمة المضافة تلقائية</div>
+      </div>
+      <div class="hero-stat">
+        <div class="stat-n">24/7</div>
+        <div class="stat-l">سيرفر داخل المملكة 🇸🇦</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FEATURES ══ -->
+<section class="section bg-light" id="features">
+  <div class="container">
+    <div class="text-center">
+      <div class="sec-label">المميزات</div>
+      <h2 class="sec-title">كل ما تحتاجه لإدارة أعمالك</h2>
+      <p class="sec-sub">نظام محاسبي متكامل مصمم خصيصاً للسوق السعودي — من الفاتورة إلى التقرير المالي</p>
+    </div>
+    <div class="feat-grid">
+
+      <div class="feat-card c-blue">
+        <div class="feat-icon">🧾</div>
+        <h3>فواتير إلكترونية متوافقة مع ZATCA</h3>
+        <p>أصدر فواتير ضريبية معتمدة بمواصفات الهيئة مع احتساب ضريبة القيمة المضافة 15% تلقائياً، ودعم كامل لفواتير المبيعات والمرتجعات وعروض الأسعار.</p>
+        <div class="feat-tags"><span class="feat-tag">فاتورة ضريبية</span><span class="feat-tag">مرتجعات</span><span class="feat-tag">عروض أسعار</span></div>
+      </div>
+
+      <div class="feat-card c-green">
+        <div class="feat-icon">📦</div>
+        <h3>إدارة المخزون والمنتجات</h3>
+        <p>تتبع مخزونك لحظة بلحظة مع تنبيهات نقص البضاعة، وتقارير حركة المخزون، وإدارة الفئات والوحدات والباركود بكل سهولة.</p>
+        <div class="feat-tags"><span class="feat-tag">تنبيه نقص</span><span class="feat-tag">حركة المخزون</span><span class="feat-tag">باركود</span></div>
+      </div>
+
+      <div class="feat-card c-amber">
+        <div class="feat-icon">💰</div>
+        <h3>الخزينة وحركة النقد</h3>
+        <p>سندات قبض وصرف منظمة، تتبع كامل لكل دخل وخرج، وتقارير التدفق النقدي اليومي والشهري والسنوي — كل حركة موثقة ومحاسبة.</p>
+        <div class="feat-tags"><span class="feat-tag">سند قبض</span><span class="feat-tag">سند صرف</span><span class="feat-tag">تدفق نقدي</span></div>
+      </div>
+
+      <div class="feat-card c-purple">
+        <div class="feat-icon">👥</div>
+        <h3>الموظفون والرواتب</h3>
+        <p>إدارة بيانات الموظفين، وتوليد كشوف الرواتب الشهرية، ومتابعة الورديات والحضور والغياب، مع دعم كامل لنظام نقاط الولاء.</p>
+        <div class="feat-tags"><span class="feat-tag">رواتب</span><span class="feat-tag">ورديات</span><span class="feat-tag">ولاء</span></div>
+      </div>
+
+      <div class="feat-card c-cyan">
+        <div class="feat-icon">🛒</div>
+        <h3>المشتريات وإدارة الموردين</h3>
+        <p>سجّل مشترياتك وأدر علاقاتك مع الموردين، وتابع الديون والمستحقات، وأنشئ أوامر شراء احترافية بضغطة واحدة.</p>
+        <div class="feat-tags"><span class="feat-tag">موردون</span><span class="feat-tag">أوامر شراء</span><span class="feat-tag">مصاريف</span></div>
+      </div>
+
+      <div class="feat-card c-rose">
+        <div class="feat-icon">📊</div>
+        <h3>تقارير مالية شاملة</h3>
+        <p>قائمة الدخل، الميزانية العمومية، ميزان المراجعة، التسوية البنكية، تقرير الزكاة والضريبة — جميع التقارير جاهزة للطباعة بضغطة زر.</p>
+        <div class="feat-tags"><span class="feat-tag">قائمة دخل</span><span class="feat-tag">ميزانية</span><span class="feat-tag">زكاة</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ══ -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="text-center">
+      <div class="sec-label">كيف يعمل</div>
+      <h2 class="sec-title">ابدأ في 3 خطوات فقط</h2>
+      <p class="sec-sub">لا تحتاج خبرة تقنية — يقظ مصمم للبساطة والسرعة</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h3>سجّل شركتك</h3>
+        <p>أدخل اسم شركتك وبيانات السجل التجاري في دقائق معدودة — التجربة مجانية 14 يوماً بلا قيود</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h3>أضف بياناتك</h3>
+        <p>استورد منتجاتك وعملاءك وموردينك بملف Excel أو أضفهم يدوياً — الخيار لك</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h3>ابدأ الإدارة</h3>
+        <p>أصدر فواتيرك واستقبل مدفوعاتك وتابع أداء أعمالك من أي جهاز في أي مكان</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ COMPLIANCE ══ -->
+<section class="section bg-light" id="compliance">
+  <div class="container">
+    <div class="text-center">
+      <div class="sec-label">الامتثال والأمان</div>
+      <h2 class="sec-title">مبني على أسس قانونية صحيحة</h2>
+      <p class="sec-sub">يقظ مصمم ليلبي جميع المتطلبات التنظيمية للمملكة العربية السعودية</p>
+    </div>
+    <div class="comp-grid">
+      <div class="comp-card">
+        <div class="ci">🏛️</div>
+        <h4>متوافق مع ZATCA</h4>
+        <p>فواتير إلكترونية بمواصفات هيئة الزكاة والضريبة والجمارك — المرحلة الثانية</p>
+      </div>
+      <div class="comp-card">
+        <div class="ci">🔒</div>
+        <h4>حماية البيانات PDPL</h4>
+        <p>بيانات منشأتك محمية وفق نظام حماية البيانات الشخصية السعودي</p>
+      </div>
+      <div class="comp-card">
+        <div class="ci">🇸🇦</div>
+        <h4>سيرفر داخل المملكة</h4>
+        <p>بياناتك مخزّنة داخل الأراضي السعودية ولا تغادرها أبداً</p>
+      </div>
+      <div class="comp-card">
+        <div class="ci">🔐</div>
+        <h4>تشفير HTTPS كامل</h4>
+        <p>جميع الاتصالات مشفرة بأحدث معايير الأمان العالمية TLS 1.3</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRICING ══ -->
+<section class="section bg-dark" id="pricing">
+  <div class="container">
+    <div class="text-center">
+      <div class="sec-label light">الباقات والأسعار</div>
+      <h2 class="sec-title light">اختر الباقة المناسبة لأعمالك</h2>
+      <p class="sec-sub light">جميع الباقات تبدأ بتجربة مجانية 14 يوماً بكامل المميزات — لا يلزم بطاقة بنكية</p>
+    </div>
+
+    <div class="pricing-row">
+
+      <!-- BASIC -->
+      <div class="plan-card basic">
+        <div class="plan-header">
+          <div class="plan-icon-badge">📗</div>
+          <div class="plan-name-text">الأساسية</div>
+          <div class="plan-tagline">مثالية للمنشآت الصغيرة</div>
+        </div>
+        <div class="plan-price-block">
+          <div class="price-num"><sup>ر.س</sup> 149</div>
+          <div class="price-period">شهرياً</div>
+        </div>
+        <ul class="feat-list">
+          <li class="sect">الفوترة والمبيعات</li>
+          <li><span class="ck">✓</span> فواتير إلكترونية (ZATCA متوافق)</li>
+          <li><span class="ck">✓</span> مرتجعات المبيعات</li>
+          <li><span class="ck">✓</span> إدارة العملاء والموردين</li>
+          <li class="sect">المخزون والمشتريات</li>
+          <li><span class="ck">✓</span> إدارة المخزون والمنتجات</li>
+          <li><span class="ck">✓</span> المشتريات والمصاريف التشغيلية</li>
+          <li class="sect">المالية</li>
+          <li><span class="ck">✓</span> الالتزامات المالية والمستحقات</li>
+          <li class="sect">التقارير</li>
+          <li><span class="ck">✓</span> تقرير ضريبة القيمة المضافة</li>
+          <li><span class="ck">✓</span> تقرير الزكاة</li>
+        </ul>
+        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+      </div>
+
+      <!-- GROWTH -->
+      <div class="plan-card growth">
+        <div class="popular-badge">⭐ الأكثر اختياراً</div>
+        <div class="plan-header">
+          <div class="plan-icon-badge">📘</div>
+          <div class="plan-name-text">النمو</div>
+          <div class="plan-tagline">للمنشآت التي تحتاج تحكم أكبر</div>
+        </div>
+        <div class="plan-price-block">
+          <div class="price-num"><sup>ر.س</sup> 299</div>
+          <div class="price-period">شهرياً</div>
+        </div>
+        <ul class="feat-list">
+          <li class="sect">كل ما في الأساسية، إضافةً إلى</li>
+          <li><span class="ck">✓</span> إدارة الموظفين والرواتب</li>
+          <li><span class="ck">✓</span> إدارة الورديات</li>
+          <li><span class="ck">✓</span> نظام نقاط الولاء</li>
+          <li><span class="ck">✓</span> سجل النشاط الكامل</li>
+          <li><span class="ck">✓</span> تقرير التدفقات النقدية</li>
+          <li><span class="ck">✓</span> حركة المخزون التفصيلية</li>
+          <li><span class="ck">✓</span> المصاريف الإدارية</li>
+          <li><span class="ck">✓</span> فترة مخصصة في التقارير</li>
+          <li><span class="ck">✓</span> استيراد البيانات</li>
+        </ul>
+        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+      </div>
+
+      <!-- PRO -->
+      <div class="plan-card pro">
+        <div class="plan-header">
+          <div class="plan-icon-badge">📙</div>
+          <div class="plan-name-text">الاحترافية</div>
+          <div class="plan-tagline">للمنشآت ذات المتطلبات المتقدمة</div>
+        </div>
+        <div class="plan-price-block">
+          <div class="price-num"><sup>ر.س</sup> 499</div>
+          <div class="price-period">شهرياً</div>
+        </div>
+        <ul class="feat-list">
+          <li class="sect">كل ما في باقة النمو، إضافةً إلى</li>
+          <li><span class="ck">✓</span> دفتر اليومية والقيود المحاسبية</li>
+          <li><span class="ck">✓</span> قائمة الدخل (أرباح وخسائر)</li>
+          <li><span class="ck">✓</span> الميزانية العمومية</li>
+          <li><span class="ck">✓</span> ميزان المراجعة</li>
+          <li><span class="ck">✓</span> التسوية البنكية</li>
+          <li><span class="ck">✓</span> تقرير الذمم المتأخرة</li>
+          <li><span class="ck">✓</span> أوامر الشراء</li>
+          <li><span class="ck">✓</span> مقارنة الفترات المالية</li>
+        </ul>
+        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+      </div>
+
+    </div>
+    <p class="pricing-note">
+      بعد انتهاء التجربة اختر باقتك — أو تواصل معنا على
+      <strong>yaqiz.app@outlook.sa</strong>
+    </p>
+  </div>
+</section>
+
+<!-- ══ CTA ══ -->
+<div class="cta-wrap">
+  <h2>جاهز تبدأ إدارة أعمالك باحترافية؟</h2>
+  <p>انضم للمنشآت السعودية التي تثق في يقظ لإدارة حساباتها</p>
+  <button class="btn-cta" onclick="openModal()">سجّل الآن — مجاناً</button>
+</div>
+
+<!-- ══ FOOTER ══ -->
+<footer>
+  <div class="footer-links">
+    <a href="/VVIP.html">دخول التطبيق</a>
+    <a href="/privacy">سياسة الخصوصية</a>
+    <a href="/terms">شروط الاستخدام</a>
+    <a href="mailto:yaqiz.app@outlook.sa">تواصل معنا</a>
+  </div>
+  <p>© 2026 يقظ لحلول المحاسبة — جميع الحقوق محفوظة 🇸🇦</p>
+</footer>
+
+<!-- ══ MODAL ══ -->
+<div class="overlay" id="regOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h2>سجّل شركتك في يقظ</h2>
+    <p class="modal-sub">أنشئ حسابك مجاناً — تجربة 14 يوم بكامل المميزات</p>
+    <div class="malert malert-err" id="mErr"></div>
+    <div class="malert malert-ok"  id="mOk"></div>
+    <form id="regForm" onsubmit="doReg(event)" novalidate>
+      <div class="fgroup">
+        <label>اسم الشركة / المنشأة *</label>
+        <input type="text" id="f-co" placeholder="مثال: مؤسسة النجاح للتجارة" required>
+      </div>
+      <hr class="div">
+      <div class="frow">
+        <div class="fgroup">
+          <label>اسم المستخدم *</label>
+          <input type="text" id="f-un" placeholder="ahmed1" required autocomplete="username">
+        </div>
+        <div class="fgroup">
+          <label>كلمة المرور *</label>
+          <input type="password" id="f-pw" placeholder="Ahmed@123" required minlength="8" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="fgroup">
+        <label>الاسم الكامل *</label>
+        <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required>
+      </div>
+      <hr class="div">
+      <div class="frow">
+        <div class="fgroup">
+          <label>رقم السجل التجاري</label>
+          <input type="text" id="f-cr" placeholder="1234567890">
+        </div>
+        <div class="fgroup">
+          <label>الرقم الضريبي VAT</label>
+          <input type="text" id="f-vt" placeholder="300…">
+        </div>
+      </div>
+      <button type="submit" class="btn-submit" id="regBtn">إنشاء الحساب</button>
+      <p style="text-align:center;font-size:.78rem;color:#94a3b8;margin-top:.9rem">
+        بالتسجيل توافق على
+        <a href="/terms" target="_blank" style="color:var(--blue)">شروط الاستخدام</a>
+        و<a href="/privacy" target="_blank" style="color:var(--blue)">سياسة الخصوصية</a>
+      </p>
+    </form>
+  </div>
+</div>
+
+<script>
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%"><rect width="100" height="100" rx="17" fill="#0d0f14"/><circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/><circle cx="43" cy="42" r="12" fill="white"/><path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/><path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/><g fill="white"><g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g></g><polygon points="49,58 60,68 83,91 71,88" fill="white"/><polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/></svg>`;
+
+function openModal() {
+  document.getElementById('regOverlay').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('regOverlay').classList.remove('show');
+  document.body.style.overflow = '';
+  document.getElementById('mErr').classList.remove('show');
+  document.getElementById('mOk').classList.remove('show');
+  document.getElementById('regForm').reset();
+  const b = document.getElementById('regBtn');
+  b.textContent = 'إنشاء الحساب'; b.disabled = false;
+}
+document.getElementById('regOverlay').addEventListener('click', e => { if(e.target===document.getElementById('regOverlay')) closeModal(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+async function doReg(e) {
+  e.preventDefault();
+  const btn = document.getElementById('regBtn');
+  const err = document.getElementById('mErr');
+  const ok  = document.getElementById('mOk');
+  err.classList.remove('show'); ok.classList.remove('show');
+  const co = document.getElementById('f-co').value.trim();
+  const un = document.getElementById('f-un').value.trim();
+  const pw = document.getElementById('f-pw').value;
+  const fn = document.getElementById('f-fn').value.trim();
+  const cr = document.getElementById('f-cr').value.trim();
+  const vt = document.getElementById('f-vt').value.trim();
+  if (!co||!un||!pw||!fn) {
+    err.textContent='❌ يرجى ملء جميع الحقول الإلزامية'; err.classList.add('show'); return;
+  }
+  if (un.length<6||!/\d/.test(un)) {
+    err.textContent='❌ اسم المستخدم: 6 أحرف على الأقل ويحتوي على رقم (مثال: ahmed1)'; err.classList.add('show'); return;
+  }
+  if (pw.length<8||!/[a-z]/.test(pw)||!/[A-Z]/.test(pw)) {
+    err.textContent='❌ كلمة المرور: 8 أحرف + حرف كبير + حرف صغير (مثال: Ahmed@123)'; err.classList.add('show'); return;
+  }
+  btn.textContent='جاري التسجيل...'; btn.disabled=true;
+  try {
+    const body={company_name:co,username:un,password:pw,full_name:fn};
+    if(cr) body.cr_number=cr;
+    if(vt) body.vat_number=vt;
+    const res  = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if(data.success){
+      localStorage.setItem('yaqiz_access_token',data.accessToken);
+      localStorage.setItem('yaqiz_refresh_token',data.refreshToken);
+      ok.textContent='✅ تم إنشاء حسابك! جاري التوجيه...'; ok.classList.add('show');
+      setTimeout(()=>{window.location.href='/VVIP.html';},1600);
+    } else {
+      err.textContent='❌ '+(data.message||'حدث خطأ، حاول مجدداً'); err.classList.add('show');
+      btn.textContent='إنشاء الحساب'; btn.disabled=false;
+    }
+  } catch {
+    err.textContent='❌ تعذّر الاتصال بالخادم'; err.classList.add('show');
+    btn.textContent='إنشاء الحساب'; btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>

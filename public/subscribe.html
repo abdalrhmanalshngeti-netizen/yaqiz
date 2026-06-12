@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>الاشتراك — يقظ</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Tajawal', sans-serif; background:#0d0f14; color:#e2e8f0; min-height:100vh; display:flex; flex-direction:column; }
+    nav {
+      background:#0d0f14; border-bottom:1px solid rgba(255,255,255,.07);
+      padding:0 5%; height:64px; display:flex; align-items:center;
+      justify-content:space-between;
+    }
+    .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .nav-logo svg { width:36px; height:36px; border-radius:8px; }
+    .nav-logo-text { font-size:1.2rem; font-weight:900; color:#fff; }
+    .nav-logo-sub  { font-size:.75rem; color:#64748b; }
+    .container { max-width:860px; margin:0 auto; padding:3rem 5%; flex:1; }
+    h1 { font-size:2rem; font-weight:900; color:#fff; text-align:center; margin-bottom:.5rem; }
+    .sub-title { color:#64748b; text-align:center; font-size:.97rem; margin-bottom:2.5rem; }
+
+    /* Alert */
+    .alert { border-radius:10px; padding:1rem 1.25rem; margin-bottom:1.5rem; font-weight:600; font-size:.93rem; display:none; }
+    .alert.error   { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); color:#fca5a5; }
+    .alert.success { background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.3); color:#6ee7b7; }
+
+    /* Plans grid */
+    .plans { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-bottom:2rem; }
+    @media(max-width:680px){ .plans { grid-template-columns:1fr; } }
+    .plan-card {
+      border:2px solid rgba(255,255,255,.08); border-radius:14px; padding:1.5rem;
+      cursor:pointer; transition:all .2s; position:relative; background:#111827;
+    }
+    .plan-card:hover  { border-color:rgba(255,255,255,.2); background:#1e293b; }
+    .plan-card.active { border-color:#3b82f6; background:#1e3a5f; }
+    .plan-icon  { font-size:1.8rem; margin-bottom:.5rem; }
+    .plan-name  { font-size:1.1rem; font-weight:900; color:#fff; }
+    .plan-price { font-size:2rem; font-weight:900; color:#34d399; margin:.4rem 0; }
+    .plan-price span { font-size:.9rem; color:#64748b; font-weight:600; }
+    .plan-desc  { font-size:.83rem; color:#64748b; }
+    .popular-badge {
+      position:absolute; top:-12px; right:50%; transform:translateX(50%);
+      background:#3b82f6; color:#fff; font-size:.78rem; font-weight:700;
+      padding:3px 12px; border-radius:100px;
+    }
+
+    /* Duration */
+    .duration-section { margin-bottom:2rem; }
+    .duration-section label { display:block; font-weight:700; color:#cbd5e1; margin-bottom:.75rem; }
+    .duration-btns { display:flex; gap:.75rem; flex-wrap:wrap; }
+    .dur-btn {
+      border:1.5px solid rgba(255,255,255,.12); border-radius:8px; padding:.5rem 1.25rem;
+      background:transparent; color:#94a3b8; cursor:pointer; font-family:inherit; font-size:.9rem;
+      font-weight:600; transition:all .2s;
+    }
+    .dur-btn:hover  { border-color:rgba(255,255,255,.3); color:#e2e8f0; }
+    .dur-btn.active { border-color:#3b82f6; background:#1e3a5f; color:#fff; }
+    .dur-btn .save  { font-size:.75rem; color:#34d399; margin-right:4px; }
+
+    /* Summary */
+    .summary-box {
+      background:#111827; border:1px solid rgba(255,255,255,.08); border-radius:12px;
+      padding:1.5rem; margin-bottom:2rem;
+    }
+    .summary-row { display:flex; justify-content:space-between; padding:.5rem 0; color:#94a3b8; font-size:.93rem; }
+    .summary-row.total { border-top:1px solid rgba(255,255,255,.08); margin-top:.5rem; padding-top:1rem; }
+    .summary-row.total span:first-child { color:#fff; font-weight:700; }
+    .summary-row.total span:last-child  { color:#34d399; font-size:1.3rem; font-weight:900; }
+
+    /* Pay button */
+    .btn-pay {
+      width:100%; background:linear-gradient(135deg,#1d4ed8,#2563eb);
+      color:#fff; border:none; border-radius:12px; padding:1rem;
+      font-family:inherit; font-size:1.1rem; font-weight:900; cursor:pointer;
+      transition:all .2s; display:flex; align-items:center; justify-content:center; gap:.5rem;
+    }
+    .btn-pay:hover    { background:linear-gradient(135deg,#1e40af,#1d4ed8); transform:translateY(-1px); }
+    .btn-pay:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+    .btn-pay .spinner { width:20px; height:20px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; display:none; }
+    .btn-pay.loading .spinner { display:block; }
+    .btn-pay.loading .btn-text { display:none; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .secure-note { text-align:center; color:#334155; font-size:.82rem; margin-top:1rem; }
+    footer { text-align:center; padding:1.5rem; color:#334155; font-size:.82rem; border-top:1px solid rgba(255,255,255,.06); }
+    footer a { color:#475569; text-decoration:none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <rect width="512" height="512" rx="87" fill="#0d0f14"/>
+      <circle cx="220" cy="215" r="113" fill="none" stroke="white" stroke-width="46"/>
+      <circle cx="220" cy="215" r="61" fill="white"/>
+      <path d="M 235,134 A 82,82 0 0 1 283,268" fill="none" stroke="white" stroke-width="9"/>
+      <g fill="white">
+        <g transform="rotate(10,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
+        <g transform="rotate(40,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
+        <g transform="rotate(70,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
+      </g>
+      <polygon points="251,297 307,348 425,466 363,451" fill="white"/>
+      <polygon points="277,317 292,333 410,466 394,456" fill="#0d0f14"/>
+    </svg>
+    <div>
+      <div class="nav-logo-text">يقظ</div>
+      <div class="nav-logo-sub">Yaqiz Accounting</div>
+    </div>
+  </a>
+</nav>
+
+<div class="container">
+  <h1>اختر باقتك</h1>
+  <p class="sub-title">ادفع بأمان عبر Moyasar — بطاقة بنكية، مدى، STC Pay، Apple Pay</p>
+
+  <div id="alert" class="alert"></div>
+
+  <!-- Plans -->
+  <div class="plans">
+    <div class="plan-card" data-plan="basic" onclick="selectPlan('basic')">
+      <div class="plan-icon">📗</div>
+      <div class="plan-name">الأساسية</div>
+      <div class="plan-price">149 <span>ر.س / شهر</span></div>
+      <div class="plan-desc">فواتير، مخزون، تقارير ضريبية، الالتزامات</div>
+    </div>
+    <div class="plan-card" data-plan="growth" onclick="selectPlan('growth')">
+      <div class="popular-badge">⭐ الأكثر اختياراً</div>
+      <div class="plan-icon">📘</div>
+      <div class="plan-name">النمو</div>
+      <div class="plan-price">299 <span>ر.س / شهر</span></div>
+      <div class="plan-desc">+ موظفين، رواتب، نقاط ولاء، تدفقات نقدية</div>
+    </div>
+    <div class="plan-card" data-plan="pro" onclick="selectPlan('pro')">
+      <div class="plan-icon">📙</div>
+      <div class="plan-name">الاحترافية</div>
+      <div class="plan-price">499 <span>ر.س / شهر</span></div>
+      <div class="plan-desc">+ يومية محاسبية، ميزانية، تسوية بنكية، ذمم</div>
+    </div>
+  </div>
+
+  <!-- Duration -->
+  <div class="duration-section">
+    <label>مدة الاشتراك</label>
+    <div class="duration-btns">
+      <button class="dur-btn active" data-months="1" onclick="selectMonths(1)">شهر واحد</button>
+      <button class="dur-btn" data-months="3" onclick="selectMonths(3)">3 أشهر <span class="save">وفّر 5%</span></button>
+      <button class="dur-btn" data-months="6" onclick="selectMonths(6)">6 أشهر <span class="save">وفّر 10%</span></button>
+      <button class="dur-btn" data-months="12" onclick="selectMonths(12)">سنة <span class="save">وفّر 15%</span></button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-box">
+    <div class="summary-row"><span>الباقة</span><span id="sum-plan">—</span></div>
+    <div class="summary-row"><span>المدة</span><span id="sum-months">—</span></div>
+    <div class="summary-row"><span>السعر الشهري</span><span id="sum-monthly">—</span></div>
+    <div class="summary-row total"><span>الإجمالي</span><span id="sum-total">0 ر.س</span></div>
+  </div>
+
+  <button id="btn-pay" class="btn-pay" onclick="pay()" disabled>
+    <div class="spinner"></div>
+    <span class="btn-text">💳 ادفع الآن</span>
+  </button>
+  <p class="secure-note">🔒 مدفوعات آمنة بتشفير SSL عبر Moyasar — معتمد من ساما</p>
+</div>
+
+<footer>
+  <p>© 2026 يقظ &nbsp;·&nbsp; <a href="/privacy">سياسة الخصوصية</a> &nbsp;·&nbsp; <a href="/terms">شروط الاستخدام</a></p>
+</footer>
+
+<script>
+const PRICES = { basic:149, growth:299, pro:499 };
+const LABELS = { basic:'الأساسية', growth:'النمو', pro:'الاحترافية' };
+const DISCOUNTS = { 1:0, 3:0.05, 6:0.10, 12:0.15 };
+
+let selectedPlan   = null;
+let selectedMonths = 1;
+
+function showAlert(msg, type='error') {
+  const el = document.getElementById('alert');
+  el.textContent = msg;
+  el.className = `alert ${type}`;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display='none', 6000);
+}
+
+function selectPlan(plan) {
+  selectedPlan = plan;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-plan="${plan}"]`).classList.add('active');
+  updateSummary();
+  document.getElementById('btn-pay').disabled = false;
+}
+
+function selectMonths(m) {
+  selectedMonths = m;
+  document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-months="${m}"]`).classList.add('active');
+  updateSummary();
+}
+
+function updateSummary() {
+  if (!selectedPlan) return;
+  const base  = PRICES[selectedPlan];
+  const disc  = DISCOUNTS[selectedMonths] || 0;
+  const total = Math.round(base * selectedMonths * (1 - disc));
+  document.getElementById('sum-plan').textContent    = LABELS[selectedPlan];
+  document.getElementById('sum-months').textContent  = selectedMonths + (selectedMonths===1?' شهر':' أشهر');
+  document.getElementById('sum-monthly').textContent = base + ' ر.س';
+  document.getElementById('sum-total').textContent   = total + ' ر.س';
+}
+
+async function pay() {
+  if (!selectedPlan) return showAlert('اختر باقة أولاً');
+  const token = localStorage.getItem('yaqiz_access_token');
+  if (!token) {
+    showAlert('يجب تسجيل الدخول أولاً — جارٍ التوجيه...');
+    setTimeout(() => window.location.href = '/', 1500);
+    return;
+  }
+
+  const btn = document.getElementById('btn-pay');
+  btn.disabled = true;
+  btn.classList.add('loading');
+
+  try {
+    const disc  = DISCOUNTS[selectedMonths] || 0;
+    const months = disc > 0
+      ? Math.round(PRICES[selectedPlan] * selectedMonths * (1 - disc) / PRICES[selectedPlan] * 100) / 100
+      : selectedMonths;
+
+    const res = await fetch('/api/payment/create', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+      body: JSON.stringify({ plan: selectedPlan, months: selectedMonths })
+    });
+    const data = await res.json();
+
+    if (!data.success || !data.payment_url) {
+      showAlert(data.message || 'حدث خطأ في إنشاء الدفع');
+      return;
+    }
+
+    window.location.href = data.payment_url;
+
+  } catch (e) {
+    showAlert('تعذّر الاتصال بالخادم، حاول لاحقاً');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+// تحقق من وجود error في URL
+const urlParams = new URLSearchParams(window.location.search);
+const err = urlParams.get('error');
+if (err) {
+  const msgs = {
+    not_paid:     'لم يتم إتمام الدفع. يمكنك المحاولة مرة أخرى.',
+    verify_failed:'تعذّر التحقق من الدفع. تواصل مع الدعم إذا تم خصم المبلغ.',
+    server_error: 'خطأ داخلي. تواصل مع الدعم.',
+    missing_id:   'معرّف الدفع مفقود.',
+  };
+  showAlert(msgs[err] || 'حدث خطأ في عملية الدفع');
+}
+</script>
+</body>
+</html>

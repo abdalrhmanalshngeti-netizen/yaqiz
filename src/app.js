@@ -1,0 +1,129 @@
+require('dotenv').config();
+const express     = require('express');
+const helmet      = require('helmet');
+const cors        = require('cors');
+const compression = require('compression');
+const { apiLimiter } = require('./middleware/rateLimiter');
+
+const app = express();
+
+// ── Security & parsing ────────────────────────────────────────
+const isProduction = process.env.NODE_ENV === 'production';
+
+// إعادة توجيه HTTP → HTTPS في الإنتاج
+if (isProduction) {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    }
+    next();
+  });
+}
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:    ["'self'"],
+      scriptSrc:     ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc:       ["'self'", "https://fonts.gstatic.com"],
+      imgSrc:        ["'self'", "data:", "blob:"],
+      connectSrc:    ["'self'"],
+    }
+  },
+  hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+  frameguard: { action: 'deny' },
+}));
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // Postman أو server-to-server
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+    if (origin.startsWith('file://')) return cb(null, true);
+    const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (allowed.includes(origin) || allowed.includes('*')) return cb(null, true);
+    cb(new Error('CORS not allowed for: ' + origin));
+  },
+  credentials: true
+}));
+
+// ── خدمة الـ public files (api-client.js, manifest.json, sw.js) ──
+const staticPath = require('path').join(__dirname, '..', 'public');
+app.use('/public', require('express').static(staticPath));
+
+// sw.js يجب أن يُقدَّم من / لأن scope يعتمد على المسار
+app.get('/sw.js', (_, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(require('path').join(staticPath, 'sw.js'));
+});
+app.use(compression());
+app.use(express.json({ limit: '5mb' }));
+app.use(apiLimiter);
+
+// ── Health check ─────────────────────────────────────────────
+app.get('/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
+
+// ── Routes ───────────────────────────────────────────────────
+app.use('/api/register',  require('./routes/register.routes'));
+app.use('/api/admin',     require('./routes/admin.routes'));
+app.use('/api/print',     require('./routes/print.routes'));
+app.use('/api/auth',      require('./routes/auth.routes'));
+app.use('/api/users',     require('./routes/users.routes'));
+app.use('/api/products',  require('./routes/products.routes'));
+app.use('/api/customers', require('./routes/customers.routes'));
+app.use('/api/suppliers', require('./routes/suppliers.routes'));
+app.use('/api/invoices',  require('./routes/invoices.routes'));
+app.use('/api/quotes',    require('./routes/quotes.routes'));
+app.use('/api/purchases', require('./routes/purchases.routes'));
+app.use('/api/treasury',  require('./routes/treasury.routes'));
+app.use('/api/employees', require('./routes/employees.routes'));
+app.use('/api/reports',   require('./routes/reports.routes'));
+app.use('/api/support',   require('./routes/support.routes'));
+app.use('/api/payment',   require('./routes/payments.routes'));
+app.use('/api/ai',        require('./routes/ai.routes'));
+
+// ── Static Pages ─────────────────────────────────────────────
+app.get('/',         (_, res) => res.sendFile(require('path').join(staticPath, 'index.html')));
+app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
+app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));
+app.get('/subscribe',        (_, res) => res.sendFile(require('path').join(staticPath, 'subscribe.html')));
+app.get('/reset-password',   (_, res) => res.sendFile(require('path').join(staticPath, 'reset-password.html')));
+app.get('/payment/callback', require('./controllers/payments.controller').verifyCallback);
+app.get('/VVIP.html',(_, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.sendFile(require('path').join(staticPath, 'VVIP.html'));
+});
+// /admin — لا يُعاد توجيهه للخارج، التحقق من المصادقة يتم داخل الصفحة عبر JWT
+app.get('/admin', (_, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  res.sendFile(require('path').join(staticPath, 'admin.html'));
+});
+
+// ── Error handler ────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err.message);
+  res.status(err.status || 500).json({
+    success: false,
+    message: isProduction ? 'خطأ داخلي في الخادم' : (err.message || 'خطأ داخلي في الخادم')
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  process.exit(1);
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Yaqiz Backend running on port ${PORT}`);
+  console.log(`   Environment: ${process.env.NODE_ENV}`);
+});
+
+module.exports = app;

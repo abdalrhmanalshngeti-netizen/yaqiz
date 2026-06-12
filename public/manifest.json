@@ -1,0 +1,36 @@
+{
+  "name": "قيمة — محاسبة الأعمال",
+  "short_name": "قيمة",
+  "description": "نظام محاسبة متكامل للمنشآت الصغيرة والمتوسطة",
+  "start_url": "/VVIP.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/public/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "الفواتير",
+      "short_name": "فواتير",
+      "url": "/VVIP.html#invoices",
+      "description": "إنشاء فاتورة جديدة"
+    },
+    {
+      "name": "المنتجات",
+      "short_name": "منتجات",
+      "url": "/VVIP.html#products",
+      "description": "إدارة المنتجات"
+    }
+  ]
+}
