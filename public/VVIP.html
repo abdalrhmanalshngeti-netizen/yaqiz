@@ -9534,7 +9534,7 @@ async function handleSilentAIImport(file, docType) {
   if (!file) return;
   if (file.size > 20 * 1024 * 1024) { showToast(lang==='ar'?'⚠️ حجم الملف أكبر من 20 ميجا':'File too large'); return; }
   const token = localStorage.getItem('yaqiz_access_token');
-  if (!token) { showToast(lang==='ar'?'⚠️ افتح المنصة عبر http://localhost:3000 وسجّل الدخول':'Open via http://localhost:3000 and login'); return; }
+  if (!token) { showToast(lang==='ar'?'⚠️ يجب تسجيل الدخول أولاً لاستخدام الذكاء الاصطناعي':'Please login first to use AI features'); return; }
 
   const mc = el('modal-container');
   mc.innerHTML = `
