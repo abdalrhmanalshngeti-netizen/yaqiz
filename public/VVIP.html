@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" id="favicon-link">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/lucide@0.263.1/dist/umd/lucide.min.js" onerror="var s=document.createElement('script');s.src='https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js';document.head.appendChild(s);"></script>
+<script src="/public/lucide.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -110,9 +110,9 @@ html.dark [style*="color: #1e293b"],
 html.dark [style*="color:#0f172a"],
 html.dark [style*="color: #0f172a"]        { color: var(--text-main) !important; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html[dir="rtl"] body { font-family: 'Tajawal', sans-serif; font-weight: 600; }
-html[dir="ltr"] body { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }
-body { background: var(--bg); color: var(--text-main); -webkit-font-smoothing: antialiased; font-weight: 600; }
+html[dir="rtl"] body { font-family: 'Tajawal', sans-serif; font-weight: 700; }
+html[dir="ltr"] body { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; }
+body { background: var(--bg); color: var(--text-main); -webkit-font-smoothing: antialiased; font-weight: 700; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
@@ -9419,14 +9419,24 @@ function init() {
   initDark();
   migrateDB();
   setupAutoBackup();
-  // restore user session — في وضع السحابة نتحقق من وجود token صالح
+  // restore user session — في وضع السحابة نتحقق من token صالح وغير منتهي
   const isCloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-  const hasToken = !!localStorage.getItem('yaqiz_access_token');
-  if (!isCloud || hasToken) {
+  let hasValidToken = false;
+  if (isCloud) {
+    try {
+      const tok = localStorage.getItem('yaqiz_access_token');
+      if (tok) {
+        const payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        hasValidToken = payload.exp * 1000 > Date.now();
+      }
+    } catch(e) {}
+  }
+  if (!isCloud || hasValidToken) {
     try { const u=JSON.parse(localStorage.getItem('yaqiz_user')); if(u){ const db=getDB(); const fresh=db.users.find(x=>x.id===u.id&&x.active!==false); if(fresh)currentUser=fresh; } } catch(e){}
   } else {
-    // سحابة بدون token — امسح الجلسة القديمة
     localStorage.removeItem('yaqiz_user');
+    localStorage.removeItem('yaqiz_access_token');
+    localStorage.removeItem('yaqiz_refresh_token');
   }
   renderApp();
 }
