@@ -9419,8 +9419,15 @@ function init() {
   initDark();
   migrateDB();
   setupAutoBackup();
-  // restore user session
-  try { const u=JSON.parse(localStorage.getItem('yaqiz_user')); if(u){ const db=getDB(); const fresh=db.users.find(x=>x.id===u.id&&x.active!==false); if(fresh)currentUser=fresh; } } catch(e){}
+  // restore user session — في وضع السحابة نتحقق من وجود token صالح
+  const isCloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  const hasToken = !!localStorage.getItem('yaqiz_access_token');
+  if (!isCloud || hasToken) {
+    try { const u=JSON.parse(localStorage.getItem('yaqiz_user')); if(u){ const db=getDB(); const fresh=db.users.find(x=>x.id===u.id&&x.active!==false); if(fresh)currentUser=fresh; } } catch(e){}
+  } else {
+    // سحابة بدون token — امسح الجلسة القديمة
+    localStorage.removeItem('yaqiz_user');
+  }
   renderApp();
 }
 init();
