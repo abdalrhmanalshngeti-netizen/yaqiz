@@ -87,7 +87,10 @@ exports.extract = async (req, res, next) => {
       data: parsed,
       usage: { used: used + 1, limit },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    // إرجاع رسالة الخطأ الحقيقية للمساعدة في التشخيص
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في الذكاء الاصطناعي' });
+  }
 };
 
 // POST /api/ai/analyze
@@ -127,7 +130,9 @@ exports.analyze = async (req, res, next) => {
       analysis: result.content,
       usage: { used: used + 1, limit },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في التحليل الذكي' });
+  }
 };
 
 // POST /api/ai/assistant
@@ -151,7 +156,9 @@ exports.assistant = async (req, res, next) => {
     await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out);
 
     res.json({ success: true, answer: result.content });
-  } catch (err) { next(err); }
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في المساعد الذكي' });
+  }
 };
 
 // GET /api/ai/usage
