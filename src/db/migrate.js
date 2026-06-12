@@ -4,7 +4,7 @@ const path = require('path');
 const db   = require('../config/db');
 
 async function migrate() {
-  const migrations = ['001_initial.sql', '002_saas.sql', '003_support_tickets.sql', '004_impersonation.sql', '005_indexes.sql', '006_payments.sql', '007_email.sql', '008_ai.sql', '009_ensure_core.sql'];
+  const migrations = ['001_initial.sql', '002_saas.sql', '003_support_tickets.sql', '004_impersonation.sql', '005_indexes.sql', '006_payments.sql', '007_email.sql', '008_ai.sql', '009_ensure_core.sql', '010_platform_admins.sql'];
   for (const file of migrations) {
     const filePath = path.join(__dirname, 'migrations', file);
     if (!fs.existsSync(filePath)) continue;

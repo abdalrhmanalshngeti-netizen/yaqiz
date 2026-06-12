@@ -5,28 +5,31 @@ const db     = require('../config/db');
 // ── تسجيل دخول المدير العام ─────────────────────────────
 exports.login = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبان' });
+    }
 
     const { rows } = await db.query(
-      `SELECT * FROM users WHERE username = $1 AND is_super_admin = true AND active = true`,
-      [username]
+      `SELECT * FROM platform_admins WHERE email = $1 AND active = true`,
+      [email.toLowerCase().trim()]
     );
-    const user = rows[0];
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      // تسجيل محاولة فاشلة
-      await db.query(
-        `INSERT INTO login_attempts (username, ip_address, success) VALUES ($1, $2, false)`,
-        [username || '', ip]
-      ).catch(() => {});
+    const admin = rows[0];
+    if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
       return res.status(401).json({ success: false, message: 'بيانات غير صحيحة' });
     }
+
+    await db.query(
+      `UPDATE platform_admins SET last_login = NOW() WHERE id = $1`,
+      [admin.id]
+    );
+
     const token = jwt.sign(
-      { sub: user.id, is_super_admin: true, username: user.username },
+      { sub: admin.id, is_super_admin: true, email: admin.email, name: admin.full_name },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
-    res.json({ success: true, token, username: user.username });
+    res.json({ success: true, token, email: admin.email, name: admin.full_name });
   } catch (err) { next(err); }
 };
 
@@ -311,7 +314,7 @@ exports.setCompanyPlan = async (req, res, next) => {
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description)
       VALUES ('plan_changed', $1, $2)
-    `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.username}`]);
+    `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.email || req.admin.name}`]);
 
     res.json({ success: true, message: `تم تغيير الباقة إلى ${plan}` });
   } catch (err) { next(err); }

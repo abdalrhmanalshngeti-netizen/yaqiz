@@ -126,10 +126,31 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+async function seedPlatformAdmin() {
+  const email = (process.env.ADMIN_EMAIL || '').trim();
+  const pass  = (process.env.ADMIN_PASS  || '').trim();
+  if (!email || !pass) return;
+  try {
+    const db     = require('./config/db');
+    const bcrypt = require('bcrypt');
+    const { rows } = await db.query('SELECT COUNT(*)::int AS cnt FROM platform_admins');
+    if (rows[0].cnt > 0) return;
+    const hash = await bcrypt.hash(pass, 12);
+    await db.query(
+      `INSERT INTO platform_admins (email, password_hash, full_name) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      [email.toLowerCase(), hash, 'مالك المنصة']
+    );
+    console.log(`✅ Platform admin created: ${email}`);
+  } catch (err) {
+    console.error('⚠️  seedPlatformAdmin:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Yaqiz Backend running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV}`);
+  seedPlatformAdmin();
 });
 
 module.exports = app;
