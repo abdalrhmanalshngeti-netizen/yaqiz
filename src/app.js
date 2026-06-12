@@ -24,12 +24,15 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:    ["'self'"],
-      scriptSrc:     ["'self'", "'unsafe-inline'"],
+      scriptSrc:     ["'self'", "'unsafe-inline'", "'unsafe-eval'",
+                      "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc:       ["'self'", "https://fonts.gstatic.com"],
-      imgSrc:        ["'self'", "data:", "blob:"],
-      connectSrc:    ["'self'"],
+      fontSrc:       ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc:        ["'self'", "data:", "blob:", "https:"],
+      connectSrc:    ["'self'", "https://api.openai.com", "https:"],
+      workerSrc:     ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
+      frameSrc:      ["'none'"],
     }
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,

@@ -8520,22 +8520,6 @@ function renderSettingsGeneral(c) {
       </div>
       <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'العنوان':'Address'}</label><input class="input" id="s-addr" value="${s.address||''}" /></div>
     </div></div>
-    <div class="card" style="border-color:var(--primary-light);"><div class="card-pad">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-        <div style="background:linear-gradient(135deg,var(--primary),var(--accent));color:white;padding:4px 12px;border-radius:8px;font-weight:800;font-size:12px;">ZATCA</div>
-        <h3 style="font-weight:800;">${lang==='ar'?'ربط هيئة الزكاة والضريبة':'ZATCA Integration'}</h3>
-      </div>
-      <div style="background:var(--primary-soft);padding:12px;border-radius:8px;font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.8;">
-        ${lang==='ar'?'⚠️ هذا النظام يعمل حالياً في <b>نمط المحاكاة</b>. للربط الفعلي مع ZATCA، سجّل في <a href="https://fatoora.zatca.gov.sa" target="_blank" style="color:var(--primary);">fatoora.zatca.gov.sa</a> واحصل على الـ CSID والمفتاح السري.':'⚠️ System running in <b>mock mode</b>. To connect to ZATCA production, register at <a href="https://fatoora.zatca.gov.sa" target="_blank" style="color:var(--primary);">fatoora.zatca.gov.sa</a>'}
-      </div>
-      <div><label class="form-label">${lang==='ar'?'البيئة':'Environment'}</label>
-        <select class="select" id="s-zatca-env">
-          <option value="mock" ${s.zatca_env==='mock'?'selected':''}>🧪 ${lang==='ar'?'محاكاة':'Mock'}</option>
-          <option value="sandbox" ${s.zatca_env==='sandbox'?'selected':''}>🔧 ${lang==='ar'?'تجريبية':'Sandbox'}</option>
-          <option value="production" ${s.zatca_env==='production'?'selected':''}>🟢 ${lang==='ar'?'إنتاج':'Production'}</option>
-        </select>
-      </div>
-    </div></div>
     ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" onclick="saveSettings()">${t('save')}</button>`:''}
 
     <!-- Sales Targets -->
@@ -9793,8 +9777,10 @@ async function runAISearchQuery(q) {
 (function() {
   'use strict';
 
-  const API_BASE    = 'http://localhost:3000';
-  window._YAQIZ_API = API_BASE; // exposed for AI features
+  const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? `http://${window.location.hostname}:3000`
+    : window.location.origin;
+  window._YAQIZ_API = API_BASE;
   const TOKEN_KEY   = 'yaqiz_access_token';
   const REFRESH_KEY = 'yaqiz_refresh_token';
   const SYNC_LOG    = false; // true لرؤية تفاصيل الـ sync في console
