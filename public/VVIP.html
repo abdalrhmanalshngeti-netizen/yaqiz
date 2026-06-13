@@ -9928,7 +9928,6 @@ async function runAISearchQuery(q) {
   window._apiReachable = false;
   let _apiReachable = false;
   let _syncBusy = false;
-  let _pendingSyncPrev = null;
 
   // ── مزامنة الباقة من الباكند ─────────────────────────────
   async function syncPlanFromAPI() {
@@ -10305,11 +10304,7 @@ async function runAISearchQuery(q) {
   }
 
   async function _diffAndPush(newDB, prev) {
-    if (_syncBusy) {
-      // حفظ أقدم prev حتى لا تضيع الفروقات المتراكمة
-      if (!_pendingSyncPrev) _pendingSyncPrev = prev;
-      return;
-    }
+    if (_syncBusy) return;
     _syncBusy = true;
     try {
 
@@ -10466,11 +10461,6 @@ async function runAISearchQuery(q) {
 
     } finally {
       _syncBusy = false;
-      if (_pendingSyncPrev) {
-        const _pp = _pendingSyncPrev; _pendingSyncPrev = null;
-        const _cur = getDB();
-        setTimeout(() => _diffAndPush(_cur, _pp), 100);
-      }
     }
   }
 
