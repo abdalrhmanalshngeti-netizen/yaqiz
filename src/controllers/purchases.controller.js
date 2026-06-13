@@ -67,6 +67,11 @@ exports.create = async (req, res, next) => {
     const vatAmount  = parseFloat(vat_amount || baseAmount * 0.15);
     const total      = baseAmount + vatAmount;
 
+    const CASH_METHODS = ['cash', 'نقدي', 'شبكة', 'bank', 'بنك', 'تحويل', 'بطاقة', 'network', 'card'];
+    const isPaid      = CASH_METHODS.includes(payment_method);
+    const remaining   = isPaid ? 0 : total;
+    const purchStatus = isPaid ? 'paid' : 'unpaid';
+
     const { rows: [seq] } = await client.query(`SELECT NEXTVAL('purchase_seq') AS n`);
     const purchase_no = `PUR-${String(seq.n).padStart(6, '0')}`;
 
@@ -75,13 +80,12 @@ exports.create = async (req, res, next) => {
         (company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
          purchase_type, category, description, date, amount, vat_amount, total,
          remaining, payment_method, status, deductible, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13,
-              CASE WHEN $13 = 'cash' THEN 'paid' ELSE 'unpaid' END,$14,$15,$16)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       RETURNING *
     `, [company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
         purchase_type || 'goods', category, description, date,
         baseAmount, vatAmount, total,
-        payment_method, deductible !== false, notes, user_id]);
+        remaining, payment_method, purchStatus, deductible !== false, notes, user_id]);
 
     // إضافة المخزون لو كانت مشتريات بضاعة مع بنود
     if (purchase_type !== 'opex' && items.length) {
@@ -109,8 +113,8 @@ exports.create = async (req, res, next) => {
       }
     }
 
-    // تحديث رصيد المورد
-    if (supplier_id && payment_method !== 'cash') {
+    // تحديث رصيد المورد (فقط للمشتريات الآجلة)
+    if (supplier_id && !isPaid) {
       await client.query(
         `UPDATE suppliers SET balance = balance + $1 WHERE id = $2`,
         [total, supplier_id]
