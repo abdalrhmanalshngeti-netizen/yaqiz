@@ -874,6 +874,7 @@ const allNavItems = [
   { id:'purchases',        icon:'package',          perm:'purchases.view'  },
   { id:'inventory',        icon:'box',              perm:'inventory.view'  },
   { id:'customers',        icon:'users',            perm:'customers.view'  },
+  { id:'suppliers',        icon:'truck',            perm:'suppliers.view'  },
   { id:'treasury',         icon:'wallet',           perm:'treasury.view'   },
   { id:'receipts',         icon:'receipt',          perm:'receipts.view'   },
   { id:'quotes',           icon:'file-plus',        perm:'quotes.view'     },
@@ -884,10 +885,10 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  trial:  ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
-  basic:  ['pos','dashboard','sales','purchases','inventory','customers','treasury','obligations','reports','settings'],
-  growth: ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
-  pro:    ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
+  trial:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
+  basic:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
+  growth: ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
+  pro:    ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
 };
 
 // الميزات الداخلية المتاحة لكل باقة (تُستخدم في renderSettings و renderReports)
@@ -922,6 +923,7 @@ const navLabels = {
   purchases:{ar:'المشتريات',en:'Purchases'},
   inventory:{ar:'المخزون',en:'Inventory'},
   customers:{ar:'العملاء',en:'Customers'},
+  suppliers:{ar:'الموردون',en:'Suppliers'},
   treasury:{ar:'الخزينة',en:'Treasury'},
   receipts:{ar:'سندات القبض والصرف',en:'Receipts & Payments'},
   quotes:{ar:'عروض الأسعار',en:'Quotations'},
@@ -1453,6 +1455,7 @@ function renderPage() {
     case 'purchases': renderPurchases(c); break;
     case 'inventory': renderInventory(c); break;
     case 'customers': renderCustomers(c); break;
+    case 'suppliers': renderSuppliers(c); break;
     case 'treasury': renderTreasury(c); break;
     case 'accounts': renderAccounts(c); break;
     case 'reports': renderReports(c); break;
@@ -3683,14 +3686,14 @@ function deleteProduct(id) {
 // ============ CUSTOMERS ============
 let cusTab = 'customers';
 function renderCustomers(c) {
+  if(cusTab==='suppliers') cusTab='customers';
   c.innerHTML = `
   <div>
-    <div class="page-header"><div class="page-title-lg">${t('customers')}</div></div>
-    <div class="tabs">
+    <div class="page-header"><div class="page-title-lg">👤 ${lang==='ar'?'العملاء':'Customers'}</div></div>
+    ${hasPlanFeature('loyalty')?`<div class="tabs">
       <button class="tab-btn ${cusTab==='customers'?'active':''}" onclick="setCusTab('customers')">👤 ${lang==='ar'?'العملاء':'Customers'}</button>
-      <button class="tab-btn ${cusTab==='suppliers'?'active':''}" onclick="setCusTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>
-      ${hasPlanFeature('loyalty')?`<button class="tab-btn ${cusTab==='loyalty'?'active':''}" onclick="setCusTab('loyalty')">⭐ ${lang==='ar'?'نظام الولاء':'Loyalty'}</button>`:''}
-    </div>
+      <button class="tab-btn ${cusTab==='loyalty'?'active':''}" onclick="setCusTab('loyalty')">⭐ ${lang==='ar'?'نظام الولاء':'Loyalty'}</button>
+    </div>`:''}
     <div id="cus-content"></div>
   </div>`;
   renderCusContent();
@@ -3698,15 +3701,16 @@ function renderCustomers(c) {
 }
 function setCusTab(tab) {
   cusTab=tab;
-  $qa('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===(['customers','suppliers','loyalty'].indexOf(tab))));
+  $qa('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===(['customers','loyalty'].indexOf(tab))));
   renderCusContent();
 }
 function renderCusContent() {
   const cc = el('cus-content'); if(!cc) return;
   const db = getDB();
   if(cusTab==='loyalty' && !hasPlanFeature('loyalty')) cusTab='customers';
+  if(cusTab==='suppliers') cusTab='customers';
   if(cusTab==='loyalty') { renderLoyalty(cc); return; }
-  if(cusTab==='customers') {
+  if(cusTab==='customers'||true) {
     const custRows = db.customers.map(c=>{
       const custInvs = db.invoices.filter(i=>i.customer_name===c.name);
       const totalTx  = custInvs.reduce((s,i)=>s+(i.grand_total||0),0);
@@ -3742,17 +3746,27 @@ function renderCusContent() {
         </td>
       </tr>`).join('')}</tbody>
     </table>${db.customers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد عملاء':'No customers'}</div>`:''}</div></div>`;
-  } else {
-    const suppRows = db.suppliers.map(s=>{
-      const suppPurchs = db.purchases.filter(p=>p.vendor===s.name);
-      const totalTx   = suppPurchs.reduce((sum,p)=>sum+(p.total||0),0);
-      const purCount  = suppPurchs.length;
-      const totalPaid = (db.receipts||[]).filter(r=>r.party===s.name&&r.type==='payment').reduce((s,r)=>s+r.amount,0);
-      const outstanding = Math.max(0, Math.round((totalTx - totalPaid)*100)/100);
-      return {s, totalTx, purCount, outstanding};
-    });
-    cc.innerHTML = `
-    ${has('suppliers.manage')?`<div style="margin-bottom:12px;"><button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button></div>`:''}
+  }
+  refreshIcons();
+}
+
+// ============ SUPPLIERS ============
+function renderSuppliers(c) {
+  const db = getDB();
+  const suppRows = db.suppliers.map(s=>{
+    const suppPurchs = db.purchases.filter(p=>p.vendor===s.name);
+    const totalTx   = suppPurchs.reduce((sum,p)=>sum+(p.total||0),0);
+    const purCount  = suppPurchs.length;
+    const totalPaid = (db.receipts||[]).filter(r=>r.party===s.name&&r.type==='payment').reduce((s,r)=>s+r.amount,0);
+    const outstanding = Math.max(0, Math.round((totalTx - totalPaid)*100)/100);
+    return {s, totalTx, purCount, outstanding};
+  });
+  c.innerHTML = `
+  <div>
+    <div class="page-header">
+      <div class="page-title-lg">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</div>
+      ${has('suppliers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
+    </div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
         <th>${t('name')}</th>
@@ -3777,8 +3791,8 @@ function renderCusContent() {
           <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${s.name}')">${icon('printer',13)} PDF</button>
         </td>
       </tr>`).join('')}</tbody>
-    </table>${db.suppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>`;
-  }
+    </table>${db.suppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>
+  </div>`;
   refreshIcons();
 }
 
@@ -3807,7 +3821,9 @@ function saveEntity(type) {
   const isCustomer = type==='customer';
   const data = { id:nextId(db,type), name:el('ent-name').value, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
   if(isCustomer) db.customers.push(data); else db.suppliers.push(data);
-  saveDB(db); showToast(`✅ ${t('save')}`); closeModal(); renderCusContent();
+  saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
+  if(isCustomer) renderCusContent();
+  else { const _mc=el('main-content'); if(_mc) renderSuppliers(_mc); }
 }
 
 // ============ TREASURY ============
