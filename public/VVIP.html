@@ -732,6 +732,10 @@ function fmtDateBoth(s) {
 }
 function has(perm) {
   if (!currentUser) return false;
+  if (perm === 'pos.access') {
+    if (currentUser.role === 'owner') return false; // المالك يستخدم صفحة المبيعات العادية
+    return currentUser.pos_access === true;
+  }
   if (currentUser.role === 'owner') return true;
   return (currentUser.permissions||[]).includes(perm);
 }
@@ -864,6 +868,7 @@ function initDark() {
 
 // ============ SHELL ============
 const allNavItems = [
+  { id:'pos',              icon:'scan-barcode',     perm:'pos.access'      },
   { id:'dashboard',        icon:'layout-dashboard', perm:'dashboard.view'  },
   { id:'sales',            icon:'shopping-cart',    perm:'sales.view'      },
   { id:'purchases',        icon:'package',          perm:'purchases.view'  },
@@ -879,10 +884,10 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  trial:  ['dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
-  basic:  ['dashboard','sales','purchases','inventory','customers','treasury','obligations','reports','settings'],
-  growth: ['dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
-  pro:    ['dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
+  trial:  ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
+  basic:  ['pos','dashboard','sales','purchases','inventory','customers','treasury','obligations','reports','settings'],
+  growth: ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
+  pro:    ['pos','dashboard','sales','purchases','inventory','customers','treasury','receipts','quotes','obligations','reports','settings'],
 };
 
 // الميزات الداخلية المتاحة لكل باقة (تُستخدم في renderSettings و renderReports)
@@ -911,6 +916,7 @@ function hasPlanFeature(feat) {
 }
 
 const navLabels = {
+  pos:{ar:'نقاط البيع',en:'POS'},
   dashboard:{ar:'لوحة التحكم',en:'Dashboard'},
   sales:{ar:'المبيعات',en:'Sales'},
   purchases:{ar:'المشتريات',en:'Purchases'},
@@ -952,15 +958,6 @@ function renderShell() {
         <button class="icon-btn" onclick="toggleSidebar()">${icon('menu',18)}</button>
         <div style="display:flex;align-items:center;gap:10px;flex:none;">
           <div class="topbar-title">${(()=>{const s=getDB().settings;return s?.company_name||t('appName');})()}</div>
-          ${currentUser?.shift_enabled?(()=>{
-            const sh=getCurrentShift();
-            if(!sh) return '';
-            const dur=Math.floor((new Date()-new Date(sh.start_time))/60000);
-            const hrs=Math.floor(dur/60); const mins=dur%60;
-            return `<div style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#15803d;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid #86efac;">
-              ${icon('clock',14)} ${lang==='ar'?'وردية:':'Shift:'} ${hrs}h ${mins}m
-            </div>`;
-          })():''}
         </div>
         <div class="search-wrap" id="search-wrap">
           <span class="search-icon" id="search-mode-icon">${icon('search',15)}</span>
@@ -1450,6 +1447,7 @@ function renderPage() {
   // منع الوصول لصفحات خارج الباقة
   if(!hasPlanPage(currentPage)) { currentPage='dashboard'; }
   switch(currentPage) {
+    case 'pos': renderPOSPage(c); break;
     case 'dashboard': renderDashboard(c); break;
     case 'sales': renderSales(c); break;
     case 'purchases': renderPurchases(c); break;
@@ -1646,6 +1644,13 @@ function renderDashboard(c) {
   refreshIcons();
 }
 
+// ── POS كصفحة مستقلة للموظفين الذين لديهم pos_access فقط ──
+function renderPOSPage(c) {
+  cart = cart || [];
+  salesTab = 'pos';
+  renderPOS(c);
+}
+
 // ============ SALES ============
 let salesTab = 'invoices';
 function renderSales(c) {
@@ -1804,7 +1809,11 @@ function posSearchInput(val) {
   // exact barcode match → add directly
   const exact=db.products.find(p=>p.code?.toLowerCase()===q);
   if(exact){
-    addToCart(exact.id);
+    if(exact.qty<=0){
+      showToast(lang==='ar'?`⚠️ ${exact.name}: نفد المخزون`:`⚠️ ${exact.name}: Out of stock`,'error');
+    } else {
+      addToCart(exact.id);
+    }
     const si=el('pos-search'); if(si){si.value='';si.focus();}
     if(res)res.style.display='none';
     filterProductGrid('');
@@ -1837,10 +1846,21 @@ function posSearchKeydown(e) {
     // exact barcode match first (scanner sends barcode + Enter)
     const exact=db.products.find(p=>p.code?.toLowerCase()===q);
     if(exact){
-      addToCart(exact.id);
+      if(exact.qty<=0){
+        showToast(lang==='ar'?`⚠️ ${exact.name}: نفد المخزون`:`⚠️ ${exact.name}: Out of stock`,'error');
+      } else {
+        addToCart(exact.id);
+      }
       el('pos-search').value='';
       if(el('pos-search-results')) el('pos-search-results').style.display='none';
       filterProductGrid('');
+      el('pos-search').focus();
+      return;
+    }
+    // no barcode match → show error
+    if(q.length>=3 && !db.products.some(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q))){
+      showToast(lang==='ar'?`❌ لم يُعثر على: ${q}`:`❌ Not found: ${q}`,'error');
+      el('pos-search').value='';
       el('pos-search').focus();
       return;
     }
@@ -5082,25 +5102,11 @@ function showUserModal(id) {
         </div>
       </div>
 
-      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="padding:14px;background:var(--primary-soft);border-radius:10px;border:1px solid var(--primary-light);">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-            <input type="checkbox" id="u-shift" ${u?.shift_enabled?'checked':''} style="width:18px;height:18px;accent-color:var(--primary);" />
-            <div>
-              <div style="font-weight:800;font-size:13px;">⏱️ ${lang==='ar'?'نظام الورديات':'Shift System'}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${lang==='ar'?'تسجيل وقت الدخول والخروج':'Track login/logout times'}</div>
-            </div>
-          </label>
-        </div>
-        <div style="padding:14px;background:#fef3c7;border-radius:10px;border:1px solid #fbbf24;">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-            <input type="checkbox" id="u-pos" ${u?.pos_access||u?.role==='owner'?'checked':''} style="width:18px;height:18px;accent-color:#f59e0b;" />
-            <div>
-              <div style="font-weight:800;font-size:13px;">🛒 ${lang==='ar'?'صلاحية نقطة البيع':'POS Access'}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${lang==='ar'?'السماح باستخدام نقطة البيع':'Allow using POS'}</div>
-            </div>
-          </label>
-        </div>
+      <div style="margin-top:10px;">
+        <label class="perm-item ${u?.pos_access||u?.role==='owner'?'checked':''}" id="perm-lbl-pos-access" style="border:2px solid #f59e0b;">
+          <input type="checkbox" id="u-pos" ${u?.pos_access||u?.role==='owner'?'checked':''} onchange="this.closest('label').classList.toggle('checked',this.checked);updatePermCount()" />
+          <span>🛒 ${lang==='ar'?'نقاط البيع':'POS Access'}</span>
+        </label>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:16px;">
@@ -5156,7 +5162,6 @@ function saveUser(id) {
   const title    = el('u-jobtitle')?.value||'مخصص';
   const role     = (window._jobTitles||{})[title]?.role || 'cashier';
   const perms    = Object.keys(window._permLabels||{}).filter(p=>el('perm-'+p.replace(/\./g,'-'))?.checked);
-  const shiftEnabled = el('u-shift')?.checked||false;
   const posAccess    = el('u-pos')?.checked||false;
 
   let valid = true;
@@ -5209,7 +5214,6 @@ function saveUser(id) {
       u.full_name     = fullname;
       u.role          = role;
       u.permissions   = perms;
-      u.shift_enabled = shiftEnabled;
       u.pos_access    = posAccess;
       if (password) u.password = password;
     }
@@ -5221,7 +5225,6 @@ function saveUser(id) {
       full_name:      fullname,
       role,
       permissions:    perms,
-      shift_enabled:  shiftEnabled,
       pos_access:     posAccess,
       active:         true
     });
@@ -5240,8 +5243,7 @@ function saveUser(id) {
           // تعديل مستخدم موجود
           await window._cloudApiFetch('PUT', `/api/users/${id}`, {
             full_name: fullname, role, permissions: perms,
-            pos_access: posAccess, shift_enabled: shiftEnabled,
-            active: true
+            pos_access: posAccess, active: true
           });
           if (password) {
             await window._cloudApiFetch('PUT', `/api/users/${id}/password`, { new_password: password });
@@ -10095,14 +10097,19 @@ async function runAISearchQuery(q) {
   }
 
   function purchaseToFE(p) {
+    const cat = p.category||'';
     return {
-      id: p.id, vendor: p.supplier_name||'',
-      description: p.description||'', category: p.category||'',
+      id: p.id, vendor: p.supplier_name||p.vendor||'',
+      description: p.description||'', category: cat,
+      purchase_type: p.purchase_type || (cat==='بضاعة'||cat==='مواد خام'||cat==='بضاعة جاهزة'||cat==='مواد تغليف' ? 'goods' : 'opex'),
       amount: parseFloat(p.amount)||0,
       vat: parseFloat(p.vat_amount)||0,
       total: parseFloat(p.total)||0,
       paid_amount: parseFloat(p.paid_amount)||0,
       remaining_amount: parseFloat(p.remaining)||0,
+      payment_method: p.payment_method||'نقدي',
+      supplier_ref: p.supplier_ref||'',
+      notes: p.notes||'',
       deductible: p.deductible!==false,
       status: p.status||'unpaid',
       created_at: p.created_at
