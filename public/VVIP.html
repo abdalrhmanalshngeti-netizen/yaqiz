@@ -1803,7 +1803,7 @@ function posSearchInput(val) {
 
   // exact barcode match → add directly
   const exact=db.products.find(p=>p.code?.toLowerCase()===q);
-  if(exact&&val.length>=4){
+  if(exact){
     addToCart(exact.id);
     const si=el('pos-search'); if(si){si.value='';si.focus();}
     if(res)res.style.display='none';
@@ -1830,10 +1830,21 @@ function posSearchInput(val) {
 }
 
 function posSearchKeydown(e) {
-  // Enter on single match → add it
   if(e.key==='Enter') {
     const q=el('pos-search')?.value?.trim().toLowerCase()||'';
+    if(!q) return;
     const db=getDB();
+    // exact barcode match first (scanner sends barcode + Enter)
+    const exact=db.products.find(p=>p.code?.toLowerCase()===q);
+    if(exact){
+      addToCart(exact.id);
+      el('pos-search').value='';
+      if(el('pos-search-results')) el('pos-search-results').style.display='none';
+      filterProductGrid('');
+      el('pos-search').focus();
+      return;
+    }
+    // fallback: single partial match
     const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q));
     if(matches.length===1){
       addToCart(matches[0].id);
