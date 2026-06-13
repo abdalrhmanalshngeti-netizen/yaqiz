@@ -973,7 +973,7 @@ function renderShell() {
           ${icon('bell',18)}
           ${getAlerts().length>0?`<span style="position:absolute;top:4px;${lang==='ar'?'left':'right'}:4px;width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>`:''}
         </button>
-        <button class="icon-btn topbar-hide-mobile" onclick="showExportModal()" title="${lang==='ar'?'تصدير البيانات':'Export'}">${icon('download',18)}</button>
+        ${currentUser?.role==='owner'?`<button class="icon-btn topbar-hide-mobile" onclick="showExportModal()" title="${lang==='ar'?'تصدير البيانات':'Export'}">${icon('download',18)}</button>`:''}
         <button class="icon-btn" id="dark-btn" onclick="toggleDark()" title="${lang==='ar'?'الوضع الليلي':'Dark Mode'}">${document.documentElement.classList.contains('dark')?icon('sun',18):icon('moon',18)}</button>
         <button class="icon-btn topbar-hide-mobile" onclick="toggleLang()" title="Language">${icon('globe',18)}</button>
         <div class="user-pill">
@@ -6965,24 +6965,24 @@ function printPartyStatement(partyName){
 // ============ NOTIFICATIONS ============
 function getAlerts() {
   const db=getDB(); const alerts=[];
-  // low stock
-  db.products.filter(p=>p.qty<=p.min_qty).forEach(p=>{
-    alerts.push({type:'warning',icon:'box',title:lang==='ar'?'مخزون منخفض':'Low Stock',msg:`${p.name}: ${p.qty} ${lang==='ar'?'وحدة':'units'}`,page:'inventory'});
-  });
-  // overdue invoices
   const now=new Date();
-  db.invoices.filter(i=>(i.status==='آجل'||i.status==='جزئي')&&Math.floor((now-new Date(i.created_at))/(86400000))>30).forEach(i=>{
-    alerts.push({type:'danger',icon:'file-text',title:lang==='ar'?'فاتورة متأخرة':'Overdue Invoice',msg:`${i.invoice_no} — ${i.customer_name}`,page:'sales'});
-  });
-  // obligations due soon
-  (db.obligations||[]).filter(o=>o.status==='active'&&Math.ceil((new Date(o.next_due)-now)/86400000)<=7).forEach(o=>{
-    alerts.push({type:'warning',icon:'repeat',title:lang==='ar'?'التزام مستحق':'Due Obligation',msg:`${o.name} — ${fmtMoney(o.amount)}`,page:'obligations'});
-  });
-  // long open shifts (12+ hours) - for owner
-  if(currentUser?.role==='owner') {
-    checkLongShifts().forEach(s=>{
-      const hrs=Math.floor((now-new Date(s.start_time))/3600000);
-      alerts.push({type:'danger',icon:'clock',title:lang==='ar'?'وردية مفتوحة طويلة':'Long Open Shift',msg:`${s.full_name} — ${hrs}${lang==='ar'?'+ ساعة':'+ hours'}`,page:'activity'});
+  const isOwner=currentUser?.role==='owner';
+  // low stock - للمالك أو من لديه صلاحية المخزون
+  if(isOwner||has('inventory.view')) {
+    db.products.filter(p=>p.qty<=p.min_qty).forEach(p=>{
+      alerts.push({type:'warning',icon:'box',title:lang==='ar'?'مخزون منخفض':'Low Stock',msg:`${p.name}: ${p.qty} ${lang==='ar'?'وحدة':'units'}`,page:'inventory'});
+    });
+  }
+  // overdue invoices - للمالك أو من لديه صلاحية المبيعات
+  if(isOwner||has('sales.view')) {
+    db.invoices.filter(i=>(i.status==='آجل'||i.status==='جزئي')&&Math.floor((now-new Date(i.created_at))/(86400000))>30).forEach(i=>{
+      alerts.push({type:'danger',icon:'file-text',title:lang==='ar'?'فاتورة متأخرة':'Overdue Invoice',msg:`${i.invoice_no} — ${i.customer_name}`,page:'sales'});
+    });
+  }
+  // obligations due soon - للمالك أو من لديه صلاحية الالتزامات
+  if(isOwner||has('obligations.view')) {
+    (db.obligations||[]).filter(o=>o.status==='active'&&Math.ceil((new Date(o.next_due)-now)/86400000)<=7).forEach(o=>{
+      alerts.push({type:'warning',icon:'repeat',title:lang==='ar'?'التزام مستحق':'Due Obligation',msg:`${o.name} — ${fmtMoney(o.amount)}`,page:'obligations'});
     });
   }
   return alerts;
@@ -10112,6 +10112,7 @@ async function runAISearchQuery(q) {
       notes: p.notes||'',
       deductible: p.deductible!==false,
       status: p.status||'unpaid',
+      purchase_no: p.purchase_no||'',
       created_at: p.created_at
     };
   }
@@ -10376,7 +10377,16 @@ async function runAISearchQuery(q) {
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
             payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false
           }).catch(e => { console.warn('purchase create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
+          if (res?.data?.id) {
+            if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
+            if (res.data.purchase_no) {
+              try {
+                const _db = getDB();
+                const _pur = _db.purchases.find(x => x.id === res.data.id);
+                if (_pur) { _pur.purchase_no = res.data.purchase_no; _origSaveDB(_db); }
+              } catch {}
+            }
+          }
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update purchase', p.vendor);
           await apiFetch('PUT', `/api/purchases/${p.id}`, {
@@ -10632,6 +10642,29 @@ async function runAISearchQuery(q) {
           currentUser = u;
           localStorage.setItem('yaqiz_user', JSON.stringify(u));
           _showSyncBar('مزامنة البيانات...');
+          // رفع المشتريات غير المتزامنة قبل تحميل البيانات من API
+          try {
+            const _preDB = getDB();
+            const _unsynced = (_preDB.purchases||[]).filter(p => !p.purchase_no);
+            for (const p of _unsynced) {
+              const res = await apiFetch('POST', '/api/purchases', {
+                supplier_name: p.vendor||'', description: p.description||'',
+                category: p.category||'', date: (p.created_at||new Date().toISOString()).slice(0,10),
+                purchase_type: p.purchase_type||'opex',
+                amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
+                payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
+                supplier_ref: p.supplier_ref||'', notes: p.notes||''
+              }).catch(()=>null);
+              if (res?.data?.id) {
+                _replaceLocalId('purchases', p.id, res.data.id);
+                if (res.data.purchase_no) {
+                  const _db2 = getDB();
+                  const _p2 = _db2.purchases.find(x=>x.id===res.data.id);
+                  if (_p2) { _p2.purchase_no = res.data.purchase_no; _origSaveDB(_db2); }
+                }
+              }
+            }
+          } catch {}
           await loadAllFromAPI();
           _hideSyncBar();
           window.renderApp?.();
