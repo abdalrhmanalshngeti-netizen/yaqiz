@@ -722,7 +722,10 @@ function renderCompaniesTable(companies) {
   $('companies-tbody').innerHTML=list.map((c,i)=>`
     <tr>
       <td style="font-weight:800;color:var(--muted)">${i+1}</td>
-      <td style="font-weight:800;color:#f0f4ff">${c.name}</td>
+      <td>
+        <div style="font-weight:800;color:#f0f4ff;cursor:pointer;" onclick="showCompanyModal(${c.id})">${c.name}</div>
+        ${c.contact_email?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">${c.contact_email}</div>`:''}
+      </td>
       <td>${badge(c.status)}</td>
       <td>${planBadge(c.plan)}</td>
       <td style="font-weight:900;color:#93c5fd">${fmt(c.user_count)}</td>
@@ -730,12 +733,7 @@ function renderCompaniesTable(companies) {
       <td>${fmtSAR(c.total_revenue)}</td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
       <td>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;">
-          <button class="abtn" style="background:rgba(139,92,246,.15);color:#c4b5fd;border:1px solid rgba(139,92,246,.3);" onclick="impersonateCompany(${c.id},'${(c.name||'').replace(/'/g,"\\'")}')">🔑 دخول</button>
-          ${c.status!=='active'    ?`<button class="abtn activate" onclick="setCoStatus(${c.id},'active')">تفعيل</button>`:''}
-          ${c.status!=='suspended' ?`<button class="abtn suspend"  onclick="setCoStatus(${c.id},'suspended')">تعليق</button>`:''}
-          ${c.status!=='cancelled' ?`<button class="abtn cancel"   onclick="setCoStatus(${c.id},'cancelled')">إلغاء</button>`:''}
-        </div>
+        <button onclick="showCompanyModal(${c.id})" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">⚙️ إدارة</button>
       </td>
     </tr>`).join('');
 }
@@ -768,6 +766,168 @@ async function setCoStatus(id,status){
     renderCompaniesTable(_allCompanies);
     renderCostSection(_allCompanies);
   }catch{toast('خطأ في التحديث','#f87171');}
+}
+
+// ── Company Management Modal ────────────────────────────
+function closeCoModal(){const m=document.getElementById('co-modal-overlay');if(m)m.remove();}
+
+async function showCompanyModal(id){
+  closeCoModal();
+  const ov=document.createElement('div');
+  ov.id='co-modal-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div id="co-modal-box" onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:700px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
+    <div style="padding:40px;text-align:center;color:var(--muted)"><span class="spinner"></span> جاري التحميل...</div>
+  </div>`;
+  ov.onclick=closeCoModal;
+  document.body.appendChild(ov);
+  try{
+    const res=await apiFetch(`/api/admin/companies/${id}`);
+    if(!res?.success){toast('خطأ في التحميل','#f87171');closeCoModal();return;}
+    renderCoModal(res.data);
+  }catch{toast('خطأ في الاتصال','#f87171');closeCoModal();}
+}
+
+function renderCoModal(c){
+  const box=document.getElementById('co-modal-box');
+  if(!box)return;
+  const expiry=c.subscription_expires_at?new Date(c.subscription_expires_at).toISOString().split('T')[0]:'';
+  const planOpts=['trial','basic','growth','pro'].map(p=>`<option value="${p}"${c.plan===p?' selected':''}>${{trial:'تجريبي 🎁',basic:'أساسي 📗',growth:'نمو 📘',pro:'احترافي 📙'}[p]}</option>`).join('');
+  const usersRows=(c.users||[]).map(u=>`
+    <tr>
+      <td style="font-weight:700;color:#f0f4ff;padding:9px 12px;">${u.full_name||'—'}</td>
+      <td style="color:var(--muted);font-size:12px;padding:9px 12px;">@${u.username}</td>
+      <td style="padding:9px 12px;"><span style="font-size:11px;background:rgba(59,130,246,.15);color:#93c5fd;padding:2px 8px;border-radius:99px;">${{owner:'مالك',accountant:'محاسب',cashier:'كاشير'}[u.role]||u.role}</span></td>
+      <td style="padding:9px 12px;">${u.active?'<span style="color:#34d399;font-size:12px;font-weight:700;">● نشط</span>':'<span style="color:#f87171;font-size:12px;font-weight:700;">● موقوف</span>'}</td>
+      <td style="font-size:11px;color:var(--muted);padding:9px 12px;">${fmtD(u.last_login)}</td>
+    </tr>`).join('');
+
+  const statusColors={active:'#10b981',suspended:'#f59e0b',cancelled:'#ef4444'};
+  const statusLabels={active:'✅ نشطة',suspended:'⏸ معلّقة',cancelled:'🚫 ملغاة'};
+
+  box.innerHTML=`
+  <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+    <div>
+      <div style="font-size:22px;font-weight:900;color:#f0f4ff;margin-bottom:4px;">${c.name}</div>
+      <div style="font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;">
+        ${c.vat_number?`<span>🔢 ${c.vat_number}</span>`:''}
+        ${c.cr_number?`<span>📋 ${c.cr_number}</span>`:''}
+        ${c.contact_email?`<span>📧 ${c.contact_email}</span>`:''}
+        ${c.contact_phone?`<span>📞 ${c.contact_phone}</span>`:''}
+        ${c.city?`<span>🏙 ${c.city}</span>`:''}
+        <span>📅 ${fmtD(c.created_at)}</span>
+      </div>
+    </div>
+    <button onclick="closeCoModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
+  </div>
+
+  <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+      <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:900;color:#93c5fd;">${fmt(c.user_count)}</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">مستخدم</div>
+      </div>
+      <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:900;color:#34d399;">${fmt(c.invoice_count)}</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">فاتورة</div>
+      </div>
+      <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:22px;font-weight:900;color:#fbbf24;">${fmtSAR(c.total_revenue)}</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">ر.س إجمالي</div>
+      </div>
+    </div>
+
+    <!-- الحالة -->
+    <div style="margin-bottom:18px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">حالة الحساب</div>
+      <div style="display:flex;gap:8px;">
+        ${['active','suspended','cancelled'].map(s=>`
+          <button onclick="coModalSetStatus(${c.id},'${s}')" style="flex:1;padding:10px;border:2px solid ${c.status===s?statusColors[s]:'#1a2942'};background:${c.status===s?`${statusColors[s]}22`:'transparent'};color:${c.status===s?statusColors[s]:'var(--muted)'};border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;transition:.15s;">
+            ${statusLabels[s]}
+          </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- الباقة -->
+    <div style="background:rgba(255,255,255,.04);border:1px solid #1a2942;border-radius:12px;padding:16px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">الباقة والاشتراك</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:120px;">
+          <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">الباقة</label>
+          <select id="co-modal-plan" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">${planOpts}</select>
+        </div>
+        <div style="flex:1;min-width:150px;">
+          <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">تاريخ انتهاء الاشتراك</label>
+          <input type="date" id="co-modal-expiry" value="${expiry}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
+        </div>
+        <button onclick="coModalSavePlan(${c.id})" style="padding:10px 22px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
+      </div>
+      ${expiry?`<div style="margin-top:8px;font-size:12px;color:${new Date(expiry)<new Date()?'#f87171':'#6b7fa3'};">⏳ تنتهي: ${fmtD(c.subscription_expires_at)}</div>`:''}
+    </div>
+  </div>
+
+  <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
+    <button onclick="coModalImpersonate(${c.id},'${(c.name||'').replace(/'/g,"\\'")}')" style="width:100%;padding:13px;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.35);color:#c4b5fd;border-radius:12px;font-family:inherit;font-weight:900;font-size:14px;cursor:pointer;transition:.2s;">
+      🔑 دخول حساب الشركة (انتحال الهوية)
+    </button>
+  </div>
+
+  ${(c.users||[]).length?`
+  <div style="padding:20px 28px;">
+    <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">المستخدمون (${c.users.length})</div>
+    <div style="border:1px solid #1a2942;border-radius:12px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#0d1629;">
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الاسم</th>
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">المستخدم</th>
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الدور</th>
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الحالة</th>
+          <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">آخر دخول</th>
+        </tr></thead>
+        <tbody>${usersRows}</tbody>
+      </table>
+    </div>
+  </div>`:''}`;
+}
+
+async function coModalSetStatus(id,status){
+  try{
+    await apiFetch(`/api/admin/companies/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
+    const labels={active:'✅ تم تفعيل الحساب',suspended:'⏸ تم تعليق الحساب',cancelled:'🚫 تم إلغاء الحساب'};
+    toast(labels[status]||'تم التحديث','#34d399');
+    const [r1,r2]=await Promise.all([
+      apiFetch('/api/admin/cost-analysis'),
+      apiFetch(`/api/admin/companies/${id}`)
+    ]);
+    _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);renderCostSection(_allCompanies);
+    if(r2?.success)renderCoModal(r2.data);
+  }catch{toast('خطأ في التحديث','#f87171');}
+}
+
+async function coModalSavePlan(id){
+  const plan=document.getElementById('co-modal-plan')?.value;
+  const expires_at=document.getElementById('co-modal-expiry')?.value||undefined;
+  if(!plan)return;
+  try{
+    await apiFetch(`/api/admin/companies/${id}/plan`,{method:'PUT',body:JSON.stringify({plan,expires_at})});
+    toast('✅ تم تحديث الباقة','#34d399');
+    const [r1,r2]=await Promise.all([
+      apiFetch('/api/admin/cost-analysis'),
+      apiFetch(`/api/admin/companies/${id}`)
+    ]);
+    _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);
+    if(r2?.success)renderCoModal(r2.data);
+  }catch{toast('خطأ في تحديث الباقة','#f87171');}
+}
+
+async function coModalImpersonate(id,name){
+  try{
+    const res=await apiFetch(`/api/admin/impersonate/${id}`,{method:'POST'});
+    if(!res?.success){toast('لم يُعثر على حساب owner للشركة','#f87171');return;}
+    const coName=res.company_name||name;
+    window.open(`/VVIP.html?code=${encodeURIComponent(res.code)}&co=${encodeURIComponent(coName)}`,'_blank');
+    toast(`✅ تم فتح حساب ${coName} — الرابط صالح 5 دقائق`,'#c4b5fd');
+  }catch{toast('خطأ في الاتصال','#f87171');}
 }
 
 // ── Users ──────────────────────────────────────────────

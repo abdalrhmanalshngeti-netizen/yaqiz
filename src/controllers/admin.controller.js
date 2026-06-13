@@ -296,20 +296,30 @@ exports.getPlans = async (req, res, next) => {
 // ── تغيير باقة شركة ──────────────────────────────────────
 exports.setCompanyPlan = async (req, res, next) => {
   try {
-    const { plan } = req.body;
+    const { plan, expires_at } = req.body;
     const validPlans = ['trial', 'basic', 'growth', 'pro'];
     if (!validPlans.includes(plan)) {
       return res.status(400).json({ success: false, message: 'باقة غير صالحة' });
     }
 
-    const expires = plan === 'trial'
-      ? `NOW() + INTERVAL '14 days'`
-      : `NOW() + INTERVAL '1 month'`;
-
-    await db.query(
-      `UPDATE companies SET plan = $1, subscription_expires_at = ${expires} WHERE id = $2`,
-      [plan, req.params.id]
-    );
+    if (expires_at) {
+      const expDate = new Date(expires_at);
+      if (isNaN(expDate.getTime())) {
+        return res.status(400).json({ success: false, message: 'تاريخ انتهاء غير صالح' });
+      }
+      await db.query(
+        `UPDATE companies SET plan = $1, subscription_expires_at = $2 WHERE id = $3`,
+        [plan, expDate, req.params.id]
+      );
+    } else {
+      const expires = plan === 'trial'
+        ? `NOW() + INTERVAL '14 days'`
+        : `NOW() + INTERVAL '1 month'`;
+      await db.query(
+        `UPDATE companies SET plan = $1, subscription_expires_at = ${expires} WHERE id = $2`,
+        [plan, req.params.id]
+      );
+    }
 
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description)
