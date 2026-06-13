@@ -1989,7 +1989,7 @@ function doCheckout() {
     id:nextId(db,'invoice'),
     invoice_no:`SAL-${new Date().getFullYear()}${String(db.nextId.invoice-1).padStart(5,'0')}`,
     customer_name:posCustomer||t('cashCustomer'), customer_vat:'',
-    items:cart.map(i=>({name:i.name,code:i.code||'',qty:i.qty,price:i.price,line_total:i.qty*i.price})),
+    items:cart.map(i=>({id:i.id,name:i.name,code:i.code||'',qty:i.qty,price:i.price,line_total:i.qty*i.price})),
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
     invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
@@ -6967,22 +6967,41 @@ function getAlerts() {
   const db=getDB(); const alerts=[];
   const now=new Date();
   const isOwner=currentUser?.role==='owner';
-  // low stock - للمالك أو من لديه صلاحية المخزون
+  // مخزون منخفض → المخزون
   if(isOwner||has('inventory.view')) {
     db.products.filter(p=>p.qty<=p.min_qty).forEach(p=>{
       alerts.push({type:'warning',icon:'box',title:lang==='ar'?'مخزون منخفض':'Low Stock',msg:`${p.name}: ${p.qty} ${lang==='ar'?'وحدة':'units'}`,page:'inventory'});
     });
   }
-  // overdue invoices - للمالك أو من لديه صلاحية المبيعات
+  // فاتورة متأخرة (30+ يوم) → المبيعات
   if(isOwner||has('sales.view')) {
     db.invoices.filter(i=>(i.status==='آجل'||i.status==='جزئي')&&Math.floor((now-new Date(i.created_at))/(86400000))>30).forEach(i=>{
       alerts.push({type:'danger',icon:'file-text',title:lang==='ar'?'فاتورة متأخرة':'Overdue Invoice',msg:`${i.invoice_no} — ${i.customer_name}`,page:'sales'});
     });
   }
-  // obligations due soon - للمالك أو من لديه صلاحية الالتزامات
+  // عميل متأخر عن السداد (14+ يوم) → العملاء
+  if(isOwner||has('customers.view')) {
+    const seen=new Set();
+    db.invoices.filter(i=>(i.status==='آجل'||i.status==='جزئي')&&Math.floor((now-new Date(i.created_at))/(86400000))>14&&!seen.has(i.customer_name)&&seen.add(i.customer_name)).forEach(i=>{
+      alerts.push({type:'warning',icon:'user',title:lang==='ar'?'عميل متأخر عن السداد':'Overdue Customer',msg:i.customer_name,page:'customers'});
+    });
+  }
+  // التزامات مستحقة (خلال 7 أيام) → الالتزامات
   if(isOwner||has('obligations.view')) {
-    (db.obligations||[]).filter(o=>o.status==='active'&&Math.ceil((new Date(o.next_due)-now)/86400000)<=7).forEach(o=>{
+    (db.obligations||[]).filter(o=>o.status==='active'&&o.next_due&&Math.ceil((new Date(o.next_due)-now)/86400000)<=7).forEach(o=>{
       alerts.push({type:'warning',icon:'repeat',title:lang==='ar'?'التزام مستحق':'Due Obligation',msg:`${o.name} — ${fmtMoney(o.amount)}`,page:'obligations'});
+    });
+  }
+  // سندات معلقة → السندات
+  if(isOwner||has('receipts.view')) {
+    (db.receipts||[]).filter(r=>r.status==='pending'||r.status==='معلق').forEach(r=>{
+      alerts.push({type:'warning',icon:'receipt',title:lang==='ar'?'سند معلق':'Pending Receipt',msg:`${r.receipt_no||''} — ${fmtMoney(r.amount||0)}`,page:'receipts'});
+    });
+  }
+  // مشتريات غير مسددة (30+ يوم) → المشتريات
+  if(isOwner||has('purchases.view')) {
+    (db.purchases||[]).filter(p=>(p.status==='آجل'||p.status==='unpaid'||(p.remaining_amount||0)>0)&&Math.floor((now-new Date(p.created_at))/(86400000))>30).forEach(p=>{
+      alerts.push({type:'danger',icon:'shopping-bag',title:lang==='ar'?'مشتريات غير مسددة':'Unpaid Purchase',msg:`${p.vendor||''} — ${fmtMoney(p.total||p.amount||0)}`,page:'purchases'});
     });
   }
   return alerts;
@@ -10018,11 +10037,12 @@ async function runAISearchQuery(q) {
       discount_value: parseFloat(inv.discount)||0,
       notes: '',
       items: (inv.items||[]).map(it => ({
+        product_id:   it.id || null,
         product_name: it.name||it.product_name||'',
-        qty:        parseFloat(it.qty)||1,
-        unit_price: parseFloat(it.price||it.unit_price)||0,
-        discount:   parseFloat(it.discount)||0,
-        tax_rate:   15
+        qty:          parseFloat(it.qty)||1,
+        unit_price:   parseFloat(it.price||it.unit_price)||0,
+        discount:     parseFloat(it.discount)||0,
+        tax_rate:     15
       }))
     };
   }
@@ -10373,9 +10393,11 @@ async function runAISearchQuery(q) {
           const res = await apiFetch('POST', '/api/purchases', {
             supplier_name: p.vendor, description: p.description,
             category: p.category, date: (p.created_at || new Date().toISOString()).slice(0, 10),
-            purchase_type: (p.category === 'بضاعة' || p.category === 'goods') ? 'goods' : 'opex',
+            purchase_type: p.purchase_type || ((p.category === 'بضاعة' || p.category === 'goods') ? 'goods' : 'opex'),
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
-            payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false
+            payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
+            supplier_ref: p.supplier_ref||'', notes: p.notes||'',
+            items: (p.items||[]).filter(it=>it.product_id).map(it=>({product_id:it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0}))
           }).catch(e => { console.warn('purchase create:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
@@ -10653,7 +10675,8 @@ async function runAISearchQuery(q) {
                 purchase_type: p.purchase_type||'opex',
                 amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
                 payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
-                supplier_ref: p.supplier_ref||'', notes: p.notes||''
+                supplier_ref: p.supplier_ref||'', notes: p.notes||'',
+                items: (p.items||[]).filter(it=>it.product_id).map(it=>({product_id:it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0}))
               }).catch(()=>null);
               if (res?.data?.id) {
                 _replaceLocalId('purchases', p.id, res.data.id);

@@ -131,9 +131,9 @@ exports.create = async (req, res, next) => {
       );
     }
 
-    // ── إذا مدفوع نقداً الآن ─────────────────
-    if (payment_method && payment_method !== 'credit' && grand > 0) {
-      await client.query(`UPDATE invoices SET paid_amount = $1 WHERE id = $2`, [grand, invoice.id]);
+    // ── إذا مدفوع نقداً الآن → تحديث paid_amount و status ─────────────────
+    if (payment_method && payment_method !== 'credit' && payment_method !== 'آجل' && grand > 0) {
+      await client.query(`UPDATE invoices SET paid_amount = $1, status = 'paid' WHERE id = $2`, [grand, invoice.id]);
       if (customer_id) {
         await client.query(`UPDATE customers SET balance = balance - $1 WHERE id = $2`, [grand, customer_id]);
       }
