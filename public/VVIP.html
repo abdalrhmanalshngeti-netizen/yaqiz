@@ -10212,7 +10212,7 @@ async function runAISearchQuery(q) {
 
       const db = getDB();
 
-      if (prods?.data)    db.products   = prods.data.map(productToFE);
+      if (prods?.data)    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
       if (custs?.data)    db.customers  = custs.data.map(customerToFE);
       if (supps?.data)    db.suppliers  = supps.data.map(supplierToFE);
       if (invRes?.data)   db.invoices   = invRes.data.map(invToFE);
@@ -10260,7 +10260,7 @@ async function runAISearchQuery(q) {
         db.users = apiUsers;
       }
 
-      saveDB(db);
+      _origSaveDB(db); // لا تستخدم saveDB الـ hooked حتى لا تُطلق _diffAndPush بناءً على بيانات API
       _snap = JSON.parse(JSON.stringify(db));
       if (SYNC_LOG) console.log('✅ API data loaded into localStorage');
     } catch (e) {
