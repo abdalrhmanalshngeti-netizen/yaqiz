@@ -1440,8 +1440,6 @@ function closeMobileSidebar() {
 function goTo(page) {
   currentPage = page;
   $qa('.nav-item').forEach(n => { n.classList.toggle('active', n.getAttribute('onclick')===`goTo('${page}')`); });
-  const tTitle = $q('.topbar-title');
-  if(tTitle) tTitle.textContent = navLabels[page]?.[lang]||'';
   if (window.innerWidth <= 768) closeMobileSidebar();
   renderPage();
 }
