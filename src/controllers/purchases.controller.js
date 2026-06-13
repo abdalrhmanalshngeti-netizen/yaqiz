@@ -15,7 +15,13 @@ exports.list = async (req, res, next) => {
     if (to)          { where.push(`p.date <= $${idx++}`);         params.push(to); }
 
     const { rows } = await db.query(`
-      SELECT p.*, s.name AS supplier_name_db, COUNT(*) OVER() AS total_count
+      SELECT p.*, s.name AS supplier_name_db,
+        COALESCE(
+          (SELECT json_agg(json_build_object('name', pi.product_name, 'qty', pi.qty::float, 'price', pi.unit_price::float, 'line_total', pi.line_total::float) ORDER BY pi.sort_order)
+           FROM purchase_items pi WHERE pi.purchase_id = p.id),
+          '[]'::json
+        ) AS items_json,
+        COUNT(*) OVER() AS total_count
       FROM purchases p
       LEFT JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${where.join(' AND ')}
@@ -41,7 +47,11 @@ exports.getOne = async (req, res, next) => {
       [req.params.id, req.user.company_id]
     );
     if (!purchase) return res.status(404).json({ success: false, message: 'المشتريات غير موجودة' });
-    res.json({ success: true, data: purchase });
+    const { rows: items } = await db.query(
+      `SELECT product_name AS name, qty::float, unit_price::float AS price, line_total::float FROM purchase_items WHERE purchase_id = $1 ORDER BY sort_order`,
+      [req.params.id]
+    );
+    res.json({ success: true, data: { ...purchase, items_json: items } });
   } catch (err) { next(err); }
 };
 
@@ -110,6 +120,26 @@ exports.create = async (req, res, next) => {
           await client.query('ROLLBACK TO sp_stock_add');
           console.warn(`stock add skipped [${purchase_no}] product ${item.product_id}:`, stockErr.message);
         }
+      }
+    }
+
+    // حفظ بنود الشراء في purchase_items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemName  = item.name || item.product_name || '';
+      const itemQty   = parseFloat(item.qty) || 1;
+      const itemPrice = parseFloat(item.unit_cost || item.unit_price || 0);
+      if (!itemName && !item.product_id) continue;
+      try {
+        await client.query('SAVEPOINT sp_pitem');
+        await client.query(`
+          INSERT INTO purchase_items (purchase_id, product_id, product_name, qty, unit_price, line_total, sort_order)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [purchase.id, item.product_id || null, itemName, itemQty, itemPrice, itemQty * itemPrice, i]);
+        await client.query('RELEASE SAVEPOINT sp_pitem');
+      } catch (itemErr) {
+        await client.query('ROLLBACK TO sp_pitem');
+        console.warn(`purchase_item insert skipped [${purchase_no}]:`, itemErr.message);
       }
     }
 

@@ -3107,9 +3107,10 @@ function renderPurchContent() {
   if(purchTab==='opex' && !hasPlanFeature('admin_expenses')) purchTab='goods';
   const isGoods = purchTab==='goods';
 
+  const _byDate=(a,b)=>new Date(b.created_at)-new Date(a.created_at);
   const rows = isGoods
-    ? [...db.purchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').reverse()
-    : [...db.purchases].filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).reverse();
+    ? [...db.purchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').sort(_byDate)
+    : [...db.purchases].filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).sort(_byDate);
 
   const goodsCats = ['بضاعة','مواد خام','بضاعة جاهزة','مواد تغليف'];
   const opexCats  = ['إيجار','رواتب وتعويضات','كهرباء ومياه','اتصالات وإنترنت','مواصلات','صيانة','تسويق وإعلان','قرطاسية ومكتبية','تأمين','رسوم وتراخيص','استشارات','نثريات'];
@@ -10209,6 +10210,7 @@ async function runAISearchQuery(q) {
       amount: parseFloat(p.amount)||0,
       vat: parseFloat(p.vat_amount)||0,
       total: parseFloat(p.total)||0,
+      items: (p.items_json||[]).map(it=>({name:it.name||'',qty:parseFloat(it.qty)||1,price:parseFloat(it.price)||0,line_total:parseFloat(it.line_total)||0})),
       paid_amount: parseFloat(p.paid_amount)||0,
       remaining_amount: parseFloat(p.remaining)||0,
       payment_method: p.payment_method||'نقدي',
@@ -10481,10 +10483,10 @@ async function runAISearchQuery(q) {
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
             payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
             supplier_ref: p.supplier_ref||'', notes: p.notes||'',
-            items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
+            items: (p.items||[]).filter(it=>it.name||it.product_id).map(it=>{
               const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
-              return {product_id:_pr?.id||it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0};
-            }).filter(it=>it.product_id)
+              return {product_id:_pr?.id||it.product_id||null, name:it.name||_pr?.name||'', qty:parseFloat(it.qty)||1, unit_cost:parseFloat(it.price||it.unit_price||it.unit_cost||0)};
+            }).filter(it=>it.name||it.product_id)
           }).catch(e => { console.warn('purchase create:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
