@@ -47,6 +47,9 @@ exports.login = async (req, res, next) => {
     // جلب المستخدم
     const { rows } = await db.query(`
       SELECT u.*, c.name AS company_name, c.vat_number AS company_vat,
+             c.cr_number AS company_cr, c.contact_phone AS company_phone,
+             c.address AS company_address, c.city AS company_city,
+             c.contact_email AS company_email,
              c.plan AS company_plan, c.subscription_expires_at
       FROM users u
       JOIN companies c ON c.id = u.company_id
@@ -95,9 +98,14 @@ exports.login = async (req, res, next) => {
         role:         user.role,
         permissions:  user.permissions || [],
         pos_access:   user.pos_access,
-        company_id:   user.company_id,
+        company_id:              user.company_id,
         company_name:            user.company_name,
         company_vat:             user.company_vat,
+        company_cr:              user.company_cr      || null,
+        company_phone:           user.company_phone   || null,
+        company_address:         user.company_address || null,
+        company_city:            user.company_city    || null,
+        company_email:           user.company_email   || null,
         plan:                    user.company_plan || 'trial',
         subscription_expires_at: user.subscription_expires_at,
       }
@@ -221,6 +229,9 @@ exports.me = async (req, res, next) => {
       SELECT u.id, u.username, u.full_name, u.role, u.permissions,
              u.pos_access, u.shift_enabled, u.last_login,
              c.name AS company_name, c.vat_number AS company_vat, c.logo_url,
+             c.cr_number AS company_cr, c.contact_phone AS company_phone,
+             c.address AS company_address, c.city AS company_city,
+             c.contact_email AS company_email,
              c.plan AS plan, c.subscription_expires_at
       FROM users u
       JOIN companies c ON c.id = u.company_id
@@ -229,5 +240,29 @@ exports.me = async (req, res, next) => {
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     res.json({ success: true, data: rows[0] });
+  } catch (err) { next(err); }
+};
+
+// ── تحديث بيانات الشركة ──────────────────────────────────
+exports.updateCompany = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ success: false, message: 'هذه الميزة للمالك فقط' });
+    }
+    const { company_name, vat_number, cr_number, address, city, contact_phone, contact_email } = req.body;
+    await db.query(`
+      UPDATE companies SET
+        name            = COALESCE($1, name),
+        vat_number      = COALESCE($2, vat_number),
+        cr_number       = COALESCE($3, cr_number),
+        address         = COALESCE($4, address),
+        city            = COALESCE($5, city),
+        contact_phone   = COALESCE($6, contact_phone),
+        contact_email   = COALESCE($7, contact_email)
+      WHERE id = $8
+    `, [company_name||null, vat_number||null, cr_number||null,
+        address||null, city||null, contact_phone||null, contact_email||null,
+        req.user.company_id]);
+    res.json({ success: true });
   } catch (err) { next(err); }
 };

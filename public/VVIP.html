@@ -942,7 +942,7 @@ function renderShell() {
         <div class="brand-logo">${LOGO_SVG}</div>
         <div>
           <div class="brand-text">${t('appName')}</div>
-          <div class="brand-sub">${t('zatcaCompliant')}</div>
+          <div class="brand-sub">${(()=>{const s=getDB().settings;return s?.company_name||t('zatcaCompliant');})()}</div>
         </div>
       </div>
       <nav class="nav-menu">${navHtml}</nav>
@@ -5222,11 +5222,49 @@ function saveUser(id) {
   showToast(`✅ ${t('save')}`);
   closeModal();
   renderPage();
+
+  // مزامنة مع API إذا كان متصلاً
+  if (window._apiReachable && window._cloudApiFetch) {
+    (async () => {
+      try {
+        if (id) {
+          // تعديل مستخدم موجود
+          await window._cloudApiFetch('PUT', `/api/users/${id}`, {
+            full_name: fullname, role, permissions: perms,
+            pos_access: posAccess, shift_enabled: shiftEnabled,
+            active: true
+          });
+          if (password) {
+            await window._cloudApiFetch('PUT', `/api/users/${id}/password`, { new_password: password });
+          }
+        } else {
+          // إنشاء مستخدم جديد
+          const res = await window._cloudApiFetch('POST', '/api/users', {
+            username, password, full_name: fullname, role,
+            permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled
+          });
+          if (res?.data?.id) {
+            // تحديث الـ ID المحلي بـ ID من قاعدة البيانات
+            const db2 = getDB();
+            const lu = db2.users.find(x => x.username === username);
+            if (lu) lu.id = res.data.id;
+            saveDB(db2);
+          }
+        }
+      } catch(e) {
+        console.warn('User API sync:', e.message);
+        showToast('⚠️ ' + (e.message||'خطأ في مزامنة المستخدم'), 'warning');
+      }
+    })();
+  }
 }
 
 function deleteUser(id) {
   if(!confirm(t('confirm')))return;
   const db=getDB();db.users=db.users.filter(u=>u.id!==id);saveDB(db);renderPage();
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('DELETE', `/api/users/${id}`).catch(e=>console.warn('User delete API:', e.message));
+  }
 }
 
 
@@ -8598,8 +8636,21 @@ function renderSettingsGeneral(c) {
 
 function saveSettings() {
   const db = getDB();
-  db.settings = { ...db.settings, company_name:el('s-name')?.value, vat_number:el('s-vat')?.value, cr_number:el('s-cr')?.value, phone:el('s-phone')?.value, address:el('s-addr')?.value, zatca_env:el('s-zatca-env')?.value };
-  saveDB(db); showToast(`✅ ${t('save')}`);
+  const company_name = el('s-name')?.value||'';
+  const vat_number   = el('s-vat')?.value||'';
+  const cr_number    = el('s-cr')?.value||'';
+  const phone        = el('s-phone')?.value||'';
+  const address      = el('s-addr')?.value||'';
+  db.settings = { ...db.settings, company_name, vat_number, cr_number, phone, address, zatca_env:el('s-zatca-env')?.value };
+  saveDB(db);
+  showToast(`✅ ${t('save')}`);
+  // مزامنة مع API (للمالك فقط)
+  if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
+    window._cloudApiFetch('PUT', '/api/auth/company', {
+      company_name, vat_number, cr_number, address, contact_phone: phone
+    }).catch(e => console.warn('Company sync:', e.message));
+  }
+  renderShell();
 }
 
 // ============ MODAL ============
@@ -9858,19 +9909,23 @@ async function runAISearchQuery(q) {
       });
       if (!res.ok) return;
       const data = await res.json();
-      if (!data.success || !data.data?.plan) return;
+      if (!data.success || !data.data) return;
       const db = window.getDB();
       const oldPlan = db.settings?.plan;
-      if (data.data.plan !== oldPlan || data.data.subscription_expires_at !== db.settings?.plan_expires_at) {
-        db.settings = db.settings || {};
-        db.settings.plan = data.data.plan;
-        db.settings.plan_expires_at = data.data.subscription_expires_at || null;
-        window._origSaveDB ? window._origSaveDB(db) : window.saveDB(db);
-        // أعد رسم الواجهة لو تغيّرت الباقة
-        if (data.data.plan !== oldPlan) {
-          window.renderShell?.();
-          window.renderPage?.();
-        }
+      db.settings = db.settings || {};
+      // مزامنة بيانات الشركة دائماً
+      const d = data.data;
+      if (d.company_name)    db.settings.company_name = d.company_name;
+      if (d.company_vat)     db.settings.vat_number   = d.company_vat;
+      if (d.company_cr)      db.settings.cr_number     = d.company_cr;
+      if (d.company_phone)   db.settings.phone         = d.company_phone;
+      if (d.company_address) db.settings.address       = d.company_address;
+      if (d.company_city)    db.settings.city          = d.company_city;
+      if (d.plan)            { db.settings.plan = d.plan; db.settings.plan_expires_at = d.subscription_expires_at||null; }
+      window._origSaveDB ? window._origSaveDB(db) : window.saveDB(db);
+      if (d.plan !== oldPlan) {
+        window.renderShell?.();
+        window.renderPage?.();
       }
     } catch(e) {}
   }
@@ -10099,7 +10154,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -10108,6 +10163,8 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/employees'),
         apiFetch('GET', '/api/treasury/accounts'),
         apiFetch('GET', '/api/quotes?limit=500'),
+        apiFetch('GET', '/api/users').catch(() => null),
+        apiFetch('GET', '/api/auth/me').catch(() => null),
       ]);
 
       const db = getDB();
@@ -10126,6 +10183,40 @@ async function runAISearchQuery(q) {
       }
       if (quotesRes?.data) db.quotes = quotesRes.data.map(quoteToFE);
 
+      // مزامنة بيانات الشركة في الإعدادات
+      if (meRes?.data) {
+        const m = meRes.data;
+        db.settings = db.settings || {};
+        if (m.company_name)    db.settings.company_name = m.company_name;
+        if (m.company_vat)     db.settings.vat_number   = m.company_vat;
+        if (m.company_cr)      db.settings.cr_number     = m.company_cr;
+        if (m.company_phone)   db.settings.phone         = m.company_phone;
+        if (m.company_address) db.settings.address       = m.company_address;
+        if (m.company_city)    db.settings.city          = m.company_city;
+        if (m.plan)            db.settings.plan          = m.plan;
+        if (m.subscription_expires_at) db.settings.plan_expires_at = m.subscription_expires_at;
+      }
+
+      // مزامنة قائمة المستخدمين من API
+      if (usersRes?.data) {
+        const apiUsers = usersRes.data.map(u => ({
+          id:           u.id,
+          username:     u.username,
+          full_name:    u.full_name,
+          role:         u.role,
+          permissions:  u.permissions || [],
+          pos_access:   u.pos_access  || false,
+          shift_enabled:u.shift_enabled || false,
+          active:       u.active !== false,
+          last_login:   u.last_login,
+        }));
+        // أضف المستخدم الحالي إذا لم يكن في القائمة
+        if (currentUser && !apiUsers.find(x => x.id === currentUser.id)) {
+          apiUsers.push({ ...currentUser });
+        }
+        db.users = apiUsers;
+      }
+
       saveDB(db);
       _snap = JSON.parse(JSON.stringify(db));
       if (SYNC_LOG) console.log('✅ API data loaded into localStorage');
@@ -10133,6 +10224,9 @@ async function runAISearchQuery(q) {
       console.warn('⚠️ Could not load from API:', e.message);
     }
   }
+
+  // تعريض apiFetch للكود الخارجي (لإدارة المستخدمين)
+  window._cloudApiFetch = apiFetch;
 
   // ═══════════════════════════════════════════════════════
   // 4. DIFF & SYNC (saveDB hook)
@@ -10356,8 +10450,18 @@ async function runAISearchQuery(q) {
         pos_access: apiUser.pos_access, shift_enabled: false
       };
 
-      // تحديث قاعدة المستخدمين المحلية
+      // حفظ بيانات الشركة في الإعدادات فوراً
       const db = getDB();
+      db.settings = db.settings || {};
+      if (apiUser.company_name)    db.settings.company_name = apiUser.company_name;
+      if (apiUser.company_vat)     db.settings.vat_number   = apiUser.company_vat;
+      if (apiUser.company_cr)      db.settings.cr_number     = apiUser.company_cr;
+      if (apiUser.company_phone)   db.settings.phone         = apiUser.company_phone;
+      if (apiUser.company_address) db.settings.address       = apiUser.company_address;
+      if (apiUser.company_city)    db.settings.city          = apiUser.company_city;
+      if (apiUser.plan)            db.settings.plan          = apiUser.plan;
+      if (apiUser.subscription_expires_at) db.settings.plan_expires_at = apiUser.subscription_expires_at;
+      // تحديث قاعدة المستخدمين المحلية
       const idx = db.users.findIndex(x => x.id === u.id || x.username === u.username);
       if (idx >= 0) db.users[idx] = { ...db.users[idx], ...u };
       else db.users.push(u);
