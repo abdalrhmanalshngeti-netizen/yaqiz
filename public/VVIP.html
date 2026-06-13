@@ -9928,6 +9928,7 @@ async function runAISearchQuery(q) {
   window._apiReachable = false;
   let _apiReachable = false;
   let _syncBusy = false;
+  let _pendingSyncPrev = null;
 
   // ── مزامنة الباقة من الباكند ─────────────────────────────
   async function syncPlanFromAPI() {
@@ -10304,7 +10305,11 @@ async function runAISearchQuery(q) {
   }
 
   async function _diffAndPush(newDB, prev) {
-    if (_syncBusy) return;
+    if (_syncBusy) {
+      // حفظ أقدم prev حتى لا تضيع الفروقات المتراكمة
+      if (!_pendingSyncPrev) _pendingSyncPrev = prev;
+      return;
+    }
     _syncBusy = true;
     try {
 
@@ -10461,6 +10466,11 @@ async function runAISearchQuery(q) {
 
     } finally {
       _syncBusy = false;
+      if (_pendingSyncPrev) {
+        const _pp = _pendingSyncPrev; _pendingSyncPrev = null;
+        const _cur = getDB();
+        setTimeout(() => _diffAndPush(_cur, _pp), 100);
+      }
     }
   }
 
@@ -10673,8 +10683,19 @@ async function runAISearchQuery(q) {
           currentUser = u;
           localStorage.setItem('yaqiz_user', JSON.stringify(u));
           _showSyncBar('مزامنة البيانات...');
-          // رفع المشتريات غير المتزامنة قبل تحميل البيانات من API
           try {
+            // 1. رفع المنتجات الجديدة أولاً (قبل المشتريات لضمان صحة product_id)
+            const _preApiProds = await apiFetch('GET', '/api/products').catch(() => null);
+            if (_preApiProds?.data) {
+              const _apiProdIds = new Set(_preApiProds.data.map(p => p.id));
+              const _preDB0 = getDB();
+              for (const prod of (_preDB0.products||[])) {
+                if (_apiProdIds.has(prod.id)) continue; // موجود في API
+                const res = await apiFetch('POST', '/api/products', productToAPI(prod)).catch(() => null);
+                if (res?.data?.id && res.data.id !== prod.id) _replaceLocalId('products', prod.id, res.data.id);
+              }
+            }
+            // 2. رفع المشتريات غير المتزامنة
             const _preDB = getDB();
             const _unsynced = (_preDB.purchases||[]).filter(p => !p.purchase_no);
             for (const p of _unsynced) {
@@ -10700,7 +10721,26 @@ async function runAISearchQuery(q) {
               }
             }
           } catch {}
+
+          // احفظ نسخة قبل loadAllFromAPI لاسترداد البيانات المحلية غير المتزامنة
+          const _preLoadDB = getDB();
           await loadAllFromAPI();
+
+          // أعد أي مشتريات/منتجات محلية لم تصل للـ API (pre-sync فشل لها)
+          try {
+            const _postDB = getDB();
+            const _apiProdIdSet = new Set(_postDB.products.map(p => p.id));
+            const _lostProds = (_preLoadDB.products||[]).filter(lp => !_apiProdIdSet.has(lp.id));
+            const _lostPurch = (_preLoadDB.purchases||[]).filter(lp =>
+              !lp.purchase_no && !_postDB.purchases.find(ap => ap.id === lp.id)
+            );
+            if (_lostProds.length || _lostPurch.length) {
+              if (_lostProds.length) _postDB.products = [..._postDB.products, ..._lostProds];
+              if (_lostPurch.length) _postDB.purchases = [..._lostPurch, ..._postDB.purchases];
+              _origSaveDB(_postDB);
+              // لا نحدث _snap هنا → هكذا يرى _diffAndPush هذه الكيانات كجديدة ويرفعها تلقائياً
+            }
+          } catch {}
           _hideSyncBar();
           window.renderApp?.();
           return;
