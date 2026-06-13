@@ -10419,11 +10419,20 @@ async function runAISearchQuery(q) {
             }
           }
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
-          if (SYNC_LOG) console.log('→ API: update purchase', p.vendor);
-          await apiFetch('PUT', `/api/purchases/${p.id}`, {
-            supplier_name: p.vendor, description: p.description,
-            amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0
-          }).catch(e => console.warn('purchase update:', e.message));
+          const _oldPaid = parseFloat(old.paid_amount||0);
+          const _newPaid = parseFloat(p.paid_amount||0);
+          if (_newPaid > _oldPaid + 0.01) {
+            if (SYNC_LOG) console.log('→ API: purchase payment', p.vendor, _newPaid - _oldPaid);
+            const _payAmt = Math.round((_newPaid - _oldPaid)*100)/100;
+            await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _payAmt })
+              .catch(e => console.warn('purchase payment:', e.message));
+          } else {
+            if (SYNC_LOG) console.log('→ API: update purchase', p.vendor);
+            await apiFetch('PUT', `/api/purchases/${p.id}`, {
+              supplier_name: p.vendor, description: p.description,
+              amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0
+            }).catch(e => console.warn('purchase update:', e.message));
+          }
         }
       }
 
@@ -10674,63 +10683,67 @@ async function runAISearchQuery(q) {
           localStorage.setItem('yaqiz_user', JSON.stringify(u));
           _showSyncBar('مزامنة البيانات...');
           try {
-            // 1. رفع المنتجات الجديدة أولاً (قبل المشتريات لضمان صحة product_id)
-            const _preApiProds = await apiFetch('GET', '/api/products').catch(() => null);
-            if (_preApiProds?.data) {
-              const _apiProdIds = new Set(_preApiProds.data.map(p => p.id));
-              const _preDB0 = getDB();
-              for (const prod of (_preDB0.products||[])) {
-                if (_apiProdIds.has(prod.id)) continue; // موجود في API
-                const res = await apiFetch('POST', '/api/products', productToAPI(prod)).catch(() => null);
-                if (res?.data?.id && res.data.id !== prod.id) _replaceLocalId('products', prod.id, res.data.id);
-              }
-            }
-            // 2. رفع المشتريات غير المتزامنة
             const _preDB = getDB();
-            const _unsynced = (_preDB.purchases||[]).filter(p => !p.purchase_no);
-            for (const p of _unsynced) {
-              const res = await apiFetch('POST', '/api/purchases', {
-                supplier_name: p.vendor||'', description: p.description||'',
-                category: p.category||'', date: (p.created_at||new Date().toISOString()).slice(0,10),
-                purchase_type: p.purchase_type||'opex',
-                amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
-                payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
-                supplier_ref: p.supplier_ref||'', notes: p.notes||'',
-                items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
-                  const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
-                  return {product_id:_pr?.id||it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0};
-                }).filter(it=>it.product_id)
-              }).catch(()=>null);
-              if (res?.data?.id) {
-                _replaceLocalId('purchases', p.id, res.data.id);
-                if (res.data.purchase_no) {
-                  const _db2 = getDB();
-                  const _p2 = _db2.purchases.find(x=>x.id===res.data.id);
-                  if (_p2) { _p2.purchase_no = res.data.purchase_no; _origSaveDB(_db2); }
+            const _unsyncedPurch = (_preDB.purchases||[]).filter(p => !p.purchase_no);
+            const _hasLocalPaid  = (_preDB.purchases||[]).some(p => p.purchase_no && parseFloat(p.paid_amount||0) > 0);
+
+            if (_unsyncedPurch.length > 0 || _hasLocalPaid) {
+              // جلب المشتريات من API مرة واحدة للمقارنة
+              const _apiPurRes = await apiFetch('GET', '/api/purchases').catch(() => null);
+              const _apiPurs = _apiPurRes?.data || [];
+
+              // أ) مزامنة مدفوعات معلقة لمشتريات مربوطة بالـ API
+              for (const p of (_preDB.purchases||[]).filter(p => p.purchase_no)) {
+                const _ap = _apiPurs.find(a => a.purchase_no === p.purchase_no || a.id === p.id);
+                if (_ap && parseFloat(p.paid_amount||0) > parseFloat(_ap.paid_amount||0) + 0.01) {
+                  const _delta = Math.round((parseFloat(p.paid_amount) - parseFloat(_ap.paid_amount||0))*100)/100;
+                  await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _delta }).catch(()=>null);
+                }
+              }
+
+              // ب) إنشاء أو ربط المشتريات غير المتزامنة (مع تجنب التكرار)
+              for (const p of _unsyncedPurch) {
+                const _pDate = (p.created_at||new Date().toISOString()).slice(0,10);
+                // هل أُنشئت بالفعل في API (طلب سابق في رحلة وصل للسيرفر لكن الرد ما وصل للعميل)؟
+                const _existing = _apiPurs.find(a =>
+                  (a.supplier_name||'') === (p.vendor||'') &&
+                  Math.abs(parseFloat(a.total||0) - parseFloat(p.total||0)) < 0.01 &&
+                  (a.date||'').slice(0,10) === _pDate
+                );
+                if (_existing) {
+                  if (_existing.id !== p.id) _replaceLocalId('purchases', p.id, _existing.id);
+                  if (_existing.purchase_no) {
+                    const _db2 = getDB();
+                    const _p2 = _db2.purchases.find(x=>x.id===_existing.id);
+                    if (_p2 && !_p2.purchase_no) { _p2.purchase_no = _existing.purchase_no; _origSaveDB(_db2); }
+                  }
+                  continue;
+                }
+                // غير موجودة → أنشئها
+                const res = await apiFetch('POST', '/api/purchases', {
+                  supplier_name: p.vendor||'', description: p.description||'',
+                  category: p.category||'', date: _pDate,
+                  purchase_type: p.purchase_type||'opex',
+                  amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
+                  payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
+                  supplier_ref: p.supplier_ref||'', notes: p.notes||'',
+                  items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
+                    const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
+                    return {product_id:_pr?.id||it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0};
+                  }).filter(it=>it.product_id)
+                }).catch(()=>null);
+                if (res?.data?.id) {
+                  if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
+                  if (res.data.purchase_no) {
+                    const _db2 = getDB();
+                    const _p2 = _db2.purchases.find(x=>x.id===res.data.id);
+                    if (_p2) { _p2.purchase_no = res.data.purchase_no; _origSaveDB(_db2); }
+                  }
                 }
               }
             }
           } catch {}
-
-          // احفظ نسخة قبل loadAllFromAPI لاسترداد البيانات المحلية غير المتزامنة
-          const _preLoadDB = getDB();
           await loadAllFromAPI();
-
-          // أعد أي مشتريات/منتجات محلية لم تصل للـ API (pre-sync فشل لها)
-          try {
-            const _postDB = getDB();
-            const _apiProdIdSet = new Set(_postDB.products.map(p => p.id));
-            const _lostProds = (_preLoadDB.products||[]).filter(lp => !_apiProdIdSet.has(lp.id));
-            const _lostPurch = (_preLoadDB.purchases||[]).filter(lp =>
-              !lp.purchase_no && !_postDB.purchases.find(ap => ap.id === lp.id)
-            );
-            if (_lostProds.length || _lostPurch.length) {
-              if (_lostProds.length) _postDB.products = [..._postDB.products, ..._lostProds];
-              if (_lostPurch.length) _postDB.purchases = [..._lostPurch, ..._postDB.purchases];
-              _origSaveDB(_postDB);
-              // لا نحدث _snap هنا → هكذا يرى _diffAndPush هذه الكيانات كجديدة ويرفعها تلقائياً
-            }
-          } catch {}
           _hideSyncBar();
           window.renderApp?.();
           return;
