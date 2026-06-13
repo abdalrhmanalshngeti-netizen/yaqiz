@@ -1766,7 +1766,7 @@ function renderPOS(sc) {
             style="flex:1;" />
         </div>
         <div style="display:flex;gap:6px;margin-bottom:10px;">
-          ${['نقدي','شبكة','تحويل','آجل'].map(m=>`
+          ${['نقدي','شبكة'].map(m=>`
             <button class="btn ${posPayment===m?'btn-primary':'btn-outline'} btn-sm"
               style="flex:1;padding:7px 4px;font-size:12px;"
               data-paymethod="${m}"
@@ -3007,18 +3007,18 @@ function renderPurchContent() {
   const cats = isGoods ? goodsCats : opexCats;
   const emptyMsg = isGoods
     ? (lang==='ar'?'لا توجد فواتير بضاعة':'No goods purchases')
-    : (lang==='ar'?'لا توجد مصاريف تشغيلية':'No operating expenses');
+    : (lang==='ar'?'لا توجد مصاريف إدارية':'No administrative expenses');
 
   pc.innerHTML = `
   <div class="card">
     <div class="card-head">
       <h3>${isGoods
         ?(lang==='ar'?'📦 البضاعة والموردون — تكلفة البضاعة المباعة (COGS)':'📦 Operating Expenses — Cost of Goods Sold (COGS)')
-        :(lang==='ar'?'💼 المصاريف التشغيلية — Operating Expenses (OPEX)':'💼 Administrative Expenses (OPEX)')}</h3>
+        :(lang==='ar'?'💼 المصاريف الإدارية — Administrative Expenses (OPEX)':'💼 Administrative Expenses (OPEX)')}</h3>
       <div style="font-size:11px;color:var(--text-muted);text-align:end;">
         ${isGoods
           ?(lang==='ar'?'تُحتسب في تكلفة البضاعة المباعة وتؤثر على الربح الإجمالي':'Counted in COGS, affects Gross Profit')
-          :(lang==='ar'?'تُحتسب في المصاريف التشغيلية وتؤثر على صافي الربح':'Counted in OPEX, affects Net Profit')}
+          :(lang==='ar'?'تُحتسب في المصاريف الإدارية وتؤثر على صافي الربح':'Counted in OPEX, affects Net Profit')}
       </div>
     </div>
     <div class="tbl-wrap"><table class="tbl">
