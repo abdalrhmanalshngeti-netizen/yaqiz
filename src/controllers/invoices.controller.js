@@ -115,11 +115,17 @@ exports.create = async (req, res, next) => {
           item.line_total, item.vat_amount, i]);
 
       if (item.product_id) {
-        await stock.deduct(client, {
-          company_id, product_id: item.product_id, qty: item.qty,
-          reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
-          reference: invoice_no, user_id
-        });
+        try {
+          await client.query('SAVEPOINT sp_stock');
+          await stock.deduct(client, {
+            company_id, product_id: item.product_id, qty: item.qty,
+            reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
+            reference: invoice_no, user_id
+          });
+        } catch (stockErr) {
+          await client.query('ROLLBACK TO sp_stock');
+          console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
+        }
       }
     }
 

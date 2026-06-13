@@ -10027,6 +10027,7 @@ async function runAISearchQuery(q) {
   const STATUS_TO_FE   = { 'paid':'مسددة','issued':'آجل','partial':'مدفوع جزئياً','cancelled':'ملغاة','draft':'مسودة' };
 
   function invToAPI(inv) {
+    const _liveDB = getDB(); // دائماً الحالة الحديثة من localStorage
     return {
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
@@ -10036,14 +10037,19 @@ async function runAISearchQuery(q) {
       discount_type:  inv.discount>0 ? 'value' : null,
       discount_value: parseFloat(inv.discount)||0,
       notes: '',
-      items: (inv.items||[]).map(it => ({
-        product_id:   it.id || null,
-        product_name: it.name||it.product_name||'',
-        qty:          parseFloat(it.qty)||1,
-        unit_price:   parseFloat(it.price||it.unit_price)||0,
-        discount:     parseFloat(it.discount)||0,
-        tax_rate:     15
-      }))
+      items: (inv.items||[]).map(it => {
+        // البحث عن المنتج بالـ ID أولاً، ثم بالاسم كبديل (بعد مزامنة المنتجات قد يتغير الـ ID)
+        const _prod = _liveDB.products.find(p=>p.id===(it.id||it.product_id)) ||
+                      _liveDB.products.find(p=>p.name===(it.name||it.product_name));
+        return {
+          product_id:   _prod?.id || it.id || null,
+          product_name: it.name||it.product_name||'',
+          qty:          parseFloat(it.qty)||1,
+          unit_price:   parseFloat(it.price||it.unit_price)||0,
+          discount:     parseFloat(it.discount)||0,
+          tax_rate:     15
+        };
+      })
     };
   }
 
@@ -10397,7 +10403,10 @@ async function runAISearchQuery(q) {
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
             payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
             supplier_ref: p.supplier_ref||'', notes: p.notes||'',
-            items: (p.items||[]).filter(it=>it.product_id).map(it=>({product_id:it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0}))
+            items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
+              const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
+              return {product_id:_pr?.id||it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0};
+            }).filter(it=>it.product_id)
           }).catch(e => { console.warn('purchase create:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
@@ -10676,7 +10685,10 @@ async function runAISearchQuery(q) {
                 amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
                 payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
                 supplier_ref: p.supplier_ref||'', notes: p.notes||'',
-                items: (p.items||[]).filter(it=>it.product_id).map(it=>({product_id:it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0}))
+                items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
+                  const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
+                  return {product_id:_pr?.id||it.product_id, qty:it.qty, unit_cost:it.price||it.unit_price||0};
+                }).filter(it=>it.product_id)
               }).catch(()=>null);
               if (res?.data?.id) {
                 _replaceLocalId('purchases', p.id, res.data.id);

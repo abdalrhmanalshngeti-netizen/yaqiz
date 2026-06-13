@@ -86,19 +86,25 @@ exports.create = async (req, res, next) => {
     // إضافة المخزون لو كانت مشتريات بضاعة مع بنود
     if (purchase_type !== 'opex' && items.length) {
       for (const item of items) {
-        await stock.add(client, {
-          company_id, product_id: item.product_id, qty: item.qty,
-          unit_cost: item.unit_cost || item.unit_price,
-          reason: 'شراء', source: supplier_name,
-          source_type: 'purchase', source_id: purchase.id,
-          reference: purchase_no, user_id
-        });
-        // تحديث سعر الشراء
-        if (item.unit_cost) {
-          await client.query(
-            `UPDATE products SET buy_price = $1 WHERE id = $2`,
-            [item.unit_cost, item.product_id]
-          );
+        if (!item.product_id) continue;
+        try {
+          await client.query('SAVEPOINT sp_stock_add');
+          await stock.add(client, {
+            company_id, product_id: item.product_id, qty: item.qty,
+            unit_cost: item.unit_cost || item.unit_price,
+            reason: 'شراء', source: supplier_name,
+            source_type: 'purchase', source_id: purchase.id,
+            reference: purchase_no, user_id
+          });
+          if (item.unit_cost) {
+            await client.query(
+              `UPDATE products SET buy_price = $1 WHERE id = $2`,
+              [item.unit_cost, item.product_id]
+            );
+          }
+        } catch (stockErr) {
+          await client.query('ROLLBACK TO sp_stock_add');
+          console.warn(`stock add skipped [${purchase_no}] product ${item.product_id}:`, stockErr.message);
         }
       }
     }
