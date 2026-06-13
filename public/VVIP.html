@@ -951,7 +951,7 @@ function renderShell() {
       <header class="topbar">
         <button class="icon-btn" onclick="toggleSidebar()">${icon('menu',18)}</button>
         <div style="display:flex;align-items:center;gap:10px;flex:none;">
-          <div class="topbar-title">${navLabels[currentPage]?.[lang]||''}</div>
+          <div class="topbar-title">${(()=>{const s=getDB().settings;return s?.company_name||t('appName');})()}</div>
           ${currentUser?.shift_enabled?(()=>{
             const sh=getCurrentShift();
             if(!sh) return '';
