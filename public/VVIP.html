@@ -2936,6 +2936,85 @@ function printSalesInvoice(id) {
   win.document.close();
 }
 
+function printPurchaseInvoice(id) {
+  const db=getDB(); const p=db.purchases.find(x=>x.id===id); if(!p)return;
+  const s=db.settings||{};
+  const gregDate = new Date(p.created_at).toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const hijriDate = fmtHijri(p.created_at);
+  const win=window.open('','_blank','width=850,height=700');
+  if(!win) return;
+  win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="UTF-8"><title>${p.purchase_no||'فاتورة شراء'}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Tajawal',sans-serif;background:white;padding:28px;color:#0f172a;font-size:13px;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #1e40af;}
+    .company{font-size:20px;font-weight:900;color:#1e40af;} .sub{font-size:11px;color:#64748b;margin-top:3px;}
+    .title{font-size:18px;font-weight:900;color:#1e40af;text-align:end;}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;}
+    .info-box{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
+    .lbl{font-size:10px;color:#64748b;font-weight:700;margin-bottom:3px;} .val{font-weight:800;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+    th{background:#1e40af;color:white;padding:9px 10px;text-align:start;font-size:12px;}
+    td{padding:9px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;}
+    .tot-box{background:#f8fafc;padding:14px;border-radius:8px;border:1px solid #e2e8f0;max-width:280px;margin-right:auto;}
+    .tr{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+    .tr-final{font-weight:900;font-size:17px;color:#1e40af;border-top:2px solid #1e40af;padding-top:8px;margin-top:4px;}
+    .footer{margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center;}
+    @media print{body{padding:8px;} .no-print{display:none;}}
+  </style></head><body>
+  <div class="no-print" style="margin-bottom:16px;text-align:center;">
+    <button onclick="window.print()" style="background:#1e40af;color:white;border:none;padding:10px 32px;border-radius:8px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🖨️ طباعة</button>
+  </div>
+  <div class="header">
+    <div>
+      <div class="company">${s.company_name||'يقظ'}</div>
+      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${s.vat_number}</div>`:''}
+      <div class="sub">${s.address||''} ${s.city||''}</div>
+    </div>
+    <div style="text-align:end;">
+      <div class="title">فاتورة شراء</div>
+      <div style="font-size:13px;font-weight:700;margin-top:6px;">${p.purchase_no||'—'}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${gregDate}</div>
+      <div style="font-size:11px;color:#64748b;">${hijriDate}</div>
+    </div>
+  </div>
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="lbl">المورد</div><div class="val">${p.vendor||'—'}</div>
+      ${p.supplier_ref?`<div style="font-size:11px;color:#64748b;margin-top:4px;">المرجع: ${p.supplier_ref}</div>`:''}
+    </div>
+    <div class="info-box">
+      <div class="lbl">طريقة الدفع</div><div class="val">${p.payment_method||'—'}</div>
+      <div style="margin-top:6px;"><div class="lbl">التصنيف</div><div class="val">${p.category||'—'}</div></div>
+    </div>
+  </div>
+  ${(p.items||[]).length?`
+  <table>
+    <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+    <tbody>${(p.items).map((it,i)=>`<tr>
+      <td>${i+1}</td>
+      <td style="font-weight:700;">${it.name}</td>
+      <td>${it.qty}</td>
+      <td>${Number(it.price||it.unit_price||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td style="font-weight:800;">${Number(it.line_total||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+    </tr>`).join('')}</tbody>
+  </table>`:
+  `<div style="background:#f8fafc;padding:12px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">${p.description||''}</div>`}
+  <div style="display:flex;justify-content:flex-end;">
+    <div class="tot-box">
+      <div class="tr"><span>المبلغ قبل الضريبة:</span><span>${Number(p.amount||0).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+      <div class="tr"><span>ضريبة القيمة المضافة 15%:</span><span>${Number(p.vat||0).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+      <div class="tr tr-final"><span>الإجمالي:</span><span>${Number(p.total||0).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+    </div>
+  </div>
+  ${p.notes?`<div style="margin-top:16px;padding:12px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;"><b>ملاحظات:</b> ${p.notes}</div>`:''}
+  <div class="footer">${s.company_name||'يقظ'} • ${p.purchase_no||''} • نظام يقظ للمحاسبة</div>
+  </body></html>`);
+  win.document.close();
+}
+
 // ============ PURCHASES ============
 // purchase_type: 'goods' = مصاريف تشغيلية | 'opex' = مصاريف تشغيلية
 let purchTab = 'goods';
@@ -3061,25 +3140,27 @@ function renderPurchContent() {
         <th>${t('amount')}</th>
         <th>${lang==='ar'?'ضريبة 15%':'VAT 15%'}</th>
         <th>${t('total')}</th>
-        ${isGoods?`<th>${lang==='ar'?'طريقة الدفع':'Payment'}</th><th>${lang==='ar'?'الحالة':'Status'}</th>`:''}
+        ${isGoods?`<th>${lang==='ar'?'طريقة الدفع':'Payment'}</th><th></th>`:''}
       </tr></thead>
       <tbody>
         ${rows.length===0
-          ?`<tr><td colspan="${isGoods?10:7}" style="text-align:center;padding:32px;color:var(--text-muted);">${emptyMsg}</td></tr>`
+          ?`<tr><td colspan="${isGoods?9:7}" style="text-align:center;padding:32px;color:var(--text-muted);">${emptyMsg}</td></tr>`
           :rows.map(p=>{
-            const paid = p.paid_amount||0;
-            const remaining = Math.max(0, Math.round(((p.total||0)-paid)*100)/100);
+            const _itemDesc = p.items?.length ? p.items.map(i=>i.name).join('، ') : p.description;
             return `<tr>
-          <td>${fmtDate(p.created_at)}</td>
+          <td>
+            <div>${fmtDate(p.created_at)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
+          </td>
           <td><b>${p.vendor}</b></td>
-          <td style="color:var(--text-muted);font-size:12px;">${p.description}</td>
+          <td style="color:var(--text-muted);font-size:12px;">${_itemDesc||p.description}</td>
           <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${p.category}</span></td>
           <td>${fmtMoney(p.amount)}</td>
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
           <td><b>${fmtMoney(p.total)}</b></td>
           ${isGoods?`
           <td style="color:var(--text-muted);font-size:12px;">${p.payment_method||'—'}</td>
-          <td><span class="badge ${p.status==='مسدد'||p.status==='paid'?'badge-green':p.status==='آجل'||p.status==='unpaid'?'badge-red':'badge-amber'}">${p.status||'—'}</span></td>`:''}
+          <td><button class="icon-btn" style="width:28px;height:28px;" onclick="printPurchaseInvoice(${p.id})" title="${lang==='ar'?'عرض PDF':'View PDF'}">${icon('file-text',14)}</button></td>`:''}
         </tr>`;}).join('')}
       </tbody>
       ${rows.length>0?`<tfoot>
@@ -3325,7 +3406,7 @@ function saveGoodsPurchase() {
   const p={
     id:nextId(db,'purchase'),
     vendor:el('gp-vendor').value,
-    description:`${lang==='ar'?'فاتورة بضاعة':'Goods Invoice'} - ${el('gp-ref')?.value||''}`,
+    description: _goodsItems.map(i=>i.name).join('، ') || (lang==='ar'?'فاتورة بضاعة':'Goods Invoice'),
     category:'بضاعة', purchase_type:'goods',
     items:[..._goodsItems],
     amount:sub, vat, total,
@@ -5443,6 +5524,7 @@ function renderObligations(c) {
             <td style="font-weight:800;color:var(--primary);">${fmtMoney(o.amount)}</td>
             <td>
               <div style="font-weight:700;">${fmtDate(o.next_due)}</div>
+              <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(o.next_due)}</div>
               <div style="font-size:11px;color:${isUrgent?'var(--danger)':isSoon?'var(--warning)':'var(--text-muted)'};">
                 ${o.status==='active'?(daysLeft<0?(lang==='ar'?'متأخر!':'Overdue!'):daysLeft===0?(lang==='ar'?'اليوم!':'Today!'):`${daysLeft} ${lang==='ar'?'يوم':'days'}`):''}
               </div>
