@@ -1500,85 +1500,178 @@ async function sendAIMsg() {
   renderAIChatButton();
 
   try {
-    const db = getDB();
+    const db  = getDB();
     const now = new Date();
-    const thisMonth = now.toISOString().slice(0, 7);
-    const invList   = db.invoices  || [];
-    const purList   = db.purchases || [];
-    const custList  = db.customers || [];
-    const suppList  = db.suppliers || [];
-    const prodList  = db.products  || [];
-    const empList   = db.employees || [];
+
+    // ── دوال مساعدة للتواريخ ──────────────────────────────
+    const todayStr     = now.toISOString().slice(0, 10);
+    const yesterdayStr = new Date(now - 864e5).toISOString().slice(0, 10);
+    const thisMonth    = now.toISOString().slice(0, 7);
+    const lastMonth    = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
+
+    const invList  = db.invoices    || [];
+    const purList  = db.purchases   || [];
+    const custList = db.customers   || [];
+    const suppList = db.suppliers   || [];
+    const prodList = db.products    || [];
+    const empList  = db.employees   || [];
+    const oblList  = db.obligations || [];
+    const quoList  = db.quotes      || [];
+
+    // ── دالة حساب المعادل الشهري للالتزام ──────────────
+    function oblMonthly(o) {
+      if (o.frequency === 'شهري')       return o.amount;
+      if (o.frequency === 'أسبوعي')     return o.amount * 4.33;
+      if (o.frequency === 'ربع سنوي')  return o.amount / 3;
+      if (o.frequency === 'نصف سنوي')  return o.amount / 6;
+      if (o.frequency === 'سنوي')       return o.amount / 12;
+      return o.amount;
+    }
+
+    // ── دالة تصفية الفواتير حسب التاريخ ─────────────────
+    function invByDate(datePrefix) {
+      return invList.filter(i => (i.created_at || '').startsWith(datePrefix));
+    }
+    function purByDate(datePrefix) {
+      return purList.filter(p => (p.created_at || '').startsWith(datePrefix));
+    }
+
+    // ── إحصائيات سريعة بالتواريخ ────────────────────────
+    const todayInv   = invByDate(todayStr);
+    const yestInv    = invByDate(yesterdayStr);
+    const monthInv   = invByDate(thisMonth);
+    const lastMInv   = invByDate(lastMonth);
+    const todayPur   = purByDate(todayStr);
+    const yestPur    = purByDate(yesterdayStr);
+    const monthPur   = purByDate(thisMonth);
+
+    // ── قائمة الفواتير الكاملة (مع limit للحفاظ على التوكن) ─
+    const MAX_INV = 300;
+    const allInvMapped = invList.slice(-MAX_INV).map(i => ({
+      no:        i.invoice_no,
+      customer:  i.customer_name,
+      total:     i.grand_total,
+      paid:      i.paid_amount,
+      remaining: i.remaining_amount,
+      status:    i.status,
+      date:      (i.created_at || '').slice(0, 10),
+    }));
 
     const ctx = {
-      // ── الشركة ──────────────────────────────────────
-      company:      db.settings?.company_name || '',
-      vat_number:   db.settings?.vat_number   || '',
-      plan:         db.settings?.plan         || 'trial',
+      // ── التاريخ الحالي (مهم جداً للأسئلة الزمنية) ──────
+      today:      todayStr,
+      yesterday:  yesterdayStr,
+      this_month: thisMonth,
+      last_month: lastMonth,
 
-      // ── الخزينة ─────────────────────────────────────
+      // ── الشركة ──────────────────────────────────────────
+      company:        db.settings?.company_name || '',
+      vat_number:     db.settings?.vat_number   || '',
+      address:        db.settings?.address      || '',
+
+      // ── الخزينة ─────────────────────────────────────────
       treasury_balance: db.treasury?.balance || 0,
 
-      // ── إحصائيات الشهر الحالي ───────────────────────
-      this_month: thisMonth,
-      this_month_revenue:  invList.filter(i=>(i.created_at||'').startsWith(thisMonth)).reduce((s,i)=>s+(i.grand_total||0),0),
-      this_month_expenses: purList.filter(p=>(p.created_at||'').startsWith(thisMonth)).reduce((s,p)=>s+(p.total||0),0),
-      this_month_invoices: invList.filter(i=>(i.created_at||'').startsWith(thisMonth)).length,
+      // ── إحصائيات اليوم ──────────────────────────────────
+      today_invoices_count:   todayInv.length,
+      today_revenue:          todayInv.reduce((s,i)=>s+(i.grand_total||0),0),
+      today_invoices:         todayInv.map(i=>({no:i.invoice_no,customer:i.customer_name,total:i.grand_total,status:i.status})),
+      today_expenses:         todayPur.reduce((s,p)=>s+(p.total||0),0),
 
-      // ── إجماليات الفواتير ───────────────────────────
-      invoices_count:     invList.length,
-      invoices_paid:      invList.filter(i=>i.status==='مسددة').length,
-      invoices_pending:   invList.filter(i=>i.status==='آجل').length,
-      invoices_partial:   invList.filter(i=>i.status==='مدفوع جزئياً').length,
-      invoices_revenue_total: invList.reduce((s,i)=>s+(i.grand_total||0),0),
-      invoices_collected:     invList.reduce((s,i)=>s+(i.paid_amount||0),0),
-      invoices_uncollected:   invList.reduce((s,i)=>s+(i.remaining_amount||0),0),
+      // ── إحصائيات أمس ────────────────────────────────────
+      yesterday_invoices_count: yestInv.length,
+      yesterday_revenue:        yestInv.reduce((s,i)=>s+(i.grand_total||0),0),
+      yesterday_invoices:       yestInv.map(i=>({no:i.invoice_no,customer:i.customer_name,total:i.grand_total,status:i.status})),
+      yesterday_expenses:       yestPur.reduce((s,p)=>s+(p.total||0),0),
 
-      // ── آخر 20 فاتورة (مفصّلة) ──────────────────────
-      recent_invoices: invList.slice(-20).map(i=>({
-        no: i.invoice_no, customer: i.customer_name,
-        total: i.grand_total, paid: i.paid_amount,
-        remaining: i.remaining_amount, status: i.status,
-        date: (i.created_at||'').slice(0,10),
-        items_count: (i.items||[]).length
-      })),
+      // ── إحصائيات هذا الشهر ──────────────────────────────
+      this_month_invoices_count: monthInv.length,
+      this_month_revenue:        monthInv.reduce((s,i)=>s+(i.grand_total||0),0),
+      this_month_expenses:       monthPur.reduce((s,p)=>s+(p.total||0),0),
+      this_month_net:            monthInv.reduce((s,i)=>s+(i.grand_total||0),0) - monthPur.reduce((s,p)=>s+(p.total||0),0),
 
-      // ── العملاء (كاملاً) ─────────────────────────────
-      customers_count: custList.length,
-      customers_with_balance: custList.filter(c=>c.balance>0).length,
+      // ── إحصائيات الشهر الماضي ───────────────────────────
+      last_month_revenue:  lastMInv.reduce((s,i)=>s+(i.grand_total||0),0),
+      last_month_invoices: lastMInv.length,
+
+      // ── إجماليات الفواتير الكلية ─────────────────────────
+      invoices_total_count:    invList.length,
+      invoices_paid_count:     invList.filter(i=>i.status==='مسددة').length,
+      invoices_pending_count:  invList.filter(i=>i.status==='آجل').length,
+      invoices_partial_count:  invList.filter(i=>i.status==='مدفوع جزئياً').length,
+      invoices_total_revenue:  invList.reduce((s,i)=>s+(i.grand_total||0),0),
+      invoices_total_collected: invList.reduce((s,i)=>s+(i.paid_amount||0),0),
+      invoices_total_remaining: invList.reduce((s,i)=>s+(i.remaining_amount||0),0),
+
+      // ── قائمة الفواتير الكاملة ──────────────────────────
+      all_invoices: allInvMapped,
+
+      // ── العملاء الكاملة ──────────────────────────────────
+      customers_count:          custList.length,
+      customers_with_balance:   custList.filter(c=>c.balance>0).length,
+      customers_total_balances: custList.reduce((s,c)=>s+(c.balance||0),0),
       customers: custList.map(c=>({
         name: c.name, phone: c.phone,
         balance: c.balance, loyalty: c.loyalty_points
       })),
 
-      // ── الموردون (كاملاً) ────────────────────────────
-      suppliers_count: suppList.length,
+      // ── الموردون الكاملة ─────────────────────────────────
+      suppliers_count:         suppList.length,
+      suppliers_total_balance: suppList.reduce((s,s2)=>s+(s2.balance||0),0),
       suppliers: suppList.map(s=>({ name: s.name, balance: s.balance })),
 
-      // ── المنتجات (كاملاً) ────────────────────────────
-      products_count: prodList.length,
-      low_stock: prodList.filter(p=>(p.qty||0)<=(p.min_qty||0)&&p.min_qty>0).map(p=>({name:p.name,qty:p.qty,min:p.min_qty})),
+      // ── المنتجات الكاملة ─────────────────────────────────
+      products_count:   prodList.length,
+      low_stock_count:  prodList.filter(p=>(p.qty||0)<=(p.min_qty||0)&&p.min_qty>0).length,
+      low_stock:        prodList.filter(p=>(p.qty||0)<=(p.min_qty||0)&&p.min_qty>0).map(p=>({name:p.name,qty:p.qty,min:p.min_qty})),
       products: prodList.map(p=>({
         name: p.name, code: p.code,
         qty: p.qty, min_qty: p.min_qty,
         sell_price: p.sell_price, buy_price: p.buy_price
       })),
 
-      // ── المشتريات (آخر 10) ──────────────────────────
-      purchases_count:   purList.length,
-      purchases_total:   purList.reduce((s,p)=>s+(p.total||0),0),
-      recent_purchases:  purList.slice(-10).map(p=>({
-        vendor: p.vendor, total: p.total, status: p.status,
+      // ── المشتريات الكاملة (آخر 200) ─────────────────────
+      purchases_total_count: purList.length,
+      purchases_grand_total: purList.reduce((s,p)=>s+(p.total||0),0),
+      recent_purchases: purList.slice(-200).map(p=>({
+        vendor: p.vendor, description: p.description,
+        total: p.total, status: p.status,
         date: (p.created_at||'').slice(0,10), category: p.category
       })),
 
-      // ── الموظفون ─────────────────────────────────────
+      // ── الموظفون الكاملة ─────────────────────────────────
       employees_count:    empList.length,
-      monthly_payroll:    empList.reduce((s,e)=>s+(e.salary||0)+(e.allowances||0),0),
+      monthly_payroll:    empList.filter(e=>e.status==='active').reduce((s,e)=>s+(e.salary||0)+(e.allowances||0),0),
       employees: empList.map(e=>({
-        name: e.name, position: e.position,
-        salary: e.salary, status: e.status
+        name: e.name, position: e.position, department: e.department,
+        salary: e.salary, allowances: e.allowances, status: e.status
       })),
+
+      // ── الالتزامات الكاملة ───────────────────────────────
+      obligations_count:          oblList.length,
+      obligations_active_count:   oblList.filter(o=>o.status==='active').length,
+      obligations_total_amount:   oblList.filter(o=>o.status==='active').reduce((s,o)=>s+(o.amount||0),0),
+      obligations_monthly_equiv:  oblList.filter(o=>o.status==='active').reduce((s,o)=>s+oblMonthly(o),0),
+      obligations_due_soon:       oblList.filter(o=>{
+        if(o.status!=='active') return false;
+        const d=new Date(o.next_due);
+        const days=(d-now)/(864e5);
+        return days>=0 && days<=30;
+      }).length,
+      obligations: oblList.map(o=>({
+        name: o.name, vendor: o.vendor, category: o.category,
+        amount: o.amount, frequency: o.frequency,
+        monthly_equiv: oblMonthly(o),
+        next_due: (o.next_due||'').slice(0,10),
+        status: o.status,
+        payments_count: (o.payments||[]).length,
+        last_payment: (o.payments||[]).slice(-1)[0] || null
+      })),
+
+      // ── العروض (Quotes) ──────────────────────────────────
+      quotes_count:   quoList.length,
+      quotes_pending: quoList.filter(q=>q.status==='معلق').length,
+      quotes_total:   quoList.reduce((s,q)=>s+(q.grand_total||0),0),
     };
 
     const history = _aiChatHistory.slice(0, -1).slice(-6)
