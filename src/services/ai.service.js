@@ -114,7 +114,7 @@ ${JSON.stringify(context, null, 2)}`;
 
   messages.push({ role: 'user', content: question });
 
-  return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 500, temperature: 0.3 });
+  return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 800, temperature: 0.3 });
 }
 
 async function extractFromPDF(pdfBuffer) {

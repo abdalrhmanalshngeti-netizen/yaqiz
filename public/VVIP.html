@@ -1503,24 +1503,85 @@ async function sendAIMsg() {
     const db = getDB();
     const now = new Date();
     const thisMonth = now.toISOString().slice(0, 7);
+    const invList   = db.invoices  || [];
+    const purList   = db.purchases || [];
+    const custList  = db.customers || [];
+    const suppList  = db.suppliers || [];
+    const prodList  = db.products  || [];
+    const empList   = db.employees || [];
+
     const ctx = {
-      company:              db.settings?.company_name || '',
-      plan:                 db.settings?.plan || 'trial',
-      invoice_count:        (db.invoices||[]).length,
-      customer_count:       (db.customers||[]).length,
-      supplier_count:       (db.suppliers||[]).length,
-      product_count:        (db.products||[]).length,
-      treasury_balance:     db.treasury?.balance || 0,
-      this_month_revenue:   (db.invoices||[]).filter(i=>(i.date||'').startsWith(thisMonth)).reduce((s,i)=>s+(i.grand_total||0),0),
-      this_month_expenses:  (db.purchases||[]).filter(p=>(p.date||'').startsWith(thisMonth)).reduce((s,p)=>s+(p.total||0),0),
-      pending_invoices:     (db.invoices||[]).filter(i=>i.status==='pending').length,
-      overdue_invoices:     (db.invoices||[]).filter(i=>i.status==='pending'&&i.due_date&&new Date(i.due_date)<now).length,
-      recent_invoices:      (db.invoices||[]).slice(-6).map(i=>({no:i.invoice_no,customer:i.customer_name,total:i.grand_total,status:i.status,date:i.date})),
-      top_customers:        (db.customers||[]).sort((a,b)=>(b.total_purchases||0)-(a.total_purchases||0)).slice(0,5).map(c=>({name:c.name,balance:c.balance||0})),
-      top_products:         (db.products||[]).sort((a,b)=>(b.qty||0)-(a.qty||0)).slice(0,5).map(p=>({name:p.name,qty:p.qty,price:p.sell_price})),
-      employees_count:      (db.employees||[]).length,
+      // ── الشركة ──────────────────────────────────────
+      company:      db.settings?.company_name || '',
+      vat_number:   db.settings?.vat_number   || '',
+      plan:         db.settings?.plan         || 'trial',
+
+      // ── الخزينة ─────────────────────────────────────
+      treasury_balance: db.treasury?.balance || 0,
+
+      // ── إحصائيات الشهر الحالي ───────────────────────
+      this_month: thisMonth,
+      this_month_revenue:  invList.filter(i=>(i.created_at||'').startsWith(thisMonth)).reduce((s,i)=>s+(i.grand_total||0),0),
+      this_month_expenses: purList.filter(p=>(p.created_at||'').startsWith(thisMonth)).reduce((s,p)=>s+(p.total||0),0),
+      this_month_invoices: invList.filter(i=>(i.created_at||'').startsWith(thisMonth)).length,
+
+      // ── إجماليات الفواتير ───────────────────────────
+      invoices_count:     invList.length,
+      invoices_paid:      invList.filter(i=>i.status==='مسددة').length,
+      invoices_pending:   invList.filter(i=>i.status==='آجل').length,
+      invoices_partial:   invList.filter(i=>i.status==='مدفوع جزئياً').length,
+      invoices_revenue_total: invList.reduce((s,i)=>s+(i.grand_total||0),0),
+      invoices_collected:     invList.reduce((s,i)=>s+(i.paid_amount||0),0),
+      invoices_uncollected:   invList.reduce((s,i)=>s+(i.remaining_amount||0),0),
+
+      // ── آخر 20 فاتورة (مفصّلة) ──────────────────────
+      recent_invoices: invList.slice(-20).map(i=>({
+        no: i.invoice_no, customer: i.customer_name,
+        total: i.grand_total, paid: i.paid_amount,
+        remaining: i.remaining_amount, status: i.status,
+        date: (i.created_at||'').slice(0,10),
+        items_count: (i.items||[]).length
+      })),
+
+      // ── العملاء (كاملاً) ─────────────────────────────
+      customers_count: custList.length,
+      customers_with_balance: custList.filter(c=>c.balance>0).length,
+      customers: custList.map(c=>({
+        name: c.name, phone: c.phone,
+        balance: c.balance, loyalty: c.loyalty_points
+      })),
+
+      // ── الموردون (كاملاً) ────────────────────────────
+      suppliers_count: suppList.length,
+      suppliers: suppList.map(s=>({ name: s.name, balance: s.balance })),
+
+      // ── المنتجات (كاملاً) ────────────────────────────
+      products_count: prodList.length,
+      low_stock: prodList.filter(p=>(p.qty||0)<=(p.min_qty||0)&&p.min_qty>0).map(p=>({name:p.name,qty:p.qty,min:p.min_qty})),
+      products: prodList.map(p=>({
+        name: p.name, code: p.code,
+        qty: p.qty, min_qty: p.min_qty,
+        sell_price: p.sell_price, buy_price: p.buy_price
+      })),
+
+      // ── المشتريات (آخر 10) ──────────────────────────
+      purchases_count:   purList.length,
+      purchases_total:   purList.reduce((s,p)=>s+(p.total||0),0),
+      recent_purchases:  purList.slice(-10).map(p=>({
+        vendor: p.vendor, total: p.total, status: p.status,
+        date: (p.created_at||'').slice(0,10), category: p.category
+      })),
+
+      // ── الموظفون ─────────────────────────────────────
+      employees_count:    empList.length,
+      monthly_payroll:    empList.reduce((s,e)=>s+(e.salary||0)+(e.allowances||0),0),
+      employees: empList.map(e=>({
+        name: e.name, position: e.position,
+        salary: e.salary, status: e.status
+      })),
     };
-    const history = _aiChatHistory.slice(0, -1).slice(-5)
+
+    const history = _aiChatHistory.slice(0, -1).slice(-6)
       .filter(h => h.a)
       .map(h => ({ question: h.q, answer: h.a }));
 
