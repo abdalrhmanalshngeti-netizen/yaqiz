@@ -257,12 +257,12 @@ exports.impersonate = async (req, res, next) => {
     await db.query(`
       INSERT INTO impersonation_codes (code, company_id, user_id, company_name, created_by)
       VALUES ($1, $2, $3, $4, $5)
-    `, [code, user.company_id, user.id, user.company_name, req.user.username]);
+    `, [code, user.company_id, user.id, user.company_name, req.admin.name || req.admin.email || 'المدير العام']);
 
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description)
       VALUES ('impersonation', $1, $2)
-    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${req.user.username}`]);
+    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${req.admin.name || req.admin.email || 'المدير العام'}`]);
 
     res.json({ success: true, code, company_name: user.company_name });
   } catch (err) { next(err); }

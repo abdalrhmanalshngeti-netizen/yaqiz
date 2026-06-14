@@ -8985,9 +8985,9 @@ function doGlobalSearch(q) {
   }
   if (!html) html = `<div class="search-empty">🔍 ${lang==='ar'?'لا توجد نتائج':'No results found'}</div>`;
 
-  // زر AI — للباقات التي تملك ai_analyze فقط (لا الأساسية)
+  // زر AI — لكل المستخدمين المسجلين
   const token = localStorage.getItem('yaqiz_access_token');
-  if (token && q.trim().length >= 2 && hasPlanFeature('ai_analyze')) {
+  if (token && q.trim().length >= 2) {
     window._lastAIQuery = q;
     html += `
     <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">

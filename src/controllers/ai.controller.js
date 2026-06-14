@@ -142,16 +142,6 @@ exports.assistant = async (req, res, next) => {
     const { question, context } = req.body;
     if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
 
-    const plan = await getPlan(company_id);
-    if (plan !== 'pro' && plan !== 'trial') {
-      return res.status(403).json({
-        success: false,
-        code: 'PLAN_UPGRADE_REQUIRED',
-        message: 'مساعد يقظ الذكي متاح حصرياً لباقة الاحترافية.',
-        current_plan: plan,
-      });
-    }
-
     const result = await ai.askAssistant(question, context || {});
     await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out);
 
