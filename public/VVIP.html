@@ -622,89 +622,48 @@ function saveDB(db) {
 }
 function initDB() {
   const db = {
-    users: [
-      { id:1, username:'owner', password:'1234', full_name:'أحمد المالك', role:'owner', permissions:[], active:true },
-      { id:2, username:'accountant', password:'1234', full_name:'سارة المحاسبة', role:'accountant', permissions:['dashboard.view','sales.view','purchases.view','purchases.create','inventory.view','customers.view','suppliers.view','treasury.view','reports.view','accounts.view','activity.view','employees.view','obligations.view'], active:true },
-      { id:3, username:'cashier', password:'1234', full_name:'محمد الكاشير', role:'cashier', permissions:['sales.view','sales.create','inventory.view','customers.view'], active:true }
-    ],
-    products: [
-      { id:1, name:'قهوة عربية', code:'P001', category:'مشروبات', unit:'كيس', buy_price:45, sell_price:75, qty:120, min_qty:20 },
-      { id:2, name:'تمر مجدول', code:'P002', category:'مواد غذائية', unit:'كيلو', buy_price:60, sell_price:95, qty:8, min_qty:15 },
-      { id:3, name:'زيت زيتون', code:'P003', category:'مواد غذائية', unit:'لتر', buy_price:35, sell_price:55, qty:45, min_qty:10 },
-      { id:4, name:'عسل طبيعي', code:'P004', category:'مواد غذائية', unit:'كيلو', buy_price:120, sell_price:180, qty:30, min_qty:5 },
-      { id:5, name:'أرز بسمتي', code:'P005', category:'مواد غذائية', unit:'كيس 5كجم', buy_price:28, sell_price:42, qty:60, min_qty:10 },
-      { id:6, name:'سكر أبيض', code:'P006', category:'مواد غذائية', unit:'كيس', buy_price:12, sell_price:18, qty:3, min_qty:20 },
-    ],
-    customers: [
-      { id:1, name:'شركة النخيل', phone:'0501234567', vat_num:'300012345600003', balance:1500 },
-      { id:2, name:'مؤسسة الفجر', phone:'0551234567', vat_num:'', balance:0 },
-      { id:3, name:'أحمد العمري', phone:'0561234567', vat_num:'', balance:320 },
-    ],
-    suppliers: [
-      { id:1, name:'شركة التوزيع الخليجي', phone:'0112345678', vat_num:'300098765400003', balance:5200 },
-      { id:2, name:'مستودعات الأمانة', phone:'0562345678', vat_num:'', balance:1800 },
-    ],
-    invoices: [
-      { id:1, invoice_no:'INV-2024-001', customer_name:'شركة النخيل', customer_vat:'300012345600003', items:[{name:'قهوة عربية',qty:5,price:75,line_total:375}], subtotal:375, discount:0, vat_total:56.25, grand_total:431.25, payment_method:'نقدي', status:'مسددة', invoice_type:'tax', zatca_status:false, created_at: new Date(Date.now()-86400000*2).toISOString() },
-      { id:2, invoice_no:'INV-2024-002', customer_name:'عميل نقدي', customer_vat:'', items:[{name:'تمر مجدول',qty:2,price:95,line_total:190},{name:'عسل طبيعي',qty:1,price:180,line_total:180}], subtotal:370, discount:20, vat_total:52.5, grand_total:402.5, payment_method:'شبكة', status:'مسددة', invoice_type:'simplified', zatca_status:true, created_at: new Date(Date.now()-86400000).toISOString() },
-      { id:3, invoice_no:'INV-2024-003', customer_name:'مؤسسة الفجر', customer_vat:'', items:[{name:'زيت زيتون',qty:10,price:55,line_total:550}], subtotal:550, discount:0, vat_total:82.5, grand_total:632.5, payment_method:'آجل', status:'آجل', invoice_type:'simplified', zatca_status:false, created_at: new Date().toISOString() },
-    ],
-    purchases: [
-      { id:1, vendor:'شركة التوزيع الخليجي', description:'شراء قهوة عربية 100 كيس', category:'بضاعة', amount:4500, vat:675, total:5175, deductible:true, created_at: new Date(Date.now()-86400000*5).toISOString() },
-      { id:2, vendor:'شركة الكهرباء', description:'فاتورة كهرباء شهر رجب', category:'مرافق', amount:850, vat:127.5, total:977.5, deductible:true, created_at: new Date(Date.now()-86400000*3).toISOString() },
-      { id:3, vendor:'شركة الاتصالات', description:'اشتراك إنترنت شهري', category:'تشغيلية', amount:299, vat:44.85, total:343.85, deductible:true, created_at: new Date(Date.now()-86400000).toISOString() },
-    ],
-    treasury: {
-      balance: 28450,
-      moves: [
-        { id:1, type:'in', amount:431.25, description:'فاتورة INV-2024-001', reference:'INV-2024-001', date: new Date(Date.now()-86400000*2).toISOString() },
-        { id:2, type:'in', amount:402.5, description:'فاتورة INV-2024-002', reference:'INV-2024-002', date: new Date(Date.now()-86400000).toISOString() },
-        { id:3, type:'out', amount:5175, description:'مشتريات من التوزيع الخليجي', reference:'PO-001', date: new Date(Date.now()-86400000*5).toISOString() },
-        { id:4, type:'in', amount:10000, description:'إيداع رأس مال', reference:'', date: new Date(Date.now()-86400000*10).toISOString() },
-      ]
-    },
+    users: [],
+    products: [],
+    customers: [],
+    suppliers: [],
+    invoices: [],
+    purchases: [],
+    quotes: [],
+    returns: [],
+    employees: [],
+    obligations: [],
+    shifts: [],
+    stock_moves: [],
+    journal: [],
+    escalations: [],
+    activity: [],
+    treasury: { balance: 0, moves: [] },
     accounts: [
-      { id:1, code:'1000', name:'الأصول', name_en:'Assets', type:'أصول', is_group:true, parent:null },
-      { id:2, code:'1100', name:'النقدية والبنوك', name_en:'Cash & Banks', type:'أصول', is_group:false, parent:1 },
-      { id:3, code:'1200', name:'الذمم المدينة', name_en:'Accounts Receivable', type:'أصول', is_group:false, parent:1 },
-      { id:4, code:'1300', name:'المخزون', name_en:'Inventory', type:'أصول', is_group:false, parent:1 },
-      { id:5, code:'2000', name:'الالتزامات', name_en:'Liabilities', type:'التزامات', is_group:true, parent:null },
-      { id:6, code:'2100', name:'الذمم الدائنة', name_en:'Accounts Payable', type:'التزامات', is_group:false, parent:5 },
-      { id:7, code:'2200', name:'ضريبة القيمة المضافة', name_en:'VAT Payable', type:'التزامات', is_group:false, parent:5 },
-      { id:8, code:'3000', name:'حقوق الملكية', name_en:'Equity', type:'حقوق الملكية', is_group:true, parent:null },
-      { id:9, code:'4000', name:'الإيرادات', name_en:'Revenue', type:'إيرادات', is_group:true, parent:null },
-      { id:10, code:'4100', name:'إيرادات المبيعات', name_en:'Sales Revenue', type:'إيرادات', is_group:false, parent:9 },
-      { id:11, code:'5000', name:'المصروفات', name_en:'Expenses', type:'مصروفات', is_group:true, parent:null },
-      { id:12, code:'5100', name:'تكلفة البضاعة المباعة', name_en:'Cost of Goods Sold', type:'مصروفات', is_group:false, parent:11 },
-      { id:13, code:'5200', name:'المصاريف التشغيلية', name_en:'Operating Expenses', type:'مصروفات', is_group:false, parent:11 },
-    ],
-    activity: [
-      { id:1, username:'owner', category:'مبيعات', details:'إنشاء فاتورة INV-2024-001', timestamp: new Date(Date.now()-86400000*2).toISOString() },
-      { id:2, username:'cashier', category:'مبيعات', details:'إنشاء فاتورة INV-2024-002', timestamp: new Date(Date.now()-86400000).toISOString() },
-      { id:3, username:'accountant', category:'مشتريات', details:'تسجيل مشتريات من التوزيع الخليجي', timestamp: new Date(Date.now()-86400000*5).toISOString() },
+      { id:1,  code:'1000', name:'الأصول',               name_en:'Assets',               type:'أصول',          is_group:true,  parent:null },
+      { id:2,  code:'1100', name:'النقدية والبنوك',       name_en:'Cash & Banks',          type:'أصول',          is_group:false, parent:1 },
+      { id:3,  code:'1200', name:'الذمم المدينة',         name_en:'Accounts Receivable',   type:'أصول',          is_group:false, parent:1 },
+      { id:4,  code:'1300', name:'المخزون',               name_en:'Inventory',             type:'أصول',          is_group:false, parent:1 },
+      { id:5,  code:'2000', name:'الالتزامات',            name_en:'Liabilities',           type:'التزامات',      is_group:true,  parent:null },
+      { id:6,  code:'2100', name:'الذمم الدائنة',         name_en:'Accounts Payable',      type:'التزامات',      is_group:false, parent:5 },
+      { id:7,  code:'2200', name:'ضريبة القيمة المضافة',  name_en:'VAT Payable',           type:'التزامات',      is_group:false, parent:5 },
+      { id:8,  code:'3000', name:'حقوق الملكية',          name_en:'Equity',                type:'حقوق الملكية',  is_group:true,  parent:null },
+      { id:9,  code:'4000', name:'الإيرادات',             name_en:'Revenue',               type:'إيرادات',       is_group:true,  parent:null },
+      { id:10, code:'4100', name:'إيرادات المبيعات',      name_en:'Sales Revenue',         type:'إيرادات',       is_group:false, parent:9 },
+      { id:11, code:'5000', name:'المصروفات',             name_en:'Expenses',              type:'مصروفات',       is_group:true,  parent:null },
+      { id:12, code:'5100', name:'تكلفة البضاعة المباعة', name_en:'Cost of Goods Sold',    type:'مصروفات',       is_group:false, parent:11 },
+      { id:13, code:'5200', name:'المصاريف التشغيلية',    name_en:'Operating Expenses',    type:'مصروفات',       is_group:false, parent:11 },
     ],
     settings: {
-      company_name: 'يقظ',
-      vat_number: '300011122200003',
-      cr_number: '1010123456',
-      phone: '0112345678',
-      address: 'الرياض - شارع الأمير محمد بن عبدالعزيز',
+      company_name: '',
+      vat_number: '',
+      cr_number: '',
+      phone: '',
+      address: '',
       zatca_env: 'mock',
       plan: 'trial',
       plan_expires_at: null,
     },
-    employees: [
-      { id:1, name:'خالد العمري', position:'مدير المبيعات', salary:8500, phone:'0551234567', start_date:'2023-01-15', status:'active' },
-      { id:2, name:'نورة السالم', position:'محاسبة', salary:6500, phone:'0561234567', start_date:'2023-03-01', status:'active' },
-      { id:3, name:'فهد الدوسري', position:'مخزني', salary:4500, phone:'0571234567', start_date:'2024-01-01', status:'active' },
-    ],
-    obligations: [
-      { id:1, name:'إيجار المحل', amount:5000, frequency:'شهري', next_due: new Date(new Date().getFullYear(), new Date().getMonth()+1, 1).toISOString(), category:'إيجار', status:'active', vendor:'شركة العقارات' },
-      { id:2, name:'اشتراك الإنترنت', amount:299, frequency:'شهري', next_due: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString(), category:'اتصالات', status:'active', vendor:'شركة الاتصالات' },
-      { id:3, name:'تأمين المركبات', amount:3200, frequency:'سنوي', next_due: new Date(new Date().getFullYear()+1, 0, 1).toISOString(), category:'تأمين', status:'active', vendor:'شركة التأمين الوطنية' },
-      { id:4, name:'صيانة أجهزة الكمبيوتر', amount:800, frequency:'ربع سنوي', next_due: new Date(new Date().getFullYear(), new Date().getMonth()+2, 1).toISOString(), category:'صيانة', status:'active', vendor:'شركة التقنية' },
-    ],
-    nextId: { invoice:4, purchase:4, customer:4, supplier:3, product:7, user:4, treasury:5, account:14, employee:4, obligation:5 }
+    nextId: { invoice:1, purchase:1, customer:1, supplier:1, product:1, user:1, treasury:1, account:14, employee:1, obligation:1, escalation:1, quote:1, return:1, shift:1 }
   };
   saveDB(db);
   return db;
@@ -1345,9 +1304,21 @@ function csSelectSub(id) {
 
 function _postTicketToAPI(payload) {
   if(window.location.protocol==='file:') return;
+  // استخدم apiFetch من الـ bridge لأنه يجدد التوكن تلقائياً عند انتهائه
+  if(window._cloudApiFetch) {
+    window._cloudApiFetch('POST', '/api/support/ticket', payload)
+      .catch(err=>{ console.warn('Ticket send failed:', err?.message||err); });
+    return;
+  }
   const token=localStorage.getItem('yaqiz_access_token'); if(!token) return;
-  fetch('/api/support/ticket',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)})
-    .catch(()=>showToast(lang==='ar'?'تعذّر إرسال التذكرة، تحقق من الاتصال':'Failed to send ticket','error'));
+  const base=(window._YAQIZ_API||'').replace(/\/$/,'');
+  fetch(base+'/api/support/ticket',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body:JSON.stringify(payload)
+  })
+  .then(r=>{ if(!r.ok) showToast(lang==='ar'?'⚠️ تعذّر حفظ التذكرة على السيرفر':'⚠️ Failed to save ticket','error'); })
+  .catch(()=>showToast(lang==='ar'?'تعذّر إرسال التذكرة، تحقق من الاتصال':'Failed to send ticket','error'));
 }
 
 function csEscalate() {
