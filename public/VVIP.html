@@ -5525,6 +5525,7 @@ function renderObligations(c) {
           <th>${lang==='ar'?'المبلغ':'Amount'}</th>
           <th>${lang==='ar'?'الاستحقاق القادم':'Next Due'}</th>
           <th>${lang==='ar'?'الحالة':'Status'}</th>
+          <th>${lang==='ar'?'السداد':'Payment'}</th>
           ${has('obligations.manage')?'<th></th>':''}
         </tr></thead>
         <tbody>${db.obligations.map(o=>{
@@ -5532,6 +5533,7 @@ function renderObligations(c) {
           const daysLeft = Math.ceil((dueDate-now)/(1000*60*60*24));
           const isUrgent = daysLeft<=7 && o.status==='active';
           const isSoon = daysLeft<=30 && o.status==='active';
+          const lastPay = (o.payments||[]).slice(-1)[0];
           return `<tr style="${isUrgent?'background:#fff5f5;':''}">
             <td><b>${o.name}</b></td>
             <td style="color:var(--text-muted);">${o.vendor||'-'}</td>
@@ -5546,6 +5548,13 @@ function renderObligations(c) {
               </div>
             </td>
             <td><span class="badge ${o.status==='active'?'badge-green':'badge-red'}">${o.status==='active'?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'موقوف':'Stopped')}</span></td>
+            <td>
+              ${o.status==='active'?`<button class="btn btn-sm btn-primary" onclick="payObligation(${o.id})" style="white-space:nowrap;">
+                ${icon('credit-card',13)} ${lang==='ar'?'سداد':'Pay'}
+              </button>
+              ${lastPay?`<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${lang==='ar'?'آخر سداد:':'Last:'} ${fmtMoney(lastPay.amount)}</div>`:''}`:
+              `<span style="color:var(--text-muted);font-size:12px;">—</span>`}
+            </td>
             ${has('obligations.manage')?`<td>
               <button class="icon-btn" style="width:28px;height:28px;" onclick="showObligationModal(${o.id})">${icon('edit',13)}</button>
               <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" onclick="deleteObligation(${o.id})">${icon('trash-2',13)}</button>
@@ -5556,7 +5565,7 @@ function renderObligations(c) {
           <tr style="background:var(--primary-soft);font-weight:900;">
             <td colspan="4" style="padding:12px 14px;text-align:end;">${lang==='ar'?'المعادل الشهري:':'Monthly Equivalent:'}</td>
             <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(monthlyTotal)}</td>
-            <td colspan="${has('obligations.manage')?3:2}"></td>
+            <td colspan="${has('obligations.manage')?4:3}"></td>
           </tr>
         </tfoot>
       </table></div>
@@ -5623,6 +5632,183 @@ function saveObligation(id) {
 function deleteObligation(id) {
   if(!confirm(lang==='ar'?'تأكيد الحذف؟':'Confirm delete?'))return;
   const db=getDB();db.obligations=db.obligations.filter(o=>o.id!==id);saveDB(db);renderPage();
+}
+
+function payObligation(id) {
+  const db=getDB(); const o=db.obligations.find(x=>x.id===id); if(!o)return;
+  const mc=el('modal-container');
+  mc.innerHTML=`
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>${icon('credit-card',18)} ${lang==='ar'?'سداد الالتزام':'Pay Obligation'}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <div style="padding:0 20px 20px;display:flex;flex-direction:column;gap:14px;">
+        <div style="background:var(--bg);border-radius:10px;padding:14px;">
+          <div style="font-weight:800;font-size:15px;">${o.name}</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:3px;">${o.vendor||o.category} • ${o.frequency}</div>
+          <div style="font-size:22px;font-weight:900;color:var(--primary);margin-top:6px;">${fmtMoney(o.amount)}</div>
+        </div>
+        <button class="btn btn-primary btn-full" style="padding:16px;font-size:15px;gap:10px;"
+          onclick="confirmObligationPayment(${id},'full',${o.amount})">
+          ✅ ${lang==='ar'?'سداد كامل':'Full Payment'} — ${fmtMoney(o.amount)}
+        </button>
+        <div style="border:1px solid var(--border);border-radius:12px;padding:14px;">
+          <div style="font-weight:700;margin-bottom:10px;font-size:13px;">💰 ${lang==='ar'?'سداد جزئي':'Partial Payment'}</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input class="input" type="number" id="ob-partial-amt" min="1" max="${o.amount}"
+              placeholder="${lang==='ar'?'المبلغ المسدَّد':'Amount paid'}" style="flex:1;" />
+            <button class="btn btn-outline" style="white-space:nowrap;"
+              onclick="confirmObligationPayment(${id},'partial',Number(el('ob-partial-amt').value||0))">
+              ${lang==='ar'?'تأكيد':'Confirm'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function confirmObligationPayment(id, type, amount) {
+  amount = Math.round(parseFloat(amount)*100)/100;
+  if(!amount||amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter valid amount','error');return;}
+  const db=getDB(); const o=db.obligations.find(x=>x.id===id); if(!o)return;
+
+  // ── الخزينة ──────────────────────────────────────────────
+  if(!db.treasury)db.treasury={balance:0,moves:[]};
+  if(!db.treasury.moves)db.treasury.moves=[];
+  db.treasury.balance-=amount;
+  db.treasury.moves.unshift({
+    id:nextId(db,'treasury'),type:'out',amount,
+    description:`${lang==='ar'?'سداد التزام':'Obligation payment'} ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}: ${o.name}`,
+    reference:`OBL-${id}`,date:new Date().toISOString()
+  });
+
+  // ── تسجيل مصروف OPEX ─────────────────────────────────────
+  if(!db.purchases)db.purchases=[];
+  if(!db.nextId)db.nextId={};
+  db.purchases.push({
+    id:nextId(db,'purchase'),
+    vendor:o.vendor||o.name, description:`${type==='full'?(lang==='ar'?'سداد كامل':'Full payment'):(lang==='ar'?'سداد جزئي':'Partial payment')}: ${o.name}`,
+    category:o.category, purchase_type:'opex',
+    amount:Math.round(amount/1.15*100)/100,
+    vat:Math.round((amount-amount/1.15)*100)/100,
+    total:amount, payment_method:'نقدي', paid_amount:amount,
+    supplier_ref:`OBL-${id}`, notes:'',
+    created_at:new Date().toISOString(), items:[]
+  });
+
+  // ── قيد محاسبي مزدوج ─────────────────────────────────────
+  if(!db.journal)db.journal=[];
+  if(!db.nextId.journal)db.nextId.journal=1;
+  const _accCode={'إيجار':'5300','رواتب وتعويضات':'5100'}[o.category]||'5200';
+  db.journal.push({
+    id:db.nextId.journal++,date:new Date().toISOString(),
+    description:`${lang==='ar'?'سداد التزام':'Obligation'}: ${o.name} — ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}`,
+    entries:[
+      {account:o.category,         account_code:_accCode, side:'debit',  amount:Math.round(amount/1.15*100)/100},
+      {account:'ضريبة المدخلات',   account_code:'2210',   side:'debit',  amount:Math.round((amount-amount/1.15)*100)/100},
+      {account:'النقدية والخزينة', account_code:'1100',   side:'credit', amount},
+    ],
+    ref:`OBL-${id}`
+  });
+
+  // ── تسجيل السداد في سجل الالتزام ──────────────────────────
+  if(!o.payments)o.payments=[];
+  o.payments.push({date:new Date().toISOString(),amount,type});
+
+  // ── إعادة حساب تاريخ الاستحقاق (السداد الكامل فقط) ────────
+  if(type==='full') {
+    const _next=new Date();
+    const _freqMap={'شهري':[0,1],'أسبوعي':[7,0],'ربع سنوي':[0,3],'نصف سنوي':[0,6],'سنوي':[0,12]};
+    const [days,months]=_freqMap[o.frequency]||[0,1];
+    if(days)  _next.setDate(_next.getDate()+days);
+    if(months)_next.setMonth(_next.getMonth()+months);
+    o.next_due=_next.toISOString();
+  }
+
+  saveDB(db);
+  closeModal();
+  showToast(`✅ ${fmtMoney(amount)} — ${lang==='ar'?'تم تسجيل السداد':'Payment recorded'}`);
+  printObligationReceipt(o,amount,type);
+  renderPage();
+}
+
+function printObligationReceipt(o,amount,type) {
+  const db=getDB(); const s=db.settings||{};
+  const _now=new Date();
+  const _greg=_now.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const _hijri=fmtHijri(_now.toISOString());
+  const _refNo=`OBL-${o.id}-${(o.payments||[]).length}`;
+  const win=window.open('','_blank','width=750,height=600');
+  if(!win)return;
+  win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="UTF-8"><title>سند صرف — ${o.name}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Tajawal',sans-serif;background:#fff;padding:28px;color:#0f172a;font-size:13px;}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid #1e40af;margin-bottom:20px;}
+    .co{font-size:20px;font-weight:900;color:#1e40af;} .sub{font-size:11px;color:#64748b;margin-top:3px;}
+    .ttl{font-size:18px;font-weight:900;color:#1e40af;text-align:end;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;}
+    .box{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
+    .lbl{font-size:10px;color:#64748b;font-weight:700;margin-bottom:3px;} .val{font-weight:800;}
+    .amt{background:#1e40af;color:#fff;border-radius:12px;padding:22px;text-align:center;margin:18px 0;}
+    .amt-l{font-size:12px;opacity:.8;} .amt-v{font-size:34px;font-weight:900;margin-top:6px;}
+    .badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;margin-top:8px;}
+    .full{background:#dcfce7;color:#16a34a;} .partial{background:#fef3c7;color:#d97706;}
+    .entry-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e2e8f0;font-size:12px;}
+    .ftr{margin-top:28px;padding-top:14px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-end;}
+    .sig{text-align:center;} .sig-l{width:140px;border-top:1px solid #94a3b8;margin-top:42px;padding-top:6px;font-size:11px;color:#64748b;}
+    @media print{.no-print{display:none;}}
+  </style></head><body>
+  <div class="no-print" style="margin-bottom:14px;text-align:center;">
+    <button onclick="window.print()" style="background:#1e40af;color:#fff;border:none;padding:10px 32px;border-radius:8px;font-family:Tajawal,sans-serif;font-size:14px;font-weight:700;cursor:pointer;">🖨️ طباعة</button>
+  </div>
+  <div class="hdr">
+    <div>
+      <div class="co">${s.company_name||'يقظ'}</div>
+      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${s.vat_number}</div>`:''}
+      <div class="sub">${s.address||''} ${s.city||''}</div>
+    </div>
+    <div style="text-align:end;">
+      <div class="ttl">سند صرف</div>
+      <div style="font-size:13px;font-weight:700;margin-top:6px;">${_refNo}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${_greg}</div>
+      <div style="font-size:11px;color:#64748b;">${_hijri}</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="box">
+      <div class="lbl">الالتزام</div><div class="val">${o.name}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${o.category} • ${o.frequency}</div>
+    </div>
+    <div class="box">
+      <div class="lbl">الجهة المستفيدة</div><div class="val">${o.vendor||o.name}</div>
+      <div style="margin-top:6px;"><div class="lbl">المبلغ الأصلي للالتزام</div><div class="val">${Number(o.amount).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</div></div>
+    </div>
+  </div>
+  <div class="amt">
+    <div class="amt-l">المبلغ المسدَّد</div>
+    <div class="amt-v">${Number(amount).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</div>
+    <span class="badge ${type}">${type==='full'?'✅ سداد كامل':'⚡ سداد جزئي'}</span>
+  </div>
+  <div class="box" style="margin-bottom:16px;">
+    <div style="font-weight:700;margin-bottom:10px;font-size:12px;">تفاصيل القيد المحاسبي</div>
+    <div class="entry-row"><span>مدين — ${o.category}</span><span>${Number(Math.round(amount/1.15*100)/100).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+    <div class="entry-row"><span>مدين — ضريبة المدخلات (15%)</span><span>${Number(Math.round((amount-amount/1.15)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+    <div class="entry-row" style="border:none;font-weight:800;color:#1e40af;"><span>دائن — النقدية</span><span>${Number(amount).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+  </div>
+  <div class="ftr">
+    <div class="sig"><div class="sig-l">توقيع المحاسب</div></div>
+    <div class="sig"><div class="sig-l">توقيع المدير</div></div>
+    <div style="text-align:start;font-size:10px;color:#94a3b8;"><div>${s.company_name||'يقظ'} • سند صرف</div><div>نظام يقظ للمحاسبة</div></div>
+  </div>
+  </body></html>`);
+  win.document.close();
 }
 
 
