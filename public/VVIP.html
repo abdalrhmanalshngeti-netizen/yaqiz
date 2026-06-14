@@ -3058,7 +3058,7 @@ function renderPurchasesInner(c) {
     <div class="page-header">
       <div class="page-title-lg">${t('purchases')}</div>
       <div style="display:flex;gap:8px;">
-        ${has('purchases.create')?`<button class="btn btn-primary" onclick="showAddPurchaseMenu('${purchTab}')">${icon('plus',16)} ${lang==='ar'?'إضافة':'Add'}</button>`:''}
+        ${has('purchases.create')?`<button class="btn btn-primary" onclick="showAddPurchaseMenu()">${icon('plus',16)} ${lang==='ar'?'إضافة':'Add'}</button>`:''}
       </div>
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(${hasPlanFeature('admin_expenses')?4:3},1fr);margin-bottom:20px;">
@@ -3184,9 +3184,8 @@ function renderPurchContent() {
   refreshIcons();
 }
 
-function showAddPurchase(type) {
-  const isGoods = (type||purchTab)==='goods';
-  if(isGoods) { showAddGoodsPurchase(); return; }
+function showAddPurchase() {
+  if(purchTab==='goods') { showAddGoodsPurchase(); return; }
   showAddOpexPurchase();
 }
 
@@ -7862,8 +7861,8 @@ function showImportModal(type) {
 }
 
 // قائمة إضافة المشتريات — يدوي + ملف موحد (Excel أو PDF أو صورة)
-function showAddPurchaseMenu(type) {
-  const isGoods = (type || purchTab) === 'goods';
+function showAddPurchaseMenu() {
+  const isGoods = purchTab === 'goods';
   const mc = el('modal-container');
   mc.innerHTML = `
   <div class="modal-bg" onclick="closeModal()">
