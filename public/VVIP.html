@@ -7425,51 +7425,40 @@ function updatePOStatus(id,status) {
 function renderBalanceSheet(c) {
   const db = getDB();
 
-  // Build account balances from journal entries
-  const accs = {};
-  (db.journal||[]).forEach(e=>{
-    (e.entries||[]).forEach(r=>{
-      if(!accs[r.account_code]) accs[r.account_code]={code:r.account_code,name:r.account,debit:0,credit:0};
-      if(r.side==='debit') accs[r.account_code].debit+=r.amount;
-      else accs[r.account_code].credit+=r.amount;
-    });
-  });
-  const bal = (code) => {
-    if(!accs[code]) return 0;
-    const isDebitNormal = ['1','5'].includes(code[0]);
-    return isDebitNormal ? accs[code].debit - accs[code].credit : accs[code].credit - accs[code].debit;
-  };
+  // ─── الأصول (Assets) — من البيانات الفعلية المتزامنة مع API ───
+  const cash = parseFloat(db.treasury?.balance||0);
 
-  // Assets - mix journal + physical data
-  const cash = db.treasury.balance;
-  const receivables = Math.max(0, bal('1200') ||
-    db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+Math.max(0,i.grand_total-(i.paid_amount||0)),0));
-  const inventoryVal = db.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
+  // الذمم المدينة: فواتير آجل / جزئي لم تُسدَّد بالكامل
+  const receivables = db.invoices
+    .filter(i=>['آجل','جزئي','partial','unpaid'].includes(i.status))
+    .reduce((s,i)=>s+Math.max(0,(parseFloat(i.grand_total||i.total||0))-(parseFloat(i.paid_amount||0))),0);
+
+  // المخزون: الكمية × سعر الشراء
+  const inventoryVal = db.products.reduce((s,p)=>s+(parseFloat(p.qty||0)*parseFloat(p.buy_price||0)),0);
+
   const totalAssets = cash + receivables + inventoryVal;
 
-  // Liabilities - from journal
-  const accountsPayable = Math.max(0, bal('2100'));
-  const outputVAT = Math.max(0, bal('2200'));
-  const inputVAT = Math.max(0, bal('2210'));
+  // ─── الخصوم (Liabilities) — من أرصدة الموردين والضريبة الفعلية ───
+  // الذمم الدائنة: رصيد كل مورد المستحق (مباشرة من API)
+  const accountsPayable = db.suppliers.reduce((s,sup)=>s+Math.max(0,parseFloat(sup.balance||0)),0);
+
+  // ضريبة القيمة المضافة الصافية (مخرجات - مدخلات)
+  const outputVAT = db.invoices.reduce((s,i)=>s+parseFloat(i.vat_amount||0),0);
+  const inputVAT  = db.purchases.reduce((s,p)=>s+parseFloat(p.vat||0),0);
   const vatPayable = Math.max(0, outputVAT - inputVAT);
+
   const totalLiab = accountsPayable + vatPayable;
 
-  // Equity - from journal
-  const revenue = Math.max(0, bal('4100') - Math.max(0, bal('4200')));
-  const cogs = Math.max(0, bal('5100'));
-  const opex = Math.max(0, bal('5200'));
-  const otherExp = Math.max(0, bal('5900'));
-  // Fallback to direct calculation if no journal entries yet
-  const revenueCalc = db.invoices.reduce((s,i)=>s+i.subtotal,0)
-    - (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
-  const cogsCalc = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').reduce((s,p)=>s+p.amount,0)
-    - (db.returns||[]).filter(r=>r.type==='purchases').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
-  const opexCalc = db.purchases.filter(p=>p.purchase_type==='opex').reduce((s,p)=>s+p.amount,0);
-  const hasJournal = Object.keys(accs).length > 0;
-  const netRevenue = hasJournal ? revenue : revenueCalc;
-  const netCOGS = hasJournal ? cogs : cogsCalc;
-  const netOPEX = hasJournal ? (opex+otherExp) : opexCalc;
+  // ─── قائمة الدخل — من المعاملات الفعلية ───
+  const netRevenue = db.invoices.reduce((s,i)=>s+parseFloat(i.subtotal||i.grand_total||0),0)
+    - (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.base_amount||r.amount/1.15||0),0);
+  const netCOGS = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة')
+    .reduce((s,p)=>s+parseFloat(p.amount||0),0)
+    - (db.returns||[]).filter(r=>r.type==='purchases').reduce((s,r)=>s+parseFloat(r.base_amount||r.amount/1.15||0),0);
+  const netOPEX = db.purchases.filter(p=>p.purchase_type==='opex').reduce((s,p)=>s+parseFloat(p.amount||0),0);
   const netProfit = netRevenue - netCOGS - netOPEX;
+
+  // ─── حقوق الملكية = أصول − خصوم ───
   const equity = totalAssets - totalLiab;
   const section = (title, color, items, total) => `
     <div class="card" style="border-top:3px solid ${color};">
