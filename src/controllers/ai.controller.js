@@ -139,10 +139,10 @@ exports.analyze = async (req, res, next) => {
 exports.assistant = async (req, res, next) => {
   try {
     const { company_id } = req.user;
-    const { question, context } = req.body;
+    const { question, context, history } = req.body;
     if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
 
-    const result = await ai.askAssistant(question, context || {});
+    const result = await ai.askAssistant(question, context || {}, Array.isArray(history) ? history : []);
     await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out);
 
     res.json({ success: true, answer: result.content });

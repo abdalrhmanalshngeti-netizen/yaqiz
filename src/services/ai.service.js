@@ -95,14 +95,26 @@ async function analyzeFinancials(summary) {
   ], { model: 'gpt-4o-mini', maxTokens: 600, temperature: 0.4 });
 }
 
-async function askAssistant(question, context) {
+async function askAssistant(question, context, history = []) {
   const systemPrompt = `أنت مساعد محاسبي ذكي لمنصة يقظ للمحاسبة. أجب على أسئلة المستخدم بناءً على بياناته.
-كن دقيقاً، موجزاً، ومفيداً. إذا لم تجد إجابة في البيانات قل ذلك بوضوح. أجب بالعربية دائماً.`;
+كن دقيقاً، موجزاً، ومفيداً. إذا لم تجد إجابة في البيانات قل ذلك بوضوح. أجب بالعربية دائماً.
 
-  return callAI([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `بيانات الشركة:\n${JSON.stringify(context, null, 2)}\n\nالسؤال: ${question}` },
-  ], { model: 'gpt-4o-mini', maxTokens: 400, temperature: 0.3 });
+بيانات الشركة الحالية:
+${JSON.stringify(context, null, 2)}`;
+
+  const messages = [{ role: 'system', content: systemPrompt }];
+
+  // أضف سجل المحادثة السابقة (آخر 5 أسئلة فقط لتوفير الـ tokens)
+  for (const h of history.slice(-5)) {
+    if (h.question && h.answer) {
+      messages.push({ role: 'user',      content: h.question });
+      messages.push({ role: 'assistant', content: h.answer   });
+    }
+  }
+
+  messages.push({ role: 'user', content: question });
+
+  return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 500, temperature: 0.3 });
 }
 
 async function extractFromPDF(pdfBuffer) {
