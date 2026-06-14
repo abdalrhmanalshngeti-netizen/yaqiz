@@ -1002,7 +1002,7 @@ async function loadTicketsBadge(){
     if(latest && items.length){
       latest.innerHTML=items.slice(0,3).map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;color:#f0f4ff;">${t.company_name||'—'}</span><span style="color:var(--muted);">${t.department||'—'}</span><span style="color:var(--muted);font-size:11px;">${fmtD(t.created_at)}</span></div>`).join('');
     } else if(latest) latest.innerHTML=`<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px;">لا توجد تذاكر مفتوحة</div>`;
-  }catch{}
+  }catch(e){ console.error('[Tickets badge error]', e); }
 }
 function _showAdminNotif(msg, type){
   const c=document.createElement('div');
