@@ -1598,10 +1598,10 @@ async function sendAIMsg() {
       invoices_total_count:    invList.length,
       invoices_paid_count:     invList.filter(i=>i.status==='مسددة').length,
       invoices_pending_count:  invList.filter(i=>i.status==='آجل').length,
-      invoices_partial_count:  invList.filter(i=>i.status==='مدفوع جزئياً').length,
+      invoices_partial_count:  invList.filter(i=>i.status==='جزئي').length,
       invoices_total_revenue:  invList.reduce((s,i)=>s+(i.grand_total||0),0),
       invoices_total_collected: invList.reduce((s,i)=>s+(i.paid_amount||0),0),
-      invoices_total_remaining: invList.reduce((s,i)=>s+(i.remaining_amount||0),0),
+      invoices_total_remaining: invList.reduce((s,i)=>s+Math.max(0,(i.grand_total||0)-(i.paid_amount||0)),0),
 
       // ── قائمة الفواتير الكاملة ──────────────────────────
       all_invoices: allInvMapped,
@@ -6648,12 +6648,55 @@ function printVoucher(id) {
 }
 
 function deleteReceipt(id) {
-  if(!confirm(lang==='ar'?'تأكيد حذف السند؟':'Confirm delete?'))return;
+  if(!confirm(lang==='ar'?'حذف السند؟ سيتم عكس جميع التأثيرات المحاسبية.':'Delete voucher? All accounting effects will be reversed.'))return;
   const db=getDB();
   const v=(db.receipts||[]).find(r=>r.id===id);
-  if(v){ db.treasury.balance += v.type==='receipt'?-v.amount:v.amount; }
+  if(!v){db.receipts=(db.receipts||[]).filter(r=>r.id!==id);saveDB(db);renderPage();return;}
+
+  const amount = parseFloat(v.amount||0);
+  const isReceipt = v.type==='receipt';
+
+  // 1. عكس الخزينة
+  db.treasury.balance = Math.round((db.treasury.balance + (isReceipt?-amount:amount))*100)/100;
+  db.treasury.moves = db.treasury.moves.filter(m=>m.reference!==v.voucher_no);
+
+  // 2. حذف القيد اليومي
+  if(db.journal) db.journal = db.journal.filter(j=>j.ref!==v.voucher_no);
+
+  // 3. عكس الفاتورة (إذا سند قبض)
+  if(isReceipt) {
+    const inv = v.linked_invoice_id
+      ? db.invoices.find(i=>i.id===v.linked_invoice_id)
+      : db.invoices.find(i=>i.invoice_no===v.ref);
+    if(inv){
+      inv.paid_amount = Math.round((Math.max(0,(inv.paid_amount||0)-amount))*100)/100;
+      if(inv.paid_amount<=0){ inv.status='آجل'; inv.paid_amount=0; }
+      else { inv.status='جزئي'; }
+    }
+    // عكس رصيد العميل
+    const cust = db.customers.find(c=>c.name===v.party);
+    if(cust) cust.balance = Math.round(((cust.balance||0)+amount)*100)/100;
+  }
+
+  // 4. عكس المشتريات (إذا سند صرف)
+  if(!isReceipt) {
+    const pur = v.linked_purchase_id
+      ? db.purchases.find(p=>p.id===v.linked_purchase_id)
+      : null;
+    if(pur){
+      pur.paid_amount = Math.round((Math.max(0,(pur.paid_amount||0)-amount))*100)/100;
+      pur.remaining_amount = Math.round(((pur.remaining_amount||0)+amount)*100)/100;
+      pur.status = pur.remaining_amount<=0?'مسدد':'جزئي';
+    }
+    // عكس رصيد المورد
+    const sup = db.suppliers.find(s=>s.name===v.party);
+    if(sup) sup.balance = Math.round(((sup.balance||0)+amount)*100)/100;
+  }
+
   db.receipts=(db.receipts||[]).filter(r=>r.id!==id);
-  saveDB(db);showToast(`✅ ${lang==='ar'?'تم الحذف':'Deleted'}`);renderPage();
+  saveDB(db);
+  showToast(`✅ ${lang==='ar'?'تم حذف السند وعكس جميع التأثيرات':'Voucher deleted & all effects reversed'}`);
+  renderPage();
 }
 
 // ============ RETURNS ============
