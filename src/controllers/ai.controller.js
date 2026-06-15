@@ -26,19 +26,20 @@ async function logUsage(company_id, feature, tokens_in, tokens_out) {
 }
 
 // ── Plan limits ──────────────────────────────────────────────
-const EXTRACT_LIMITS = { trial: 30, basic: 30, growth: 100, pro: 500 };
-const ANALYZE_LIMITS = { trial: 2,  basic: 0,  growth: 2,   pro: 200 };
+const EXTRACT_LIMITS = { basic: 30, growth: 100, pro: 500 };
+const ANALYZE_LIMITS = { basic: 0,  growth: 2,   pro: 200 };
 // assistant: pro only, no hard monthly limit (fair use)
 
 async function getPlan(company_id) {
   const { rows: [co] } = await db.query(
     `SELECT plan, subscription_expires_at FROM companies WHERE id=$1`, [company_id]
   );
-  if (!co) return 'trial';
-  let plan = co.plan || 'trial';
+  if (!co) return 'basic';
+  let plan = co.plan || 'basic';
   // normalize legacy names
-  if (plan === 'free' || plan === 'starter') plan = 'trial';
-  if (plan === 'trial' && co.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
+  if (plan === 'free' || plan === 'starter' || plan === 'trial') plan = 'basic';
+  // if paid plan subscription expired → downgrade to basic
+  if (plan !== 'basic' && co.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
     plan = 'basic';
   }
   return plan;
@@ -167,7 +168,7 @@ exports.usage = async (req, res, next) => {
       usage: {
         extract:   { used: extractUsed,   limit: EXTRACT_LIMITS[plan]  ?? 0 },
         analyze:   { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]  ?? 0 },
-        assistant: { used: assistantUsed, limit: plan === 'pro' || plan === 'trial' ? 200 : 0 },
+        assistant: { used: assistantUsed, limit: plan === 'pro' ? 200 : 0 },
       },
     });
   } catch (err) { next(err); }

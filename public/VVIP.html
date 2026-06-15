@@ -856,15 +856,13 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  trial:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
   basic:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
   growth: ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
   pro:    ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
 };
 
-// الميزات الداخلية المتاحة لكل باقة (تُستخدم في renderSettings و renderReports)
+// الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
-  trial:  ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
   basic:  ['ai_extract'],
   growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze'],
   pro:    ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
@@ -872,19 +870,28 @@ const PLAN_FEATURES = {
 
 function getCurrentPlan() {
   const db = getDB();
-  const plan = db.settings?.plan || 'trial';
-  const exp  = db.settings?.plan_expires_at;
-  // لو انتهت الفترة التجريبية → يرجع لباقة أساسي
-  if (plan === 'trial' && exp && new Date(exp) < new Date()) return 'basic';
+  let plan = db.settings?.plan || 'basic';
+  // normalize legacy plan names
+  if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
+  // if subscription expired on a paid plan → drop to basic
+  const exp = db.settings?.plan_expires_at;
+  if (plan !== 'basic' && exp && new Date(exp) < new Date()) plan = 'basic';
   return plan;
 }
 
+function getTrialDaysLeft() {
+  const exp = getDB().settings?.plan_expires_at;
+  if (!exp) return null;
+  const d = Math.ceil((new Date(exp) - new Date()) / (1000 * 60 * 60 * 24));
+  return d;
+}
+
 function hasPlanPage(pageId) {
-  return (PLAN_PAGES[getCurrentPlan()] || PLAN_PAGES.trial).includes(pageId);
+  return (PLAN_PAGES[getCurrentPlan()] || PLAN_PAGES.basic).includes(pageId);
 }
 
 function hasPlanFeature(feat) {
-  return (PLAN_FEATURES[getCurrentPlan()] || PLAN_FEATURES.trial).includes(feat);
+  return (PLAN_FEATURES[getCurrentPlan()] || PLAN_FEATURES.basic).includes(feat);
 }
 
 const navLabels = {
@@ -913,7 +920,6 @@ function _getNavBadges() {
     if ((db.suppliers||[]).some(s=>(s.balance||0)>0))                       b.suppliers = true;
     if ((db.customers||[]).some(c=>(c.balance||0)>0))                       b.customers = true;
     if ((db.invoices||[]).some(i=>i.status==='آجل'||i.status==='جزئي'))     b.sales = true;
-    if ((db.purchases||[]).some(p=>p.status==='آجل'||p.status==='جزئي'))    b.purchases = true;
     if ((db.products||[]).some(p=>p.min_qty>0&&p.qty<=p.min_qty))           b.inventory = true;
     if ((db.quotes||[]).some(q=>q.status==='pending'))                       b.quotes = true;
     if ((db.obligations||[]).some(o=>{
@@ -979,6 +985,19 @@ function renderShell() {
           <button class="icon-btn" onclick="doLogout()" title="${t('logout')}" style="width:30px;height:30px;margin-inline-start:4px;">${icon('log-out',14)}</button>
         </div>
       </header>
+      ${(()=>{
+        const _dl = getTrialDaysLeft();
+        if(_dl===null) return '';
+        if(_dl > 0 && _dl <= 30) return `<div style="background:${_dl<=7?'#fef2f2':'#fffbeb'};border-bottom:1.5px solid ${_dl<=7?'#ef4444':'#f59e0b'};padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:${_dl<=7?'#dc2626':'#d97706'};">
+          <span>${_dl<=7?'🔴':'⏳'}</span>
+          <span>${lang==='ar'?`تجربتك تنتهي خلال ${_dl} يوم${_dl>1?'':'ًا'} — تواصل مع فريق قيمة لتفعيل اشتراكك`:`Your trial expires in ${_dl} day${_dl>1?'s':''} — contact Qeema team to activate`}</span>
+        </div>`;
+        if(_dl <= 0) return `<div style="background:#fef2f2;border-bottom:1.5px solid #ef4444;padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#dc2626;">
+          <span>⚠️</span>
+          <span>${lang==='ar'?'انتهت فترة التجربة — تواصل مع فريق قيمة لتفعيل اشتراكك':'Trial expired — contact Qeema team to activate your subscription'}</span>
+        </div>`;
+        return '';
+      })()}
       <main class="content" id="page-content"></main>
     </div>
   </div>
@@ -2311,12 +2330,14 @@ function doCheckout() {
     invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
     created_at:new Date().toISOString()
   };
-  // stock moves
+  // stock moves (FIFO)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
   cart.forEach(ci=>{
     const p=db.products.find(x=>x.id===ci.id);
-    if(p){const oldQty=p.qty;p.qty=Math.max(0,p.qty-ci.qty);
+    if(p){const oldQty=p.qty;
+      fifoDeduct(p, ci.qty);
+      p.qty=Math.max(0,p.qty-ci.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ci.qty,balance_before:oldQty,balance_after:p.qty,reason:'مبيعات POS',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
   // treasury
@@ -3160,12 +3181,14 @@ function saveNewInvoice(printAfter=false) {
     created_at:new Date(el('ni-date').value).toISOString()
   };
 
-  // stock moves
+  // stock moves (FIFO)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
   newInvItems.forEach(ni=>{
     const p=db.products.find(x=>x.id===ni.id);
-    if(p){const oldQty=p.qty;p.qty=Math.max(0,p.qty-ni.qty);
+    if(p){const oldQty=p.qty;
+      fifoDeduct(p, ni.qty);
+      p.qty=Math.max(0,p.qty-ni.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ni.qty,balance_before:oldQty,balance_after:p.qty,reason:'فاتورة مبيعات',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
 
@@ -3368,19 +3391,7 @@ let purchTab = 'goods';
 
 let purchMainTab = 'purch';
 function renderPurchases(c) {
-  const _pdb = getDB();
-  const _creditPurchs = (_pdb.purchases||[]).filter(p=>p.status==='آجل'||p.status==='جزئي');
-  const _creditTotal = _creditPurchs.reduce((s,p)=>s+(p.remaining_amount||p.total||0),0);
-  const purchBanner = _creditPurchs.length > 0 ? `
-    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
-      <span style="font-size:20px;">🔴</span>
-      <div style="flex:1;">
-        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_creditPurchs.length} فاتورة شراء غير مسددة بإجمالي ${fmtMoney(_creditTotal)}`:`You have ${_creditPurchs.length} unpaid purchase invoice(s) totaling ${fmtMoney(_creditTotal)}`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_creditPurchs.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${p.vendor} — ${fmtMoney(p.remaining_amount||p.total)}</span>`).join('')}</div>
-      </div>
-    </div>` : '';
   c.innerHTML = `<div>
-    ${purchBanner}
     <div class="page-header"><div class="page-title-lg">${t('purchases')}</div></div>
     <div class="tabs">
       <button class="tab-btn ${purchMainTab==='purch'?'active':''}" onclick="setPurchMainTab('purch')">📦 ${lang==='ar'?'المشتريات':'Purchases'}</button>
@@ -3845,6 +3856,28 @@ function showInventoryAddDialog() {
   refreshIcons();
 }
 
+// ── FIFO: يخصم من أقدم الدُفعات أولاً ويُعيد تكلفة المبيعات ──
+function fifoDeduct(product, qtyToDeduct) {
+  if (!product.lots || !product.lots.length) {
+    // أنشئ دفعة ضمنية من الرصيد الحالي عند أول استخدام
+    if ((product.qty || 0) > 0 && (product.buy_price || 0) > 0) {
+      product.lots = [{ qty: product.qty, cost: product.buy_price, date: new Date(0).toISOString(), ref: 'initial' }];
+    } else { return 0; }
+  }
+  product.lots.sort((a, b) => new Date(a.date) - new Date(b.date));
+  let remaining = qtyToDeduct, cogs = 0;
+  for (const lot of product.lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, lot.qty);
+    cogs += take * lot.cost;
+    lot.qty -= take;
+    remaining -= take;
+  }
+  product.lots = product.lots.filter(l => l.qty > 0);
+  if (product.lots.length > 0) product.buy_price = product.lots[0].cost;
+  return Math.round(cogs * 100) / 100;
+}
+
 function doInventoryUpdate() {
   const db = getDB();
   if(!db.stock_moves) db.stock_moves = [];
@@ -3858,6 +3891,11 @@ function doInventoryUpdate() {
     if (prod) {
       const oldQty = prod.qty;
       prod.qty += item.qty;
+      // إضافة دفعة FIFO
+      if (!prod.lots) prod.lots = [];
+      prod.lots.push({ qty: item.qty, cost: item.price || prod.buy_price || 0, date: new Date().toISOString(), ref: `PUR-${_pendingPurchaseId}` });
+      // تحديث سعر الشراء بأحدث سعر شراء
+      if (item.price) prod.buy_price = item.price;
       db.stock_moves.push({
         id: db.nextId.stock_move++,
         product_id: prod.id, product_name: prod.name, product_code: prod.code,
@@ -9504,26 +9542,27 @@ function renderSettingsGeneral(c) {
     <!-- ── بطاقة الباقة الحالية ── -->
     ${(()=>{
       const planMeta = {
-        trial:  {label:'تجريبية', color:'#0891b2', bg:'#cffafe', icon:'🎁', desc:'جميع الميزات · 14 يوم مجاناً'},
-        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 149/شهر'},
-        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 299/شهر'},
-        pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499/شهر'},
+        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 149 ريال/شهر'},
+        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 299 ريال/شهر'},
+        pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499 ريال/شهر'},
       };
       const cur = getCurrentPlan();
-      const p = planMeta[cur] || planMeta.trial;
-      const db2 = getDB();
-      const exp = db2.settings?.plan_expires_at;
-      const expStr = exp ? ` · تنتهي ${new Date(exp).toLocaleDateString('ar-SA')}` : '';
-      const isExpired = exp && new Date(exp) < new Date();
+      const p = planMeta[cur] || planMeta.basic;
+      const daysLeft = getTrialDaysLeft();
+      const isExpired = daysLeft !== null && daysLeft <= 0;
+      const isTrial   = daysLeft !== null && daysLeft > 0;
+      const expStr = daysLeft !== null
+        ? (isTrial ? ` · ${lang==='ar'?`تجربة مجانية — ${daysLeft} يوم متبقٍ`:`Free trial — ${daysLeft} days left`}` : '')
+        : '';
       return `<div class="card" style="border:2px solid ${p.color};"><div class="card-pad">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-          <div style="font-size:36px;">${p.icon}</div>
+          <div style="font-size:36px;">${isTrial?'🎁':p.icon}</div>
           <div style="flex:1;">
             <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:2px;">${lang==='ar'?'باقتك الحالية':'Current Plan'}</div>
-            <div style="font-size:20px;font-weight:900;color:${p.color};">${p.label}</div>
+            <div style="font-size:20px;font-weight:900;color:${p.color};">${p.label}${isTrial?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">${lang==='ar'?'تجربة':'Trial'}</span>`:''}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.desc}${expStr}</div>
-            ${isExpired?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⚠️ انتهت صلاحية الباقة — يرجى التواصل مع مزود الخدمة</div>`:''}
-            ${cur==='trial'&&!isExpired?`<div style="color:#0891b2;font-size:12px;margin-top:4px;">⏳ فترة تجريبية مجانية — للاشتراك تواصل مع فريق يقظ</div>`:''}
+            ${isExpired?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⚠️ ${lang==='ar'?'انتهت فترة التجربة — تواصل مع فريق قيمة لتفعيل اشتراكك':'Trial expired — contact Qeema team'}</div>`:''}
+            ${isTrial&&daysLeft<=7?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⏳ ${lang==='ar'?`تجربتك تنتهي خلال ${daysLeft} أيام!`:`Trial ends in ${daysLeft} days!`}</div>`:''}
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${Object.entries(planMeta).map(([k,v])=>`
