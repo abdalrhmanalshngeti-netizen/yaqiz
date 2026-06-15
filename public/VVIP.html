@@ -8039,51 +8039,65 @@ function updatePOStatus(id,status) {
 function renderBalanceSheet(c) {
   const db = getDB();
 
-  // ─── الأصول (Assets) — من البيانات الفعلية المتزامنة مع API ───
+  // ── الأصول ──────────────────────────────────────────────────
   const cash = parseFloat(db.treasury?.balance||0);
 
-  // الذمم المدينة: فواتير آجل / جزئي لم تُسدَّد بالكامل
+  // الذمم المدينة: من الفواتير غير المسددة بالكامل
   const receivables = db.invoices
-    .filter(i=>['آجل','جزئي','partial','unpaid'].includes(i.status))
-    .reduce((s,i)=>s+Math.max(0,(parseFloat(i.grand_total||i.total||0))-(parseFloat(i.paid_amount||0))),0);
+    .filter(i=>['آجل','جزئي'].includes(i.status))
+    .reduce((s,i)=>s+Math.max(0,parseFloat(i.grand_total||0)-parseFloat(i.paid_amount||0)),0);
 
-  // المخزون: الكمية × سعر الشراء
+  // قيمة المخزون بسعر الشراء
   const inventoryVal = db.products.reduce((s,p)=>s+(parseFloat(p.qty||0)*parseFloat(p.buy_price||0)),0);
 
   const totalAssets = cash + receivables + inventoryVal;
 
-  // ─── الخصوم (Liabilities) — من أرصدة الموردين والضريبة الفعلية ───
-  // الذمم الدائنة: رصيد كل مورد المستحق (مباشرة من API)
-  const accountsPayable = db.suppliers.reduce((s,sup)=>s+Math.max(0,parseFloat(sup.balance||0)),0);
+  // ── الخصوم ──────────────────────────────────────────────────
+  // الذمم الدائنة: من المشتريات غير المسددة — نفس منطق الذمم المدينة
+  const accountsPayable = db.purchases
+    .filter(p=>(p.status==='آجل'||p.status==='جزئي'||(parseFloat(p.remaining_amount||0)>0)))
+    .reduce((s,p)=>{
+      const rem = p.remaining_amount!=null
+        ? parseFloat(p.remaining_amount||0)
+        : Math.max(0,parseFloat(p.total||0)-parseFloat(p.paid_amount||0));
+      return s+Math.max(0,rem);
+    },0);
 
-  // ضريبة القيمة المضافة الصافية (مخرجات - مدخلات)
+  // ضريبة القيمة المضافة الصافية المستحقة
   const outputVAT = db.invoices.reduce((s,i)=>s+parseFloat(i.vat_total||0),0);
   const inputVAT  = db.purchases.reduce((s,p)=>s+parseFloat(p.vat||0),0);
   const vatPayable = Math.max(0, outputVAT - inputVAT);
 
   const totalLiab = accountsPayable + vatPayable;
 
-  // ─── قائمة الدخل — من المعاملات الفعلية ───
-  const netRevenue = db.invoices.reduce((s,i)=>s+parseFloat(i.subtotal||i.grand_total||0),0)
-    - (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.base_amount||r.amount/1.15||0),0);
-  const netCOGS = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة')
-    .reduce((s,p)=>s+parseFloat(p.amount||0),0)
-    - (db.returns||[]).filter(r=>r.type==='purchases').reduce((s,r)=>s+parseFloat(r.base_amount||r.amount/1.15||0),0);
-  const netOPEX = db.purchases.filter(p=>p.purchase_type==='opex').reduce((s,p)=>s+parseFloat(p.amount||0),0);
-  const netProfit = netRevenue - netCOGS - netOPEX;
+  // ── نتيجة الأعمال (لحساب حقوق الملكية) ──────────────────
+  const salesReturns = (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.base_amount||0),0);
+  const purchReturns = (db.returns||[]).filter(r=>r.type==='purchases').reduce((s,r)=>s+parseFloat(r.base_amount||0),0);
+  const netRevenue = db.invoices.reduce((s,i)=>s+parseFloat(i.subtotal||0),0) - salesReturns;
+  const netCOGS    = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة')
+                       .reduce((s,p)=>s+parseFloat(p.amount||0),0) - purchReturns;
+  const netOPEX    = db.purchases.filter(p=>p.purchase_type==='opex'||(p.category&&p.category!=='بضاعة'&&p.purchase_type!=='goods'))
+                       .reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  const grossProfit = netRevenue - netCOGS;
+  const netProfit   = grossProfit - netOPEX;
+  const isProfit    = netProfit >= 0;
 
-  // ─── حقوق الملكية = أصول − خصوم ───
+  // حقوق الملكية = أصول − خصوم
   const equity = totalAssets - totalLiab;
-  const section = (title, color, items, total) => `
-    <div class="card" style="border-top:3px solid ${color};">
-      <div class="card-head"><h3 style="color:${color};">${title}</h3><b style="color:${color};">${fmtMoney(total)}</b></div>
-      <div class="card-pad" style="padding-top:8px;">
-        ${items.map(i=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-          <span>${i.label}</span><span style="font-weight:700;">${fmtMoney(i.val)}</span>
+
+  // ── مساعد بناء البطاقات ──────────────────────────────────
+  const section = (title, color, items, total, footerHtml='') => `
+    <div class="card" style="border-top:3px solid ${color};margin-bottom:0;">
+      <div class="card-head"><h3 style="color:${color};margin:0;">${title}</h3><b style="color:${color};font-size:15px;">${fmtMoney(total)}</b></div>
+      <div class="card-pad" style="padding-top:6px;">
+        ${items.map(row=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
+          <span style="color:var(--text-muted);">${row.label}</span>
+          <span style="font-weight:700;color:${row.color||'inherit'};">${row.prefix||''}${fmtMoney(Math.abs(row.val))}${row.suffix||''}</span>
         </div>`).join('')}
-        <div style="display:flex;justify-content:space-between;padding:10px 0;font-weight:900;font-size:15px;color:${color};">
-          <span>${lang==='ar'?'الإجمالي:':'Total:'}</span><span>${fmtMoney(total)}</span>
+        <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-weight:900;font-size:15px;color:${color};">
+          <span>${lang==='ar'?'الإجمالي':'Total'}</span><span>${fmtMoney(total)}</span>
         </div>
+        ${footerHtml}
       </div>
     </div>`;
 
@@ -8092,41 +8106,98 @@ function renderBalanceSheet(c) {
     <div class="page-header">
       <div>
         <div class="page-title-lg">${lang==='ar'?'الميزانية العمومية':'Balance Sheet'}</div>
-        <div class="page-sub">${lang==='ar'?'حتى:':'As of:'} ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="page-sub">${lang==='ar'?'حتى تاريخ:':'As of:'} ${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})}</div>
       </div>
     </div>
 
-    <!-- Summary -->
+    <!-- بطاقات الملخص -->
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
-      <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الأصول':'Total Assets'}</div><div class="stat-value">${fmtMoney(totalAssets)}</div></div>
-      <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الالتزامات':'Total Liabilities'}</div><div class="stat-value">${fmtMoney(totalLiab)}</div></div>
-      <div class="stat-card"><div class="stat-icon">${icon('scale',22)}</div><div class="stat-label">${lang==='ar'?'حقوق الملكية':'Equity'}</div><div class="stat-value">${fmtMoney(equity)}</div></div>
-      <div class="stat-card"><div class="stat-icon ${netProfit>=0?'green':'red'}">${icon('dollar-sign',22)}</div><div class="stat-label">${lang==='ar'?'صافي الربح':'Net Profit'}</div><div class="stat-value" style="color:${netProfit>=0?'var(--success)':'var(--danger)'};">${fmtMoney(netProfit)}</div></div>
+      <div class="stat-card">
+        <div class="stat-icon green">${icon('trending-up',22)}</div>
+        <div class="stat-label">${lang==='ar'?'إجمالي الأصول':'Total Assets'}</div>
+        <div class="stat-value">${fmtMoney(totalAssets)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon red">${icon('trending-down',22)}</div>
+        <div class="stat-label">${lang==='ar'?'إجمالي الخصوم':'Total Liabilities'}</div>
+        <div class="stat-value">${fmtMoney(totalLiab)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">${icon('scale',22)}</div>
+        <div class="stat-label">${lang==='ar'?'صافي حقوق الملكية':'Net Equity'}</div>
+        <div class="stat-value">${fmtMoney(equity)}</div>
+      </div>
+      <div class="stat-card" style="border:2px solid ${isProfit?'#16a34a':'#dc2626'};">
+        <div class="stat-icon ${isProfit?'green':'red'}">${icon(isProfit?'trending-up':'trending-down',22)}</div>
+        <div class="stat-label" style="font-weight:800;color:${isProfit?'#16a34a':'#dc2626'};">
+          ${isProfit?(lang==='ar'?'✅ الشركة رابحة':'✅ Profitable'):(lang==='ar'?'❌ الشركة خاسرة':'❌ Loss')}
+        </div>
+        <div class="stat-value" style="color:${isProfit?'var(--success)':'var(--danger)'};">${fmtMoney(Math.abs(netProfit))}</div>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+      <!-- عمود الأصول -->
       <div style="display:flex;flex-direction:column;gap:16px;">
         ${section(lang==='ar'?'📦 الأصول':'📦 Assets','#16a34a',[
-          {label:lang==='ar'?'النقدية والخزينة':'Cash & Treasury',val:cash},
-          {label:lang==='ar'?'الذمم المدينة':'Accounts Receivable',val:receivables},
-          {label:lang==='ar'?'قيمة المخزون (بسعر الشراء)':'Inventory Value (at cost)',val:inventoryVal},
+          {label:lang==='ar'?'النقدية والخزينة':'Cash & Treasury', val:cash, color:'#16a34a'},
+          {label:lang==='ar'?'الذمم المدينة (مبالغ لك على العملاء)':'Accounts Receivable', val:receivables, color:receivables>0?'#b45309':'inherit'},
+          {label:lang==='ar'?'قيمة المخزون (بسعر التكلفة)':'Inventory at Cost', val:inventoryVal, color:'#1e40af'},
         ],totalAssets)}
       </div>
+
+      <!-- عمود الخصوم وحقوق الملكية -->
       <div style="display:flex;flex-direction:column;gap:16px;">
-        ${section(lang==='ar'?'💳 الالتزامات':'💳 Liabilities','#dc2626',[
-          {label:lang==='ar'?'الذمم الدائنة (موردون)':'Accounts Payable',val:accountsPayable},
-          {label:lang==='ar'?'ضريبة القيمة المضافة الصافية':'Net VAT Payable',val:vatPayable},
+
+        ${section(lang==='ar'?'💳 الخصوم (ما عليك)':'💳 Liabilities','#dc2626',[
+          {label:lang==='ar'?'الذمم الدائنة (مستحق للموردين)':'Accounts Payable to Suppliers', val:accountsPayable, color:accountsPayable>0?'#dc2626':'inherit'},
+          {label:lang==='ar'?'ضريبة القيمة المضافة المستحقة':'VAT Payable (Net)', val:vatPayable, color:vatPayable>0?'#dc2626':'inherit'},
         ],totalLiab)}
-        ${section(lang==='ar'?'🏛️ حقوق الملكية':'🏛️ Equity','#1e40af',[
-          {label:lang==='ar'?'صافي الإيرادات':'Net Revenue',val:netRevenue},
-          {label:lang==='ar'?'تكلفة البضاعة المباعة (COGS)':'Cost of Goods Sold',val:netCOGS},
-          {label:lang==='ar'?'المصاريف الإدارية (OPEX)':'Admin Expenses',val:netOPEX},
-          {label:lang==='ar'?'صافي الربح':'Net Profit',val:netProfit},
-        ],equity)}
-        <div style="background:${Math.abs(totalAssets-(totalLiab+equity))<1?'#dcfce7':'#fee2e2'};padding:14px;border-radius:12px;text-align:center;font-weight:900;">
+
+        <!-- حقوق الملكية + نتيجة الأعمال -->
+        <div class="card" style="border-top:3px solid #1e40af;">
+          <div class="card-head">
+            <h3 style="color:#1e40af;margin:0;">${lang==='ar'?'🏛️ حقوق الملكية':'🏛️ Equity'}</h3>
+            <b style="color:#1e40af;font-size:15px;">${fmtMoney(equity)}</b>
+          </div>
+          <div class="card-pad" style="padding-top:6px;">
+            <!-- نتيجة الأعمال -->
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">${lang==='ar'?'نتيجة الأعمال:':'Business Result:'}</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+              <span style="color:var(--text-muted);">${lang==='ar'?'إجمالي الإيرادات (بدون ضريبة)':'Total Revenue (ex-VAT)'}</span>
+              <span style="font-weight:700;color:#16a34a;">+ ${fmtMoney(netRevenue)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+              <span style="color:var(--text-muted);">${lang==='ar'?'تكلفة البضاعة المباعة (COGS)':'Cost of Goods Sold'}</span>
+              <span style="font-weight:700;color:#dc2626;">− ${fmtMoney(netCOGS)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+              <span style="color:var(--text-muted);">${lang==='ar'?'هامش الربح الإجمالي':'Gross Profit'}</span>
+              <span style="font-weight:800;color:${grossProfit>=0?'#16a34a':'#dc2626'};">${fmtMoney(grossProfit)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+              <span style="color:var(--text-muted);">${lang==='ar'?'المصاريف التشغيلية (OPEX)':'Operating Expenses'}</span>
+              <span style="font-weight:700;color:#dc2626;">− ${fmtMoney(netOPEX)}</span>
+            </div>
+            <!-- صافي الربح/الخسارة — بارز -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:12px 14px;border-radius:10px;background:${isProfit?'#dcfce7':'#fee2e2'};">
+              <span style="font-weight:900;font-size:14px;color:${isProfit?'#16a34a':'#dc2626'};">
+                ${isProfit?(lang==='ar'?'✅ صافي الربح':'✅ Net Profit'):(lang==='ar'?'❌ صافي الخسارة':'❌ Net Loss')}
+              </span>
+              <span style="font-weight:900;font-size:18px;color:${isProfit?'#16a34a':'#dc2626'};">${fmtMoney(Math.abs(netProfit))}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-weight:900;font-size:15px;color:#1e40af;">
+              <span>${lang==='ar'?'إجمالي حقوق الملكية':'Total Equity'}</span><span>${fmtMoney(equity)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- فحص التوازن -->
+        <div style="background:${Math.abs(totalAssets-(totalLiab+equity))<1?'#dcfce7':'#fef3c7'};padding:12px 16px;border-radius:10px;text-align:center;font-weight:800;font-size:13px;">
           ${Math.abs(totalAssets-(totalLiab+equity))<1
-            ?`✅ ${lang==='ar'?'الميزانية متوازنة (أصول = خصوم + حقوق ملكية)':'Balance Sheet Balanced (Assets = Liabilities + Equity)'}`
-            :`⚠️ ${lang==='ar'?'فرق في الميزانية:':'Balance Sheet Gap:'} ${fmtMoney(Math.abs(totalAssets-(totalLiab+equity)))}`}
+            ?`✅ ${lang==='ar'?'أصول = خصوم + حقوق ملكية':'Assets = Liabilities + Equity'} (${fmtMoney(totalAssets)})`
+            :`⚠️ ${lang==='ar'?'فرق بسيط':'Minor gap'}: ${fmtMoney(Math.abs(totalAssets-(totalLiab+equity)))}`}
         </div>
       </div>
     </div>
