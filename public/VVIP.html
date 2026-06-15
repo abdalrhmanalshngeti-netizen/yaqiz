@@ -846,6 +846,7 @@ const allNavItems = [
   { id:'inventory',        icon:'box',              perm:'inventory.view'  },
   { id:'customers',        icon:'users',            perm:'customers.view'  },
   { id:'suppliers',        icon:'truck',            perm:'suppliers.view'  },
+  { id:'employees',        icon:'user-check',       perm:'employees.view'  },
   { id:'treasury',         icon:'wallet',           perm:'treasury.view'   },
   { id:'receipts',         icon:'receipt',          perm:'receipts.view'   },
   { id:'quotes',           icon:'file-plus',        perm:'quotes.view'     },
@@ -857,15 +858,15 @@ const allNavItems = [
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
   basic:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
-  growth: ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
-  pro:    ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','receipts','quotes','obligations','reports','settings'],
+  growth: ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
+  pro:    ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
 };
 
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
-  basic:  ['ai_extract'],
+  basic:  [],
   growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze'],
-  pro:    ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
+  pro:    ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
 };
 
 function getCurrentPlan() {
@@ -902,6 +903,7 @@ const navLabels = {
   inventory:{ar:'المخزون',en:'Inventory'},
   customers:{ar:'العملاء',en:'Customers'},
   suppliers:{ar:'الموردون',en:'Suppliers'},
+  employees:{ar:'الموظفون',en:'Employees'},
   treasury:{ar:'الخزينة',en:'Treasury'},
   receipts:{ar:'سندات القبض والصرف',en:'Receipts & Payments'},
   quotes:{ar:'عروض الأسعار',en:'Quotations'},

@@ -26,7 +26,7 @@ async function logUsage(company_id, feature, tokens_in, tokens_out) {
 }
 
 // ── Plan limits ──────────────────────────────────────────────
-const EXTRACT_LIMITS = { basic: 30, growth: 100, pro: 500 };
+const EXTRACT_LIMITS = { basic: 0, growth: 100, pro: 500 };
 const ANALYZE_LIMITS = { basic: 0,  growth: 2,   pro: 200 };
 // assistant: pro only, no hard monthly limit (fair use)
 
@@ -56,8 +56,17 @@ exports.extract = async (req, res, next) => {
 
     const plan = await getPlan(company_id);
     const limit = EXTRACT_LIMITS[plan] ?? 0;
-    const used  = await getMonthlyUsage(company_id, 'extract');
 
+    if (limit === 0) {
+      return res.status(403).json({
+        success: false,
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message: 'استخراج الفواتير بالذكاء الاصطناعي متاح من باقة النمو فأعلى.',
+        current_plan: plan,
+      });
+    }
+
+    const used  = await getMonthlyUsage(company_id, 'extract');
     if (used >= limit) {
       return res.status(403).json({
         success: false,

@@ -1,10 +1,9 @@
 const db = require('../config/db');
 
 const PLAN_FEATURES = {
-  trial:  ['employees','payroll','purchase_orders','journal','balance_sheet','trial_balance','bank_recon','aging_report'],
   basic:  [],
-  growth: ['employees','payroll','purchase_orders'],
-  pro:    ['employees','payroll','purchase_orders','journal','balance_sheet','trial_balance','bank_recon','aging_report'],
+  growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze'],
+  pro:    ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','ai_assistant'],
 };
 
 module.exports = function requireFeature(feature) {
@@ -17,9 +16,11 @@ module.exports = function requireFeature(feature) {
       );
       if (!co) return res.status(403).json({ success: false, message: 'الشركة غير موجودة' });
 
-      let plan = co.plan || 'trial';
-      // لو انتهت الفترة التجريبية → أساسي
-      if (plan === 'trial' && co.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
+      let plan = co.plan || 'basic';
+      // normalize legacy plan names
+      if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
+      // subscription expired on paid plan → downgrade to basic
+      if (plan !== 'basic' && co.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
         plan = 'basic';
       }
 
