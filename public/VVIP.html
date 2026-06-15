@@ -909,10 +909,17 @@ function _getNavBadges() {
   try {
     const db = getDB();
     const b = {};
-    if ((db.suppliers||[]).some(s=>(s.balance||0)>0))                      b.suppliers = true;
-    if ((db.customers||[]).some(c=>(c.balance||0)>0))                      b.customers = true;
-    if ((db.invoices||[]).some(i=>i.status==='آجل'||i.status==='جزئي'))    b.sales = true;
-    if ((db.obligations||[]).length > 0)                                    b.obligations = true;
+    const now = new Date();
+    if ((db.suppliers||[]).some(s=>(s.balance||0)>0))                       b.suppliers = true;
+    if ((db.customers||[]).some(c=>(c.balance||0)>0))                       b.customers = true;
+    if ((db.invoices||[]).some(i=>i.status==='آجل'||i.status==='جزئي'))     b.sales = true;
+    if ((db.purchases||[]).some(p=>p.status==='آجل'||p.status==='جزئي'))    b.purchases = true;
+    if ((db.products||[]).some(p=>p.min_qty>0&&p.qty<=p.min_qty))           b.inventory = true;
+    if ((db.quotes||[]).some(q=>q.status==='pending'))                       b.quotes = true;
+    if ((db.obligations||[]).some(o=>{
+      const d=new Date(o.next_due);
+      return o.status==='active' && (d-now)/(1000*60*60*24)<=30;
+    }))                                                                      b.obligations = true;
     return b;
   } catch(e) { return {}; }
 }
@@ -1791,16 +1798,8 @@ function renderDashboard(c) {
   const lastMSales  = db.invoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
   const monthPurch  = db.purchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
   const lastMPurch  = db.purchases.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
-  const receivables = db.customers.reduce((s,c)=>{
-    const inv = db.invoices.filter(i=>i.customer_name===c.name).reduce((t,i)=>t+(i.grand_total||0),0);
-    const rcv = (db.receipts||[]).filter(r=>r.party===c.name&&r.type==='receipt').reduce((t,r)=>t+r.amount,0);
-    return s + Math.max(0, inv-rcv);
-  },0);
-  const payables = db.suppliers.reduce((s,sup)=>{
-    const pur = db.purchases.filter(p=>p.vendor===sup.name).reduce((t,p)=>t+(p.total||0),0);
-    const pay = (db.receipts||[]).filter(r=>r.party===sup.name&&r.type==='payment').reduce((t,r)=>t+r.amount,0);
-    return s + Math.max(0, pur-pay);
-  },0);
+  const receivables = db.customers.reduce((s,c)=>s+Math.max(0,c.balance||0),0);
+  const payables    = db.suppliers.reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
   const lowStock    = db.products.filter(p=>p.qty<=p.min_qty);
 
   const pctChange = (cur,prev) => {
@@ -1914,27 +1913,27 @@ function renderDashboard(c) {
           <table class="tbl">
             <thead><tr>
               <th>${lang==='ar'?'المورد':'Supplier'}</th>
-              <th>${lang==='ar'?'البيان':'Description'}</th>
-              <th>${lang==='ar'?'التاريخ':'Date'}</th>
-              <th>${lang==='ar'?'المبلغ':'Amount'}</th>
-              <th>${lang==='ar'?'الضريبة':'VAT'}</th>
+              <th>${lang==='ar'?'الجوال':'Phone'}</th>
+              <th>${lang==='ar'?'المبلغ المستحق':'Amount Due'}</th>
+              <th></th>
             </tr></thead>
             <tbody>
-              ${db.purchases.length===0
-                ? `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم دائنة':'No payables'}</td></tr>`
-                : db.purchases.slice().reverse().slice(0,8).map(p=>`
-                <tr style="cursor:pointer;" onclick="goTo('purchases')">
-                  <td><b>${p.vendor}</b></td>
-                  <td style="color:var(--text-muted);font-size:12px;">${p.description}</td>
-                  <td>${fmtDate(p.created_at)}</td>
-                  <td style="color:var(--warning);font-weight:800;">${fmtMoney(p.total)}</td>
-                  <td style="font-size:12px;color:var(--text-muted);">${fmtMoney(p.vat)}</td>
-                </tr>`).join('')}
+              ${(()=>{
+                const unpaidSup = db.suppliers.filter(s=>(s.balance||0)>0);
+                if(!unpaidSup.length) return `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم دائنة':'No payables'}</td></tr>`;
+                return unpaidSup.map(s=>`
+                <tr style="cursor:pointer;" onclick="goTo('suppliers')">
+                  <td><b>${s.name}</b></td>
+                  <td style="color:var(--text-muted);font-size:12px;">${s.phone||'-'}</td>
+                  <td style="color:var(--warning);font-weight:800;">${fmtMoney(s.balance)}</td>
+                  <td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();goTo('receipts')" style="font-size:11px;">💸 ${lang==='ar'?'دفع':'Pay'}</button></td>
+                </tr>`).join('');
+              })()}
             </tbody>
-            ${db.purchases.length>0?`
+            ${payables>0?`
             <tfoot>
               <tr style="background:var(--primary-soft);">
-                <td colspan="3" style="padding:10px 14px;font-weight:800;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
+                <td colspan="2" style="padding:10px 14px;font-weight:800;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
                 <td style="padding:10px 14px;font-weight:900;color:var(--warning);">${fmtMoney(payables)}</td>
                 <td></td>
               </tr>
@@ -3369,7 +3368,19 @@ let purchTab = 'goods';
 
 let purchMainTab = 'purch';
 function renderPurchases(c) {
+  const _pdb = getDB();
+  const _creditPurchs = (_pdb.purchases||[]).filter(p=>p.status==='آجل'||p.status==='جزئي');
+  const _creditTotal = _creditPurchs.reduce((s,p)=>s+(p.remaining_amount||p.total||0),0);
+  const purchBanner = _creditPurchs.length > 0 ? `
+    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_creditPurchs.length} فاتورة شراء غير مسددة بإجمالي ${fmtMoney(_creditTotal)}`:`You have ${_creditPurchs.length} unpaid purchase invoice(s) totaling ${fmtMoney(_creditTotal)}`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_creditPurchs.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${p.vendor} — ${fmtMoney(p.remaining_amount||p.total)}</span>`).join('')}</div>
+      </div>
+    </div>` : '';
   c.innerHTML = `<div>
+    ${purchBanner}
     <div class="page-header"><div class="page-title-lg">${t('purchases')}</div></div>
     <div class="tabs">
       <button class="tab-btn ${purchMainTab==='purch'?'active':''}" onclick="setPurchMainTab('purch')">📦 ${lang==='ar'?'المشتريات':'Purchases'}</button>
@@ -4000,7 +4011,18 @@ function savePurchase(purchase_type) {
 // ============ INVENTORY ============
 let invMainTab = 'inventory';
 function renderInventory(c) {
+  const _idb = getDB();
+  const _lowStock = (_idb.products||[]).filter(p=>p.min_qty>0&&p.qty<=p.min_qty);
+  const invBanner = _lowStock.length > 0 ? `
+    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_lowStock.length} صنف${_lowStock.length>1?'':'ًا'} وصل لحد الطلب الأدنى`:`You have ${_lowStock.length} product(s) at or below minimum stock`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStock.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${p.name} — ${p.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${p.min_qty})</span>`).join('')}</div>
+      </div>
+    </div>` : '';
   c.innerHTML = `<div>
+    ${invBanner}
     <div class="page-header"><div class="page-title-lg">${t('inventory')}</div></div>
     <div class="tabs">
       <button class="tab-btn ${invMainTab==='inventory'?'active':''}" onclick="setInvMainTab('inventory')">📦 ${lang==='ar'?'المخزون':'Inventory'}</button>
@@ -4216,9 +4238,10 @@ function renderCusContent() {
             ?`<span style="font-weight:800;color:var(--danger);">${fmtMoney(outstanding)}</span>`
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
-        <td style="display:flex;gap:4px;">
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${c.name}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${c.name}')">${icon('printer',13)} PDF</button>
+          ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${c.name.replace(/'/g,"\\'")}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table>${db.customers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد عملاء':'No customers'}</div>`:''}</div></div>`;
@@ -4271,9 +4294,10 @@ function renderSuppliers(c) {
             ?`<span style="font-weight:800;color:var(--danger);">${fmtMoney(outstanding)}</span>`
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
-        <td style="display:flex;gap:4px;">
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${s.name}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${s.name}')">${icon('printer',13)} PDF</button>
+          ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${s.name.replace(/'/g,"\\'")}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table>${db.suppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>
@@ -4309,6 +4333,24 @@ function saveEntity(type) {
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
   if(isCustomer) renderCusContent();
   else { const _mc=el('main-content'); if(_mc) renderSuppliers(_mc); }
+}
+
+function deleteSupplierEntity(id, name) {
+  if(!confirm(lang==='ar'?`تأكيد حذف المورد: ${name}؟`:`Delete supplier: ${name}?`)) return;
+  const db = getDB();
+  db.suppliers = db.suppliers.filter(s=>s.id!==id);
+  saveDB(db);
+  showToast(lang==='ar'?`✅ تم حذف ${name}`:`✅ Deleted ${name}`);
+  const _mc = el('main-content'); if(_mc) renderSuppliers(_mc);
+}
+
+function deleteCustomerEntity(id, name) {
+  if(!confirm(lang==='ar'?`تأكيد حذف العميل: ${name}؟`:`Delete customer: ${name}?`)) return;
+  const db = getDB();
+  db.customers = db.customers.filter(c=>c.id!==id);
+  saveDB(db);
+  showToast(lang==='ar'?`✅ تم حذف ${name}`:`✅ Deleted ${name}`);
+  renderCusContent();
 }
 
 // ============ TREASURY ============
@@ -7241,9 +7283,19 @@ function renderQuotes(c) {
   const totalActive = quotes.filter(q=>q.status==='مرسل'||q.status==='معلق').length;
   const totalAccepted = quotes.filter(q=>q.status==='مقبول').length;
   const totalValue = quotes.reduce((s,q)=>s+q.grand_total,0);
+  const pendingQ = quotes.filter(q=>q.status==='pending'||q.status==='مرسل'||q.status==='معلق');
+  const quotesBanner = pendingQ.length > 0 ? `
+    <div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🟡</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#d97706;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${pendingQ.length} عرض سعر بانتظار الرد`:`You have ${pendingQ.length} quote(s) awaiting response`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${pendingQ.map(q=>`<span style="background:#f59e0b20;color:#d97706;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #f59e0b40;">${q.customer||q.customer_name||'—'} — ${fmtMoney(q.grand_total)}</span>`).join('')}</div>
+      </div>
+    </div>` : '';
 
   c.innerHTML = `
   <div>
+    ${quotesBanner}
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'عروض الأسعار':'Quotations'}</div>
       ${has('quotes.manage')?`<button class="btn btn-primary" onclick="showQuoteModal()">${icon('plus',16)} ${lang==='ar'?'عرض سعر جديد':'New Quote'}</button>`:''}
