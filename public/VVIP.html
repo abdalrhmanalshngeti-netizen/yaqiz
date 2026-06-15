@@ -606,16 +606,27 @@ const tr = {
 const t = k => tr[lang]?.[k] || k;
 
 // ============ DATABASE ============
+// كل شركة تحصل على مفتاح تخزين مستقل يعتمد على company_id من JWT
+function _getDbKey() {
+  try {
+    const tok = localStorage.getItem('yaqiz_access_token');
+    if (tok) {
+      const p = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (p.company_id) return DB_KEY + '_' + p.company_id;
+    }
+  } catch(e) {}
+  return DB_KEY; // وضع محلي بدون JWT
+}
 function getDB() {
   try {
-    const d = JSON.parse(localStorage.getItem(DB_KEY));
+    const d = JSON.parse(localStorage.getItem(_getDbKey()));
     if (d) return d;
   } catch(e) {}
   return initDB();
 }
 function saveDB(db) {
   try {
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    localStorage.setItem(_getDbKey(), JSON.stringify(db));
   } catch(e) {
     showToast(lang==='ar'?'⚠️ امتلأت مساحة التخزين، احذف بيانات قديمة':'⚠️ Storage full, delete old data','error');
   }
@@ -894,13 +905,27 @@ const navLabels = {
 
 let sidebarCollapsed = false;
 
+function _getNavBadges() {
+  try {
+    const db = getDB();
+    const b = {};
+    if ((db.suppliers||[]).some(s=>(s.balance||0)>0))                      b.suppliers = true;
+    if ((db.customers||[]).some(c=>(c.balance||0)>0))                      b.customers = true;
+    if ((db.invoices||[]).some(i=>i.status==='آجل'||i.status==='جزئي'))    b.sales = true;
+    if ((db.obligations||[]).length > 0)                                    b.obligations = true;
+    return b;
+  } catch(e) { return {}; }
+}
 function renderShell() {
   const navItems = allNavItems.filter(n => has(n.perm) && hasPlanPage(n.id));
   if (!navItems.find(n=>n.id===currentPage)) currentPage = navItems[0]?.id||'dashboard';
+  const badges = _getNavBadges();
+  const dot = '<span style="width:7px;height:7px;background:#ef4444;border-radius:50%;flex-shrink:0;margin-inline-start:auto;"></span>';
   const navHtml = navItems.map(n => `
     <div class="nav-item ${currentPage===n.id?'active':''}" onclick="goTo('${n.id}')">
       ${icon(n.icon,18)}
       <span class="nav-label">${navLabels[n.id][lang]}</span>
+      ${badges[n.id] && currentPage!==n.id ? dot : ''}
     </div>`).join('');
 
   el('app').innerHTML = `
@@ -10635,28 +10660,48 @@ function obStep9() {
   const totalLiab    = payables+obligV;
   const capital      = _obData.capital || Math.max(0,totalAssets-totalLiab);
   const totalSal     = _obData.employees.reduce((s,e)=>s+e.salary,0);
-  const row = (lbl,val,color)=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="color:var(--text-muted);">'+lbl+'</span><span style="font-weight:700;'+(color?'color:'+color:'')+'">' +fmtMoney(val)+'</span></div>';
+
+  const row  = (lbl,val,color)=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="color:var(--text-muted);">'+lbl+'</span><span style="font-weight:700;'+(color?'color:'+color:'')+'">' +fmtMoney(val)+'</span></div>';
+  const chip = (text,color)=>'<span style="background:'+color+'20;color:'+color+';padding:2px 8px;border-radius:999px;font-size:11px;margin-inline-end:4px;margin-bottom:4px;display:inline-block;">'+text+'</span>';
+
+  const assetChips  = _obData.fixed_assets.map(a=>chip(a.name+' — '+fmtMoney(a.value),'#1e40af')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+  const obligChips  = _obData.obligations.map(o=>chip(o.name+' ('+o.frequency+') — '+fmtMoney(o.amount),'#dc2626')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+  const custChips   = _obData.customers.map(c=>chip(c.name+' — '+fmtMoney(c.balance),'#16a34a')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+  const suppChips   = _obData.suppliers.map(s=>chip(s.name+' — '+fmtMoney(s.balance),'#dc2626')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+  const empChips    = _obData.employees.map(e=>chip(e.name+(e.job_title?' ('+e.job_title+')':''),'#6366f1')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+  const prodChips   = _obData.products.map(p=>chip(p.name+' ×'+p.qty,'#0891b2')).join('') || '<span style="color:var(--text-muted);font-size:12px;">لا يوجد</span>';
+
+  const section = (title, chips)=>'<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;"><div style="font-weight:700;font-size:12px;color:var(--text-muted);margin-bottom:6px;">'+title+'</div><div style="flex-wrap:wrap;display:flex;gap:2px;">'+chips+'</div></div>';
+
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">راجع جميع البيانات قبل الحفظ. بعد الحفظ ستُضاف كل البيانات للنظام تلقائياً.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">راجع جميع البيانات قبل الحفظ. بعد الحفظ ستُضاف كل البيانات للنظام تلقائياً.</p>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+
+    // ── عمود الأرقام ──
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;">'
     +'<div style="font-weight:900;font-size:13px;color:var(--primary);margin-bottom:10px;">📊 ملخص المركز المالي</div>'
-    +row('النقدية والبنك',totalCash,'#16a34a')
-    +row('قيمة المخزون',inventoryVal,'#1e40af')
-    +row('الذمم المدينة (عملاء)',receivables,'#16a34a')
-    +row('الأصول الثابتة',fixedAssets,'#1e40af')
-    +'<div style="display:flex;justify-content:space-between;padding:7px 0;font-weight:900;color:#16a34a;font-size:14px;border-top:2px solid var(--border);margin-top:2px;"><span>إجمالي الأصول</span><span>'+fmtMoney(totalAssets)+'</span></div>'
-    +row('الذمم الدائنة (موردون)',payables,'#dc2626')
-    +row('الالتزامات الدورية',obligV,'#dc2626')
-    +'<div style="display:flex;justify-content:space-between;padding:7px 0;font-weight:900;color:#dc2626;font-size:14px;border-top:2px solid var(--border);margin-top:2px;"><span>إجمالي الالتزامات</span><span>'+fmtMoney(totalLiab)+'</span></div>'
+    +row('💰 النقدية والبنك',totalCash,'#16a34a')
+    +row('📦 قيمة المخزون',inventoryVal,'#1e40af')
+    +row('👥 الذمم المدينة',receivables,'#16a34a')
+    +row('🏗️ الأصول الثابتة',fixedAssets,'#1e40af')
+    +'<div style="display:flex;justify-content:space-between;padding:7px 0;font-weight:900;color:#16a34a;font-size:14px;border-top:2px solid var(--border);margin-top:4px;"><span>إجمالي الأصول</span><span>'+fmtMoney(totalAssets)+'</span></div>'
+    +row('🏭 الذمم الدائنة',payables,'#dc2626')
+    +row('📋 الالتزامات الدورية',obligV,'#dc2626')
+    +'<div style="display:flex;justify-content:space-between;padding:7px 0;font-weight:900;color:#dc2626;font-size:14px;border-top:2px solid var(--border);margin-top:4px;"><span>إجمالي الالتزامات</span><span>'+fmtMoney(totalLiab)+'</span></div>'
     +'<div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;font-weight:900;font-size:14px;color:#1e40af;margin-top:8px;">💼 رأس المال: '+fmtMoney(capital)+'</div>'
     +'</div>'
-    +'<div style="display:flex;flex-direction:column;gap:8px;">'
-    +'<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:11px;color:var(--text-muted);">📦 المخزون</div><div style="font-weight:900;font-size:22px;color:var(--primary);">'+_obData.products.length+'</div><div style="font-size:11px;color:var(--text-muted);">صنف</div></div>'
-    +'<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:11px;color:var(--text-muted);">👥 العملاء</div><div style="font-weight:900;font-size:22px;color:#16a34a;">'+_obData.customers.length+'</div><div style="font-size:11px;color:var(--text-muted);">إجمالي '+fmtMoney(receivables)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:11px;color:var(--text-muted);">🏭 الموردون</div><div style="font-weight:900;font-size:22px;color:#dc2626;">'+_obData.suppliers.length+'</div><div style="font-size:11px;color:var(--text-muted);">إجمالي '+fmtMoney(payables)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:11px;color:var(--text-muted);">👨‍💼 الموظفون</div><div style="font-weight:900;font-size:22px;color:var(--primary);">'+_obData.employees.length+'</div><div style="font-size:11px;color:var(--text-muted);">رواتب: '+fmtMoney(totalSal)+'</div></div>'
-    +'</div></div></div>';
+
+    // ── عمود التفاصيل ──
+    +'<div style="overflow-y:auto;max-height:360px;">'
+    +section('🏗️ الأصول الثابتة', assetChips)
+    +section('👥 العملاء (ذمم مدينة)', custChips)
+    +section('🏭 الموردون (ذمم دائنة)', suppChips)
+    +section('📋 الالتزامات الدورية', obligChips)
+    +section('📦 المخزون (أبرز الأصناف)', prodChips)
+    +section('👨‍💼 الموظفون ('+_obData.employees.length+' — رواتب: '+fmtMoney(totalSal)+')', empChips)
+    +'</div>'
+
+    +'</div></div>';
 }
 
 function obSaveAll() {
@@ -11610,7 +11655,8 @@ async function runAISearchQuery(q) {
       for (const c of newDB.customers || []) {
         const old = (prev.customers || []).find(o => o.id === c.id);
         const body = { name: c.name, phone: c.phone, email: c.email, address: c.address,
-                       vat_number: c.vat_num, credit_limit: c.credit_limit || 0 };
+                       vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
+                       balance: !old ? (c.balance || 0) : undefined };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
@@ -11631,7 +11677,8 @@ async function runAISearchQuery(q) {
       for (const s of newDB.suppliers || []) {
         const old = (prev.suppliers || []).find(o => o.id === s.id);
         const body = { name: s.name, phone: s.phone, email: s.email,
-                       address: s.address, vat_number: s.vat_num };
+                       address: s.address, vat_number: s.vat_num,
+                       balance: !old ? (s.balance || 0) : undefined };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });

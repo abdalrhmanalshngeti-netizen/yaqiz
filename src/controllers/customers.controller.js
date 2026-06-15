@@ -35,18 +35,18 @@ exports.getOne = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
-            email, address, city, credit_limit, payment_terms } = req.body;
+            email, address, city, credit_limit, payment_terms, balance } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم العميل مطلوب' });
 
     const { rows } = await db.query(`
       INSERT INTO customers
         (company_id, code, name, name_en, vat_number, cr_number,
-         phone, email, address, city, credit_limit, payment_terms)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         phone, email, address, city, credit_limit, payment_terms, balance)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `, [req.user.company_id, code, name, name_en, vat_number, cr_number,
-        phone, email, address, city, credit_limit || 0, payment_terms || 30]);
+        phone, email, address, city, credit_limit || 0, payment_terms || 30, parseFloat(balance) || 0]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
