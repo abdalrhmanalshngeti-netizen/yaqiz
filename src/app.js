@@ -90,6 +90,10 @@ app.use('/api/payment',   require('./routes/payments.routes'));
 app.use('/api/ai',        require('./routes/ai.routes'));
 
 // ── Static Pages ─────────────────────────────────────────────
+app.get('/robots.txt', (_, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.sendFile(require('path').join(staticPath, 'robots.txt'));
+});
 app.get('/',         (_, res) => res.sendFile(require('path').join(staticPath, 'index.html')));
 app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
 app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));

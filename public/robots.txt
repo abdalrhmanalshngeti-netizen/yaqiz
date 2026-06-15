@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /terms
+
+Disallow: /admin
+Disallow: /VVIP.html
+Disallow: /subscribe
+Disallow: /reset-password
+Disallow: /api/
+Disallow: /public/
