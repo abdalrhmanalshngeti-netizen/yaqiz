@@ -1967,8 +1967,21 @@ function renderSales(c) {
   if(currentUser.role==='cashier') salesTab='pos';
   else if(salesTab==='pos' && !showPOS) salesTab='invoices';
 
+  const _sdb = getDB();
+  const _pendInvs = (_sdb.invoices||[]).filter(i=>i.status==='آجل'||i.status==='جزئي');
+  const _pendTotal = _pendInvs.reduce((s,i)=>s+(i.remaining_amount||i.grand_total||0),0);
+  const salesBanner = _pendInvs.length > 0 ? `
+    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_pendInvs.length} فاتورة${_pendInvs.length>1?'':'ة'} غير مسددة بإجمالي ${fmtMoney(_pendTotal)}`:`You have ${_pendInvs.length} unpaid invoice(s) totaling ${fmtMoney(_pendTotal)}`}</div>
+        <div style="font-size:12px;color:#b91c1c;">${lang==='ar'?`راجع تبويب "فواتير المبيعات" لتسوية المبالغ المستحقة`:`Review the Sales Invoices tab to settle outstanding amounts`}</div>
+      </div>
+    </div>` : '';
+
   c.innerHTML = `
   <div>
+    ${salesBanner}
     <div class="page-header"><div class="page-title-lg">${t('sales')}</div></div>
     <div class="tabs">
       ${showPOS?`<button class="tab-btn ${salesTab==='pos'?'active':''}" onclick="setSalesTab('pos')">🛒 ${lang==='ar'?'نقطة البيع':'POS'}</button>`:''}
@@ -3638,8 +3651,8 @@ function showAddGoodsPurchase(keepItems) {
         <div>
           <label class="form-label">${lang==='ar'?'طريقة السداد':'Payment Method'}</label>
           <select class="select" id="gp-payment" onchange="toggleGPPayment()" style="margin-bottom:8px;">
+            <option value="آجل">${lang==='ar'?'آجل (سداد لاحقاً)':'Credit (Later)'}</option>
             <option value="نقدي">${lang==='ar'?'نقدي (سداد كامل)':'Cash (Full)'}</option>
-            <option value="آجل">${lang==='ar'?'آجل (لاحقاً)':'Credit (Later)'}</option>
             <option value="جزئي">${lang==='ar'?'جزئي':'Partial'}</option>
           </select>
           <div id="gp-partial-field" style="display:none;">
@@ -4169,11 +4182,20 @@ function renderCusContent() {
       const custInvs = db.invoices.filter(i=>i.customer_name===c.name);
       const totalTx  = custInvs.reduce((s,i)=>s+(i.grand_total||0),0);
       const invCount = custInvs.length;
-      const totalRcv = (db.receipts||[]).filter(r=>r.party===c.name&&r.type==='receipt').reduce((s,r)=>s+r.amount,0);
-      const outstanding = Math.max(0, Math.round((totalTx - totalRcv)*100)/100);
+      const outstanding = Math.max(0, Math.round((c.balance||0)*100)/100);
       return {c, totalTx, invCount, outstanding};
     });
+    const custWithBal = db.customers.filter(c=>(c.balance||0)>0);
+    const cusBanner = custWithBal.length > 0 ? `
+      <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+        <span style="font-size:20px;">🔴</span>
+        <div style="flex:1;">
+          <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${custWithBal.length} عميل${custWithBal.length>1?'ون':''} بمبالغ مستحقة`:`You have ${custWithBal.length} customer(s) with outstanding balances`}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">${custWithBal.map(c=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${c.name} — ${fmtMoney(c.balance)}</span>`).join('')}</div>
+        </div>
+      </div>` : '';
     cc.innerHTML = `
+    ${cusBanner}
     ${has('customers.manage')?`<div style="margin-bottom:12px;"><button class="btn btn-primary" onclick="showAddEntity('customer')">${icon('plus',16)} ${t('add')}</button></div>`:''}
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
@@ -4211,12 +4233,21 @@ function renderSuppliers(c) {
     const suppPurchs = db.purchases.filter(p=>p.vendor===s.name);
     const totalTx   = suppPurchs.reduce((sum,p)=>sum+(p.total||0),0);
     const purCount  = suppPurchs.length;
-    const totalPaid = (db.receipts||[]).filter(r=>r.party===s.name&&r.type==='payment').reduce((s,r)=>s+r.amount,0);
-    const outstanding = Math.max(0, Math.round((totalTx - totalPaid)*100)/100);
+    const outstanding = Math.max(0, Math.round((s.balance||0)*100)/100);
     return {s, totalTx, purCount, outstanding};
   });
+  const suppWithBal = db.suppliers.filter(s=>(s.balance||0)>0);
+  const suppBanner = suppWithBal.length > 0 ? `
+    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${suppWithBal.length} مورد${suppWithBal.length>1?'ون':''} بمبالغ مستحقة عليك`:`You have ${suppWithBal.length} supplier(s) with outstanding balances`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${suppWithBal.map(s=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${s.name} — ${fmtMoney(s.balance)}</span>`).join('')}</div>
+      </div>
+    </div>` : '';
   c.innerHTML = `
   <div>
+    ${suppBanner}
     <div class="page-header">
       <div class="page-title-lg">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</div>
       ${has('suppliers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
@@ -5955,9 +5986,19 @@ function renderObligations(c) {
   const now = new Date();
   const freqColors = {'شهري':'badge-blue','ربع سنوي':'badge-amber','نصف سنوي':'badge-blue','سنوي':'badge-green','أسبوعي':'badge-red'};
   const catColors = {'إيجار':'badge-red','اتصالات':'badge-blue','تأمين':'badge-green','صيانة':'badge-amber','أخرى':'badge-gray'};
+  const dueSoon = db.obligations.filter(o=>{ const d=new Date(o.next_due); return (d-now)/(1000*60*60*24)<=30 && o.status==='active'; });
+  const oblBanner = dueSoon.length > 0 ? `
+    <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${dueSoon.length} التزام${dueSoon.length>1?'ات':''} مستحقة خلال 30 يوماً`:`You have ${dueSoon.length} obligation(s) due within 30 days`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${dueSoon.map(o=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${o.name} — ${fmtMoney(o.amount)} (${o.frequency})</span>`).join('')}</div>
+      </div>
+    </div>` : '';
 
   c.innerHTML = `
   <div>
+    ${oblBanner}
     <div class="page-header">
       <div>
         <div class="page-title-lg">${lang==='ar'?'الالتزامات الدورية':'Recurring Obligations'}</div>
