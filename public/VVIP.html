@@ -2668,8 +2668,39 @@ function renderInvoicesList(sc) {
 }
 
 function deleteInvoice(id) {
-  if(!confirm(lang==='ar'?'حذف الفاتورة؟':'Delete invoice?'))return;
-  const db=getDB(); db.invoices=db.invoices.filter(i=>i.id!==id); saveDB(db); renderPage();
+  if(!confirm(lang==='ar'?'حذف الفاتورة نهائياً؟ سيتم عكس جميع القيود المحاسبية والمخزون.':'Delete invoice? All accounting entries will be reversed.'))return;
+  const db=getDB();
+  const inv=db.invoices.find(i=>i.id===id);
+  if(!inv){db.invoices=db.invoices.filter(i=>i.id!==id);saveDB(db);renderPage();return;}
+
+  // 1. عكس القيد اليومي — حذف القيد المرتبط بالفاتورة
+  if(db.journal) db.journal=db.journal.filter(j=>j.ref!==inv.invoice_no);
+
+  // 2. عكس المخزون — استرجاع الكميات المُبَاعة
+  if(db.stock_moves && inv.items){
+    inv.items.forEach(item=>{
+      const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
+      if(prod){ prod.qty=Math.min(999999, (prod.qty||0)+item.qty); }
+    });
+    db.stock_moves=db.stock_moves.filter(m=>m.reference!==inv.invoice_no);
+  }
+
+  // 3. عكس الخزينة — خصم المبلغ المسدد فعلاً
+  const paidAmt=parseFloat(inv.paid_amount||0);
+  if(paidAmt>0){
+    db.treasury.balance=Math.round((db.treasury.balance-paidAmt)*100)/100;
+    db.treasury.moves=db.treasury.moves.filter(m=>m.reference!==inv.invoice_no);
+  }
+
+  // 4. عكس رصيد العميل — خصم المبلغ المتبقي
+  const remaining=Math.max(0,(parseFloat(inv.grand_total||0))-(paidAmt));
+  if(remaining>0 && inv.customer_name){
+    const cust=db.customers.find(c=>c.name===inv.customer_name);
+    if(cust) cust.balance=Math.round((Math.max(0,(cust.balance||0)-remaining))*100)/100;
+  }
+
+  db.invoices=db.invoices.filter(i=>i.id!==id);
+  saveDB(db); renderPage();
 }
 
 // ─────────────────────────────────────────────
@@ -8026,7 +8057,7 @@ function renderBalanceSheet(c) {
   const accountsPayable = db.suppliers.reduce((s,sup)=>s+Math.max(0,parseFloat(sup.balance||0)),0);
 
   // ضريبة القيمة المضافة الصافية (مخرجات - مدخلات)
-  const outputVAT = db.invoices.reduce((s,i)=>s+parseFloat(i.vat_amount||0),0);
+  const outputVAT = db.invoices.reduce((s,i)=>s+parseFloat(i.vat_total||0),0);
   const inputVAT  = db.purchases.reduce((s,p)=>s+parseFloat(p.vat||0),0);
   const vatPayable = Math.max(0, outputVAT - inputVAT);
 
@@ -8092,10 +8123,10 @@ function renderBalanceSheet(c) {
           {label:lang==='ar'?'المصاريف الإدارية (OPEX)':'Admin Expenses',val:netOPEX},
           {label:lang==='ar'?'صافي الربح':'Net Profit',val:netProfit},
         ],equity)}
-        <div style="background:${Math.abs(totalAssets-totalLiab-equity)<1?'#dcfce7':'#fee2e2'};padding:14px;border-radius:12px;text-align:center;font-weight:900;">
-          ${Math.abs(totalAssets-totalLiab-equity)<1
-            ?`✅ ${lang==='ar'?'الميزانية متوازنة':'Balance Sheet Balanced'}`
-            :`⚠️ ${lang==='ar'?'فرق:':'Difference:'} ${fmtMoney(Math.abs(totalAssets-totalLiab-equity))}`}
+        <div style="background:${Math.abs(totalAssets-(totalLiab+equity))<1?'#dcfce7':'#fee2e2'};padding:14px;border-radius:12px;text-align:center;font-weight:900;">
+          ${Math.abs(totalAssets-(totalLiab+equity))<1
+            ?`✅ ${lang==='ar'?'الميزانية متوازنة (أصول = خصوم + حقوق ملكية)':'Balance Sheet Balanced (Assets = Liabilities + Equity)'}`
+            :`⚠️ ${lang==='ar'?'فرق في الميزانية:':'Balance Sheet Gap:'} ${fmtMoney(Math.abs(totalAssets-(totalLiab+equity)))}`}
         </div>
       </div>
     </div>
