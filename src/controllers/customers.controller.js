@@ -55,7 +55,7 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
-            email, address, city, credit_limit, payment_terms, is_active } = req.body;
+            email, address, city, credit_limit, payment_terms, is_active, balance } = req.body;
 
     const { rows } = await db.query(`
       UPDATE customers SET
@@ -70,11 +70,13 @@ exports.update = async (req, res, next) => {
         city          = COALESCE($9,  city),
         credit_limit  = COALESCE($10, credit_limit),
         payment_terms = COALESCE($11, payment_terms),
-        is_active     = COALESCE($12, is_active)
-      WHERE id = $13 AND company_id = $14
+        is_active     = COALESCE($12, is_active),
+        balance       = CASE WHEN $13::numeric IS NOT NULL THEN $13::numeric ELSE balance END
+      WHERE id = $14 AND company_id = $15
       RETURNING *
     `, [code, name, name_en, vat_number, cr_number, phone, email,
         address, city, credit_limit, payment_terms, is_active,
+        balance != null ? parseFloat(balance) : null,
         req.params.id, req.user.company_id]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'العميل غير موجود' });

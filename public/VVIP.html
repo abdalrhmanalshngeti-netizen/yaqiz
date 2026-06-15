@@ -6610,6 +6610,12 @@ function saveVoucher(type, printAfter=true) {
       left = Math.round((left-applying)*100)/100;
       logActivity('مبيعات', `تحديث فاتورة ${inv.invoice_no} من "${prevStatus}" إلى "${inv.status}" — سند ${voucher.voucher_no}`);
     }
+    // تحديث رصيد العميل
+    const _vCust = db.customers.find(c=>c.name===party);
+    if(_vCust) {
+      const _applied = amount - left;
+      _vCust.balance = Math.max(0, Math.round((((_vCust.balance)||0) - _applied)*100)/100);
+    }
   }
 
   // 2b. تطبيق سند الصرف على مشتريات المورد
@@ -6632,6 +6638,12 @@ function saveVoucher(type, printAfter=true) {
       pur.last_payment_date = new Date().toISOString();
       left = Math.round((left-applying)*100)/100;
       logActivity('مشتريات', `تحديث مشتريات ${pur.vendor} — المتبقي: ${fmtMoney(pur.remaining_amount)}`);
+    }
+    // تحديث رصيد المورد
+    const _vSup = db.suppliers.find(s=>s.name===party);
+    if(_vSup) {
+      const _applied = amount - left;
+      _vSup.balance = Math.max(0, Math.round((((_vSup.balance)||0) - _applied)*100)/100);
     }
   }
 
@@ -11630,8 +11642,8 @@ async function runAISearchQuery(q) {
       const db = getDB();
 
       if (prods?.data)    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
-      if (custs?.data)    db.customers  = custs.data.map(customerToFE);
-      if (supps?.data)    db.suppliers  = supps.data.map(supplierToFE);
+      if (custs?.data)    db.customers  = custs.data.filter(c=>c.is_active!==false).map(customerToFE);
+      if (supps?.data)    db.suppliers  = supps.data.filter(s=>s.is_active!==false).map(supplierToFE);
       if (invRes?.data)   db.invoices   = invRes.data.map(invToFE);
       if (purRes?.data)   db.purchases  = purRes.data.map(purchaseToFE);
       if (empRes?.data)   db.employees  = empRes.data.map(employeeToFE);
@@ -11749,7 +11761,7 @@ async function runAISearchQuery(q) {
         const old = (prev.customers || []).find(o => o.id === c.id);
         const body = { name: c.name, phone: c.phone, email: c.email, address: c.address,
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
-                       balance: !old ? (c.balance || 0) : undefined };
+                       balance: c.balance || 0 };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
@@ -11771,7 +11783,7 @@ async function runAISearchQuery(q) {
         const old = (prev.suppliers || []).find(o => o.id === s.id);
         const body = { name: s.name, phone: s.phone, email: s.email,
                        address: s.address, vat_number: s.vat_num,
-                       balance: !old ? (s.balance || 0) : undefined };
+                       balance: s.balance || 0 };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });
