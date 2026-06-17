@@ -865,7 +865,7 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:  [],
-  growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze'],
+  growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant'],
   pro:    ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
 };
 
@@ -1014,6 +1014,7 @@ function renderShell() {
   refreshIcons();
   renderPage();
   renderCSButton();
+  _aiLoadHistory();
   renderAIChatButton();
 }
 
@@ -1446,12 +1447,32 @@ function csCloseEscalation(id) {
 
 let _aiChat = { open: false, minimized: false, loading: false };
 let _aiChatHistory = [];
+let _aiDailyUsed = 0;
+
+function _aiGetHistoryKey() {
+  try { const t=localStorage.getItem('yaqiz_access_token'); if(!t)return null; const p=JSON.parse(atob(t.split('.')[1])); return `ai_hist_${p.company_id}`; } catch{return null;}
+}
+function _aiLoadHistory() {
+  if(getCurrentPlan()!=='pro') return;
+  try { const k=_aiGetHistoryKey(); if(k){const s=localStorage.getItem(k); if(s) _aiChatHistory=JSON.parse(s).slice(-30);} } catch{}
+}
+function _aiSaveHistory() {
+  if(getCurrentPlan()!=='pro') return;
+  try { const k=_aiGetHistoryKey(); if(k) localStorage.setItem(k,JSON.stringify(_aiChatHistory.slice(-30))); } catch{}
+}
+function _aiClearHistory() {
+  _aiChatHistory=[];
+  try { const k=_aiGetHistoryKey(); if(k) localStorage.removeItem(k); } catch{}
+  renderAIChatButton();
+}
 
 function renderAIChatButton() {
   const root = document.getElementById('ai-chat-root');
   if (!root) return;
   const token = localStorage.getItem('yaqiz_access_token');
   if (!token) { root.innerHTML = ''; return; }
+  const plan = getCurrentPlan();
+  if (!hasPlanFeature('ai_assistant')) { root.innerHTML = ''; return; }
 
   const side = lang === 'ar' ? 'left' : 'right';
   const msgHtml = _aiChatHistory.length === 0
@@ -1490,18 +1511,22 @@ function renderAIChatButton() {
 
     <div onclick="toggleAIChatMin()" style="
       padding:12px 14px;
-      background:linear-gradient(135deg,#6366f1,#8b5cf6);
+      background:${plan==='pro'?'linear-gradient(135deg,#7c3aed,#6d28d9,#4f46e5)':'linear-gradient(135deg,#3b82f6,#6366f1)'};
       color:white;flex-shrink:0;cursor:pointer;user-select:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:20px;">🤖</span>
+          <span style="font-size:20px;">${plan==='pro'?'🧠':'🤖'}</span>
           <div>
-            <div style="font-weight:900;font-size:14px;">${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}</div>
-            <div style="font-size:10px;opacity:.8;">${_aiChat.loading?'⏳ يفكر...':lang==='ar'?'مساعدك المحاسبي':'Your accounting assistant'}</div>
+            <div style="font-weight:900;font-size:14px;display:flex;align-items:center;gap:6px;">
+              ${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}
+              ${plan==='pro'?`<span style="background:rgba(255,255,255,.25);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">PRO</span>`:`<span style="background:rgba(255,255,255,.2);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">${lang==='ar'?`${3-_aiDailyUsed}/3 اليوم`:`${3-_aiDailyUsed}/3 today`}</span>`}
+            </div>
+            <div style="font-size:10px;opacity:.85;">${_aiChat.loading?(lang==='ar'?'⏳ يفكر...':'⏳ Thinking...'):(plan==='pro'?(lang==='ar'?'🧠 يتذكر محادثاتك':'🧠 Remembers your conversations'):(lang==='ar'?'مساعدك المحاسبي':'Your accounting assistant'))}</div>
           </div>
         </div>
         <div style="display:flex;gap:5px;">
-          <button onclick="event.stopPropagation();toggleAIChatMin()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;" title="${_aiChat.minimized?'تكبير':'تصغير'}">${_aiChat.minimized?'▲':'▼'}</button>
+          ${plan==='pro'?`<button onclick="event.stopPropagation();if(confirm('${lang==='ar'?'مسح سجل المحادثات؟':'Clear chat history?'}'))_aiClearHistory()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="${lang==='ar'?'مسح المحادثات':'Clear history'}">🗑</button>`:''}
+          <button onclick="event.stopPropagation();toggleAIChatMin()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>
           <button onclick="event.stopPropagation();closeAIChat()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
       </div>
@@ -1547,8 +1572,16 @@ async function sendAIMsg() {
   if (!inp || _aiChat.loading) return;
   const q = inp.value.trim();
   if (!q) return;
-  inp.value = '';
 
+  const plan = getCurrentPlan();
+  if (plan === 'growth' && _aiDailyUsed >= 3) {
+    inp.value = '';
+    _aiChatHistory.push({ q, a: `⚠️ ${lang==='ar'?'وصلت لحد الـ 3 أسئلة اليومية. يتجدد الحد منتصف الليل. رقّ للباقة الاحترافية للوصول غير المحدود.':'Daily limit of 3 questions reached. Resets at midnight. Upgrade to Pro for unlimited access.'}` });
+    renderAIChatButton();
+    return;
+  }
+
+  inp.value = '';
   _aiChatHistory.push({ q, a: null });
   _aiChat.loading = true;
   renderAIChatButton();
@@ -1739,6 +1772,8 @@ async function sendAIMsg() {
   }
 
   _aiChat.loading = false;
+  if (plan === 'growth') _aiDailyUsed = Math.min(3, _aiDailyUsed + 1);
+  if (plan === 'pro') _aiSaveHistory();
   renderAIChatButton();
 }
 
@@ -4709,10 +4744,11 @@ function renderReports(c) {
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
     <div class="tabs">
       <button class="tab-btn ${reportMainTab==='reports'?'active':''}" onclick="setReportMainTab('reports')">📊 ${lang==='ar'?'التقارير':'Reports'}</button>
-      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='balance'?'active':''}" onclick="setReportMainTab('balance')">⚖️ ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
+      ${hasPlanFeature('trial_balance')?`<button class="tab-btn ${reportMainTab==='trial_balance'?'active':''}" onclick="setReportMainTab('trial_balance')">⚖️ ${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</button>`:''}
+      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='balance'?'active':''}" onclick="setReportMainTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
       ${hasPlanFeature('journal')?`<button class="tab-btn ${reportMainTab==='journal'?'active':''}" onclick="setReportMainTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='accounts'?'active':''}" onclick="setReportMainTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
-      <button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>
+      ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>`:''}
       <button class="tab-btn ${reportMainTab==='zakat'?'active':''}" onclick="setReportMainTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
     </div>
     <div id="report-main-content"></div>
@@ -4722,17 +4758,88 @@ function renderReports(c) {
 }
 function setReportMainTab(tab) {
   reportMainTab=tab;
-  $qa('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===(['reports','balance','journal','accounts','overdue','zakat'].indexOf(tab))));
+  $qa('.tab-btn').forEach(b=>{const m=(b.getAttribute('onclick')||'').match(/setReportMainTab\('(\w+)'\)/);if(m)b.classList.toggle('active',m[1]===tab);});
   renderReportMainContent();
 }
 function renderReportMainContent() {
   const mc=el('report-main-content'); if(!mc) return;
-  if(reportMainTab==='reports') renderReportsInner(mc);
-  else if(reportMainTab==='balance') renderBalanceSheet(mc);
-  else if(reportMainTab==='journal') renderJournal(mc);
-  else if(reportMainTab==='overdue') renderOverdueReport(mc);
-  else if(reportMainTab==='zakat') renderZakatReport(mc);
+  if(reportMainTab==='reports')       renderReportsInner(mc);
+  else if(reportMainTab==='trial_balance') renderTrialBalance(mc);
+  else if(reportMainTab==='balance')  renderBalanceSheet(mc);
+  else if(reportMainTab==='journal')  renderJournal(mc);
+  else if(reportMainTab==='overdue')  renderOverdueReport(mc);
+  else if(reportMainTab==='zakat')    renderZakatReport(mc);
   else renderAccounts(mc);
+}
+
+function renderTrialBalance(c) {
+  const db  = getDB();
+  const now = new Date();
+  const month = now.getMonth(), year = now.getFullYear();
+  const fmt = v => fmtMoney(Math.abs(v));
+
+  const totalSales    = (db.invoices||[]).reduce((s,i)=>s+(i.grand_total||0),0);
+  const totalPurch    = (db.purchases||[]).reduce((s,p)=>s+(p.total||0),0);
+  const treasury      = db.treasury?.balance || 0;
+  const receivables   = (db.customers||[]).reduce((s,c)=>s+Math.max(0,c.balance||0),0);
+  const payables      = (db.suppliers||[]).reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
+  const invValue      = (db.products||[]).reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
+  const netProfit     = totalSales - totalPurch;
+
+  const rows = [
+    { name: lang==='ar'?'النقدية والخزينة':'Cash & Treasury',         debit: treasury,    credit: 0,           type:'asset' },
+    { name: lang==='ar'?'ذمم مدينة — عملاء':'Accounts Receivable',   debit: receivables, credit: 0,           type:'asset' },
+    { name: lang==='ar'?'قيمة المخزون':'Inventory Value',            debit: invValue,    credit: 0,           type:'asset' },
+    { name: lang==='ar'?'إيرادات المبيعات':'Sales Revenue',           debit: 0,           credit: totalSales,  type:'income' },
+    { name: lang==='ar'?'مصاريف المشتريات':'Purchase Expenses',       debit: totalPurch,  credit: 0,           type:'expense' },
+    { name: lang==='ar'?'ذمم دائنة — موردون':'Accounts Payable',      debit: 0,           credit: payables,    type:'liability' },
+  ];
+  const totDebit  = rows.reduce((s,r)=>s+r.debit,0);
+  const totCredit = rows.reduce((s,r)=>s+r.credit,0);
+
+  const typeColor = {asset:'#3b82f6',income:'#10b981',expense:'#ef4444',liability:'#f59e0b'};
+  const typeBadge = {asset:'أصل',income:'إيراد',expense:'مصروف',liability:'التزام'};
+
+  c.innerHTML = `
+  <div style="margin-top:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:18px;font-weight:900;">${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إجمالي تراكمي حتى اليوم':'Cumulative totals to date'}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="padding:8px 16px;background:rgba(59,130,246,.1);border-radius:10px;font-size:12px;font-weight:700;color:#3b82f6;">📊 ${lang==='ar'?`صافي الربح: ${fmtMoney(netProfit)}`:`Net Profit: ${fmtMoney(netProfit)}`}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr>
+          <th>${lang==='ar'?'الحساب':'Account'}</th>
+          <th>${lang==='ar'?'النوع':'Type'}</th>
+          <th style="text-align:end;">${lang==='ar'?'مدين':'Debit'}</th>
+          <th style="text-align:end;">${lang==='ar'?'دائن':'Credit'}</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r=>`<tr>
+            <td style="font-weight:700;">${r.name}</td>
+            <td><span style="background:${typeColor[r.type]}18;color:${typeColor[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeBadge[r.type]||r.type}</span></td>
+            <td style="text-align:end;font-weight:700;color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmt(r.debit):'—'}</td>
+            <td style="text-align:end;font-weight:700;color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmt(r.credit):'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="background:var(--primary-soft);font-weight:900;">
+            <td colspan="2" style="padding:12px 14px;">${lang==='ar'?'الإجمالي':'Total'}</td>
+            <td style="padding:12px 14px;text-align:end;color:var(--primary);">${fmt(totDebit)}</td>
+            <td style="padding:12px 14px;text-align:end;color:var(--primary);">${fmt(totCredit)}</td>
+          </tr>
+        </tfoot>
+      </table></div>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px;">
+      * ${lang==='ar'?'ميزان مراجعة مبسّط يعتمد على البيانات المتاحة في النظام.':'Simplified trial balance based on available system data.'}
+    </div>
+  </div>`;
 }
 
 let overdueTab = 'customers';
@@ -5621,7 +5728,13 @@ function renderUsers(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${t('users')}</div>
-      ${has('users.manage')?`<button class="btn btn-primary" onclick="showUserModal()">${icon('plus',16)} ${t('newUser')}</button>`:''}
+      ${(()=>{
+        if(!has('users.manage')) return '';
+        const limit = getCurrentPlan()==='basic' ? 4 : null;
+        const count = (db.users||[]).filter(u=>u.active!==false).length;
+        if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} مستخدمين) في الباقة الأساسية`:`Max users reached (${limit}) on Basic plan`}</div>`;
+        return `<button class="btn btn-primary" onclick="showUserModal()">${icon('plus',16)} ${t('newUser')}</button>`;
+      })()}
     </div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('username')}</th><th>${t('fullName')}</th><th>${t('role')}</th><th>${t('permissions')}</th><th>${t('status')}</th>${has('users.manage')?'<th></th>':''}</tr></thead>
@@ -5644,6 +5757,10 @@ function renderUsers(c) {
 
 function showUserModal(id) {
   const db = getDB();
+  if (!id && getCurrentPlan()==='basic') {
+    const count = (db.users||[]).filter(u=>u.active!==false).length;
+    if (count >= 4) { showToast(lang==='ar'?'الباقة الأساسية تسمح بـ 4 مستخدمين فقط. رقّ باقتك للمزيد.':'Basic plan allows 4 users only.','error'); return; }
+  }
   const u = id ? db.users.find(x=>x.id===id) : null;
 
   const permLabels = {
@@ -9592,6 +9709,26 @@ function renderSettingsGeneral(c) {
     </div></div>
     ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" onclick="saveSettings()">${t('save')}</button>`:''}
 
+    <!-- VAT Toggle -->
+    <div class="card"><div class="card-pad">
+      <h3 style="margin-bottom:16px;font-weight:800;">🧾 ${lang==='ar'?'ضريبة القيمة المضافة (VAT)':'Value Added Tax (VAT)'}</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;background:var(--bg);border-radius:12px;border:1px solid var(--border);">
+        <div>
+          <div style="font-weight:800;font-size:14px;">${lang==='ar'?'تطبيق ضريبة القيمة المضافة 15%':'Apply 15% VAT on invoices'}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${lang==='ar'?'عند التفعيل تُضاف ضريبة 15% تلقائياً على كل فاتورة مبيعات':'When enabled, 15% VAT is added automatically to all sales invoices'}</div>
+        </div>
+        <label style="position:relative;display:inline-block;width:50px;height:26px;flex-shrink:0;">
+          <input type="checkbox" id="vat-toggle" ${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'checked':''} onchange="toggleVAT(this.checked)" style="opacity:0;width:0;height:0;">
+          <span style="position:absolute;cursor:pointer;inset:0;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'var(--primary)':'#cbd5e1'};border-radius:999px;transition:.3s;">
+            <span style="position:absolute;height:20px;width:20px;right:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'3px':'27px'};bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>
+          </span>
+        </label>
+      </div>
+      <div style="margin-top:10px;padding:10px 14px;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'rgba(16,185,129,.08)':'rgba(107,114,128,.06)'};border-radius:10px;font-size:12px;font-weight:700;color:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'#059669':'var(--text-muted)'};">
+        ${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?`✅ ${lang==='ar'?'الضريبة مفعّلة — ستظهر ضريبة 15% في كل فاتورة':'VAT enabled — 15% appears on all invoices'}`:`⭕ ${lang==='ar'?'الضريبة معطّلة — الفواتير بدون ضريبة':'VAT disabled — invoices without tax'}`}
+      </div>
+    </div></div>
+
     <!-- Sales Targets -->
     <div class="card"><div class="card-pad">
       <h3 style="margin-bottom:16px;font-weight:800;">🎯 ${lang==='ar'?'أهداف المبيعات اليومية':'Daily Sales Targets'}</h3>
@@ -9667,6 +9804,14 @@ function saveSettings() {
     }).catch(e => console.warn('Company sync:', e.message));
   }
   renderShell();
+}
+
+function toggleVAT(enabled) {
+  const db = getDB();
+  db.settings = { ...db.settings, vat_enabled: enabled };
+  saveDB(db);
+  showToast(enabled ? `✅ ${lang==='ar'?'تم تفعيل ضريبة القيمة المضافة 15%':'VAT 15% enabled'}` : `⭕ ${lang==='ar'?'تم إيقاف ضريبة القيمة المضافة':'VAT disabled'}`);
+  renderSettingsContent();
 }
 
 // ============ MODAL ============

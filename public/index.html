@@ -609,15 +609,17 @@
           <li><span class="ck">✓</span> مرتجعات المبيعات</li>
           <li><span class="ck">✓</span> إدارة العملاء والموردين</li>
           <li class="sect">المخزون والمشتريات</li>
-          <li><span class="ck">✓</span> إدارة المخزون والمنتجات</li>
-          <li><span class="ck">✓</span> المشتريات والمصاريف التشغيلية</li>
-          <li class="sect">المالية</li>
+          <li><span class="ck">✓</span> إدارة المخزون (FIFO)</li>
+          <li><span class="ck">✓</span> المشتريات والمصاريف</li>
+          <li class="sect">المالية والإعدادات</li>
           <li><span class="ck">✓</span> الالتزامات المالية والمستحقات</li>
+          <li><span class="ck">✓</span> ضريبة القيمة المضافة 15% (تحكم كامل)</li>
+          <li><span class="ck">✓</span> حتى 4 مستخدمين</li>
           <li class="sect">التقارير</li>
           <li><span class="ck">✓</span> تقرير ضريبة القيمة المضافة</li>
           <li><span class="ck">✓</span> تقرير الزكاة</li>
         </ul>
-        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+        <button class="btn-plan" onclick="openModal('basic')">ابدأ مجاناً 14 يوم</button>
       </div>
 
       <!-- GROWTH -->
@@ -639,12 +641,15 @@
           <li><span class="ck">✓</span> نظام نقاط الولاء</li>
           <li><span class="ck">✓</span> سجل النشاط الكامل</li>
           <li><span class="ck">✓</span> تقرير التدفقات النقدية</li>
+          <li><span class="ck">✓</span> ميزان المراجعة</li>
           <li><span class="ck">✓</span> حركة المخزون التفصيلية</li>
           <li><span class="ck">✓</span> المصاريف الإدارية</li>
           <li><span class="ck">✓</span> فترة مخصصة في التقارير</li>
           <li><span class="ck">✓</span> استيراد البيانات</li>
+          <li><span class="ck">✓</span> مستخدمون غير محدودين</li>
+          <li><span class="ck">✓</span> الذكاء الاصطناعي (3 أسئلة يومياً)</li>
         </ul>
-        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+        <button class="btn-plan" onclick="openModal('growth')">ابدأ مجاناً 14 يوم</button>
       </div>
 
       <!-- PRO -->
@@ -663,13 +668,13 @@
           <li><span class="ck">✓</span> دفتر اليومية والقيود المحاسبية</li>
           <li><span class="ck">✓</span> قائمة الدخل (أرباح وخسائر)</li>
           <li><span class="ck">✓</span> الميزانية العمومية</li>
-          <li><span class="ck">✓</span> ميزان المراجعة</li>
           <li><span class="ck">✓</span> التسوية البنكية</li>
           <li><span class="ck">✓</span> تقرير الذمم المتأخرة</li>
           <li><span class="ck">✓</span> أوامر الشراء</li>
           <li><span class="ck">✓</span> مقارنة الفترات المالية</li>
+          <li><span class="ck">✓</span> مساعد ذكي بدون حدود + ذاكرة المحادثات</li>
         </ul>
-        <button class="btn-plan" onclick="openModal()">ابدأ مجاناً 14 يوم</button>
+        <button class="btn-plan" onclick="openModal('pro')">ابدأ مجاناً 14 يوم</button>
       </div>
 
     </div>
@@ -703,7 +708,28 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">✕</button>
     <h2>سجّل شركتك في يقظ</h2>
-    <p class="modal-sub">أنشئ حسابك مجاناً — تجربة 14 يوم بكامل المميزات</p>
+    <p class="modal-sub">أنشئ حسابك مجاناً — تجربة 14 يوم بكامل مميزات الباقة المختارة</p>
+
+    <!-- اختيار الباقة -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;" id="planPicker">
+      <div class="plan-pick" data-plan="basic" onclick="pickPlan('basic')" style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:rgba(16,185,129,.08);cursor:pointer;text-align:center;transition:.2s;">
+        <div style="font-size:20px;">📗</div>
+        <div style="font-weight:900;font-size:13px;color:#10b981;margin-top:4px;">أساسية</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);">149 ر.س/شهر</div>
+      </div>
+      <div class="plan-pick selected" data-plan="growth" onclick="pickPlan('growth')" style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:rgba(59,130,246,.15);cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.3);">
+        <div style="font-size:20px;">📘</div>
+        <div style="font-weight:900;font-size:13px;color:#3b82f6;margin-top:4px;">النمو ⭐</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);">299 ر.س/شهر</div>
+      </div>
+      <div class="plan-pick" data-plan="pro" onclick="pickPlan('pro')" style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.4);background:rgba(139,92,246,.08);cursor:pointer;text-align:center;transition:.2s;">
+        <div style="font-size:20px;">📙</div>
+        <div style="font-weight:900;font-size:13px;color:#8b5cf6;margin-top:4px;">احترافية</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);">499 ر.س/شهر</div>
+      </div>
+    </div>
+    <input type="hidden" id="chosen-plan" value="growth">
+
     <div class="malert malert-err" id="mErr"></div>
     <div class="malert malert-ok"  id="mOk"></div>
     <form id="regForm" onsubmit="doReg(event)" novalidate>
@@ -750,9 +776,22 @@
 <script>
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%"><rect width="100" height="100" rx="17" fill="#0d0f14"/><circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/><circle cx="43" cy="42" r="12" fill="white"/><path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/><path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/><g fill="white"><g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g></g><polygon points="49,58 60,68 83,91 71,88" fill="white"/><polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/></svg>`;
 
-function openModal() {
+function openModal(plan) {
   document.getElementById('regOverlay').classList.add('show');
   document.body.style.overflow = 'hidden';
+  if(plan) pickPlan(plan);
+}
+function pickPlan(plan) {
+  document.getElementById('chosen-plan').value = plan;
+  document.querySelectorAll('.plan-pick').forEach(el => {
+    const p = el.dataset.plan;
+    const colors = {basic:'#10b981',growth:'#3b82f6',pro:'#8b5cf6'};
+    const c = colors[p]||'#3b82f6';
+    const sel = p === plan;
+    el.style.border = `2px solid ${sel?c:'rgba(255,255,255,.1)'}`;
+    el.style.background = sel ? `rgba(${p==='basic'?'16,185,129':p==='growth'?'59,130,246':'139,92,246'},.15)` : 'rgba(255,255,255,.03)';
+    el.style.boxShadow = sel ? `0 0 0 3px ${c}44` : 'none';
+  });
 }
 function closeModal() {
   document.getElementById('regOverlay').classList.remove('show');
@@ -789,7 +828,8 @@ async function doReg(e) {
   }
   btn.textContent='جاري التسجيل...'; btn.disabled=true;
   try {
-    const body={company_name:co,username:un,password:pw,full_name:fn};
+    const plan = document.getElementById('chosen-plan')?.value || 'basic';
+    const body={company_name:co,username:un,password:pw,full_name:fn,plan};
     if(cr) body.cr_number=cr;
     if(vt) body.vat_number=vt;
     const res  = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

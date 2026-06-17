@@ -18,6 +18,15 @@ async function getMonthlyUsage(company_id, feature) {
   return parseInt(row.cnt, 10);
 }
 
+async function getDailyUsage(company_id, feature) {
+  const { rows: [row] } = await db.query(`
+    SELECT COUNT(*) AS cnt FROM ai_usage
+    WHERE company_id=$1 AND feature=$2
+      AND created_at >= date_trunc('day', NOW())
+  `, [company_id, feature]);
+  return parseInt(row.cnt, 10);
+}
+
 async function logUsage(company_id, feature, tokens_in, tokens_out) {
   await db.query(`
     INSERT INTO ai_usage (company_id, feature, tokens_in, tokens_out)
@@ -26,8 +35,9 @@ async function logUsage(company_id, feature, tokens_in, tokens_out) {
 }
 
 // ── Plan limits ──────────────────────────────────────────────
-const EXTRACT_LIMITS = { basic: 0, growth: 100, pro: 500 };
-const ANALYZE_LIMITS = { basic: 0,  growth: 2,   pro: 200 };
+const EXTRACT_LIMITS  = { basic: 30,  growth: 100, pro: 500 };
+const ANALYZE_LIMITS  = { basic: 0,   growth: 10,  pro: 200 };
+const ASSISTANT_DAILY = { basic: 0,   growth: 3,   pro: 9999 };
 // assistant: pro only, no hard monthly limit (fair use)
 
 async function getPlan(company_id) {
@@ -152,10 +162,37 @@ exports.assistant = async (req, res, next) => {
     const { question, context, history } = req.body;
     if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
 
+    const plan  = await getPlan(company_id);
+    const daily = ASSISTANT_DAILY[plan] ?? 0;
+
+    if (daily === 0) {
+      return res.status(403).json({
+        success: false,
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message: 'المساعد الذكي متاح من باقة النمو فأعلى.',
+        current_plan: plan,
+      });
+    }
+
+    const usedToday = await getDailyUsage(company_id, 'assistant');
+    if (usedToday >= daily) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_DAILY_LIMIT',
+        message: `وصلت للحد اليومي (${daily} ${daily === 3 ? 'أسئلة' : 'سؤال'}). يتجدد الحد منتصف الليل.`,
+        used: usedToday,
+        limit: daily,
+      });
+    }
+
     const result = await ai.askAssistant(question, context || {}, Array.isArray(history) ? history : []);
     await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out);
 
-    res.json({ success: true, answer: result.content });
+    res.json({
+      success: true,
+      answer: result.content,
+      usage: { used: usedToday + 1, limit: daily },
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message || 'خطأ في المساعد الذكي' });
   }
@@ -166,18 +203,18 @@ exports.usage = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const plan = await getPlan(company_id);
-    const [extractUsed, analyzeUsed, assistantUsed] = await Promise.all([
+    const [extractUsed, analyzeUsed, assistantDaily] = await Promise.all([
       getMonthlyUsage(company_id, 'extract'),
       getMonthlyUsage(company_id, 'analyze'),
-      getMonthlyUsage(company_id, 'assistant'),
+      getDailyUsage(company_id, 'assistant'),
     ]);
     res.json({
       success: true,
       plan,
       usage: {
-        extract:   { used: extractUsed,   limit: EXTRACT_LIMITS[plan]  ?? 0 },
-        analyze:   { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]  ?? 0 },
-        assistant: { used: assistantUsed, limit: plan === 'pro' ? 200 : 0 },
+        extract:   { used: extractUsed,   limit: EXTRACT_LIMITS[plan]   ?? 0 },
+        analyze:   { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]   ?? 0 },
+        assistant: { used: assistantDaily, limit: ASSISTANT_DAILY[plan] ?? 0, period: 'daily' },
       },
     });
   } catch (err) { next(err); }

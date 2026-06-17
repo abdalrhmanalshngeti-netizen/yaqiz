@@ -14,8 +14,11 @@ exports.register = async (req, res, next) => {
       // بيانات الشركة
       company_name, vat_number, cr_number, address, city, contact_email, contact_phone,
       // بيانات المالك
-      username, password, full_name, phone, email
+      username, password, full_name, phone, email,
+      // الباقة المختارة
+      plan: chosenPlan
     } = req.body;
+    const plan = ['basic','growth','pro'].includes(chosenPlan) ? chosenPlan : 'basic';
 
     if (!company_name || !username || !password || !full_name) {
       return res.status(400).json({
@@ -43,10 +46,10 @@ exports.register = async (req, res, next) => {
     // 1. إنشاء الشركة
     const { rows: [company] } = await client.query(`
       INSERT INTO companies (name, vat_number, cr_number, address, city, contact_email, contact_phone, status, plan, subscription_expires_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'active','trial', NOW() + INTERVAL '14 days')
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8, NOW() + INTERVAL '14 days')
       RETURNING *
     `, [company_name, vat_number||null, cr_number||null, address||null, city||null,
-        contact_email||null, contact_phone||null]);
+        contact_email||null, contact_phone||null, plan]);
 
     // 2. إنشاء مستخدم المالك
     const hash = await bcrypt.hash(password, 12);
