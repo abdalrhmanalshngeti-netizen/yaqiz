@@ -19,7 +19,7 @@ exports.createPublicTicket = async (req, res, next) => {
         (company_id, company_name, user_name, user_role, department, sub_dept, description, note)
       VALUES (NULL,$1,$2,'guest','public','login-screen',$3,$4)
       RETURNING id, created_at
-    `, [companyName, userName, message, `هاتف: ${phone}`]);
+    `, [companyName, userName, message, `📞 ${phone}${username ? ' — @'+username : ''}`]);
 
     sendMail({
       to: PLATFORM_OWNER_EMAIL,

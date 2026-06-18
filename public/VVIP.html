@@ -764,41 +764,13 @@ function renderLogin() {
       <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
-      <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.12);padding-top:16px;">
-        <button onclick="document.getElementById('support-panel').style.display=document.getElementById('support-panel').style.display==='none'?'block':'none'" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.85);border-radius:10px;padding:10px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;">
-          ${icon('headphones',16)} ${lang==='ar'?'الدعم الفني — أرسل لنا':'Technical Support'}
-        </button>
-        <div id="support-panel" style="display:none;margin-top:12px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <div>
-              <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'رقم الجوال *':'Phone *'}</label>
-              <input id="s-phone" class="input" placeholder="${lang==='ar'?'05xxxxxxxx':'+966 5xx xxx xxx'}" style="font-size:13px;" />
-            </div>
-            <div>
-              <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'اسم المستخدم':'Username'}</label>
-              <input id="s-username" class="input" placeholder="${lang==='ar'?'اختياري':'optional'}" style="font-size:13px;" />
-            </div>
-          </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'اسم الشركة':'Company Name'}</label>
-            <input id="s-company" class="input" placeholder="${lang==='ar'?'اختياري':'optional'}" style="font-size:13px;" />
-          </div>
-          <div style="margin-bottom:10px;">
-            <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'وصف المشكلة *':'Problem Description *'}</label>
-            <textarea id="s-msg" class="input" rows="3" placeholder="${lang==='ar'?'اكتب مشكلتك هنا...':'Describe your issue...'}" style="font-size:13px;resize:none;"></textarea>
-          </div>
-          <div id="s-status" style="display:none;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:8px;"></div>
-          <button onclick="sendLoginSupportTicket()" id="s-btn" class="btn btn-primary btn-full" style="font-size:13px;padding:10px;">
-            ${icon('send',14)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}
-          </button>
-        </div>
-      </div>
+      <button onclick="showSupportModal()" style="width:100%;margin-top:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.7);border-radius:10px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+        ${icon('headphones',15)} ${lang==='ar'?'الدعم الفني':'Technical Support'}
+      </button>
     </div>
   </div>`;
   el('l-user').focus();
   el('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
-  // ملء اسم المستخدم تلقائياً إذا تم كتابته
-  el('l-user').addEventListener('input', () => { const s=el('s-username'); if(s&&!s.value) s.value=el('l-user').value; });
   refreshIcons();
 }
 
@@ -808,37 +780,91 @@ function togglePw() {
   el('pw-btn').innerHTML = icon(p.type==='password'?'eye':'eye-off',18);
 }
 
-async function sendLoginSupportTicket() {
-  const phone   = (el('s-phone')?.value||'').trim();
-  const username= (el('s-username')?.value||'').trim();
-  const company = (el('s-company')?.value||'').trim();
-  const message = (el('s-msg')?.value||'').trim();
-  const status  = el('s-status');
-  const btn     = el('s-btn');
+function showSupportModal() {
+  const mc = el('modal-container') || (() => { const d=document.createElement('div'); d.id='modal-container'; document.body.appendChild(d); return d; })();
+  mc.innerHTML = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)this.parentElement.innerHTML=''">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px;width:min(460px,95vw);max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+          <div style="font-size:17px;font-weight:900;color:#f8fafc;">🎧 ${lang==='ar'?'الدعم الفني':'Technical Support'}</div>
+          <div style="font-size:12px;color:#64748b;margin-top:3px;">${lang==='ar'?'سنتواصل معك في أقرب وقت ممكن':'We will contact you as soon as possible'}</div>
+        </div>
+        <button onclick="el('modal-container').innerHTML=''" style="background:none;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      </div>
 
-  if (!phone) { if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'رقم الجوال مطلوب':'Phone required';} return; }
-  if (!message){ if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'وصف المشكلة مطلوب':'Description required';} return; }
+      <div id="sup-err" style="display:none;background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;font-weight:700;"></div>
+      <div id="sup-ok"  style="display:none;background:#dcfce7;color:#16a34a;padding:14px;border-radius:10px;font-size:13px;margin-bottom:14px;font-weight:700;text-align:center;"></div>
 
-  if(btn){btn.disabled=true;btn.textContent=lang==='ar'?'جاري الإرسال...':'Sending...';}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#94a3b8;display:block;margin-bottom:5px;">${lang==='ar'?'رقم الجوال':'Phone'} <span style="color:#ef4444">*</span></label>
+          <input id="sup-phone" class="input" placeholder="${lang==='ar'?'05xxxxxxxx':'05xxxxxxxx'}" style="width:100%;" />
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#94a3b8;display:block;margin-bottom:5px;">${lang==='ar'?'اسم المستخدم':'Username'} <span style="color:#ef4444">*</span></label>
+          <input id="sup-user" class="input" placeholder="${lang==='ar'?'اسم المستخدم في النظام':'System username'}" style="width:100%;" value="${el('l-user')?.value||''}" />
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:700;color:#94a3b8;display:block;margin-bottom:5px;">${lang==='ar'?'اسم المؤسسة':'Company Name'} <span style="color:#ef4444">*</span></label>
+        <input id="sup-company" class="input" placeholder="${lang==='ar'?'اسم شركتك أو منشأتك':'Your company or business name'}" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:700;color:#94a3b8;display:block;margin-bottom:5px;">${lang==='ar'?'وصف المشكلة':'Problem Description'} <span style="color:#ef4444">*</span></label>
+        <textarea id="sup-msg" class="input" rows="4" placeholder="${lang==='ar'?'اكتب مشكلتك بالتفصيل... مثال: لا أستطيع تسجيل الدخول، كلمة المرور لا تعمل':'Describe your issue in detail...'}" style="width:100%;resize:none;"></textarea>
+      </div>
+      <div style="font-size:11px;color:#475569;margin-bottom:14px;text-align:center;">
+        ${lang==='ar'?'جميع الحقول المشار إليها بـ':'All fields marked'} <span style="color:#ef4444">*</span> ${lang==='ar'?'إلزامية':'are required'}
+      </div>
+      <button id="sup-btn" onclick="sendSupportModal()" class="btn btn-primary btn-full" style="padding:13px;font-size:14px;">
+        ${icon('send',16)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}
+      </button>
+    </div>
+  </div>`;
+  refreshIcons();
+  setTimeout(()=>{ const p=el('sup-phone'); if(p)p.focus(); }, 80);
+}
+
+async function sendSupportModal() {
+  const phone   = (el('sup-phone')?.value||'').trim();
+  const username= (el('sup-user')?.value||'').trim();
+  const company = (el('sup-company')?.value||'').trim();
+  const message = (el('sup-msg')?.value||'').trim();
+  const errEl   = el('sup-err');
+  const okEl    = el('sup-ok');
+  const btn     = el('sup-btn');
+
+  const showErr = msg => { if(errEl){errEl.style.display='block';errEl.textContent=msg;} };
+  errEl.style.display='none'; okEl.style.display='none';
+
+  if (!phone)   { showErr(lang==='ar'?'⚠️ رقم الجوال مطلوب':'Phone required'); el('sup-phone')?.focus(); return; }
+  if (!username){ showErr(lang==='ar'?'⚠️ اسم المستخدم مطلوب':'Username required'); el('sup-user')?.focus(); return; }
+  if (!company) { showErr(lang==='ar'?'⚠️ اسم المؤسسة مطلوب':'Company name required'); el('sup-company')?.focus(); return; }
+  if (!message) { showErr(lang==='ar'?'⚠️ وصف المشكلة مطلوب':'Problem description required'); el('sup-msg')?.focus(); return; }
+
+  if(btn){btn.disabled=true; btn.innerHTML=`⏳ ${lang==='ar'?'جاري الإرسال...':'Sending...'}`;}
   try {
     const base=(window._YAQIZ_API||window.location.origin);
     const res=await fetch(`${base}/api/support/public`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({phone,username,company_name:company,message})
+      body:JSON.stringify({phone, username, company_name:company, message})
     });
     const data=await res.json();
     if(data.success){
-      if(status){status.style.display='block';status.style.background='#dcfce7';status.style.color='#16a34a';status.textContent=(lang==='ar'?'✅ تم إرسال طلبك بنجاح، سنتواصل معك قريباً. رقم التذكرة: #':'✅ Sent! We will contact you soon. Ticket #')+data.id;}
-      if(el('s-phone'))el('s-phone').value='';
-      if(el('s-msg'))el('s-msg').value='';
+      if(okEl){okEl.style.display='block'; okEl.innerHTML=`✅ ${lang==='ar'?'تم إرسال طلبك بنجاح! سنتواصل معك على رقم '+phone+' في أقرب وقت':'Request sent! We will contact you soon.'}<br><span style="font-size:11px;opacity:0.8">${lang==='ar'?'رقم التذكرة: #':'Ticket #'}${data.id}</span>`;}
+      if(el('sup-phone'))el('sup-phone').value='';
+      if(el('sup-msg'))el('sup-msg').value='';
+      if(btn){btn.style.display='none';}
     } else {
-      if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=data.message||'حدث خطأ';}
+      showErr(data.message||'حدث خطأ');
     }
   } catch(e) {
-    if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'تعذر الاتصال بالخادم':'Could not reach server';}
+    showErr(lang==='ar'?'تعذر الاتصال بالخادم. تحقق من اتصالك بالإنترنت.':'Could not reach server. Check your connection.');
   } finally {
-    if(btn){btn.disabled=false;btn.innerHTML=`${icon('send',14)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}`;}
+    if(btn&&btn.style.display!=='none'){btn.disabled=false; btn.innerHTML=`${icon('send',16)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}`;}
+    refreshIcons();
   }
 }
 
@@ -8963,14 +8989,14 @@ function showAddPurchaseMenu() {
           onclick="closeModal();${isGoods?'showAddGoodsPurchase()':'showAddOpexPurchase()'}">
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
-        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#16a34a;color:#16a34a;">
+        <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;border-color:#16a34a;color:#16a34a;"
+          onclick="closeModal();downloadTemplate('purchases');setTimeout(()=>showImportModal('purchases'),400);">
           ${icon('table',18)}
           <span>
             <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
-            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'جدول جاهز — .xlsx / .xls / .csv':'Ready template — .xlsx / .xls / .csv'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'ينزّل قالب جاهز ثم تعبئه وترفعه':'Downloads template — fill and upload'}</span>
           </span>
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="closeModal();handlePurchaseFileImport(this.files[0])"/>
-        </label>
+        </button>
         <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
           ${icon('scan',18)}
           <span>
@@ -9012,15 +9038,14 @@ function showAddInventoryMenu() {
           onclick="closeModal();showProductModal()">
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
-        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#16a34a;color:#16a34a;">
+        <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;border-color:#16a34a;color:#16a34a;"
+          onclick="closeModal();downloadTemplate('inventory');setTimeout(()=>showImportModal('inventory'),400);">
           ${icon('table',18)}
           <span>
             <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
-            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'جدول جاهز — .xlsx / .xls / .csv':'Ready template — .xlsx / .xls / .csv'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'ينزّل قالب جاهز ثم تعبئه وترفعه':'Downloads template — fill and upload'}</span>
           </span>
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none"
-            onchange="closeModal();handleInventoryFileImport(this.files[0])"/>
-        </label>
+        </button>
         <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
           ${icon('scan',18)}
           <span>
