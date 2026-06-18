@@ -239,7 +239,9 @@ exports.me = async (req, res, next) => {
     `, [req.user.sub]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
-    res.json({ success: true, data: rows[0] });
+    const d = rows[0];
+    d.plan = (['basic','growth','pro'].includes(d.plan) ? d.plan : 'basic');
+    res.json({ success: true, data: d });
   } catch (err) { next(err); }
 };
 

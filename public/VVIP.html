@@ -1085,7 +1085,7 @@ function renderShell() {
       </header>
       ${(()=>{
         const _dl = getTrialDaysLeft();
-        if(_dl===null) return '';
+        if(_dl===null || getCurrentPlan()==='basic') return '';
         if(_dl > 0 && _dl <= 30) return `<div style="background:${_dl<=7?'#fef2f2':'#fffbeb'};border-bottom:1.5px solid ${_dl<=7?'#ef4444':'#f59e0b'};padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:${_dl<=7?'#dc2626':'#d97706'};">
           <span>${_dl<=7?'🔴':'⏳'}</span>
           <span>${lang==='ar'?`تجربتك تنتهي خلال ${_dl} يوم${_dl>1?'':'ًا'} — تواصل مع فريق قيمة لتفعيل اشتراكك`:`Your trial expires in ${_dl} day${_dl>1?'s':''} — contact Qeema team to activate`}</span>
@@ -9864,7 +9864,7 @@ function renderSettingsGeneral(c) {
       };
       const cur = getCurrentPlan();
       const p = planMeta[cur] || planMeta.basic;
-      const daysLeft = getTrialDaysLeft();
+      const daysLeft = cur === 'basic' ? null : getTrialDaysLeft();
       const isExpired = daysLeft !== null && daysLeft <= 0;
       const isTrial   = daysLeft !== null && daysLeft > 0;
       const expStr = daysLeft !== null
