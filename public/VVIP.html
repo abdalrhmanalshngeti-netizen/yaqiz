@@ -764,14 +764,41 @@ function renderLogin() {
       <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
-      <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);">
-        <span style="font-size:12px;color:rgba(255,255,255,0.5);">${lang==='ar'?'هل تحتاج مساعدة؟':'Need help?'}</span>
-        <a href="mailto:abdalrhmanalshngeti@gmail.com" style="display:block;margin-top:6px;color:rgba(255,255,255,0.8);font-size:12px;text-decoration:none;font-weight:700;">${icon('mail',13)} ${lang==='ar'?'تواصل مع الدعم الفني':'Contact Support'}</a>
+      <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.12);padding-top:16px;">
+        <button onclick="document.getElementById('support-panel').style.display=document.getElementById('support-panel').style.display==='none'?'block':'none'" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.85);border-radius:10px;padding:10px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;">
+          ${icon('headphones',16)} ${lang==='ar'?'الدعم الفني — أرسل لنا':'Technical Support'}
+        </button>
+        <div id="support-panel" style="display:none;margin-top:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div>
+              <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'رقم الجوال *':'Phone *'}</label>
+              <input id="s-phone" class="input" placeholder="${lang==='ar'?'05xxxxxxxx':'+966 5xx xxx xxx'}" style="font-size:13px;" />
+            </div>
+            <div>
+              <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'اسم المستخدم':'Username'}</label>
+              <input id="s-username" class="input" placeholder="${lang==='ar'?'اختياري':'optional'}" style="font-size:13px;" />
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'اسم الشركة':'Company Name'}</label>
+            <input id="s-company" class="input" placeholder="${lang==='ar'?'اختياري':'optional'}" style="font-size:13px;" />
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.55);display:block;margin-bottom:4px;">${lang==='ar'?'وصف المشكلة *':'Problem Description *'}</label>
+            <textarea id="s-msg" class="input" rows="3" placeholder="${lang==='ar'?'اكتب مشكلتك هنا...':'Describe your issue...'}" style="font-size:13px;resize:none;"></textarea>
+          </div>
+          <div id="s-status" style="display:none;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:8px;"></div>
+          <button onclick="sendLoginSupportTicket()" id="s-btn" class="btn btn-primary btn-full" style="font-size:13px;padding:10px;">
+            ${icon('send',14)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}
+          </button>
+        </div>
       </div>
     </div>
   </div>`;
   el('l-user').focus();
   el('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  // ملء اسم المستخدم تلقائياً إذا تم كتابته
+  el('l-user').addEventListener('input', () => { const s=el('s-username'); if(s&&!s.value) s.value=el('l-user').value; });
   refreshIcons();
 }
 
@@ -779,6 +806,40 @@ function togglePw() {
   const p = el('l-pass');
   p.type = p.type==='password'?'text':'password';
   el('pw-btn').innerHTML = icon(p.type==='password'?'eye':'eye-off',18);
+}
+
+async function sendLoginSupportTicket() {
+  const phone   = (el('s-phone')?.value||'').trim();
+  const username= (el('s-username')?.value||'').trim();
+  const company = (el('s-company')?.value||'').trim();
+  const message = (el('s-msg')?.value||'').trim();
+  const status  = el('s-status');
+  const btn     = el('s-btn');
+
+  if (!phone) { if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'رقم الجوال مطلوب':'Phone required';} return; }
+  if (!message){ if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'وصف المشكلة مطلوب':'Description required';} return; }
+
+  if(btn){btn.disabled=true;btn.textContent=lang==='ar'?'جاري الإرسال...':'Sending...';}
+  try {
+    const base=(window._YAQIZ_API||window.location.origin);
+    const res=await fetch(`${base}/api/support/public`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({phone,username,company_name:company,message})
+    });
+    const data=await res.json();
+    if(data.success){
+      if(status){status.style.display='block';status.style.background='#dcfce7';status.style.color='#16a34a';status.textContent=(lang==='ar'?'✅ تم إرسال طلبك بنجاح، سنتواصل معك قريباً. رقم التذكرة: #':'✅ Sent! We will contact you soon. Ticket #')+data.id;}
+      if(el('s-phone'))el('s-phone').value='';
+      if(el('s-msg'))el('s-msg').value='';
+    } else {
+      if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=data.message||'حدث خطأ';}
+    }
+  } catch(e) {
+    if(status){status.style.display='block';status.style.background='#fee2e2';status.style.color='#dc2626';status.textContent=lang==='ar'?'تعذر الاتصال بالخادم':'Could not reach server';}
+  } finally {
+    if(btn){btn.disabled=false;btn.innerHTML=`${icon('send',14)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}`;}
+  }
 }
 
 function doLogin() {
@@ -8886,7 +8947,7 @@ function showImportModal(type) {
   refreshIcons();
 }
 
-// قائمة إضافة المشتريات — يدوي + ملف موحد (Excel أو PDF أو صورة)
+// قائمة إضافة المشتريات — يدوي + Excel + PDF/صورة
 function showAddPurchaseMenu() {
   const isGoods = purchTab === 'goods';
   const mc = el('modal-container');
@@ -8902,11 +8963,22 @@ function showAddPurchaseMenu() {
           onclick="closeModal();${isGoods?'showAddGoodsPurchase()':'showAddOpexPurchase()'}">
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
-        <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;"
-          onclick="el('add-menu-anyfile').click()">
-          ${icon('upload',18)} ${lang==='ar'?'رفع ملف (Excel أو PDF أو صورة)':'Upload File (Excel, PDF or Image)'}
-          <input type="file" id="add-menu-anyfile" accept=".xlsx,.xls,.csv,.pdf,image/*" style="display:none;" onchange="closeModal();handlePurchaseFileImport(this.files[0])"/>
-        </button>
+        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#16a34a;color:#16a34a;">
+          ${icon('table',18)}
+          <span>
+            <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'جدول جاهز — .xlsx / .xls / .csv':'Ready template — .xlsx / .xls / .csv'}</span>
+          </span>
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="closeModal();handlePurchaseFileImport(this.files[0])"/>
+        </label>
+        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
+          ${icon('scan',18)}
+          <span>
+            <span style="display:block;font-weight:800;">${lang==='ar'?'تفريغ PDF / صورة':'Extract PDF / Image'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'يستخرج البيانات تلقائياً بالذكاء الاصطناعي':'AI extracts data automatically'}</span>
+          </span>
+          <input type="file" accept=".pdf,image/*" style="display:none;" onchange="closeModal();handleSilentAIImport(this.files[0],'purchases')"/>
+        </label>
       </div>
     </div>
   </div>`;
@@ -8925,7 +8997,7 @@ function handlePurchaseFileImport(file) {
   }
 }
 
-// قائمة إضافة المخزون — يدوي + استيراد (Excel أو PDF)
+// قائمة إضافة المخزون — يدوي + Excel + PDF/صورة
 function showAddInventoryMenu() {
   const mc = el('modal-container');
   mc.innerHTML = `
@@ -8940,10 +9012,23 @@ function showAddInventoryMenu() {
           onclick="closeModal();showProductModal()">
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
-        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;">
-          ${icon('upload',18)} ${lang==='ar'?'رفع ملف (Excel أو PDF أو صورة)':'Upload File (Excel, PDF or Image)'}
-          <input type="file" accept=".xlsx,.xls,.csv,.pdf,image/*" style="display:none"
+        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#16a34a;color:#16a34a;">
+          ${icon('table',18)}
+          <span>
+            <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'جدول جاهز — .xlsx / .xls / .csv':'Ready template — .xlsx / .xls / .csv'}</span>
+          </span>
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none"
             onchange="closeModal();handleInventoryFileImport(this.files[0])"/>
+        </label>
+        <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
+          ${icon('scan',18)}
+          <span>
+            <span style="display:block;font-weight:800;">${lang==='ar'?'تفريغ PDF / صورة':'Extract PDF / Image'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'يستخرج البيانات تلقائياً بالذكاء الاصطناعي':'AI extracts data automatically'}</span>
+          </span>
+          <input type="file" accept=".pdf,image/*" style="display:none"
+            onchange="closeModal();handleSilentAIImport(this.files[0],'inventory')"/>
         </label>
       </div>
     </div>
@@ -8978,21 +9063,52 @@ function openInventoryFormWithAIData(data) {
 }
 
 function downloadTemplate(type) {
-  let csv;
-  if(type==='purchases') {
-    csv = lang==='ar'
-      ? 'المورد;التصنيف;البيان;المبلغ قبل الضريبة;نوع المصروف\nشركة التوزيع;بضاعة;شراء قهوة عربية;4500;تشغيلي\nشركة الكهرباء;كهرباء ومياه;فاتورة كهرباء;850;إداري'
-      : 'Vendor;Category;Description;Amount;Type\nDistribution Co;Goods;Coffee purchase;4500;operational\nElectricity Co;Utilities;Bill;850;admin';
-  } else {
-    csv = lang==='ar'
-      ?       'الكود;الاسم;التصنيف;الوحدة;سعر الشراء;سعر البيع;الكمية;حد الأمان\nP001;قهوة عربية;مشروبات;كيس;45;75;100;20'
-      : 'Code;Name;Category;Unit;BuyPrice;SellPrice;Qty;MinQty\nP001;Arabic Coffee;Beverages;Bag;45;75;100;20';
+  if (typeof XLSX === 'undefined') {
+    showToast(lang==='ar'?'⚠️ مكتبة Excel غير محملة':'Excel library not loaded','error');
+    return;
   }
-  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `yaqiz-${type}-template.csv`;
-  a.click();
+
+  let headers, rows, sheetName, fileName;
+
+  if (type === 'purchases') {
+    headers = lang==='ar'
+      ? ['المورد', 'التصنيف', 'البيان', 'المبلغ قبل الضريبة', 'نوع المصروف']
+      : ['Vendor', 'Category', 'Description', 'Amount (excl. VAT)', 'Type'];
+    rows = lang==='ar'
+      ? [['شركة النور للتوزيع', 'بضاعة', 'شراء قهوة عربية', 4500, 'تشغيلي'],
+         ['شركة الكهرباء', 'كهرباء ومياه', 'فاتورة كهرباء شهر يونيو', 850, 'إداري'],
+         ['مورد آخر', 'أخرى', 'وصف المشتراة', 0, 'تشغيلي']]
+      : [['Sunrise Distribution', 'Goods', 'Coffee purchase', 4500, 'operational'],
+         ['Power Co', 'Utilities', 'June electric bill', 850, 'admin'],
+         ['Another Vendor', 'Other', 'Item description', 0, 'operational']];
+    sheetName = lang==='ar' ? 'مشتريات' : 'Purchases';
+    fileName  = 'yaqiz-purchases-template.xlsx';
+  } else {
+    headers = lang==='ar'
+      ? ['الكود', 'اسم المنتج', 'التصنيف', 'وحدة القياس', 'سعر الشراء', 'سعر البيع', 'الكمية الحالية', 'حد الأمان']
+      : ['Code', 'Product Name', 'Category', 'Unit', 'Buy Price', 'Sell Price', 'Current Qty', 'Min Qty'];
+    rows = lang==='ar'
+      ? [['P001', 'قهوة عربية', 'مشروبات', 'كيس', 45, 75, 100, 20],
+         ['P002', 'شاي أخضر', 'مشروبات', 'علبة', 25, 45, 50, 10],
+         ['P003', 'منتج آخر', 'أخرى', 'قطعة', 0, 0, 0, 5]]
+      : [['P001', 'Arabic Coffee', 'Beverages', 'Bag', 45, 75, 100, 20],
+         ['P002', 'Green Tea', 'Beverages', 'Box', 25, 45, 50, 10],
+         ['P003', 'Another Item', 'Other', 'Piece', 0, 0, 0, 5]];
+    sheetName = lang==='ar' ? 'منتجات' : 'Products';
+    fileName  = 'yaqiz-inventory-template.xlsx';
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // عرض الأعمدة
+  ws['!cols'] = headers.map((h, i) => ({
+    wch: type==='purchases' ? [20, 16, 28, 18, 14][i] : [10, 22, 16, 12, 12, 12, 14, 10][i]
+  }));
+
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, fileName);
+  showToast(lang==='ar'?`✅ تم تحميل القالب — افتحه وأضف بياناتك ثم ارفعه`:`✅ Template downloaded — fill it and upload`);
 }
 
 function handleImportFile(input, type, format) {
