@@ -764,8 +764,8 @@ function renderLogin() {
       <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
-      <button onclick="showSupportModal()" style="width:100%;margin-top:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.7);border-radius:10px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
-        ${icon('headphones',15)} ${lang==='ar'?'الدعم الفني':'Technical Support'}
+      <button onclick="showSupportModal()" style="width:100%;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;border-radius:10px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s;" onmouseover="this.style.background='#f1f5f9';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='#f8fafc';this.style.borderColor='#e2e8f0'">
+        ${icon('headphones',15)} ${lang==='ar'?'🎧 الدعم الفني':'🎧 Technical Support'}
       </button>
     </div>
   </div>`;
@@ -8928,6 +8928,50 @@ function printShiftReport(shiftId) {
 
 
 // ============ IMPORT PDF/EXCEL ============
+
+// موديل Excel فقط: خياران — تحميل نموذج أو رفع ملف
+function showExcelImportModal(type) {
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+      <div class="modal-head">
+        <h3>📊 ${lang==='ar'?'استيراد Excel':'Import Excel'}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <div style="padding:0 4px 8px;display:flex;flex-direction:column;gap:12px;">
+
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 4px;">
+          ${lang==='ar'?'اختر: حمّل النموذج وعبّئه ثم ارفعه، أو ارفع ملف Excel جاهز.':'Download the template, fill it, then upload — or upload a ready Excel file.'}
+        </p>
+
+        <!-- تحميل النموذج -->
+        <button onclick="downloadTemplate('${type}')" class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;border-color:#16a34a;color:#16a34a;">
+          <span style="font-size:28px;line-height:1;">📥</span>
+          <span>
+            <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'تحميل نموذج Excel':'Download Excel Template'}</span>
+            <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'ملف جاهز بالأعمدة الصحيحة — عبّئه ثم ارفعه':'Pre-formatted file — fill it then upload'}</span>
+          </span>
+        </button>
+
+        <!-- رفع ملف -->
+        <label class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;cursor:pointer;border-color:#3b82f6;color:#3b82f6;">
+          <span style="font-size:28px;line-height:1;">📤</span>
+          <span>
+            <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع ملف Excel':'Upload Excel File'}</span>
+            <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'.xlsx / .xls / .csv — ارفع الملف المعبأ':'.xlsx / .xls / .csv — upload your filled file'}</span>
+          </span>
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(this,'${type}','excel')" />
+        </label>
+
+        <div id="import-preview" style="display:none;margin-top:4px;"></div>
+        <div id="import-status" style="margin-top:4px;"></div>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
 function showImportModal(type) {
   const mc = el('modal-container');
   mc.innerHTML = `
@@ -8990,11 +9034,11 @@ function showAddPurchaseMenu() {
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
         <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;border-color:#16a34a;color:#16a34a;"
-          onclick="closeModal();downloadTemplate('purchases');setTimeout(()=>showImportModal('purchases'),400);">
+          onclick="showExcelImportModal('purchases')">
           ${icon('table',18)}
           <span>
             <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
-            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'ينزّل قالب جاهز ثم تعبئه وترفعه':'Downloads template — fill and upload'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'تحميل نموذج أو رفع ملف':'Download template or upload file'}</span>
           </span>
         </button>
         <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
@@ -9039,11 +9083,11 @@ function showAddInventoryMenu() {
           ${icon('edit-3',18)} ${lang==='ar'?'إضافة يدوية':'Manual Entry'}
         </button>
         <button class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;border-color:#16a34a;color:#16a34a;"
-          onclick="closeModal();downloadTemplate('inventory');setTimeout(()=>showImportModal('inventory'),400);">
+          onclick="showExcelImportModal('inventory')">
           ${icon('table',18)}
           <span>
             <span style="display:block;font-weight:800;">${lang==='ar'?'استيراد Excel':'Import Excel'}</span>
-            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'ينزّل قالب جاهز ثم تعبئه وترفعه':'Downloads template — fill and upload'}</span>
+            <span style="font-size:11px;opacity:0.75;">${lang==='ar'?'تحميل نموذج أو رفع ملف':'Download template or upload file'}</span>
           </span>
         </button>
         <label class="btn btn-outline" style="padding:14px 16px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;gap:12px;font-size:14px;cursor:pointer;border-color:#dc2626;color:#dc2626;">
