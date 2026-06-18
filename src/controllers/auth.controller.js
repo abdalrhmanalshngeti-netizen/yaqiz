@@ -106,7 +106,7 @@ exports.login = async (req, res, next) => {
         company_address:         user.company_address || null,
         company_city:            user.company_city    || null,
         company_email:           user.company_email   || null,
-        plan:                    user.company_plan || 'trial',
+        plan:                    (['basic','growth','pro'].includes(user.company_plan) ? user.company_plan : 'basic'),
         subscription_expires_at: user.subscription_expires_at,
       }
     });

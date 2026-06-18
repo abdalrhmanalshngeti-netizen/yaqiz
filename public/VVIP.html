@@ -764,6 +764,10 @@ function renderLogin() {
       <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
+      <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);">
+        <span style="font-size:12px;color:rgba(255,255,255,0.5);">${lang==='ar'?'هل تحتاج مساعدة؟':'Need help?'}</span>
+        <a href="mailto:abdalrhmanalshngeti@gmail.com" style="display:block;margin-top:6px;color:rgba(255,255,255,0.8);font-size:12px;text-decoration:none;font-weight:700;">${icon('mail',13)} ${lang==='ar'?'تواصل مع الدعم الفني':'Contact Support'}</a>
+      </div>
     </div>
   </div>`;
   el('l-user').focus();
@@ -789,7 +793,12 @@ function doLogin() {
   if (!u) {
     recordLoginAttempt(false);
     const err=el('l-err'); err.style.display='block';
-    err.textContent=lang==='ar'?'اسم المستخدم أو كلمة المرور غير صحيحة':'Invalid credentials';
+    if (!window._apiReachable) {
+      err.innerHTML = (lang==='ar'?'⚠️ السيرفر لا يستجيب حالياً. انتظر قليلاً ثم اضغط ':'⚠️ Server not responding. Wait a moment then click ')
+        + `<a href="#" onclick="event.preventDefault();window._retryConnection?.()" style="color:#3b82f6;font-weight:800;">${lang==='ar'?'إعادة الاتصال':'Reconnect'}</a>`;
+    } else {
+      err.textContent=lang==='ar'?'اسم المستخدم أو كلمة المرور غير صحيحة':'Invalid credentials';
+    }
     return;
   }
   recordLoginAttempt(true);
@@ -8909,7 +8918,8 @@ function handlePurchaseFileImport(file) {
   if (!file) return;
   const ext = file.name.split('.').pop().toLowerCase();
   if (['xlsx','xls','csv'].includes(ext)) {
-    handleImportFile({files:[file]}, 'purchases', ext);
+    showImportModal('purchases');
+    setTimeout(() => handleImportFile({files:[file]}, 'purchases', ext), 60);
   } else {
     handleSilentAIImport(file, 'purchases');
   }
@@ -8946,6 +8956,8 @@ function handleInventoryFileImport(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (['xlsx','xls','csv'].includes(ext)) {
     showImportModal('inventory');
+    // نمرر الملف مباشرة بعد فتح الموديل (حتى تتوفر عناصر import-status و import-preview)
+    setTimeout(() => handleImportFile({files:[file]}, 'inventory', ext), 60);
   } else {
     handleSilentAIImport(file, 'inventory');
   }
@@ -11630,7 +11642,7 @@ async function runAISearchQuery(q) {
 
   async function apiCheck() {
     if(window.location.protocol === 'file:') return false;
-    try { await fetch(`${API_BASE}/health`,{signal:AbortSignal.timeout(2000)}); return true; }
+    try { await fetch(`${API_BASE}/health`,{signal:AbortSignal.timeout(6000)}); return true; }
     catch { return false; }
   }
 
@@ -12208,11 +12220,29 @@ async function runAISearchQuery(q) {
   function _showOfflineBar() {
     let bar = document.getElementById('_yaqiz_sync_bar');
     if (!bar) return;
-    bar.innerHTML = '🔴 وضع غير متصل — البيانات محلية فقط';
+    bar.innerHTML = '🔴 السيرفر لا يستجيب — <button onclick="window._retryConnection()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>';
     bar.style.background = '#dc2626';
     bar.style.display = 'flex';
-    setTimeout(() => { bar.style.display='none'; }, 4000);
+    // لا تختفي تلقائياً — تبقى حتى يضغط المستخدم إعادة المحاولة أو يتصل
   }
+
+  window._retryConnection = async function() {
+    const bar = document.getElementById('_yaqiz_sync_bar');
+    if (bar) { bar.innerHTML = '⏳ جاري الاتصال بالسيرفر...'; bar.style.background='#d97706'; bar.style.display='flex'; }
+    const ok = await apiCheck();
+    if (ok) {
+      _apiReachable = true;
+      window._apiReachable = true;
+      if (bar) { bar.innerHTML = '✅ تم الاتصال'; bar.style.background='#16a34a'; setTimeout(()=>{ bar.style.display='none'; }, 2000); }
+      // إذا كان المستخدم في شاشة الدخول → يعيد المحاولة تلقائياً
+      const u = document.getElementById('l-user');
+      const p = document.getElementById('l-pass');
+      if (u && p && u.value && p.value) { window.doLogin(); }
+      else { syncPlanFromAPI(); }
+    } else {
+      if (bar) { bar.innerHTML = '🔴 السيرفر لا يزال لا يستجيب — <button onclick="window._retryConnection()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>'; bar.style.background='#dc2626'; bar.style.display='flex'; }
+    }
+  };
 
   // ═══════════════════════════════════════════════════════
   // 7. STARTUP
