@@ -16,6 +16,7 @@ router.put('/companies/:id/status',     ctrl.setCompanyStatus);
 router.get('/cost-analysis',            ctrl.costAnalysis);
 router.get('/log',                      ctrl.platformLog);
 router.get('/tickets',                  ctrl.listTickets);
+router.get('/tickets/:id',              ctrl.getTicket);
 router.put('/tickets/:id/status',       ctrl.updateTicketStatus);
 router.get('/users',                    ctrl.listUsers);
 router.post('/impersonate/:company_id', ctrl.impersonate);

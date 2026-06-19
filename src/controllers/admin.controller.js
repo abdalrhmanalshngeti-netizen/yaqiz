@@ -331,13 +331,18 @@ exports.setCompanyPlan = async (req, res, next) => {
 // ── تذاكر الدعم — قائمة ──────────────────────────────────
 exports.listTickets = async (req, res, next) => {
   try {
-    const { status } = req.query;
-    let where = '1=1';
+    const { status, company_id } = req.query;
     const params = [];
+    const conditions = [];
     if (status && status !== 'all') {
       params.push(status);
-      where += ` AND status = $${params.length}`;
+      conditions.push(`status = $${params.length}`);
     }
+    if (company_id) {
+      params.push(company_id);
+      conditions.push(`company_id = $${params.length}`);
+    }
+    const where = conditions.length ? conditions.join(' AND ') : '1=1';
     const { rows } = await db.query(`
       SELECT * FROM support_tickets
       WHERE ${where}
@@ -345,6 +350,27 @@ exports.listTickets = async (req, res, next) => {
       LIMIT 200
     `, params);
     res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+// ── تذكرة واحدة — تفاصيل + سجل الشركة ──────────────────
+exports.getTicket = async (req, res, next) => {
+  try {
+    const { rows: [ticket] } = await db.query(
+      `SELECT * FROM support_tickets WHERE id = $1`, [req.params.id]
+    );
+    if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+
+    let history = [];
+    if (ticket.company_id) {
+      const { rows } = await db.query(`
+        SELECT id, department, sub_dept, description, status, created_at, resolved_at
+        FROM support_tickets WHERE company_id = $1 ORDER BY created_at DESC LIMIT 50
+      `, [ticket.company_id]);
+      history = rows;
+    }
+
+    res.json({ success: true, data: ticket, history });
   } catch (err) { next(err); }
 };
 
@@ -356,11 +382,18 @@ exports.updateTicketStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'حالة غير صالحة' });
     }
     const resolved_at = status === 'resolved' ? new Date() : null;
+    const actionLabel = { open: 'إعادة فتح', in_progress: 'جارٍ المعالجة', resolved: 'محلولة' }[status];
+    const actor = req.admin?.name || req.admin?.email || 'المدير';
+    const actionEntry = JSON.stringify([{
+      status, label: actionLabel, actor, at: new Date().toISOString()
+    }]);
+
     const { rowCount } = await db.query(`
       UPDATE support_tickets
-      SET status = $1, resolved_at = $2
-      WHERE id = $3
-    `, [status, resolved_at, req.params.id]);
+      SET status = $1, resolved_at = $2,
+          actions = COALESCE(actions, '[]'::jsonb) || $3::jsonb
+      WHERE id = $4
+    `, [status, resolved_at, actionEntry, req.params.id]);
 
     if (!rowCount) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
     res.json({ success: true });
