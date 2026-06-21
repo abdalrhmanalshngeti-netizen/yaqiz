@@ -36,7 +36,7 @@ exports.login = async (req, res, next) => {
 // ── إحصائيات المنصة ──────────────────────────────────────
 exports.stats = async (req, res, next) => {
   try {
-    const [companies, users, invoices, newToday, byStatus, daily, suspended, recentLog] = await Promise.all([
+    const [companies, users, invoices, newToday, byStatus, daily, suspended, recentLog, recentRegistrations] = await Promise.all([
       db.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status='active')::int AS active FROM companies`),
       db.query(`SELECT COUNT(*)::int AS total FROM users WHERE is_super_admin = false`),
       db.query(`SELECT COUNT(*)::int AS total, COALESCE(SUM(grand_total),0)::numeric AS revenue FROM invoices`),
@@ -62,6 +62,13 @@ exports.stats = async (req, res, next) => {
         LEFT JOIN companies c ON c.id = pl.company_id
         ORDER BY pl.created_at DESC LIMIT 10
       `),
+      db.query(`
+        SELECT c.id, c.name, c.contact_email, c.contact_phone, c.city, c.plan, c.created_at,
+               u.full_name, u.username
+        FROM companies c
+        LEFT JOIN users u ON u.company_id = c.id AND u.role = 'owner'
+        ORDER BY c.created_at DESC LIMIT 10
+      `),
     ]);
 
     const statusMap = {};
@@ -70,13 +77,14 @@ exports.stats = async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        companies:   { ...companies.rows[0], by_status: statusMap },
-        users:       users.rows[0],
-        invoices:    invoices.rows[0],
-        new_today:   newToday.rows[0].total,
-        daily_reg:   daily.rows,
-        issues:      suspended.rows,
-        recent_log:  recentLog.rows,
+        companies:              { ...companies.rows[0], by_status: statusMap },
+        users:                  users.rows[0],
+        invoices:               invoices.rows[0],
+        new_today:              newToday.rows[0].total,
+        daily_reg:              daily.rows,
+        issues:                 suspended.rows,
+        recent_log:             recentLog.rows,
+        recent_registrations:   recentRegistrations.rows,
       }
     });
   } catch (err) { next(err); }

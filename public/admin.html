@@ -256,6 +256,20 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="status-legend" id="status-legend"></div>
         </div>
       </div>
+      <!-- بطاقة أحدث العملاء -->
+      <div class="panel" style="margin-bottom:24px;">
+        <div class="panel-head">
+          <div><div class="panel-title">🆕 أحدث العملاء المسجّلين</div><div class="panel-sub">آخر 10 منشآت</div></div>
+          <button class="btn-action" onclick="switchTab('companies')">عرض الكل ←</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>#</th><th>المنشأة</th><th>المالك</th><th>التواصل</th><th>المدينة</th><th>الباقة</th><th>التاريخ</th></tr></thead>
+            <tbody id="dash-new-clients"><tr><td colspan="7" class="loader"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
         <div class="panel">
           <div class="panel-head"><div><div class="panel-title">🕐 آخر الأنشطة</div><div class="panel-sub">أحدث 10 أحداث</div></div></div>
@@ -623,6 +637,7 @@ async function loadAll() {
     renderKPI(statsRes.data);
     renderCharts(statsRes.data);
     renderDashActivity(statsRes.data);
+    renderDashNewClients(statsRes.data);
     renderIssues(statsRes.data);
     _allCompanies = costRes.data||[];
     renderCompaniesTable(_allCompanies);
@@ -699,6 +714,37 @@ function renderCharts(data) {
     {label:'معلّقة',val:suspended,color:'#f59e0b'},
     {label:'ملغاة',val:cancelled,color:'#ef4444'},
   ].map(i=>`<div class="legend-item"><div style="display:flex;align-items:center;gap:8px"><div class="legend-dot" style="background:${i.color}"></div><span style="font-size:13px;font-weight:700;color:#c4d0e8">${i.label}</span></div><span style="font-size:16px;font-weight:900">${i.val}</span></div>`).join('');
+}
+
+// ── Dashboard New Clients ──────────────────────────────
+function renderDashNewClients(data) {
+  const tbody = $('dash-new-clients');
+  if (!tbody) return;
+  const rows = data.recent_registrations || [];
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state">لا توجد تسجيلات</td></tr>'; return; }
+  const planLabel = { basic:'📗 أساسي', growth:'📘 نمو', pro:'📙 احترافي' };
+  tbody.innerHTML = rows.map((r, i) => {
+    const contact = [
+      r.contact_phone ? `📞 ${r.contact_phone}` : '',
+      r.contact_email ? `✉️ ${r.contact_email}` : '',
+    ].filter(Boolean).join('<br>') || '<span style="color:var(--muted)">—</span>';
+    const isNew = new Date(r.created_at) > new Date(Date.now() - 24*60*60*1000);
+    return `<tr style="${isNew?'background:rgba(16,185,129,.04);':''}">
+      <td style="font-weight:800;color:var(--muted)">${i+1}</td>
+      <td style="font-weight:800;color:#f0f4ff;">
+        ${r.name}
+        ${isNew?'<span style="background:#10b981;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:99px;margin-right:5px;">جديد</span>':''}
+      </td>
+      <td>
+        <div style="font-weight:700;">${r.full_name||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);">@${r.username||'—'}</div>
+      </td>
+      <td style="font-size:12px;line-height:1.8;">${contact}</td>
+      <td style="font-size:12px;color:var(--muted);">${r.city||'—'}</td>
+      <td><span style="font-size:12px;">${planLabel[r.plan]||r.plan||'—'}</span></td>
+      <td style="font-size:11px;color:var(--muted);">${fmtD(r.created_at)}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Dashboard Activity ─────────────────────────────────

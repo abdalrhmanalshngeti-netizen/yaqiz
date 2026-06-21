@@ -12625,26 +12625,35 @@ async function runAISearchQuery(q) {
 
       <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #334155">بيانات المنشأة</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">اسم المنشأة *</label>
-          <input id="_r_company" class="input" placeholder="شركة..." style="width:100%"></div>
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">الرقم الضريبي</label>
-          <input id="_r_vat" class="input" placeholder="300..." style="width:100%"></div>
+        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">اسم المنشأة <span style="color:#ef4444">*</span></label>
+          <input id="_r_company" class="input" placeholder="شركة النور..." style="width:100%"></div>
         <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">المدينة</label>
           <input id="_r_city" class="input" placeholder="الرياض" style="width:100%"></div>
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">البريد الإلكتروني</label>
-          <input id="_r_email" class="input" type="email" placeholder="info@..." style="width:100%"></div>
+      </div>
+      <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:8px;">📞 معلومات التواصل <span style="color:#ef4444">*</span> <span style="font-weight:400;color:#64748b;">(يجب تعبئة واحد على الأقل)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">البريد الإلكتروني</label>
+            <input id="_r_email" class="input" type="email" placeholder="info@company.com" style="width:100%"></div>
+          <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">رقم الجوال</label>
+            <input id="_r_contact_phone" class="input" type="tel" placeholder="05xxxxxxxx" style="width:100%"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">الرقم الضريبي</label>
+          <input id="_r_vat" class="input" placeholder="300..." style="width:100%"></div>
+        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">السجل التجاري</label>
+          <input id="_r_cr" class="input" placeholder="10..." style="width:100%"></div>
       </div>
 
       <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:10px;margin-top:16px;padding-bottom:6px;border-bottom:1px solid #334155">بيانات حساب المالك</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">الاسم الكامل *</label>
+        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">الاسم الكامل <span style="color:#ef4444">*</span></label>
           <input id="_r_name" class="input" placeholder="محمد أحمد" style="width:100%"></div>
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">اسم المستخدم *</label>
+        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">اسم المستخدم <span style="color:#ef4444">*</span></label>
           <input id="_r_user" class="input" placeholder="بدون مسافات" style="width:100%"></div>
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">كلمة المرور * (8+ أحرف)</label>
+        <div style="grid-column:1/-1;"><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">كلمة المرور <span style="color:#ef4444">*</span> <span style="font-weight:400;color:#64748b;">(8 أحرف على الأقل، حرف كبير وصغير)</span></label>
           <input id="_r_pass" class="input" type="password" style="width:100%"></div>
-        <div><label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px">رقم الجوال</label>
-          <input id="_r_phone" class="input" placeholder="05..." style="width:100%"></div>
       </div>
 
       <div style="display:flex;gap:10px">
@@ -12662,16 +12671,21 @@ async function runAISearchQuery(q) {
     const body = {
       company_name:  document.getElementById('_r_company').value.trim(),
       vat_number:    document.getElementById('_r_vat').value.trim(),
+      cr_number:     document.getElementById('_r_cr')?.value.trim() || '',
       city:          document.getElementById('_r_city').value.trim(),
       contact_email: document.getElementById('_r_email').value.trim(),
+      contact_phone: document.getElementById('_r_contact_phone').value.trim(),
       full_name:     document.getElementById('_r_name').value.trim(),
       username:      document.getElementById('_r_user').value.trim(),
       password:      document.getElementById('_r_pass').value,
-      phone:         document.getElementById('_r_phone').value.trim(),
     };
 
     if (!body.company_name || !body.username || !body.password || !body.full_name) {
       errEl.textContent = 'يرجى تعبئة الحقول المطلوبة (*)'; errEl.style.display = 'block'; return;
+    }
+    if (!body.contact_email && !body.contact_phone) {
+      errEl.textContent = '⚠️ يجب تعبئة البريد الإلكتروني أو رقم الجوال على الأقل للتواصل'; errEl.style.display = 'block';
+      document.getElementById('_r_email')?.focus(); return;
     }
     if (body.password.length < 8) {
       errEl.textContent = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'; errEl.style.display = 'block'; return;

@@ -1,6 +1,9 @@
-const bcrypt = require('bcrypt');
-const jwt    = require('jsonwebtoken');
-const db     = require('../config/db');
+const bcrypt           = require('bcrypt');
+const jwt              = require('jsonwebtoken');
+const db               = require('../config/db');
+const { sendMail }     = require('../services/email.service');
+
+const PLATFORM_OWNER_EMAIL = 'abdalrhmanalshngeti@gmail.com';
 
 const ACCESS_TTL  = '8h';
 const REFRESH_TTL = '30d';
@@ -19,6 +22,13 @@ exports.register = async (req, res, next) => {
       plan: chosenPlan
     } = req.body;
     const plan = ['basic','growth','pro'].includes(chosenPlan) ? chosenPlan : 'basic';
+
+    if (!contact_email && !contact_phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'يجب تعبئة البريد الإلكتروني أو رقم الجوال على الأقل'
+      });
+    }
 
     if (!company_name || !username || !password || !full_name) {
       return res.status(400).json({
@@ -98,6 +108,33 @@ exports.register = async (req, res, next) => {
     `, [user.id, refreshToken, req.ip, req.headers['user-agent']]);
 
     await client.query('COMMIT');
+
+    // إشعار المالك بالعميل الجديد
+    sendMail({
+      to: PLATFORM_OWNER_EMAIL,
+      subject: `🏢 عميل جديد — ${company_name}`,
+      html: `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><style>
+        body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:20px;}
+        .wrap{max-width:500px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1);}
+        .header{background:#1e40af;padding:20px 28px;color:#fff;font-size:1.1rem;font-weight:700;}
+        .body{padding:24px 28px;}
+        .row{padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:.92rem;display:flex;justify-content:space-between;}
+        .label{color:#64748b;font-weight:600;}.val{color:#0f172a;font-weight:700;}
+      </style></head><body>
+      <div class="wrap">
+        <div class="header">🏢 تسجيل منشأة جديدة في يقظ</div>
+        <div class="body">
+          <div class="row"><span class="label">اسم المنشأة</span><span class="val">${company_name}</span></div>
+          <div class="row"><span class="label">اسم المالك</span><span class="val">${full_name} (@${username})</span></div>
+          ${contact_email ? `<div class="row"><span class="label">البريد الإلكتروني</span><span class="val">${contact_email}</span></div>` : ''}
+          ${contact_phone ? `<div class="row"><span class="label">رقم الجوال</span><span class="val">${contact_phone}</span></div>` : ''}
+          ${city ? `<div class="row"><span class="label">المدينة</span><span class="val">${city}</span></div>` : ''}
+          ${vat_number ? `<div class="row"><span class="label">الرقم الضريبي</span><span class="val">${vat_number}</span></div>` : ''}
+          <div class="row"><span class="label">الباقة</span><span class="val">${{basic:'أساسي',growth:'نمو',pro:'احترافي'}[plan]||plan}</span></div>
+          <div class="row"><span class="label">تاريخ التسجيل</span><span class="val">${new Date().toLocaleString('ar-SA')}</span></div>
+        </div>
+      </div></body></html>`
+    }).catch(e => console.warn('[register] Owner notification failed:', e.message));
 
     res.status(201).json({
       success: true,
