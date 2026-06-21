@@ -336,6 +336,26 @@ exports.setCompanyPlan = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── عملاء جدد ومحتملون ────────────────────────────────────
+exports.newClients = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT c.id, c.name, c.contact_email, c.contact_phone, c.city, c.plan,
+             c.created_at, c.status,
+             EXTRACT(DAY FROM NOW() - c.created_at)::int AS days_since,
+             u.full_name, u.username
+      FROM companies c
+      LEFT JOIN users u ON u.company_id = c.id AND u.role = 'owner'
+      WHERE c.created_at >= NOW() - INTERVAL '14 days'
+        AND NOT EXISTS (SELECT 1 FROM platform_admins WHERE email = u.username)
+      ORDER BY c.created_at DESC
+    `);
+    const newClients       = rows.filter(r => r.days_since <  10);
+    const potentialClients = rows.filter(r => r.days_since >= 10);
+    res.json({ success: true, new: newClients, potential: potentialClients });
+  } catch (err) { next(err); }
+};
+
 // ── تذاكر الدعم — قائمة ──────────────────────────────────
 exports.listTickets = async (req, res, next) => {
   try {
