@@ -10,7 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Tajawal', sans-serif; background:#0a0d14; color:#e2e8f0; min-height:100vh; display:flex; flex-direction:column; }
+    :root { color-scheme: dark; }
+    body { font-family:'Tajawal', sans-serif; background:#0a0d14 !important; color:#e2e8f0; min-height:100vh; display:flex; flex-direction:column; }
     nav {
       background:#0f1420; border-bottom:1px solid rgba(255,255,255,.1);
       padding:0 5%; height:64px; display:flex; align-items:center;
@@ -34,14 +35,14 @@
     @media(max-width:680px){ .plans { grid-template-columns:1fr; } }
     .plan-card {
       border:2px solid rgba(255,255,255,.12); border-radius:14px; padding:1.5rem;
-      cursor:pointer; transition:all .2s; position:relative; background:#141c2e;
+      cursor:pointer; transition:all .2s; position:relative; background:#141c2e !important;
     }
-    .plan-card:hover  { border-color:rgba(255,255,255,.3); background:#1a2540; }
-    .plan-card.active { border-color:#3b82f6; background:#1e3a5f; box-shadow:0 0 0 4px rgba(59,130,246,.15); }
+    .plan-card:hover  { border-color:rgba(255,255,255,.3); background:#1a2540 !important; }
+    .plan-card.active { border-color:#3b82f6; background:#1e3a5f !important; box-shadow:0 0 0 4px rgba(59,130,246,.15); }
     .plan-icon  { font-size:1.8rem; margin-bottom:.5rem; }
-    .plan-name  { font-size:1.15rem; font-weight:900; color:#f1f5f9; }
-    .plan-price { font-size:2rem; font-weight:900; color:#34d399; margin:.4rem 0; }
-    .plan-price span { font-size:.9rem; color:#94a3b8; font-weight:600; }
+    .plan-name  { font-size:1.15rem; font-weight:900; color:#e2e8f0 !important; }
+    .plan-price { font-size:2rem; font-weight:900; color:#10b981 !important; margin:.4rem 0; }
+    .plan-price span { font-size:.9rem; color:#94a3b8 !important; font-weight:600; }
     .plan-desc  { font-size:.85rem; color:#cbd5e1; line-height:1.5; margin-top:6px; }
     .popular-badge {
       position:absolute; top:-12px; right:50%; transform:translateX(50%);
