@@ -1,5 +1,5 @@
 // Qeema Service Worker — App Shell strategy
-const CACHE_NAME = 'qeema-v1';
+const CACHE_NAME = 'qeema-v3';
 const SHELL_URLS = ['/VVIP.html', '/public/api-client.js', '/public/manifest.json'];
 
 // تثبيت: تحميل App Shell
@@ -36,19 +36,16 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // الـ App Shell → Cache first, ثم شبكة
+  // الـ App Shell → Network first, ثم Cache (يضمن دائماً آخر إصدار)
   if (SHELL_URLS.includes(url.pathname)) {
     e.respondWith(
-      caches.match(request).then(cached => {
-        const networkFetch = fetch(request).then(res => {
-          if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then(c => c.put(request, clone));
-          }
-          return res;
-        });
-        return cached || networkFetch;
-      })
+      fetch(request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(request))
     );
     return;
   }

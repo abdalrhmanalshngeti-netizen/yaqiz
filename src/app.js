@@ -101,7 +101,10 @@ app.get('/sitemap.xml', (_, res) => {
 app.get('/',         (_, res) => res.sendFile(require('path').join(staticPath, 'index.html')));
 app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
 app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));
-app.get('/subscribe',        (_, res) => res.sendFile(require('path').join(staticPath, 'subscribe.html')));
+app.get('/subscribe', (_, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(require('path').join(staticPath, 'subscribe.html'));
+});
 app.get('/reset-password',   (_, res) => res.sendFile(require('path').join(staticPath, 'reset-password.html')));
 app.get('/payment/callback', require('./controllers/payments.controller').verifyCallback);
 app.get('/VVIP.html',(_, res) => {
