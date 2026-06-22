@@ -712,20 +712,20 @@
 
     <!-- اختيار الباقة -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;" id="planPicker">
-      <div class="plan-pick" data-plan="basic" onclick="pickPlan('basic')" style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:rgba(16,185,129,.08);cursor:pointer;text-align:center;transition:.2s;">
+      <div class="plan-pick" data-plan="basic" onclick="pickPlan('basic')" style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:#f0fdf4;cursor:pointer;text-align:center;transition:.2s;">
         <div style="font-size:20px;">📗</div>
         <div style="font-weight:900;font-size:13px;color:#10b981;margin-top:4px;">أساسية</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);">149 ر.س/شهر</div>
+        <div style="font-size:11px;color:#64748b;font-weight:700;">149 ر.س/شهر</div>
       </div>
-      <div class="plan-pick selected" data-plan="growth" onclick="pickPlan('growth')" style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:rgba(59,130,246,.15);cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.3);">
+      <div class="plan-pick selected" data-plan="growth" onclick="pickPlan('growth')" style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:#eff6ff;cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.25);">
         <div style="font-size:20px;">📘</div>
         <div style="font-weight:900;font-size:13px;color:#3b82f6;margin-top:4px;">النمو ⭐</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);">299 ر.س/شهر</div>
+        <div style="font-size:11px;color:#64748b;font-weight:700;">299 ر.س/شهر</div>
       </div>
-      <div class="plan-pick" data-plan="pro" onclick="pickPlan('pro')" style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.4);background:rgba(139,92,246,.08);cursor:pointer;text-align:center;transition:.2s;">
+      <div class="plan-pick" data-plan="pro" onclick="pickPlan('pro')" style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.6);background:#f5f3ff;cursor:pointer;text-align:center;transition:.2s;">
         <div style="font-size:20px;">📙</div>
         <div style="font-weight:900;font-size:13px;color:#8b5cf6;margin-top:4px;">احترافية</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);">499 ر.س/شهر</div>
+        <div style="font-size:11px;color:#64748b;font-weight:700;">499 ر.س/شهر</div>
       </div>
     </div>
     <input type="hidden" id="chosen-plan" value="growth">
@@ -748,9 +748,15 @@
           <input type="password" id="f-pw" placeholder="Ahmed@123" required minlength="8" autocomplete="new-password">
         </div>
       </div>
-      <div class="fgroup">
-        <label>الاسم الكامل *</label>
-        <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required>
+      <div class="frow">
+        <div class="fgroup">
+          <label>الاسم الكامل *</label>
+          <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required>
+        </div>
+        <div class="fgroup">
+          <label>رقم الجوال *</label>
+          <input type="tel" id="f-ph" placeholder="05xxxxxxxx" required>
+        </div>
       </div>
       <hr class="div">
       <div class="frow">
@@ -783,14 +789,15 @@ function openModal(plan) {
 }
 function pickPlan(plan) {
   document.getElementById('chosen-plan').value = plan;
+  const lightBg = {basic:'#f0fdf4',growth:'#eff6ff',pro:'#f5f3ff'};
+  const colors  = {basic:'#10b981',growth:'#3b82f6',pro:'#8b5cf6'};
   document.querySelectorAll('.plan-pick').forEach(el => {
     const p = el.dataset.plan;
-    const colors = {basic:'#10b981',growth:'#3b82f6',pro:'#8b5cf6'};
     const c = colors[p]||'#3b82f6';
     const sel = p === plan;
-    el.style.border = `2px solid ${sel?c:'rgba(255,255,255,.1)'}`;
-    el.style.background = sel ? `rgba(${p==='basic'?'16,185,129':p==='growth'?'59,130,246':'139,92,246'},.15)` : 'rgba(255,255,255,.03)';
-    el.style.boxShadow = sel ? `0 0 0 3px ${c}44` : 'none';
+    el.style.border = `2px solid ${sel?c:'#e2e8f0'}`;
+    el.style.background = sel ? lightBg[p] : '#f8fafc';
+    el.style.boxShadow = sel ? `0 0 0 3px ${c}33` : 'none';
   });
 }
 function closeModal() {
@@ -815,9 +822,10 @@ async function doReg(e) {
   const un = document.getElementById('f-un').value.trim();
   const pw = document.getElementById('f-pw').value;
   const fn = document.getElementById('f-fn').value.trim();
+  const ph = document.getElementById('f-ph').value.trim();
   const cr = document.getElementById('f-cr').value.trim();
   const vt = document.getElementById('f-vt').value.trim();
-  if (!co||!un||!pw||!fn) {
+  if (!co||!un||!pw||!fn||!ph) {
     err.textContent='❌ يرجى ملء جميع الحقول الإلزامية'; err.classList.add('show'); return;
   }
   if (un.length<6||!/\d/.test(un)) {
@@ -829,7 +837,7 @@ async function doReg(e) {
   btn.textContent='جاري التسجيل...'; btn.disabled=true;
   try {
     const plan = document.getElementById('chosen-plan')?.value || 'basic';
-    const body={company_name:co,username:un,password:pw,full_name:fn,plan};
+    const body={company_name:co,username:un,password:pw,full_name:fn,contact_phone:ph,plan};
     if(cr) body.cr_number=cr;
     if(vt) body.vat_number=vt;
     const res  = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

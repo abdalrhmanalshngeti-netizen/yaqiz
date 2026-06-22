@@ -98,7 +98,10 @@ app.get('/sitemap.xml', (_, res) => {
   res.setHeader('Content-Type', 'application/xml');
   res.sendFile(require('path').join(staticPath, 'sitemap.xml'));
 });
-app.get('/',         (_, res) => res.sendFile(require('path').join(staticPath, 'index.html')));
+app.get('/', (_, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(require('path').join(staticPath, 'index.html'));
+});
 app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
 app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));
 app.get('/subscribe', (_, res) => {
