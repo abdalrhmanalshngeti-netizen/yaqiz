@@ -4419,17 +4419,26 @@ function startBarcodeScan() {
 
 function saveProduct(id) {
   const db = getDB();
+
+  const autoOn = el('pr-auto')?.checked || false;
+  const polVal = parseFloat(el('pr-policy-val')?.value) || 0;
+  const buyPrice = Number(el('pr-buy').value);
+
+  // احسب سعر البيع فوراً إذا كان التسعير الديناميكي مفعّلاً
+  let sellPrice = Number(el('pr-sell').value);
+  if (has('pricing.manage') && autoOn && polVal > 0 && buyPrice > 0) {
+    sellPrice = Math.round(buyPrice * (1 + polVal / 100) * 100) / 100;
+  }
+
   const data = {
     name:el('pr-name').value, code:el('pr-code').value,
     barcode:el('pr-barcode')?.value?.trim()||'',
     category:el('pr-cat').value, unit:el('pr-unit').value,
-    buy_price:Number(el('pr-buy').value), sell_price:Number(el('pr-sell').value),
+    buy_price: buyPrice, sell_price: sellPrice,
     qty:Number(el('pr-qty').value), min_qty:Number(el('pr-min').value)
   };
   if(!data.name){showToast(lang==='ar'?'اسم المنتج مطلوب':'Product name required','error');return;}
 
-  const autoOn   = el('pr-auto')?.checked || false;
-  const polVal   = parseFloat(el('pr-policy-val')?.value) || 0;
   if (has('pricing.manage')) {
     data.auto_price_update   = autoOn;
     data.profit_policy_type  = autoOn ? 'percentage_on_cost' : 'none';
@@ -4438,7 +4447,9 @@ function saveProduct(id) {
 
   if(id) { const p=db.products.find(x=>x.id===id); if(p) Object.assign(p,data); }
   else { db.products.push({id:nextId(db,'product'), created_at:new Date().toISOString(), ...data}); }
-  saveDB(db); showToast(`✅ ${t('save')}`); closeModal(); renderPage();
+  saveDB(db);
+  showToast(autoOn && polVal > 0 ? `✅ تم الحفظ — سعر البيع الجديد: ${sellPrice} ر.س` : `✅ ${t('save')}`);
+  closeModal(); renderPage();
 
   // إرسال سياسة التسعير للـ API (صلاحية مستقلة — للمنتجات الموجودة فقط)
   if (id && has('pricing.manage') && window._cloudApiFetch) {
@@ -4446,8 +4457,6 @@ function saveProduct(id) {
       profit_policy_type:  autoOn ? 'percentage_on_cost' : 'none',
       profit_policy_value: polVal,
       auto_price_update:   autoOn
-    }).then(() => {
-      if (autoOn) showToast('✅ سياسة التسعير محفوظة — السعر سيتحدث تلقائياً عند كل فاتورة شراء', 'success');
     }).catch(e => {
       console.error('pricing policy save failed:', e);
       showToast('⚠️ تعذّر حفظ سياسة التسعير على الخادم: ' + (e.message||'خطأ'), 'error');
