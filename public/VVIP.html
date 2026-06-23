@@ -1067,9 +1067,9 @@ function renderShell() {
             autocomplete="off" />
           <div id="search-dropdown" class="search-dropdown" style="display:none;"></div>
         </div>
-        <button class="icon-btn" onclick="showNotifications()" title="${lang==='ar'?'التنبيهات':'Alerts'}" style="position:relative;">
+        <button class="icon-btn" onclick="showNotifications()" title="${lang==='ar'?'الإشعارات':'Notifications'}" style="position:relative;" id="notif-bell-btn">
           ${icon('bell',18)}
-          ${getAlerts().length>0?`<span style="position:absolute;top:4px;${lang==='ar'?'left':'right'}:4px;width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>`:''}
+          <span id="notif-badge" style="position:absolute;top:3px;${lang==='ar'?'left':'right'}:3px;min-width:16px;height:16px;background:var(--danger);border-radius:9px;font-size:9px;font-weight:800;color:#fff;display:${getAlerts().length>0?'flex':'none'};align-items:center;justify-content:center;padding:0 3px;">${getAlerts().length||''}</span>
         </button>
         ${currentUser?.role==='owner'?`<button class="icon-btn topbar-hide-mobile" onclick="showExportModal()" title="${lang==='ar'?'تصدير البيانات':'Export'}">${icon('download',18)}</button>`:''}
         <button class="icon-btn" id="dark-btn" onclick="toggleDark()" title="${lang==='ar'?'الوضع الليلي':'Dark Mode'}">${document.documentElement.classList.contains('dark')?icon('sun',18):icon('moon',18)}</button>
@@ -1112,6 +1112,7 @@ function renderShell() {
   renderCSButton();
   _aiLoadHistory();
   renderAIChatButton();
+  setTimeout(_updateNotifBadge, 1500);
 }
 
 // ============================================================
@@ -4287,6 +4288,20 @@ function showProductModal(id) {
         <div><label class="form-label">${t('quantity')}</label><input class="input" type="number" id="pr-qty" value="${p?.qty||0}" /></div>
         <div><label class="form-label">${t('minQty')}</label><input class="input" type="number" id="pr-min" value="${p?.min_qty||5}" /></div>
       </div>
+      ${has('pricing.manage')?`
+      <div style="margin-top:16px;padding:14px 16px;background:rgba(59,130,246,.06);border:1.5px solid rgba(59,130,246,.25);border-radius:12px;">
+        <div style="font-size:12px;font-weight:800;color:#3b82f6;margin-bottom:12px;">⚙️ ${lang==='ar'?'سياسة التسعير الديناميكي':'Dynamic Pricing Policy'}</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;">
+          <input type="checkbox" id="pr-auto" ${p?.auto_price_update?'checked':''} onchange="togglePrPolicyFields()" style="width:16px;height:16px;accent-color:#3b82f6;" />
+          <span style="font-size:13px;font-weight:700;color:var(--text-main)">${lang==='ar'?'تحديث سعر البيع تلقائياً عند استلام مشتريات':'Auto-update sell price on new purchases'}</span>
+        </label>
+        <div id="pr-policy-fields" style="display:${p?.auto_price_update?'block':'none'}">
+          <label class="form-label">${lang==='ar'?'نسبة الربح الصافي % (على سعر التكلفة قبل الضريبة)':'Net Profit % (on cost before tax)'}</label>
+          <input class="input" type="number" id="pr-policy-val" step="0.01" min="0" placeholder="مثال: 3.5" value="${p?.profit_policy_value||0}" oninput="updatePricingPreview()" />
+          <div id="pr-pricing-preview" style="margin-top:8px;padding:8px 12px;background:rgba(59,130,246,.08);border-radius:8px;font-size:12px;color:#93c5fd;min-height:32px;"></div>
+        </div>
+        ${id?`<button type="button" class="btn btn-outline" style="margin-top:10px;font-size:12px;padding:5px 12px;" onclick="showPriceHistory(${id})">${lang==='ar'?'📋 سجل تغييرات السعر':'📋 Price History'}</button>`:''}
+      </div>`:''}
       <div style="display:flex;gap:8px;margin-top:16px;">
         <button class="btn btn-primary btn-full" onclick="saveProduct(${id||'null'})">${t('save')}</button>
         <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
@@ -4294,6 +4309,58 @@ function showProductModal(id) {
     </div>
   </div>`;
   refreshIcons();
+  if (p?.auto_price_update && has('pricing.manage')) updatePricingPreview();
+}
+
+function togglePrPolicyFields() {
+  const on = el('pr-auto')?.checked;
+  const f  = el('pr-policy-fields');
+  if (f) f.style.display = on ? 'block' : 'none';
+  if (on) updatePricingPreview();
+}
+
+function updatePricingPreview() {
+  const on  = el('pr-auto')?.checked;
+  const f   = el('pr-policy-fields');
+  if (f) f.style.display = on ? 'block' : 'none';
+  if (!on) return;
+  const buy = parseFloat(el('pr-buy')?.value) || 0;
+  const pct = parseFloat(el('pr-policy-val')?.value) || 0;
+  const previewEl = el('pr-pricing-preview');
+  if (!previewEl) return;
+  if (buy <= 0) { previewEl.textContent = lang==='ar'?'أدخل سعر الشراء لعرض المعاينة':'Enter buy price to preview'; return; }
+  const sellPreTax  = Math.round(buy * (1 + pct / 100) * 100) / 100;
+  const sellWithTax = Math.round(sellPreTax * 1.15 * 100) / 100;
+  previewEl.innerHTML = lang==='ar'
+    ? `سعر البيع (قبل الضريبة): <strong style="color:#fff">${sellPreTax} ر.س</strong> &nbsp;|&nbsp; شامل ضريبة 15%: <strong style="color:#34d399">${sellWithTax} ر.س</strong>`
+    : `Sell price (pre-tax): <strong style="color:#fff">${sellPreTax} SAR</strong> &nbsp;|&nbsp; With 15% VAT: <strong style="color:#34d399">${sellWithTax} SAR</strong>`;
+}
+
+async function showPriceHistory(productId) {
+  if (!window._cloudApiFetch) { showToast(lang==='ar'?'يجب الاتصال بالإنترنت':'Internet required','error'); return; }
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/products/${productId}/price-history`);
+    const rows = res?.data || [];
+    const mc   = el('modal-container');
+    mc.innerHTML = `<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:520px;">
+      <div class="modal-head"><h3>📋 ${lang==='ar'?'سجل تغييرات السعر':'Price History'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+      ${rows.length===0?`<div class="empty"><div class="empty-icon">📋</div>${lang==='ar'?'لا يوجد سجل تغييرات بعد':'No price changes yet'}</div>`:`
+      <div style="overflow-x:auto;"><table class="tbl"><thead><tr>
+        <th>${lang==='ar'?'التاريخ':'Date'}</th>
+        <th>${lang==='ar'?'سعر الشراء':'Buy Price'}</th>
+        <th>${lang==='ar'?'سعر البيع':'Sell Price'}</th>
+        <th>${lang==='ar'?'السبب':'Reason'}</th>
+      </tr></thead><tbody>
+      ${rows.map(r=>`<tr>
+        <td>${new Date(r.created_at).toLocaleDateString('ar-SA')}</td>
+        <td>${r.old_buy_price||'-'} ← <strong>${r.new_buy_price}</strong></td>
+        <td style="color:#34d399">${r.old_sell_price||'-'} ← <strong>${r.new_sell_price}</strong></td>
+        <td style="font-size:11px;color:var(--text-muted)">${r.purchase_no||r.reason||'-'}</td>
+      </tr>`).join('')}
+      </tbody></table></div>`}
+    </div></div>`;
+    refreshIcons();
+  } catch(e) { showToast(lang==='ar'?'تعذر تحميل السجل':'Failed to load history','error'); }
 }
 
 function startBarcodeScan() {
@@ -4333,9 +4400,27 @@ function saveProduct(id) {
     qty:Number(el('pr-qty').value), min_qty:Number(el('pr-min').value)
   };
   if(!data.name){showToast(lang==='ar'?'اسم المنتج مطلوب':'Product name required','error');return;}
+
+  const autoOn   = el('pr-auto')?.checked || false;
+  const polVal   = parseFloat(el('pr-policy-val')?.value) || 0;
+  if (has('pricing.manage')) {
+    data.auto_price_update   = autoOn;
+    data.profit_policy_type  = autoOn ? 'percentage_on_cost' : 'none';
+    data.profit_policy_value = polVal;
+  }
+
   if(id) { const p=db.products.find(x=>x.id===id); if(p) Object.assign(p,data); }
   else { db.products.push({id:nextId(db,'product'), created_at:new Date().toISOString(), ...data}); }
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal(); renderPage();
+
+  // إرسال سياسة التسعير للـ API (صلاحية مستقلة)
+  if (id && has('pricing.manage') && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', `/api/products/${id}/pricing-policy`, {
+      profit_policy_type:  autoOn ? 'percentage_on_cost' : 'none',
+      profit_policy_value: polVal,
+      auto_price_update:   autoOn
+    }).catch(e => console.warn('pricing policy update:', e.message));
+  }
 }
 
 function deleteProduct(id) {
@@ -5891,6 +5976,7 @@ function showUserModal(id) {
     'returns.manage':lang==='ar'?'إدارة المرتجعات':'Manage Returns',
     'quotes.view':lang==='ar'?'عرض عروض الأسعار':'View Quotes',
     'quotes.manage':lang==='ar'?'إدارة عروض الأسعار':'Manage Quotes',
+    'pricing.manage':lang==='ar'?'إدارة التسعير وسياسات الربح':'Manage Pricing Policies',
   };
   window._permLabels = permLabels;
   const allPerms = Object.keys(permLabels);
@@ -8143,19 +8229,85 @@ function getAlerts() {
   return alerts;
 }
 
-function showNotifications(){
-  const alerts=getAlerts();
-  const mc=el('modal-container');
-  mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:440px;">
-    <div class="modal-head"><h3>🔔 ${lang==='ar'?'التنبيهات':'Notifications'} ${alerts.length>0?`<span class="badge badge-red" style="font-size:12px;">${alerts.length}</span>`:''}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
-    ${alerts.length===0
-      ?`<div class="empty"><div class="empty-icon">✅</div>${lang==='ar'?'لا توجد تنبيهات':'No alerts'}</div>`
-      :alerts.map(a=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${a.type==='danger'?'#fee2e2':'#fef3c7'};border-radius:10px;cursor:pointer;" onclick="closeModal();goTo('${a.page}')">
-        <div style="width:36px;height:36px;border-radius:8px;background:${a.type==='danger'?'#dc2626':'#f59e0b'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon(a.icon,16)}</div>
-        <div><div style="font-weight:800;font-size:13px;">${a.title}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${a.msg}</div></div>
-      </div>`).join('')}
-  </div></div>`;
-  refreshIcons();
+async function showNotifications(){
+  const alerts = getAlerts();
+  const mc = el('modal-container');
+
+  const renderNotifModal = (apiNotifs) => {
+    const unreadApi = (apiNotifs||[]).filter(n=>!n.is_read);
+    const totalBadge = alerts.length + unreadApi.length;
+    mc.innerHTML = `<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:480px;max-height:85vh;overflow-y:auto;">
+      <div class="modal-head" style="position:sticky;top:0;z-index:1;background:var(--card);">
+        <h3>🔔 ${lang==='ar'?'الإشعارات':'Notifications'} ${totalBadge>0?`<span class="badge badge-red" style="font-size:12px;">${totalBadge}</span>`:''}</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${apiNotifs?.length>0?`<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;" onclick="markAllNotifsRead()">${lang==='ar'?'قراءة الكل':'Mark all read'}</button>`:''}
+          <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        </div>
+      </div>
+      <div style="padding:12px;">
+        ${alerts.length>0?`
+          <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'تنبيهات النظام':'System Alerts'}</div>
+          ${alerts.map(a=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${a.type==='danger'?'rgba(239,68,68,.1)':'rgba(245,158,11,.1)'};border-radius:10px;cursor:pointer;border:1px solid ${a.type==='danger'?'rgba(239,68,68,.2)':'rgba(245,158,11,.2)'};" onclick="closeModal();goTo('${a.page}')">
+            <div style="width:36px;height:36px;border-radius:8px;background:${a.type==='danger'?'#dc2626':'#f59e0b'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon(a.icon,16)}</div>
+            <div><div style="font-weight:800;font-size:13px;">${a.title}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${a.msg}</div></div>
+          </div>`).join('')}`:''}
+        ${apiNotifs===null?`<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">⏳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>`
+        :apiNotifs.length>0?`
+          ${alerts.length>0?`<div style="height:1px;background:var(--border);margin:12px 0;"></div>`:''}
+          <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'إشعارات التسعير':'Pricing Notifications'}</div>
+          ${apiNotifs.map(n=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${n.is_read?'transparent':'rgba(59,130,246,.08)'};border-radius:10px;border:1px solid ${n.is_read?'var(--border)':'rgba(59,130,246,.25)'};" onclick="markNotifRead(${n.id},this)">
+            <div style="width:36px;height:36px;border-radius:8px;background:${n.is_read?'#334155':'#3b82f6'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">💰</div>
+            <div style="flex:1;">
+              <div style="font-weight:800;font-size:13px;color:${n.is_read?'var(--text-main)':'#93c5fd'}">${n.title||'تحديث سعر'}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${n.message}</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${new Date(n.created_at).toLocaleString('ar-SA')}</div>
+            </div>
+            ${!n.is_read?`<span style="width:8px;height:8px;background:#3b82f6;border-radius:50%;flex-shrink:0;margin-top:4px;"></span>`:''}
+          </div>`).join('')}`
+        :`${alerts.length===0?`<div class="empty"><div class="empty-icon">✅</div>${lang==='ar'?'لا توجد إشعارات':'No notifications'}</div>`:''}` }
+      </div>
+    </div></div>`;
+    refreshIcons();
+    _updateNotifBadge();
+  };
+
+  renderNotifModal(null);
+
+  if (window._cloudApiFetch) {
+    try {
+      const res = await window._cloudApiFetch('GET', '/api/notifications');
+      renderNotifModal(res?.data || []);
+    } catch(e) { renderNotifModal([]); }
+  } else {
+    renderNotifModal([]);
+  }
+}
+
+async function markNotifRead(id, rowEl) {
+  if (rowEl) { rowEl.style.background='transparent'; rowEl.style.borderColor='var(--border)'; const dot=rowEl.querySelector('[style*="8px;background:#3b82f6"]'); if(dot)dot.remove(); }
+  if (window._cloudApiFetch) window._cloudApiFetch('PUT', `/api/notifications/${id}/read`).catch(()=>{});
+  _updateNotifBadge();
+}
+
+async function markAllNotifsRead() {
+  if (window._cloudApiFetch) await window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').catch(()=>{});
+  showNotifications();
+}
+
+async function _updateNotifBadge() {
+  const badge = el('notif-badge');
+  if (!badge) return;
+  const localCount = getAlerts().length;
+  let apiCount = 0;
+  if (window._cloudApiFetch) {
+    try {
+      const r = await window._cloudApiFetch('GET', '/api/notifications/unread-count');
+      apiCount = r?.count || 0;
+    } catch(e) {}
+  }
+  const total = localCount + apiCount;
+  badge.style.display = total > 0 ? 'flex' : 'none';
+  badge.textContent   = total > 9 ? '9+' : (total > 0 ? total : '');
 }
 
 
@@ -11896,7 +12048,10 @@ async function runAISearchQuery(q) {
       sell_price: parseFloat(p.sell_price)||0,
       qty: parseFloat(p.qty)||0, min_qty: parseFloat(p.min_qty)||0,
       tax_rate: parseFloat(p.tax_rate)||15,
-      is_active: p.is_active!==false, notes: p.notes||''
+      is_active: p.is_active!==false, notes: p.notes||'',
+      profit_policy_type:  p.profit_policy_type  || 'none',
+      profit_policy_value: parseFloat(p.profit_policy_value) || 0,
+      auto_price_update:   p.auto_price_update    === true
     };
   }
 

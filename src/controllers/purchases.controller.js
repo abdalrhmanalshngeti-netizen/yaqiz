@@ -111,11 +111,71 @@ exports.create = async (req, res, next) => {
             reference: purchase_no, user_id
           });
           if (item.unit_cost) {
-            await client.query(
-              `UPDATE products SET buy_price = $1 WHERE id = $2`,
-              [item.unit_cost, item.product_id]
+            const newBuyPrice = parseFloat(item.unit_cost);
+
+            // جلب بيانات المنتج للتحقق من سياسة التسعير
+            const { rows: [prod] } = await client.query(
+              `SELECT id, name, buy_price, sell_price, tax_rate,
+                      profit_policy_type, profit_policy_value, auto_price_update
+               FROM products WHERE id = $1 AND company_id = $2`,
+              [item.product_id, company_id]
             );
+
+            if (prod) {
+              const oldBuyPrice  = parseFloat(prod.buy_price)  || 0;
+              const oldSellPrice = parseFloat(prod.sell_price) || 0;
+
+              await client.query(
+                `UPDATE products SET buy_price = $1, updated_at = NOW() WHERE id = $2`,
+                [newBuyPrice, prod.id]
+              );
+
+              // تطبيق التسعير الديناميكي إذا كان مفعّلاً
+              if (prod.auto_price_update && prod.profit_policy_type === 'percentage_on_cost') {
+                const policyValue  = parseFloat(prod.profit_policy_value) || 0;
+                // سعر البيع = تكلفة الشراء × (1 + نسبة الربح%)  — قبل الضريبة
+                const newSellPrice = Math.round(newBuyPrice * (1 + policyValue / 100) * 100) / 100;
+
+                if (Math.abs(newSellPrice - oldSellPrice) >= 0.01) {
+                  await client.query(
+                    `UPDATE products SET sell_price = $1, updated_at = NOW() WHERE id = $2`,
+                    [newSellPrice, prod.id]
+                  );
+
+                  // تسجيل في سجل التغييرات
+                  await client.query(`
+                    INSERT INTO product_price_history
+                      (company_id, product_id, old_buy_price, new_buy_price,
+                       old_sell_price, new_sell_price, policy_type, policy_value,
+                       purchase_id, changed_by, reason)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'auto_pricing')
+                  `, [company_id, prod.id, oldBuyPrice, newBuyPrice,
+                      oldSellPrice, newSellPrice,
+                      prod.profit_policy_type, prod.profit_policy_value,
+                      purchase.id, user_id]);
+
+                  // إرسال إشعار للمالك وأصحاب صلاحية التسعير
+                  const taxRate  = parseFloat(prod.tax_rate) || 15;
+                  const withVat  = Math.round(newSellPrice * (1 + taxRate / 100) * 100) / 100;
+                  const msg = `تم تحديث سعر بيع "${prod.name}" تلقائياً من ${oldSellPrice} إلى ${newSellPrice} ر.س (شامل ضريبة: ${withVat} ر.س) بناءً على فاتورة شراء ${purchase_no}`;
+
+                  const { rows: notifUsers } = await client.query(`
+                    SELECT id FROM users
+                    WHERE company_id = $1 AND active = true
+                      AND (role = 'owner' OR 'pricing.manage' = ANY(permissions))
+                  `, [company_id]);
+
+                  for (const nu of notifUsers) {
+                    await client.query(`
+                      INSERT INTO notifications (company_id, user_id, type, title, message, link)
+                      VALUES ($1,$2,'price_update','تحديث سعر تلقائي',$3,'/VVIP.html#inventory')
+                    `, [company_id, nu.id, msg]);
+                  }
+                }
+              }
+            }
           }
+          await client.query('RELEASE SAVEPOINT sp_stock_add');
         } catch (stockErr) {
           await client.query('ROLLBACK TO sp_stock_add');
           console.warn(`stock add skipped [${purchase_no}] product ${item.product_id}:`, stockErr.message);

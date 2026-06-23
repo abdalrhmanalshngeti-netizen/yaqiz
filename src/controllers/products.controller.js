@@ -124,6 +124,51 @@ exports.stockMoves = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.setPricingPolicy = async (req, res, next) => {
+  try {
+    const { profit_policy_type, profit_policy_value, auto_price_update } = req.body;
+
+    const policyType = profit_policy_type || 'none';
+    if (!['none', 'percentage_on_cost'].includes(policyType)) {
+      return res.status(400).json({ success: false, message: 'نوع السياسة غير صحيح' });
+    }
+
+    const policyValue = parseFloat(profit_policy_value) || 0;
+    if (policyValue < 0) {
+      return res.status(400).json({ success: false, message: 'نسبة الربح لا يمكن أن تكون سالبة' });
+    }
+
+    const { rows } = await db.query(`
+      UPDATE products SET
+        profit_policy_type  = $1,
+        profit_policy_value = $2,
+        auto_price_update   = $3,
+        updated_at          = NOW()
+      WHERE id = $4 AND company_id = $5
+      RETURNING *
+    `, [policyType, policyValue, auto_price_update ?? false,
+        req.params.id, req.user.company_id]);
+
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+    res.json({ success: true, data: rows[0] });
+  } catch (err) { next(err); }
+};
+
+exports.getPriceHistory = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT h.*, u.full_name AS changed_by_name, pu.purchase_no
+      FROM product_price_history h
+      LEFT JOIN users u ON u.id = h.changed_by
+      LEFT JOIN purchases pu ON pu.id = h.purchase_id
+      WHERE h.product_id = $1 AND h.company_id = $2
+      ORDER BY h.created_at DESC
+      LIMIT 50
+    `, [req.params.id, req.user.company_id]);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
 exports.manualMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
