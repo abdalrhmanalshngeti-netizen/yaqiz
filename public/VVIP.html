@@ -2171,7 +2171,8 @@ function renderPOS(sc) {
   const db = getDB();
   const subtotal = cart.reduce((s,i)=>s+i.qty*i.price,0);
   const afterDisc = Math.max(0, subtotal - Number(posDiscount||0));
-  const vat = afterDisc * 0.15;
+  const _vatRnd=db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0;
+  const vat = _vatRnd ? afterDisc * 0.15 : 0;
   const total = afterDisc + vat;
 
   sc.innerHTML = `
@@ -2204,6 +2205,8 @@ function renderPOS(sc) {
 
     <!-- Left: invoice panel -->
     <div class="invoice-panel-pos">
+      <!-- Daily target bar (if set) -->
+      ${getCashierTargetHTML()}
       <!-- Customer -->
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
         ${icon('user',16)}
@@ -2248,7 +2251,7 @@ function renderPOS(sc) {
         </div>
         <div id="pos-totals">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('subtotal')}</span><span>${fmtMoney(afterDisc)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>
+          ${_vatRnd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>`:''}
           <div style="display:flex;justify-content:space-between;font-weight:900;font-size:20px;color:var(--primary);border-top:2px solid var(--border);margin-top:6px;padding-top:8px;">
             <span>${t('grandTotal')}</span><span>${fmtMoney(total)}</span>
           </div>
@@ -2437,11 +2440,13 @@ function setPosPayment(m) {
 function updatePOSTotals() {
   const subtotal=cart.reduce((s,i)=>s+i.qty*i.price,0);
   const afterDisc=Math.max(0,subtotal-Number(posDiscount||0));
-  const vat=afterDisc*0.15; const total=afterDisc+vat;
+  const _stg=getDB().settings;
+  const _vatOn=_stg?.vat_enabled!==false&&_stg?.vat_enabled!==0;
+  const vat=_vatOn?afterDisc*0.15:0; const total=afterDisc+vat;
   const d=el('pos-totals'); if(!d)return;
   d.innerHTML=`
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('subtotal')}</span><span>${fmtMoney(afterDisc)}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>
+    ${_vatOn?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;font-weight:900;font-size:20px;color:var(--primary);border-top:2px solid var(--border);margin-top:6px;padding-top:8px;">
       <span>${t('grandTotal')}</span><span>${fmtMoney(total)}</span>
     </div>`;
@@ -2453,7 +2458,9 @@ function doCheckout() {
   const subtotal=cart.reduce((s,i)=>s+i.qty*i.price,0);
   const disc=Number(posDiscount||0);
   const afterDisc=Math.max(0,subtotal-disc);
-  const vat=afterDisc*0.15; const total=afterDisc+vat;
+  const _stPOS=db.settings;
+  const _vatActivePOS=_stPOS?.vat_enabled!==false&&_stPOS?.vat_enabled!==0;
+  const vat=_vatActivePOS?afterDisc*0.15:0; const total=afterDisc+vat;
   const inv={
     id:nextId(db,'invoice'),
     invoice_no:`SAL-${new Date().getFullYear()}${String(db.nextId.invoice-1).padStart(5,'0')}`,
@@ -3004,13 +3011,12 @@ function showNewInvoiceModal() {
                 oninput="newInvDiscount.value=Number(this.value);calcNewInvTotals()" style="flex:1;" />
             </div>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:${db.settings?.vat_number?'pointer':'not-allowed'};padding:8px;background:white;border-radius:8px;border:1px solid var(--border);opacity:${db.settings?.vat_number?1:0.5};">
-            <input type="checkbox" id="ni-vat-check" ${_hasVat?'checked':''} ${!db.settings?.vat_number?'disabled':''} onchange="newInvVAT=this.checked;calcNewInvTotals()" />
+          <label style="display:flex;align-items:center;gap:8px;cursor:${(_vatEnabled&&db.settings?.vat_number)?'pointer':'not-allowed'};padding:8px;background:${!_vatEnabled?'#f8fafc':'white'};border-radius:8px;border:1px solid ${!_vatEnabled?'#e2e8f0':'var(--border)'};opacity:${(_vatEnabled&&db.settings?.vat_number)?1:0.55};">
+            <input type="checkbox" id="ni-vat-check" ${_hasVat?'checked':''} ${(!db.settings?.vat_number||!_vatEnabled)?'disabled':''} onchange="newInvVAT=this.checked;calcNewInvTotals()" />
             <span style="font-weight:700;font-size:13px;">
-              ${_hasVat?'✅':db.settings?.vat_number?'⭕':''}
+              ${_hasVat?'✅':'⭕'}
               ${lang==='ar'?'ضريبة القيمة المضافة 15%':'VAT 15%'}
-              ${!db.settings?.vat_number?`<span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'يتطلب رقم ضريبي':'requires VAT number'})</span>`:''}
-              ${db.settings?.vat_number && !_vatEnabled?`<span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'مُعطَّلة من الإعدادات':'disabled in settings'})</span>`:''}
+              ${!db.settings?.vat_number?`<span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'يتطلب رقم ضريبي':'requires VAT number'})</span>`:!_vatEnabled?`<span style="font-size:11px;font-weight:400;color:#64748b;">(${lang==='ar'?'مُعطَّلة — فعّلها من الإعدادات العامة':'disabled in settings'})</span>`:''}
             </span>
           </label>
           <hr style="border-color:var(--border);">
@@ -10260,12 +10266,11 @@ function renderSettingsGeneral(c) {
           <div style="font-weight:800;font-size:14px;">${lang==='ar'?'تطبيق ضريبة القيمة المضافة 15%':'Apply 15% VAT on invoices'}</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${lang==='ar'?'عند التفعيل تُضاف ضريبة 15% تلقائياً على كل فاتورة مبيعات':'When enabled, 15% VAT is added automatically to all sales invoices'}</div>
         </div>
-        <label style="position:relative;display:inline-block;width:50px;height:26px;flex-shrink:0;">
-          <input type="checkbox" id="vat-toggle" ${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'checked':''} onchange="toggleVAT(this.checked)" style="opacity:0;width:0;height:0;">
-          <span style="position:absolute;cursor:pointer;inset:0;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'var(--primary)':'#cbd5e1'};border-radius:999px;transition:.3s;">
-            <span style="position:absolute;height:20px;width:20px;right:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'3px':'27px'};bottom:3px;background:white;border-radius:50%;transition:.3s;"></span>
+        <button type="button" onclick="toggleVAT(getDB().settings?.vat_enabled===false)" style="position:relative;display:inline-block;width:50px;height:26px;flex-shrink:0;border:none;padding:0;background:transparent;cursor:pointer;border-radius:999px;">
+          <span style="position:absolute;inset:0;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'var(--primary)':'#cbd5e1'};border-radius:999px;transition:.3s;display:block;">
+            <span style="position:absolute;height:20px;width:20px;right:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'3px':'27px'};bottom:3px;background:white;border-radius:50%;transition:.3s;display:block;"></span>
           </span>
-        </label>
+        </button>
       </div>
       <div style="margin-top:10px;padding:10px 14px;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'rgba(16,185,129,.08)':'rgba(107,114,128,.06)'};border-radius:10px;font-size:12px;font-weight:700;color:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'#059669':'var(--text-muted)'};">
         ${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?`✅ ${lang==='ar'?'الضريبة مفعّلة — ستظهر ضريبة 15% في كل فاتورة':'VAT enabled — 15% appears on all invoices'}`:`⭕ ${lang==='ar'?'الضريبة معطّلة — الفواتير بدون ضريبة':'VAT disabled — invoices without tax'}`}
@@ -10275,23 +10280,24 @@ function renderSettingsGeneral(c) {
     <!-- Sales Targets -->
     <div class="card"><div class="card-pad">
       <h3 style="margin-bottom:16px;font-weight:800;">🎯 ${lang==='ar'?'أهداف المبيعات اليومية':'Daily Sales Targets'}</h3>
-      <div style="margin-bottom:10px;font-size:12px;color:var(--text-muted);">${lang==='ar'?'حدد هدف يومي لكل كاشير':'Set daily target per cashier'}</div>
-      ${db.users.filter(u=>u.role==='cashier'||u.shift_enabled).map(u=>{
+      <div style="margin-bottom:10px;font-size:12px;color:var(--text-muted);">${lang==='ar'?'حدد هدف يومي لكل مستخدم — يظهر شريط التقدم في نقطة البيع':'Set a daily target per user — progress bar appears in POS'}</div>
+      ${db.users.filter(u=>u.active!==false).map(u=>{
         const target = (db.sales_targets||[]).find(t=>t.username===u.username)?.daily||0;
-        const todaySales = db.invoices.filter(i=>i.created_at.slice(0,10)===new Date().toISOString().slice(0,10)).reduce((s,inv)=>s+inv.grand_total,0);
+        const todayStr = new Date().toISOString().slice(0,10);
+        const todaySales = db.invoices.filter(i=>i.created_at.slice(0,10)===todayStr).reduce((s,inv)=>s+(inv.grand_total||0),0);
         const pct = target>0?Math.min(100,Math.round(todaySales/target*100)):0;
         return `<div style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div style="font-weight:700;">${u.full_name} <span style="font-size:11px;color:var(--text-muted);">@${u.username}</span></div>
+            <div style="font-weight:700;">${u.full_name||u.username} <span style="font-size:11px;color:var(--text-muted);">@${u.username} · ${u.role}</span></div>
             <div style="display:flex;align-items:center;gap:8px;">
-              <input class="input" type="number" style="width:120px;" value="${target}" id="tgt-${u.username}" placeholder="${lang==='ar'?'الهدف اليومي':'Daily target'}" />
+              <input class="input" type="number" min="0" style="width:130px;" value="${target||''}" id="tgt-${u.username}" placeholder="${lang==='ar'?'الهدف اليومي ر.س':'Daily target SAR'}" />
               <button class="btn btn-sm btn-primary" onclick="saveTarget('${u.username}')">${lang==='ar'?'حفظ':'Save'}</button>
             </div>
           </div>
           ${target>0?`<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden;">
             <div style="background:${pct>=100?'var(--success)':pct>=70?'var(--warning)':'var(--primary)'};height:100%;width:${pct}%;border-radius:999px;transition:width 0.5s;"></div>
           </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${pct}% ${lang==='ar'?'من الهدف':'of target'} • ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>`:''}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${pct}% ${lang==='ar'?'من الهدف':'of target'} • ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>`:'<div style="font-size:11px;color:var(--text-muted);">${lang===\'ar\'?\'لم يُحدد هدف بعد — أدخل رقماً واضغط حفظ\':\'No target set — enter a value and save\'}</div>'}
         </div>`;
       }).join('')}
     </div></div>
@@ -10675,14 +10681,14 @@ function saveTarget(username) {
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم حفظ الهدف':'Target saved'}`);renderPage();
 }
 
-// Show target in POS topbar for cashier
+// Show target in POS topbar for any user who has a target
 function getCashierTargetHTML() {
-  if(currentUser?.role!=='cashier'&&!currentUser?.shift_enabled) return '';
+  if(!currentUser) return '';
   const db=getDB();
   const target=(db.sales_targets||[]).find(t=>t.username===currentUser.username)?.daily||0;
   if(!target) return '';
   const today=new Date().toISOString().slice(0,10);
-  const todaySales=db.invoices.filter(i=>i.created_at.slice(0,10)===today&&i.customer_name).reduce((s,i)=>s+i.grand_total,0);
+  const todaySales=db.invoices.filter(i=>i.created_at.slice(0,10)===today).reduce((s,i)=>s+(i.grand_total||0),0);
   const pct=Math.min(100,Math.round(todaySales/target*100));
   return `<div style="display:flex;align-items:center;gap:8px;background:var(--bg);padding:6px 12px;border-radius:10px;border:1px solid var(--border);">
     <div style="font-size:11px;font-weight:700;">🎯 ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>
