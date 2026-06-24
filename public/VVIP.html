@@ -4065,8 +4065,16 @@ function doInventoryUpdate() {
       // إضافة دفعة FIFO
       if (!prod.lots) prod.lots = [];
       prod.lots.push({ qty: item.qty, cost: item.price || prod.buy_price || 0, date: new Date().toISOString(), ref: `PUR-${_pendingPurchaseId}` });
-      // تحديث سعر الشراء بأحدث سعر شراء
-      if (item.price) prod.buy_price = item.price;
+      // تحديث سعر الشراء بأحدث سعر شراء + تطبيق سياسة التسعير فوراً لتفادي تعارض _diffAndPush
+      if (item.price) {
+        prod.buy_price = item.price;
+        if (prod.auto_price_update && prod.profit_policy_type === 'percentage_on_cost') {
+          const margin = parseFloat(prod.profit_policy_value) || 0;
+          if (margin > 0) {
+            prod.sell_price = Math.round(item.price * (1 + margin / 100) * 100) / 100;
+          }
+        }
+      }
       db.stock_moves.push({
         id: db.nextId.stock_move++,
         product_id: prod.id, product_name: prod.name, product_code: prod.code,
