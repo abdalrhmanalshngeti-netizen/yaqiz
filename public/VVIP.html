@@ -3275,7 +3275,9 @@ function calcNewInvTotals(){
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
   const afterDisc=Math.max(0,sub-discVal);
-  const vat=newInvVAT?afterDisc*0.15:0;
+  const _st=getDB().settings;
+  const _vatActive = newInvVAT && _st?.vat_enabled!==false && _st?.vat_enabled!==0;
+  const vat=_vatActive?afterDisc*0.15:0;
   const total=afterDisc+vat;
   const setTxt=(id,v)=>{const e=el(id);if(e)e.textContent=fmtMoney(v);};
   setTxt('ni-sum-sub',sub); setTxt('ni-sum-disc',discVal);
@@ -3299,7 +3301,9 @@ function saveNewInvoice(printAfter=false) {
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
   const afterDisc=Math.max(0,sub-discVal);
-  const vat=newInvVAT?afterDisc*0.15:0;
+  const _st2=getDB().settings;
+  const _vatActive2 = newInvVAT && _st2?.vat_enabled!==false && _st2?.vat_enabled!==0;
+  const vat=_vatActive2?afterDisc*0.15:0;
   const total=afterDisc+vat;
   const payment=el('ni-payment').value;
   const partialPaid=payment==='جزئي'?Number(el('ni-partial-amount')?.value||0):payment==='آجل'?0:total;
@@ -12180,7 +12184,11 @@ async function runAISearchQuery(q) {
   const STATUS_TO_FE   = { 'paid':'مسددة','issued':'آجل','partial':'مدفوع جزئياً','cancelled':'ملغاة','draft':'مسودة' };
 
   function invToAPI(inv) {
-    const _liveDB = getDB(); // دائماً الحالة الحديثة من localStorage
+    const _liveDB = getDB();
+    const _vatSt  = _liveDB.settings;
+    const _vatOn  = _vatSt?.vat_enabled !== false && _vatSt?.vat_enabled !== 0;
+    // إذا الفاتورة نفسها لم تُحسب فيها ضريبة (vat_total=0) أو الضريبة معطّلة → tax_rate=0
+    const _invHasVat = _vatOn && (parseFloat(inv.vat_total)||0) > 0;
     return {
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
@@ -12191,7 +12199,6 @@ async function runAISearchQuery(q) {
       discount_value: parseFloat(inv.discount)||0,
       notes: '',
       items: (inv.items||[]).map(it => {
-        // البحث عن المنتج بالـ ID أولاً، ثم بالاسم كبديل (بعد مزامنة المنتجات قد يتغير الـ ID)
         const _prod = _liveDB.products.find(p=>p.id===(it.id||it.product_id)) ||
                       _liveDB.products.find(p=>p.name===(it.name||it.product_name));
         return {
@@ -12200,7 +12207,7 @@ async function runAISearchQuery(q) {
           qty:          parseFloat(it.qty)||1,
           unit_price:   parseFloat(it.price||it.unit_price)||0,
           discount:     parseFloat(it.discount)||0,
-          tax_rate:     15
+          tax_rate:     _invHasVat ? 15 : 0
         };
       })
     };
