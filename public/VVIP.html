@@ -3496,14 +3496,25 @@ function printPurchaseInvoice(id) {
   </div>
   ${(p.items||[]).length?`
   <table>
-    <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
-    <tbody>${(p.items).map((it,i)=>`<tr>
-      <td>${i+1}</td>
-      <td style="font-weight:700;">${it.name}</td>
-      <td>${it.qty}</td>
-      <td>${Number(it.price||it.unit_price||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-      <td style="font-weight:800;">${Number(it.line_total||0).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-    </tr>`).join('')}</tbody>
+    <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الحبة (ق.ض)</th><th>ضريبة الحبة</th><th>إجمالي (ق.ض)</th><th>الضريبة</th><th>شامل الضريبة</th></tr></thead>
+    <tbody>${(p.items).map((it,i)=>{
+      const unitP    = Number(it.price||it.unit_price||0);
+      const qty      = Number(it.qty||1);
+      const lineP    = Number(it.line_total||unitP*qty);
+      const unitVat  = Math.round(unitP * 0.15 * 100)/100;
+      const lineVat  = Math.round(lineP * 0.15 * 100)/100;
+      const lineIncl = Math.round((lineP + lineVat)*100)/100;
+      return `<tr>
+        <td>${i+1}</td>
+        <td style="font-weight:700;">${it.name}</td>
+        <td>${qty}</td>
+        <td>${unitP.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        <td style="color:#b45309;">+${unitVat.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        <td>${lineP.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        <td style="color:#b45309;">+${lineVat.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+        <td style="font-weight:800;">${lineIncl.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`:
   `<div style="background:#f8fafc;padding:12px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">${p.description||''}</div>`}
   <div style="display:flex;justify-content:flex-end;">
@@ -3785,13 +3796,19 @@ function showAddGoodsPurchase(keepItems) {
 
       <!-- Items -->
       <div style="font-weight:800;font-size:13px;margin-bottom:8px;">📋 ${lang==='ar'?'الأصناف:':'Items:'}</div>
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:4px;">
         <input class="input" id="gp-iname" placeholder="${lang==='ar'?'اسم الصنف':'Item name'}" list="gp-prod-list" />
         <datalist id="gp-prod-list">${db.products.map(p=>`<option value="${p.name}" data-price="${p.buy_price}">`).join('')}</datalist>
-        <input class="input" type="number" id="gp-iqty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" min="1" />
-        <input class="input" type="number" id="gp-iunit" value="0" placeholder="${lang==='ar'?'سعر الوحدة':'Unit Price'}" oninput="calcGPLine()" />
-        <input class="input" type="number" id="gp-iline" value="0" placeholder="${lang==='ar'?'الإجمالي':'Total'}" readonly style="background:var(--bg);" />
+        <input class="input" type="number" id="gp-iqty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" min="1" oninput="calcGPLine()" />
+        <div>
+          <input class="input" type="number" id="gp-iunit" value="0" placeholder="${lang==='ar'?'سعر الحبة (ق.ض)':'Unit Price (ex-VAT)'}" oninput="calcGPLine()" />
+          <div id="gp-unit-vat" style="font-size:10px;color:#f59e0b;padding:2px 4px;">ضريبة الحبة: 0.00 ر.س</div>
+        </div>
+        <input class="input" type="number" id="gp-iline" value="0" placeholder="${lang==='ar'?'إجمالي (ق.ض)':'Total (ex-VAT)'}" readonly style="background:var(--bg);" />
         <button class="btn btn-primary" onclick="addGPItem()">${icon('plus',16)}</button>
+      </div>
+      <div id="gp-line-summary" style="font-size:11px;color:var(--text-muted);padding:2px 4px 8px;display:none;">
+        ضريبة الصنف: <span id="gp-line-vat-show" style="color:#f59e0b;font-weight:700;">0.00</span> ر.س &nbsp;|&nbsp; إجمالي شامل الضريبة: <span id="gp-line-total-show" style="color:var(--primary);font-weight:700;">0.00</span> ر.س
       </div>
       <div id="gp-items" style="margin-bottom:12px;min-height:50px;background:var(--bg);border-radius:8px;padding:8px;"></div>
 
@@ -3830,9 +3847,18 @@ function showAddGoodsPurchase(keepItems) {
 }
 
 function calcGPLine() {
-  const qty=Number(el('gp-iqty')?.value||1);
-  const price=Number(el('gp-iunit')?.value||0);
-  if(el('gp-iline')) el('gp-iline').value=(qty*price).toFixed(2);
+  const qty   = Number(el('gp-iqty')?.value  || 1);
+  const price = Number(el('gp-iunit')?.value || 0);
+  const linePre = qty * price;
+  const unitVat  = Math.round(price   * 0.15 * 100) / 100;
+  const lineVat  = Math.round(linePre * 0.15 * 100) / 100;
+  const lineIncl = Math.round((linePre + lineVat) * 100) / 100;
+  if (el('gp-iline'))        el('gp-iline').value = linePre.toFixed(2);
+  if (el('gp-unit-vat'))     el('gp-unit-vat').textContent = `ضريبة الحبة: ${unitVat.toFixed(2)} ر.س`;
+  const sumEl = el('gp-line-summary');
+  if (sumEl) sumEl.style.display = price > 0 ? 'block' : 'none';
+  if (el('gp-line-vat-show'))   el('gp-line-vat-show').textContent   = lineVat.toFixed(2);
+  if (el('gp-line-total-show')) el('gp-line-total-show').textContent = lineIncl.toFixed(2);
 }
 
 function addGPItem() {
@@ -3858,19 +3884,30 @@ function renderGPItems() {
     <thead><tr style="background:var(--border);">
       <th style="padding:6px;text-align:start;">${lang==='ar'?'الصنف':'Item'}</th>
       <th style="padding:6px;text-align:center;">${lang==='ar'?'الكمية':'Qty'}</th>
-      <th style="padding:6px;text-align:center;">${lang==='ar'?'السعر':'Price'}</th>
-      <th style="padding:6px;text-align:center;">${lang==='ar'?'الإجمالي':'Total'}</th>
+      <th style="padding:6px;text-align:center;">${lang==='ar'?'سعر الحبة':'Unit Price'}</th>
+      <th style="padding:6px;text-align:center;color:#f59e0b;">${lang==='ar'?'ضريبة الحبة':'Unit VAT'}</th>
+      <th style="padding:6px;text-align:center;">${lang==='ar'?'إجمالي الصنف (ق.ض)':'Line Total'}</th>
+      <th style="padding:6px;text-align:center;color:#f59e0b;">${lang==='ar'?'الضريبة':'VAT'}</th>
+      <th style="padding:6px;text-align:center;font-weight:800;">${lang==='ar'?'شامل الضريبة':'With VAT'}</th>
       <th style="padding:6px;"></th>
     </tr></thead>
-    <tbody>${_goodsItems.map((i,idx)=>`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:6px;font-weight:700;">${i.name}</td>
-      <td style="padding:6px;text-align:center;">${i.qty}</td>
-      <td style="padding:6px;text-align:center;">${fmtMoney(i.price)}</td>
-      <td style="padding:6px;text-align:center;font-weight:800;color:var(--primary);">${fmtMoney(i.line_total)}</td>
-      <td style="padding:6px;text-align:center;">
-        <button class="icon-btn" style="width:24px;height:24px;" onclick="_goodsItems.splice(${idx},1);renderGPItems();updateGPTotals()">${icon('x',12)}</button>
-      </td>
-    </tr>`).join('')}</tbody>
+    <tbody>${_goodsItems.map((i,idx)=>{
+      const unitVat   = Math.round(i.price  * 0.15 * 100) / 100;
+      const lineVat   = Math.round(i.line_total * 0.15 * 100) / 100;
+      const lineTotal = Math.round((i.line_total + lineVat) * 100) / 100;
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px;font-weight:700;">${i.name}</td>
+        <td style="padding:6px;text-align:center;">${i.qty}</td>
+        <td style="padding:6px;text-align:center;">${fmtMoney(i.price)}</td>
+        <td style="padding:6px;text-align:center;color:#f59e0b;">+${fmtMoney(unitVat)}</td>
+        <td style="padding:6px;text-align:center;">${fmtMoney(i.line_total)}</td>
+        <td style="padding:6px;text-align:center;color:#f59e0b;">+${fmtMoney(lineVat)}</td>
+        <td style="padding:6px;text-align:center;font-weight:800;color:var(--primary);">${fmtMoney(lineTotal)}</td>
+        <td style="padding:6px;text-align:center;">
+          <button class="icon-btn" style="width:24px;height:24px;" onclick="_goodsItems.splice(${idx},1);renderGPItems();updateGPTotals()">${icon('x',12)}</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 
@@ -4328,12 +4365,43 @@ function updatePricingPreview() {
   if (!on) return;
   const previewEl = el('pr-pricing-preview');
   if (!previewEl) return;
-  const buy = parseFloat(el('pr-buy')?.value) || 0;
-  const pct = parseFloat(el('pr-policy-val')?.value) || 0;
+  const buy         = parseFloat(el('pr-buy')?.value)  || 0;
+  const pct         = parseFloat(el('pr-policy-val')?.value) || 0;
+  const currentSell = parseFloat(el('pr-sell')?.value) || 0;
+
   if (buy <= 0) {
     previewEl.innerHTML = `<span style="color:var(--text-muted);font-size:12px;">👆 أدخل سعر الشراء أعلاه لتظهر الحسبة</span>`;
     return;
   }
+
+  if (pct <= 0) {
+    // تحذير: نسبة الربح صفر تعني سعر البيع = سعر الشراء عند وصول مشتريات
+    const curWithVat = Math.round(currentSell * 1.15 * 100) / 100;
+    const curMargin  = currentSell > 0 && buy > 0
+      ? Math.round((currentSell - buy) / buy * 100 * 100) / 100 : 0;
+    previewEl.innerHTML = `
+      <div style="padding:10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);border-radius:8px;font-size:12px;">
+        <div style="color:#fbbf24;font-weight:800;margin-bottom:8px;">⚠️ نسبة الربح = 0% — انتبه!</div>
+        <div style="color:#cbd5e1;line-height:2;">
+          <div style="display:flex;justify-content:space-between;">
+            <span>💲 سعر الشراء (التكلفة)</span>
+            <strong style="color:#f1f5f9;">${buy.toFixed(2)} ر.س</strong>
+          </div>
+          ${currentSell > 0 ? `
+          <div style="display:flex;justify-content:space-between;">
+            <span>🏷️ سعر البيع الحالي (قبل الضريبة)</span>
+            <strong style="color:#60a5fa;">${currentSell.toFixed(2)} ر.س <span style="font-size:10px;color:#94a3b8;">(هامش ${curMargin}%)</span></strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span>💰 للزبون شامل الضريبة</span>
+            <strong style="color:#34d399;">${curWithVat.toFixed(2)} ر.س</strong>
+          </div>` : ''}
+        </div>
+        <div style="margin-top:8px;color:#fbbf24;font-size:11px;">لو وصل شراء جديد بهذا السعر → سيُعاد حساب سعر البيع = ${buy.toFixed(2)} ر.س (ربح صفر!) — أدخل نسبة ربح لحماية هامشك</div>
+      </div>`;
+    return;
+  }
+
   const profitAmt   = Math.round(buy * (pct / 100) * 100) / 100;
   const sellPreTax  = Math.round((buy + profitAmt) * 100) / 100;
   const vatAmt      = Math.round(sellPreTax * 0.15 * 100) / 100;
@@ -4349,7 +4417,7 @@ function updatePricingPreview() {
         <strong style="color:#fbbf24;">+ ${profitAmt.toFixed(2)} ر.س</strong>
       </div>
       <div style="border-top:1px solid rgba(255,255,255,.1);padding-top:5px;display:flex;justify-content:space-between;">
-        <span style="color:#cbd5e1;">🏷️ سعر البيع للزبون (قبل الضريبة)</span>
+        <span style="color:#cbd5e1;">🏷️ سعر البيع (قبل الضريبة)</span>
         <strong style="color:#60a5fa;">${sellPreTax.toFixed(2)} ر.س</strong>
       </div>
       <div style="display:flex;justify-content:space-between;color:#94a3b8;">
@@ -4357,7 +4425,7 @@ function updatePricingPreview() {
         <strong>+ ${vatAmt.toFixed(2)} ر.س</strong>
       </div>
       <div style="border-top:1px solid rgba(255,255,255,.15);padding-top:5px;display:flex;justify-content:space-between;">
-        <span style="color:#fff;font-weight:800;">💰 السعر الكلي شامل الضريبة</span>
+        <span style="color:#fff;font-weight:800;">💰 للزبون شامل الضريبة</span>
         <strong style="color:#34d399;font-size:14px;">${sellWithTax.toFixed(2)} ر.س</strong>
       </div>
     </div>`;
