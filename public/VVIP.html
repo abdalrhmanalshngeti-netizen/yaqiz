@@ -2907,7 +2907,9 @@ let newInvType = 'simplified';
 function showNewInvoiceModal() {
   const db=getDB();
   newInvItems=[]; newInvDiscount={type:'value',value:0};
-  const _hasVat = !!(getDB().settings?.vat_number);
+  const _s = getDB().settings;
+  const _vatEnabled = _s?.vat_enabled !== false;
+  const _hasVat = !!(_s?.vat_number) && _vatEnabled;
   newInvVAT=_hasVat; newInvType='simplified';
   const mc=el('modal-container');
   mc.innerHTML=`
@@ -3003,8 +3005,13 @@ function showNewInvoiceModal() {
             </div>
           </div>
           <label style="display:flex;align-items:center;gap:8px;cursor:${db.settings?.vat_number?'pointer':'not-allowed'};padding:8px;background:white;border-radius:8px;border:1px solid var(--border);opacity:${db.settings?.vat_number?1:0.5};">
-            <input type="checkbox" id="ni-vat-check" ${db.settings?.vat_number?'checked':''} ${!db.settings?.vat_number?'disabled':''} onchange="newInvVAT=this.checked;calcNewInvTotals()" />
-            <span style="font-weight:700;font-size:13px;">${db.settings?.vat_number?'✅':''} ${lang==='ar'?'ضريبة القيمة المضافة 15%':'VAT 15%'}${!db.settings?.vat_number?` <span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'يتطلب رقم ضريبي':'requires VAT number'})</span>`:''}</span>
+            <input type="checkbox" id="ni-vat-check" ${_hasVat?'checked':''} ${!db.settings?.vat_number?'disabled':''} onchange="newInvVAT=this.checked;calcNewInvTotals()" />
+            <span style="font-weight:700;font-size:13px;">
+              ${_hasVat?'✅':db.settings?.vat_number?'⭕':''}
+              ${lang==='ar'?'ضريبة القيمة المضافة 15%':'VAT 15%'}
+              ${!db.settings?.vat_number?`<span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'يتطلب رقم ضريبي':'requires VAT number'})</span>`:''}
+              ${db.settings?.vat_number && !_vatEnabled?`<span style="font-size:11px;font-weight:400;color:#b45309;">(${lang==='ar'?'مُعطَّلة من الإعدادات':'disabled in settings'})</span>`:''}
+            </span>
           </label>
           <hr style="border-color:var(--border);">
           <div style="display:flex;justify-content:space-between;font-size:13px;"><span>${lang==='ar'?'قيمة الخصم:':'Discount:'}</span><span id="ni-sum-disc" style="color:var(--danger);">0.00</span></div>
@@ -3048,10 +3055,12 @@ function toggleVATField() {
 function onGpVendorInput(val) {
   const db = getDB();
   const warn = el('gp-vendor-warn'); if(!warn) return;
-  const name = val.trim();
+  const name = val.trim().toLowerCase();
   if(!name) { warn.style.display='none'; return; }
-  const found = db.suppliers.find(s=>s.name===name);
+  const found = db.suppliers.find(s => s.name.trim().toLowerCase() === name);
   warn.style.display = found ? 'none' : 'block';
+  // إذا وُجد المورد، امسح أي تحذير وملّئ رقمه الضريبي إن وُجد
+  if (found && el('gp-supplier-vat')) el('gp-supplier-vat').value = found.vat_num || '';
 }
 
 function onNiCustomerInput(val) {
@@ -3947,9 +3956,12 @@ function saveGoodsPurchase() {
   const remaining=total-paidNow;
   const status=payment==='نقدي'?'مسدد':payment==='آجل'?'آجل':'جزئي';
 
+  const _vendorName = el('gp-vendor').value.trim();
+  const _vendorRec  = db.suppliers.find(s => s.name.trim().toLowerCase() === _vendorName.toLowerCase());
   const p={
     id:nextId(db,'purchase'),
-    vendor:el('gp-vendor').value,
+    vendor: _vendorName,
+    supplier_id: _vendorRec?.id || null,
     description: _goodsItems.map(i=>i.name).join('، ') || (lang==='ar'?'فاتورة بضاعة':'Goods Invoice'),
     category:'بضاعة', purchase_type:'goods',
     items:[..._goodsItems],
@@ -12543,7 +12555,12 @@ async function runAISearchQuery(q) {
         const old = (prev.purchases || []).find(o => o.id === p.id);
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create purchase', p.vendor);
+          const _ldb2 = getDB();
+          const _sup2 = p.supplier_id
+            ? _ldb2.suppliers.find(s => s.id === p.supplier_id)
+            : _ldb2.suppliers.find(s => s.name.trim().toLowerCase() === (p.vendor||'').trim().toLowerCase());
           const res = await apiFetch('POST', '/api/purchases', {
+            supplier_id:   _sup2?.id || null,
             supplier_name: p.vendor, description: p.description,
             category: p.category, date: (p.created_at || new Date().toISOString()).slice(0, 10),
             purchase_type: p.purchase_type || ((p.category === 'بضاعة' || p.category === 'goods') ? 'goods' : 'opex'),
@@ -12551,7 +12568,7 @@ async function runAISearchQuery(q) {
             payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
             supplier_ref: p.supplier_ref||'', notes: p.notes||'',
             items: (p.items||[]).filter(it=>it.name||it.product_id).map(it=>{
-              const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
+              const _pr=_ldb2.products.find(x=>x.id===it.product_id)||_ldb2.products.find(x=>x.name===it.name);
               return {product_id:_pr?.id||it.product_id||null, name:it.name||_pr?.name||'', qty:parseFloat(it.qty)||1, unit_cost:parseFloat(it.price||it.unit_price||it.unit_cost||0)};
             }).filter(it=>it.name||it.product_id)
           }).catch(e => { console.warn('purchase create:', e.message); return null; });
