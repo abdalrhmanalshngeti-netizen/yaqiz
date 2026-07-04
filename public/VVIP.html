@@ -6351,7 +6351,7 @@ function saveUser(id) {
           // إنشاء مستخدم جديد
           const res = await window._cloudApiFetch('POST', '/api/users', {
             username, password, full_name: fullname, role,
-            permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled
+            permissions: perms, pos_access: posAccess, shift_enabled: false
           });
           if (res?.data?.id) {
             // تحديث الـ ID المحلي بـ ID من قاعدة البيانات
