@@ -13,6 +13,7 @@ router.post('/transfer',          can('treasury.edit'),   ctrl.transfer);
 
 // Moves
 router.get ('/moves',             can('treasury.view'),   ctrl.listMoves);
+router.post('/move',              can('treasury.manage'), ctrl.addMove);
 
 // Vouchers
 router.get ('/vouchers',          can('receipts.view'),   ctrl.listVouchers);

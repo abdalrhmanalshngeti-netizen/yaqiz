@@ -112,6 +112,41 @@ exports.transfer = async (req, res, next) => {
   }
 };
 
+exports.addMove = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { type, amount, description, reference } = req.body;
+    if (!['in', 'out'].includes(type) || !amount) {
+      return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
+    }
+
+    const { rows: [acct] } = await client.query(
+      `SELECT * FROM treasury_accounts WHERE company_id = $1 AND is_default = true LIMIT 1`,
+      [req.user.company_id]
+    );
+    if (!acct) return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' });
+
+    const newBal = type === 'in'
+      ? parseFloat(acct.balance) + parseFloat(amount)
+      : parseFloat(acct.balance) - parseFloat(amount);
+
+    await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, acct.id]);
+    await client.query(`
+      INSERT INTO treasury_moves (company_id, account_id, type, amount, balance_before, balance_after, description, source_type, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8)
+    `, [req.user.company_id, acct.id, type, amount, acct.balance, newBal, description || '', req.user.sub]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: { balance: newBal } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
 exports.listMoves = async (req, res, next) => {
   try {
     const { account_id, from, to, limit = 100 } = req.query;

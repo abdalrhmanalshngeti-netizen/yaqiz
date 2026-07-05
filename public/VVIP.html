@@ -4800,7 +4800,7 @@ function saveTreasuryMove(type) {
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
-  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString()};
+  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),_manual:true};
   db.treasury.moves.unshift(m);
   db.treasury.balance += type==='in'?amount:-amount;
 
@@ -12372,7 +12372,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -12383,6 +12383,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/quotes?limit=500'),
         apiFetch('GET', '/api/users').catch(() => null),
         apiFetch('GET', '/api/auth/me').catch(() => null),
+        apiFetch('GET', '/api/obligations').catch(() => null),
       ]);
 
       const db = getDB();
@@ -12396,8 +12397,28 @@ async function runAISearchQuery(q) {
 
       if (treas?.data?.length) {
         const defaultAcc = treas.data.find(a => a.is_default) || treas.data[0];
-        db.treasury      = db.treasury || {};
-        db.treasury.balance = parseFloat(defaultAcc.balance) || 0;
+        db.treasury = db.treasury || {};
+        db.treasury._defaultAccountId = defaultAcc.id;
+        const _srvBal = parseFloat(defaultAcc.balance) || 0;
+        const _locBal = parseFloat(db.treasury.balance) || 0;
+        // استخدم رصيد السيرفر فقط لو أكبر من المحلي (يعني تم تسجيل حركات من جهاز آخر)
+        // أو لو الرصيد المحلي صفر (بداية جديدة)
+        if (_srvBal > _locBal || _locBal === 0) {
+          db.treasury.balance = _srvBal;
+        }
+      }
+
+      if (oblRes?.data) {
+        db.obligations = oblRes.data.map(o => ({
+          id:        o.id,
+          name:      o.name,
+          category:  o.category  || '',
+          vendor:    o.vendor    || '',
+          amount:    parseFloat(o.amount) || 0,
+          frequency: o.frequency || 'شهري',
+          next_due:  o.next_due  ? new Date(o.next_due).toISOString() : new Date().toISOString(),
+          status:    o.status    || 'active',
+        }));
       }
       if (quotesRes?.data) db.quotes = quotesRes.data.map(quoteToFE);
 
@@ -12669,6 +12690,46 @@ async function runAISearchQuery(q) {
         if (!(newDB.quotes || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: delete quote', old.quote_no);
           await apiFetch('DELETE', `/api/quotes/${old.id}`).catch(() => {});
+        }
+      }
+
+      // ── Obligations: create / update / delete ─────────────
+      for (const o of newDB.obligations || []) {
+        const old = (prev.obligations || []).find(x => x.id === o.id);
+        const body = { name: o.name, category: o.category, amount: o.amount,
+                       frequency: o.frequency, next_due: (o.next_due||'').slice(0,10),
+                       vendor: o.vendor, status: o.status };
+        if (!old) {
+          if (SYNC_LOG) console.log('→ API: create obligation', o.name);
+          const res = await apiFetch('POST', '/api/obligations', body)
+            .catch(e => { console.warn('obligation create:', e.message); return null; });
+          if (res?.data?.id && res.data.id !== o.id) _replaceLocalId('obligations', o.id, res.data.id);
+        } else if (JSON.stringify(o) !== JSON.stringify(old)) {
+          if (SYNC_LOG) console.log('→ API: update obligation', o.name);
+          await apiFetch('PUT', `/api/obligations/${o.id}`, body)
+            .catch(e => console.warn('obligation update:', e.message));
+        }
+      }
+      for (const old of prev.obligations || []) {
+        if (!(newDB.obligations || []).find(x => x.id === old.id)) {
+          if (SYNC_LOG) console.log('→ API: delete obligation', old.name);
+          await apiFetch('DELETE', `/api/obligations/${old.id}`).catch(() => {});
+        }
+      }
+
+      // ── Treasury: حركات يدوية جديدة (إيداع/سحب) ────────────
+      const _prevMoves = prev.treasury?.moves || [];
+      const _newMoves  = newDB.treasury?.moves || [];
+      const _accId     = newDB.treasury?._defaultAccountId;
+      if (_accId) {
+        for (const m of _newMoves) {
+          if (!_prevMoves.find(x => x.id === m.id) && m._manual) {
+            if (SYNC_LOG) console.log('→ API: treasury move', m.type, m.amount);
+            await apiFetch('POST', '/api/treasury/move', {
+              type: m.type, amount: m.amount,
+              description: m.description || '', reference: m.reference || ''
+            }).catch(e => console.warn('treasury move sync:', e.message));
+          }
         }
       }
 
