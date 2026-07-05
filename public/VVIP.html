@@ -6644,7 +6644,7 @@ function saveObligation(id) {
   const data = { name:el('ob-name').value, vendor:el('ob-vendor').value, amount:Number(el('ob-amount').value||0), frequency:el('ob-freq').value, category:el('ob-cat').value, next_due:new Date(el('ob-due').value).toISOString(), status:el('ob-status').value };
   if(!data.name){showToast(lang==='ar'?'اسم الالتزام مطلوب':'Name required','error');return;}
   if(id){const o=db.obligations.find(x=>x.id===id);if(o)Object.assign(o,data);}
-  else db.obligations.push({id:nextId(db,'obligation'),...data});
+  else db.obligations.push({id:nextId(db,'obligation'),...data,_pending:true});
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الحفظ':'Saved'}`);closeModal();renderPage();
 }
 
@@ -12409,7 +12409,7 @@ async function runAISearchQuery(q) {
       }
 
       if (oblRes?.data) {
-        db.obligations = oblRes.data.map(o => ({
+        const _srvObls = oblRes.data.map(o => ({
           id:        o.id,
           name:      o.name,
           category:  o.category  || '',
@@ -12419,6 +12419,11 @@ async function runAISearchQuery(q) {
           next_due:  o.next_due  ? new Date(o.next_due).toISOString() : new Date().toISOString(),
           status:    o.status    || 'active',
         }));
+        // احتفظ بالالتزامات المحلية التي لم تُزامَن بعد (pending) دون طغيان السيرفر عليها
+        const _localPending = (db.obligations||[]).filter(lo =>
+          lo._pending && !_srvObls.find(so => so.id === lo.id)
+        );
+        db.obligations = [..._srvObls, ..._localPending];
       }
       if (quotesRes?.data) db.quotes = quotesRes.data.map(quoteToFE);
 
@@ -12703,7 +12708,16 @@ async function runAISearchQuery(q) {
           if (SYNC_LOG) console.log('→ API: create obligation', o.name);
           const res = await apiFetch('POST', '/api/obligations', body)
             .catch(e => { console.warn('obligation create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== o.id) _replaceLocalId('obligations', o.id, res.data.id);
+          if (res?.data?.id) {
+            // أزل علامة _pending بعد الحفظ الناجح
+            try {
+              const _db = getDB();
+              const _targetId = res.data.id !== o.id ? o.id : res.data.id;
+              const _obl = _db.obligations.find(x => x.id === _targetId || x.id === o.id);
+              if (_obl) { delete _obl._pending; _origSaveDB(_db); }
+            } catch(e) {}
+            if (res.data.id !== o.id) _replaceLocalId('obligations', o.id, res.data.id);
+          }
         } else if (JSON.stringify(o) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update obligation', o.name);
           await apiFetch('PUT', `/api/obligations/${o.id}`, body)
@@ -12711,7 +12725,7 @@ async function runAISearchQuery(q) {
         }
       }
       for (const old of prev.obligations || []) {
-        if (!(newDB.obligations || []).find(x => x.id === old.id)) {
+        if (!(newDB.obligations || []).find(x => x.id === old.id) && !old._pending) {
           if (SYNC_LOG) console.log('→ API: delete obligation', old.name);
           await apiFetch('DELETE', `/api/obligations/${old.id}`).catch(() => {});
         }
