@@ -7088,6 +7088,7 @@ function saveVoucher(type, printAfter=true) {
       }
       inv.last_payment_date = new Date().toISOString();
       inv.last_voucher_no = voucher.voucher_no;
+      inv.last_payment_method = voucher.method || 'نقدي';
       left = Math.round((left-applying)*100)/100;
       logActivity('مبيعات', `تحديث فاتورة ${inv.invoice_no} من "${prevStatus}" إلى "${inv.status}" — سند ${voucher.voucher_no}`);
     }
@@ -12639,6 +12640,16 @@ async function runAISearchQuery(q) {
               payment_method: inv.last_payment_method || 'نقدي'
             }).catch(e => console.warn('invoice payment sync:', e.message));
           }
+        }
+      }
+
+      // ── Invoices: حذف محلي → إلغاء على السيرفر (DELETE → cancel) ──
+      for (const old of prev.invoices || []) {
+        const stillExists = (newDB.invoices || []).find(i => i.id === old.id);
+        if (!stillExists && old.status !== 'ملغاة' && old.id) {
+          if (SYNC_LOG) console.log('→ API: cancel deleted invoice', old.invoice_no);
+          await apiFetch('POST', `/api/invoices/${old.id}/cancel`, { reason: 'حذف من الواجهة' })
+            .catch(e => console.warn('invoice delete-cancel sync:', e.message));
         }
       }
 
