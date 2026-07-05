@@ -10114,7 +10114,7 @@ async function renderAdminSessionsTab(mc) {
     </div></div>
   </div>`;
   try {
-    const res = await apiFetch('GET', '/api/auth/admin-accesses');
+    const res = await window._cloudApiFetch('GET', '/api/auth/admin-accesses');
     const list = el('admin-sessions-list');
     if (!list) return;
     if (!res?.data?.length) {
@@ -10140,7 +10140,7 @@ async function renderAdminSessionsTab(mc) {
 async function revokeAdminSessions() {
   if (!confirm('هل تريد إلغاء جميع جلسات الدخول الإداري الحالية؟\nسيُطرد الأدمن فوراً إذا كان متصلاً.')) return;
   try {
-    await apiFetch('POST', '/api/auth/revoke-admin-sessions');
+    await window._cloudApiFetch('POST', '/api/auth/revoke-admin-sessions');
     showToast('✅ تم إلغاء جميع جلسات الأدمن', 'success');
     renderAdminSessionsTab(el('settings-main-content'));
   } catch { showToast('خطأ في الإلغاء', 'error'); }
