@@ -6371,7 +6371,10 @@ function saveUser(id) {
 
 function deleteUser(id) {
   if(!confirm(t('confirm')))return;
-  const db=getDB();db.users=db.users.filter(u=>u.id!==id);saveDB(db);renderPage();
+  const db=getDB();
+  const u=db.users.find(x=>x.id===id);
+  if(u) u.active=false; // soft-delete محلياً متوافق مع السيرفر
+  saveDB(db);renderPage();
   if (window._apiReachable && window._cloudApiFetch) {
     window._cloudApiFetch('DELETE', `/api/users/${id}`).catch(e=>console.warn('User delete API:', e.message));
   }
@@ -10533,6 +10536,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
   }
   inv.last_payment_date = new Date().toISOString();
   inv.last_voucher_no = voucher.voucher_no;
+  inv.last_payment_method = el('qr-method')?.value || 'نقدي';
 
   // Journal entry
   if(!db.journal) db.journal=[];
@@ -12613,7 +12617,7 @@ async function runAISearchQuery(q) {
         }
       }
 
-      // ── Invoices: create جديدة / cancel ملغاة ────────────
+      // ── Invoices: create جديدة / payment / cancel ملغاة ────────────
       for (const inv of newDB.invoices || []) {
         const old = (prev.invoices || []).find(o => o.id === inv.id);
         if (!old) {
@@ -12623,6 +12627,18 @@ async function runAISearchQuery(q) {
         } else if (old.status !== 'ملغاة' && inv.status === 'ملغاة') {
           if (SYNC_LOG) console.log('→ API: cancel invoice', inv.invoice_no);
           await apiFetch('POST', `/api/invoices/${inv.id}/cancel`, { reason: 'إلغاء من الواجهة' }).catch(e => console.warn('invoice cancel:', e.message));
+        } else {
+          // مزامنة تحصيل الدفعات — إذا زاد paid_amount
+          const _oldPaid = parseFloat(old.paid_amount || 0);
+          const _newPaid = parseFloat(inv.paid_amount || 0);
+          if (_newPaid > _oldPaid + 0.01) {
+            const _payAmt = Math.round((_newPaid - _oldPaid) * 100) / 100;
+            if (SYNC_LOG) console.log('→ API: invoice payment', inv.invoice_no, _payAmt);
+            await apiFetch('POST', `/api/invoices/${inv.id}/payment`, {
+              amount: _payAmt,
+              payment_method: inv.last_payment_method || 'نقدي'
+            }).catch(e => console.warn('invoice payment sync:', e.message));
+          }
         }
       }
 
