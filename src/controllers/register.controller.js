@@ -57,7 +57,7 @@ exports.register = async (req, res, next) => {
     // basic plan never expires — only paid plans get a 14-day trial window
     const { rows: [company] } = await client.query(`
       INSERT INTO companies (name, vat_number, cr_number, address, city, contact_email, contact_phone, status, plan, subscription_expires_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8, CASE WHEN $8 = 'basic' THEN NULL ELSE NOW() + INTERVAL '14 days' END)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8::varchar, CASE WHEN $8::varchar = 'basic' THEN NULL ELSE NOW() + INTERVAL '14 days' END)
       RETURNING *
     `, [company_name, vat_number||null, cr_number||null, address||null, city||null,
         contact_email||null, contact_phone||null, plan]);
