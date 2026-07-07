@@ -247,7 +247,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="charts-row">
         <div class="chart-card">
           <div class="chart-title">📈 التسجيلات اليومية</div>
-          <div class="chart-sub">آخر 14 يوم</div>
+          <div class="chart-sub">آخر 30 يوم</div>
           <div class="chart-wrap"><canvas id="chart-reg"></canvas></div>
         </div>
         <div class="chart-card">
@@ -319,7 +319,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="sec-head">
         <div>
           <div class="sec-title">🆕 عملاء جدد</div>
-          <div class="sec-sub">المنشآت المسجّلة خلال آخر 14 يوماً</div>
+          <div class="sec-sub">المنشآت المسجّلة خلال آخر 30 يوماً</div>
         </div>
         <button class="btn-action" onclick="loadNewClients()">🔄 تحديث</button>
       </div>
@@ -626,7 +626,7 @@ function renderNewClients(data) {
         <div style="width:4px;height:20px;background:#f59e0b;border-radius:2px;"></div>
         <span style="font-weight:700;font-size:15px;color:#f59e0b;">عملاء محتملون</span>
         <span style="background:#f59e0b;color:#fff;padding:1px 8px;border-radius:10px;font-size:12px;">${potList.length}</span>
-        <span style="color:var(--muted);font-size:12px;">— من 10 إلى 14 يوماً</span>
+        <span style="color:var(--muted);font-size:12px;">— من 15 إلى 30 يوماً</span>
         ${potList.length ? `<span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:2px 10px;border-radius:8px;font-size:12px;margin-right:auto;">⚠️ اتصل بهم قبل انتهاء التجربة</span>` : ''}
       </div>
       <div style="overflow-x:auto;border:1px solid rgba(245,158,11,.25);border-radius:10px;">

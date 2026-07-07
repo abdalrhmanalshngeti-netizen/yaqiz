@@ -45,7 +45,7 @@ exports.stats = async (req, res, next) => {
       db.query(`
         SELECT TO_CHAR(created_at,'YYYY-MM-DD') AS day, COUNT(*)::int AS count
         FROM companies
-        WHERE created_at >= NOW() - INTERVAL '14 days'
+        WHERE created_at >= NOW() - INTERVAL '30 days'
         GROUP BY day ORDER BY day
       `),
       db.query(`
@@ -346,12 +346,12 @@ exports.newClients = async (req, res, next) => {
              u.full_name, u.username
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id AND u.role = 'owner'
-      WHERE c.created_at >= NOW() - INTERVAL '14 days'
+      WHERE c.created_at >= NOW() - INTERVAL '30 days'
         AND NOT EXISTS (SELECT 1 FROM platform_admins WHERE email = u.username)
       ORDER BY c.created_at DESC
     `);
-    const newClients       = rows.filter(r => r.days_since <  10);
-    const potentialClients = rows.filter(r => r.days_since >= 10);
+    const newClients       = rows.filter(r => r.days_since <  15);
+    const potentialClients = rows.filter(r => r.days_since >= 15);
     res.json({ success: true, new: newClients, potential: potentialClients });
   } catch (err) { next(err); }
 };
