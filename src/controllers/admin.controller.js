@@ -320,7 +320,7 @@ exports.setCompanyPlan = async (req, res, next) => {
         [plan, expDate, req.params.id]
       );
     } else {
-      const days = plan === 'trial' ? 14 : 30;
+      const days = 30;
       await db.query(
         `UPDATE companies SET plan = $1, subscription_expires_at = NOW() + ($2 || ' days')::INTERVAL WHERE id = $3`,
         [plan, String(days), req.params.id]
