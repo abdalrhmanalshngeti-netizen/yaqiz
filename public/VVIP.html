@@ -11343,34 +11343,34 @@ function computePartyStatement(partyName, kind) {
 
   const events = [];
   if (openingBal !== 0) {
-    events.push({ date: openingDate || new Date(0).toISOString(), desc: lang==='ar'?'رصيد افتتاحي':'Opening Balance', type: lang==='ar'?'افتتاحي':'Opening', debit: openingBal>0?openingBal:0, credit: openingBal<0?-openingBal:0, ref:'', isOpening:true });
+    events.push({ date: openingDate || new Date(0).toISOString(), desc: lang==='ar'?'رصيد افتتاحي':'Opening Balance', type: lang==='ar'?'افتتاحي':'Opening', debit: openingBal>0?openingBal:0, credit: openingBal<0?-openingBal:0, ref:'', method:'', isOpening:true });
   }
 
   if (isCust) {
     db.invoices.filter(i=>i.customer_name===partyName).forEach(inv=>{
-      events.push({ date: inv.created_at, desc: `${lang==='ar'?'فاتورة مبيعات':'Sales Invoice'} ${inv.invoice_no}`, type: lang==='ar'?'فاتورة':'Invoice', debit: inv.grand_total, credit: 0, ref: inv.invoice_no });
+      events.push({ date: inv.created_at, desc: `${lang==='ar'?'فاتورة مبيعات':'Sales Invoice'} ${inv.invoice_no}`, type: lang==='ar'?'فاتورة':'Invoice', debit: inv.grand_total, credit: 0, ref: inv.invoice_no, method: inv.payment_method||'' });
       if ((inv.paid_amount||0) > 0) {
-        events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: inv.paid_amount, ref: inv.invoice_no });
+        events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: inv.paid_amount, ref: inv.invoice_no, method: inv.payment_method||'' });
       }
     });
     (db.receipts||[]).filter(r=>r.party===partyName && r.type==='receipt').forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no });
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
     (db.returns||[]).filter(r=>r.type==='sales' && r.party===partyName).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no });
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   } else {
     db.purchases.filter(p=>p.vendor===partyName).forEach(p=>{
-      events.push({ date: p.created_at, desc: p.description || (lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'), type: lang==='ar'?'فاتورة':'Invoice', debit: p.total, credit: 0, ref: p.supplier_ref||'' });
+      events.push({ date: p.created_at, desc: p.description || (lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'), type: lang==='ar'?'فاتورة':'Invoice', debit: p.total, credit: 0, ref: p.supplier_ref||'', method: p.payment_method||'' });
       if ((p.paid_amount||0) > 0) {
-        events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: p.paid_amount, ref: p.supplier_ref||'' });
+        events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: p.paid_amount, ref: p.supplier_ref||'', method: p.payment_method||'' });
       }
     });
     (db.receipts||[]).filter(r=>r.party===partyName && r.type==='payment').forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no });
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
     (db.returns||[]).filter(r=>r.type==='purchases' && r.party===partyName).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no });
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   }
 
@@ -11489,18 +11489,19 @@ function renderPartyStatementDetail(c, partyName, kind) {
       </div>
     </div></div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'النوع':'Type'}</th><th>${lang==='ar'?'مدين':'Debit'}</th><th>${lang==='ar'?'دائن':'Credit'}</th><th>${lang==='ar'?'الرصيد':'Balance'}</th></tr></thead>
-      <tbody>${st.events.length===0?`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد معاملات':'No transactions'}</td></tr>`:
+      <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'النوع':'Type'}</th><th>${lang==='ar'?'طريقة الدفع':'Payment Method'}</th><th>${lang==='ar'?'مدين':'Debit'}</th><th>${lang==='ar'?'دائن':'Credit'}</th><th>${lang==='ar'?'الرصيد':'Balance'}</th></tr></thead>
+      <tbody>${st.events.length===0?`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد معاملات':'No transactions'}</td></tr>`:
         st.events.map(e=>`<tr>
           <td style="font-size:12px;">${fmtDate(e.date)}</td>
           <td>${e.desc}</td>
           <td>${e.type}</td>
+          <td>${e.method?`<span class="badge badge-blue">${e.method}</span>`:'-'}</td>
           <td style="color:var(--danger);font-weight:700;">${e.debit?fmtMoney(e.debit):''}</td>
           <td style="color:var(--success);font-weight:700;">${e.credit?fmtMoney(e.credit):''}</td>
           <td style="font-weight:800;">${fmtMoney(e.balance)}</td>
         </tr>`).join('')}
       </tbody>
-      <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">${lang==='ar'?'الرصيد النهائي:':'Final Balance:'}</td><td style="font-weight:900;color:${st.finalBalance>0?'var(--danger)':'var(--success)'};">${fmtMoney(st.finalBalance)}</td></tr></tfoot>
+      <tfoot><tr class="total-row"><td colspan="6" style="text-align:end;">${lang==='ar'?'الرصيد النهائي:':'Final Balance:'}</td><td style="font-weight:900;color:${st.finalBalance>0?'var(--danger)':'var(--success)'};">${fmtMoney(st.finalBalance)}</td></tr></tfoot>
     </table></div></div>
   </div>`;
 }
@@ -11580,7 +11581,7 @@ function exportCustomerStatementPDF(customerId) {
   if(!customer) { showToast('العميل غير موجود','error'); return; }
   const now = new Date();
   const st = computePartyStatement(customer.name, 'customer');
-  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.ref||''}</td><td>${e.desc}</td>
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.ref||''}</td><td>${e.desc}</td><td>${e.method||'-'}</td>
     <td style="color:#dc2626;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
   const finalBalance = st.finalBalance;
@@ -11597,9 +11598,9 @@ function exportCustomerStatementPDF(customerId) {
     <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">الرصيد المستحق</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>
-    <thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
-    <tbody>${rows.join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
-    <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
+    <thead><tr><th>التاريخ</th><th>المرجع</th><th>البيان</th><th>طريقة الدفع</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
+    <tbody>${rows.join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
   </table>
   <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
@@ -11612,7 +11613,7 @@ function exportSupplierStatementPDF(supplierName) {
   if(!supplier) { showToast('المورد غير موجود','error'); return; }
   const now = new Date();
   const st = computePartyStatement(supplierName, 'supplier');
-  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.desc}</td><td>${e.type}</td>
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.desc}</td><td>${e.type}</td><td>${e.method||'-'}</td>
     <td style="color:#dc2626;font-weight:700;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
   const finalBalance = st.finalBalance;
@@ -11628,9 +11629,9 @@ function exportSupplierStatementPDF(supplierName) {
     <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">المستحق للمورد</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>
-    <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
-    <tbody>${rows.join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
-    <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
+    <thead><tr><th>التاريخ</th><th>البيان</th><th>النوع</th><th>طريقة الدفع</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th><th>الرصيد (ر.س)</th></tr></thead>
+    <tbody>${rows.join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
   </table>
   <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
