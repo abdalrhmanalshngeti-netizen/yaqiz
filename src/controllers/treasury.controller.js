@@ -116,7 +116,7 @@ exports.addMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { type, amount, description, reference } = req.body;
+    const { type, amount, description, reference, payment_method, source_type } = req.body;
     if (!['in', 'out'].includes(type) || !amount) {
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
     }
@@ -132,13 +132,14 @@ exports.addMove = async (req, res, next) => {
       : parseFloat(acct.balance) - parseFloat(amount);
 
     await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, acct.id]);
-    await client.query(`
-      INSERT INTO treasury_moves (company_id, account_id, type, amount, balance_before, balance_after, description, source_type, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8)
-    `, [req.user.company_id, acct.id, type, amount, acct.balance, newBal, description || '', req.user.sub]);
+    const { rows: [move] } = await client.query(`
+      INSERT INTO treasury_moves (company_id, account_id, type, amount, balance_before, balance_after, description, reference, source_type, payment_method, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      RETURNING *
+    `, [req.user.company_id, acct.id, type, amount, acct.balance, newBal, description || '', reference || '', source_type || 'manual', payment_method || null, req.user.sub]);
 
     await client.query('COMMIT');
-    res.json({ success: true, data: { balance: newBal } });
+    res.json({ success: true, data: { ...move, balance: newBal } });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

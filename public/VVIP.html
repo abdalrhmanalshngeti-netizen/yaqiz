@@ -2474,17 +2474,19 @@ function doCheckout() {
   // stock moves (FIFO)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
+  let cogsTotal=0;
   cart.forEach(ci=>{
     const p=db.products.find(x=>x.id===ci.id);
     if(p){const oldQty=p.qty;
-      fifoDeduct(p, ci.qty);
+      cogsTotal+=fifoDeduct(p, ci.qty);
       p.qty=Math.max(0,p.qty-ci.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ci.qty,balance_before:oldQty,balance_after:p.qty,reason:'مبيعات POS',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
+  inv.cogs_total = Math.round(cogsTotal*100)/100;
   // treasury
   if(posPayment!=='آجل'){
     db.treasury.balance+=total;
-    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:total,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString()});
+    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:total,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:posPayment});
   }
   // Journal entry: Dr. Cash / Cr. Sales Revenue + Cr. VAT
   if(!db.journal)db.journal=[];
@@ -2497,6 +2499,10 @@ function doCheckout() {
   }
   jEntries.push({account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue',account_code:'4100',side:'credit',amount:afterDisc});
   jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT',account_code:'2200',side:'credit',amount:vat});
+  if(inv.cogs_total>0) {
+    jEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold',account_code:'5100',side:'debit',amount:inv.cogs_total});
+    jEntries.push({account:lang==='ar'?'المخزون':'Inventory',account_code:'1300',side:'credit',amount:inv.cogs_total});
+  }
   db.journal.push({id:db.nextId.journal++,date:new Date().toISOString(),
     description:`مبيعات POS: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:jEntries, ref:inv.invoice_no});
@@ -3337,18 +3343,20 @@ function saveNewInvoice(printAfter=false) {
   // stock moves (FIFO)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
+  let cogsTotal=0;
   newInvItems.forEach(ni=>{
     const p=db.products.find(x=>x.id===ni.id);
     if(p){const oldQty=p.qty;
-      fifoDeduct(p, ni.qty);
+      cogsTotal+=fifoDeduct(p, ni.qty);
       p.qty=Math.max(0,p.qty-ni.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ni.qty,balance_before:oldQty,balance_after:p.qty,reason:'فاتورة مبيعات',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
+  inv.cogs_total = Math.round(cogsTotal*100)/100;
 
   // treasury
   if(partialPaid>0){
     db.treasury.balance+=partialPaid;
-    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:partialPaid,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString()});
+    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:partialPaid,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:payment});
   }
 
   // Journal entry
@@ -3365,6 +3373,10 @@ function saveNewInvoice(printAfter=false) {
   }
   invJEntries.push({account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue',account_code:'4100',side:'credit',amount:afterDisc});
   if(vat>0) invJEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT',account_code:'2200',side:'credit',amount:vat});
+  if(inv.cogs_total>0) {
+    invJEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold',account_code:'5100',side:'debit',amount:inv.cogs_total});
+    invJEntries.push({account:lang==='ar'?'المخزون':'Inventory',account_code:'1300',side:'credit',amount:inv.cogs_total});
+  }
   db.journal.push({id:db.nextId.journal++,date:new Date(el('ni-date').value).toISOString(),
     description:`فاتورة مبيعات: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:invJEntries, ref:inv.invoice_no});
@@ -3990,7 +4002,7 @@ function saveGoodsPurchase() {
   if(paidNow>0){
     db.treasury.balance-=paidNow;
     db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:paidNow,
-      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString()});
+      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment});
   }
 
   // Journal entry
@@ -4223,7 +4235,7 @@ function savePurchase(purchase_type) {
   // Treasury
   db.treasury.balance -= p.total;
   db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:p.total,
-    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString()});
+    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString(),method:p.payment_method});
 
   // Journal entry: Dr. Expense + Dr. Input VAT / Cr. Cash
   if(!db.journal)db.journal=[];
@@ -4786,6 +4798,14 @@ function showTreasuryMove(type) {
       <div class="modal-head"><h3>${type==='in'?t('deposit'):t('withdraw')}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
       <div style="margin-bottom:12px;"><label class="form-label">${t('amount')} *</label><input class="input" type="number" id="tr-amount" /></div>
       <div style="margin-bottom:12px;"><label class="form-label">${t('description')} *</label><input class="input" id="tr-desc" /></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'طريقة الدفع':'Payment Method'}</label>
+        <select class="select" id="tr-method">
+          <option value="نقدي">${lang==='ar'?'نقدي':'Cash'}</option>
+          <option value="شبكة">${lang==='ar'?'شبكة':'Card'}</option>
+          <option value="تحويل بنكي">${lang==='ar'?'تحويل بنكي':'Bank Transfer'}</option>
+          <option value="شيك">${lang==='ar'?'شيك':'Cheque'}</option>
+        </select>
+      </div>
       <div style="margin-bottom:16px;"><label class="form-label">${t('reference')}</label><input class="input" id="tr-ref" /></div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary btn-full" onclick="saveTreasuryMove('${type}')">${t('save')}</button>
@@ -4800,7 +4820,7 @@ function saveTreasuryMove(type) {
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
-  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),_manual:true};
+  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),method:el('tr-method')?.value||'نقدي',_manual:true};
   db.treasury.moves.unshift(m);
   db.treasury.balance += type==='in'?amount:-amount;
 
@@ -5521,8 +5541,9 @@ function calcReportData(db, filterFn) {
   const vatNet = vatOutput - vatInput;
   const salesReturnsAmt = rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
   const revenue = invs.reduce((s,i)=>s+i.subtotal,0) - salesReturnsAmt;
-  const cogs = purchs.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').reduce((s,p)=>s+p.amount,0)
-    - rets.filter(r=>r.type==='purchases').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
+  // تكلفة البضاعة المباعة الحقيقية (FIFO وقت البيع) — مو إجمالي المشتريات بالفترة
+  const cogs = invs.reduce((s,i)=>s+(i.cogs_total||0),0)
+    - rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0);
   const grossProfit = revenue - cogs;
   const expenses = purchs.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).reduce((s,p)=>s+p.amount,0);
   const netProfit = grossProfit - expenses;
@@ -5919,42 +5940,69 @@ function renderSuppliersReport(db) {
 }
 
 // ── Bank Reconciliation ──
+// نقارن حركات الشبكة (البطاقة) المسجلة بالنظام خلال فترة محددة مع إجمالي
+// كشف الحساب البنكي لنفس الفترة — مو رصيد الخزينة الكامل (نقدي+شبكة مجتمعين)
 function renderBankRecon(db) {
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{"balance":0,"adjustments":[]}');
-  const bankBal=saved.balance||0;
-  const treasuryBal=db.treasury.balance;
-  const diff=treasuryBal-bankBal;
-  const adjs=saved.adjustments||[];
-  const adjTotal=adjs.filter(a=>a.type==='add').reduce((s,a)=>s+a.amount,0)-adjs.filter(a=>a.type==='sub').reduce((s,a)=>s+a.amount,0);
-  const adjustedBankBal=bankBal+adjTotal;
-  const finalDiff=treasuryBal-adjustedBankBal;
+  const saved = JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
+  const today = new Date().toISOString().slice(0,10);
+  const from  = saved.from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const to    = saved.to   || today;
+  const bankNetworkTotal = Number(saved.bankNetworkTotal||0);
+  const adjs  = saved.adjustments||[];
+
+  // كل حركات "شبكة" فقط (تستثني النقدي) ضمن الفترة المحددة
+  const moves = (db.treasury.moves||[]).filter(m=>{
+    if(m.method!=='شبكة') return false;
+    const d=(m.date||'').slice(0,10);
+    return d>=from && d<=to;
+  });
+  const systemIn  = moves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0);
+  const systemOut = moves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0);
+  const systemNet = Math.round((systemIn-systemOut)*100)/100;
+
+  const adjTotal = adjs.filter(a=>a.type==='add').reduce((s,a)=>s+a.amount,0)-adjs.filter(a=>a.type==='sub').reduce((s,a)=>s+a.amount,0);
+  const adjustedBank = Math.round((bankNetworkTotal+adjTotal)*100)/100;
+  const finalDiff = Math.round((systemNet-adjustedBank)*100)/100;
+
   return `<div>
+    <div class="card" style="margin-bottom:16px;"><div class="card-pad">
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'من تاريخ':'From'}</label><input class="input" type="date" id="br-from" value="${from}" /></div>
+        <div><label class="form-label">${lang==='ar'?'إلى تاريخ':'To'}</label><input class="input" type="date" id="br-to" value="${to}" /></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="setBankReconPeriod()">${lang==='ar'?'تطبيق الفترة':'Apply Period'}</button>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">${lang==='ar'?'حدّد نفس الفترة الموجودة في كشف الحساب البنكي اللي جبته من البنك (مثلاً من 1 إلى 30 من الشهر).':'Match the exact period shown on your bank statement.'}</p>
+    </div></div>
+
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
-      <div class="stat-card"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${lang==='ar'?'رصيد الخزينة (النظام)':'System Treasury'}</div><div class="stat-value">${fmtMoney(treasuryBal)}</div></div>
-      <div class="stat-card"><div class="stat-icon">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'رصيد البنك المعدّل':'Adjusted Bank Balance'}</div><div class="stat-value">${fmtMoney(adjustedBankBal)}</div></div>
+      <div class="stat-card"><div class="stat-icon blue">${icon('credit-card',22)}</div><div class="stat-label">${lang==='ar'?'مبيعات شبكة بالنظام (الفترة)':'System Network Sales (Period)'}</div><div class="stat-value">${fmtMoney(systemNet)}</div></div>
+      <div class="stat-card"><div class="stat-icon">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'شبكة حسب كشف البنك (معدّل)':'Bank Statement Network (Adjusted)'}</div><div class="stat-value">${fmtMoney(adjustedBank)}</div></div>
       <div class="stat-card" style="border-color:${Math.abs(finalDiff)<0.01?'var(--success)':'var(--danger)'};">
         <div class="stat-icon ${Math.abs(finalDiff)<0.01?'green':'red'}">${icon(Math.abs(finalDiff)<0.01?'check-circle':'alert-triangle',22)}</div>
-        <div class="stat-label">${lang==='ar'?'الفرق النهائي':'Final Difference'}</div>
+        <div class="stat-label">${lang==='ar'?'الفرق':'Difference'}</div>
         <div class="stat-value" style="color:${Math.abs(finalDiff)<0.01?'var(--success)':'var(--danger)'};">${fmtMoney(Math.abs(finalDiff))}</div>
       </div>
     </div>
+
     <div class="card" style="margin-bottom:16px;"><div class="card-pad">
       <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
         <div style="flex:1;min-width:200px;">
-          <label class="form-label">🏦 ${lang==='ar'?'رصيد كشف الحساب البنكي:':'Bank Statement Balance:'}</label>
-          <input class="input" type="number" id="bank-bal-input" value="${bankBal}" />
+          <label class="form-label">🏦 ${lang==='ar'?'إجمالي مبيعات الشبكة حسب كشف الحساب البنكي لهذه الفترة:':'Total network sales per bank statement for this period:'}</label>
+          <input class="input" type="number" id="bank-bal-input" value="${bankNetworkTotal}" />
         </div>
         <button class="btn btn-primary" onclick="saveBankBalance()">${lang==='ar'?'تحديث':'Update'}</button>
       </div>
       <div style="margin-top:12px;background:${Math.abs(finalDiff)<0.01?'#dcfce7':'#fee2e2'};padding:12px;border-radius:10px;font-weight:700;">
         ${Math.abs(finalDiff)<0.01
-          ?`✅ ${lang==='ar'?'الخزينة متوازنة مع البنك':'Balanced!'}`
-          :`⚠️ ${lang==='ar'?`فرق ${fmtMoney(Math.abs(finalDiff))}`:`Difference: ${fmtMoney(Math.abs(finalDiff))}`} — ${lang==='ar'?'الأسباب: شيكات معلقة، تحويلات في الطريق، رسوم بنكية':'Possible: pending checks, in-transit transfers, bank fees'}`}
+          ?`✅ ${lang==='ar'?'مبيعات الشبكة متطابقة مع كشف الحساب لهذه الفترة':'Network sales match the bank statement for this period'}`
+          :`⚠️ ${lang==='ar'?`فرق ${fmtMoney(Math.abs(finalDiff))}`:`Difference: ${fmtMoney(Math.abs(finalDiff))}`} — ${lang==='ar'?'الأسباب المحتملة: عملية لم تُسوَّى بالبنك بعد، رسوم شبكة، أو فرق توقيت بين تاريخ العملية وتاريخ الإيداع':'Possible: pending settlement, network fees, or timing mismatch'}`}
       </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">${lang==='ar'?`عدد عمليات الشبكة بالنظام لهذه الفترة: ${moves.length}`:`Network transactions in system for this period: ${moves.length}`}</div>
     </div></div>
+
     <div class="card">
       <div class="card-head">
-        <h3>📋 ${lang==='ar'?'بنود التسوية':'Reconciliation Items'}</h3>
+        <h3>📋 ${lang==='ar'?'بنود تسوية إضافية':'Additional Reconciliation Items'}</h3>
         <button class="btn btn-sm btn-primary" onclick="addBankAdjustment()">${icon('plus',14)} ${lang==='ar'?'إضافة بند':'Add'}</button>
       </div>
       ${adjs.length===0?`<div class="empty"><div class="empty-icon">📋</div>${lang==='ar'?'لا توجد بنود':'No items'}</div>`:
@@ -5972,10 +6020,20 @@ function renderBankRecon(db) {
   </div>`;
 }
 
+function setBankReconPeriod() {
+  const from=el('br-from')?.value, to=el('br-to')?.value;
+  if(!from||!to){showToast(lang==='ar'?'حدد الفترة كاملة':'Select full period','error');return;}
+  if(from>to){showToast(lang==='ar'?'تاريخ البداية بعد تاريخ النهاية':'From date is after to date','error');return;}
+  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
+  saved.from=from; saved.to=to;
+  localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
+  renderPage();
+}
+
 function saveBankBalance() {
   const val=Number(el('bank-bal-input')?.value||0);
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{"balance":0,"adjustments":[]}');
-  saved.balance=val; localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
+  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
+  saved.bankNetworkTotal=val; localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
   showToast(`✅ ${lang==='ar'?'تم تحديث رصيد البنك':'Updated'}`); renderPage();
 }
 
@@ -6003,17 +6061,18 @@ function addBankAdjustment() {
 }
 
 function saveBankAdj() {
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{"balance":0,"adjustments":[]}');
+  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
   const desc=el('ba-desc')?.value; const amount=Number(el('ba-amount')?.value||0);
+  const date=el('ba-date')?.value || new Date().toISOString().slice(0,10);
   if(!desc||!amount){showToast(lang==='ar'?'البيانات مطلوبة':'Required','error');return;}
   if(!saved.adjustments)saved.adjustments=[];
-  saved.adjustments.push({desc,amount,type:el('ba-type').value,date:new Date().toISOString()});
+  saved.adjustments.push({desc,amount,type:el('ba-type').value,date});
   localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
   showToast(`✅ ${lang==='ar'?'تم':'Done'}`); closeModal(); renderPage();
 }
 
 function removeBankAdj(idx) {
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{"balance":0,"adjustments":[]}');
+  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
   saved.adjustments.splice(idx,1);
   localStorage.setItem('yaqiz_bank',JSON.stringify(saved)); renderPage();
 }
@@ -7060,7 +7119,8 @@ function saveVoucher(type, printAfter=true) {
     amount,
     description: `${voucher.voucher_no}: ${voucher.party}`,
     reference: voucher.ref||voucher.voucher_no,
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    method: voucher.method
   });
 
   // 2. تطبيق سند القبض على فواتير العميل
@@ -7530,13 +7590,18 @@ function saveReturn(type) {
   // VAT calc
   const base=amount/1.15; const vat=amount-base;
 
+  // ورّث طريقة الدفع من الفاتورة/الفاتورة المرتبطة إن وُجدت
+  const linkedRec = linkedId ? (isSales ? db.invoices.find(i=>i.id===linkedId) : db.purchases.find(p=>p.id===linkedId)) : null;
+  const retMethod = linkedRec?.payment_method || null;
+
   const ret={
     id:num, type, return_no:`RET-${String(num).padStart(4,'0')}`,
     party:el('rt-party').value, amount, vat_amount:vat, base_amount:base,
     item:el('rt-item').value, reason:el('rt-reason').value,
     date:el('rt-date').value, created_at:new Date().toISOString(),
     linked_id:linkedId, product_id:prodId,
-    product_name:prodOpt?.dataset?.name||'', qty
+    product_name:prodOpt?.dataset?.name||'', qty,
+    payment_method:retMethod
   };
 
   if(!db.returns) db.returns=[];
@@ -7548,42 +7613,59 @@ function saveReturn(type) {
   db.treasury.moves.unshift({
     id:nextId(db,'treasury'), type:tType, amount,
     description:`مرتجع ${isSales?'مبيعات':'مشتريات'} ${ret.return_no}: ${ret.party}`,
-    reference:ret.return_no, date:new Date().toISOString()
+    reference:ret.return_no, date:new Date().toISOString(), method:retMethod
   });
 
-  // 2. Stock effect: sales return → stock IN, purchase return → stock OUT
+  // 2. Stock effect: sales return → stock IN (تُعاد للمخزون بتكلفتها الحالية)
+  //    purchase return → stock OUT (تخرج من المخزون بأسلوب FIFO)
+  let returnCogsReversal = 0;
   if(prodId && qty>0) {
     const prod=db.products.find(p=>p.id===prodId);
     if(prod) {
       if(!db.stock_moves) db.stock_moves=[];
       if(!db.nextId.stock_move) db.nextId.stock_move=1;
-      const stockType=isSales?'in':'out';
       const oldQty=prod.qty;
-      prod.qty=stockType==='in'?oldQty+qty:Math.max(0,oldQty-qty);
+      if(isSales) {
+        const unitCost = prod.buy_price||0;
+        returnCogsReversal = Math.round(qty*unitCost*100)/100;
+        if(!prod.lots) prod.lots=[];
+        prod.lots.push({qty, cost:unitCost, date:new Date().toISOString(), ref:ret.return_no});
+        prod.qty = oldQty+qty;
+      } else {
+        returnCogsReversal = fifoDeduct(prod, qty);
+        prod.qty = Math.max(0, oldQty-qty);
+      }
       db.stock_moves.push({
         id:db.nextId.stock_move++,
         product_id:prodId, product_name:prod.name, product_code:prod.code,
-        type:stockType, qty,
+        type:isSales?'in':'out', qty,
         balance_before:oldQty, balance_after:prod.qty,
         reason:`مرتجع ${isSales?'مبيعات':'مشتريات'}: ${ret.party}`,
         reference:ret.return_no, date:new Date().toISOString()
       });
     }
   }
+  ret.cogs_reversal = returnCogsReversal;
 
   // 3. Journal entry for VAT and AR/AP
   if(!db.journal) db.journal=[];
   if(!db.nextId.journal) db.nextId.journal=1;
   if(isSales) {
     // Dr. Sales Returns & Dr. VAT Payable / Cr. Cash
+    const salesRetEntries = [
+      {account:lang==='ar'?'مرتجعات المبيعات':'Sales Returns', account_code:'4200', side:'debit', amount:base},
+      {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'debit', amount:vat},
+      {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount}
+    ];
+    if(returnCogsReversal>0) {
+      // البضاعة رجعت للمخزون → نعكس جزء من تكلفة البضاعة المباعة الأصلية
+      salesRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:returnCogsReversal});
+      salesRetEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'credit', amount:returnCogsReversal});
+    }
     db.journal.push({
       id:db.nextId.journal++, date:new Date().toISOString(),
       description:`مرتجع مبيعات ${ret.return_no} — ${ret.party}`,
-      entries:[
-        {account:lang==='ar'?'مرتجعات المبيعات':'Sales Returns', account_code:'4200', side:'debit', amount:base},
-        {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'debit', amount:vat},
-        {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount}
-      ],
+      entries:salesRetEntries,
       ref:ret.return_no
     });
     // 4. Update linked invoice if exists
@@ -7633,15 +7715,34 @@ function deleteReturn(id){
   // 1. Reverse treasury
   db.treasury.balance+=isSales?r.amount:-r.amount;
   db.treasury.moves.unshift({id:nextId(db,'treasury'),type:isSales?'in':'out',amount:r.amount,
-    description:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString()});
+    description:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString(),method:r.payment_method});
 
-  // 2. Reverse stock
+  // 2. Reverse stock (ونحافظ على دقة تكلفة FIFO بدل تعديل qty بس)
   if(r.product_id && r.qty>0){
     const prod=db.products.find(p=>p.id===r.product_id);
     if(prod){
       const stockType=isSales?'out':'in';
       const oldQty=prod.qty;
-      prod.qty=stockType==='in'?oldQty+r.qty:Math.max(0,oldQty-r.qty);
+      if(!prod.lots) prod.lots=[];
+      if(isSales){
+        // شيل نفس اللوت اللي أضافه المرتجع (ref = return_no) بالضبط لو لسه موجود
+        const lotIdx=prod.lots.findIndex(l=>l.ref===r.return_no);
+        if(lotIdx>=0){
+          const lot=prod.lots[lotIdx];
+          const take=Math.min(lot.qty, r.qty);
+          lot.qty-=take;
+          prod.lots=prod.lots.filter(l=>l.qty>0);
+          if(r.qty-take>0) fifoDeduct(prod, r.qty-take);
+        } else {
+          fifoDeduct(prod, r.qty);
+        }
+        prod.qty=Math.max(0,oldQty-r.qty);
+      } else {
+        // رجّع للمخزون بنفس التكلفة اللي خرجت فيها وقت المرتجع
+        const unitCost = r.qty>0 ? (r.cogs_reversal||0)/r.qty : 0;
+        prod.lots.push({qty:r.qty, cost:unitCost, date:new Date().toISOString(), ref:'reverse-'+r.return_no});
+        prod.qty=oldQty+r.qty;
+      }
       if(!db.stock_moves)db.stock_moves=[];
       db.stock_moves.push({id:db.nextId.stock_move||1,product_id:r.product_id,product_name:r.product_name,type:stockType,qty:r.qty,
         balance_before:oldQty,balance_after:prod.qty,reason:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString()});
@@ -7657,6 +7758,29 @@ function deleteReturn(id){
   if(r.linked_id && !isSales){
     const pur=db.purchases.find(p=>p.id===r.linked_id);
     if(pur){ pur.returned_amount=Math.max(0,(pur.returned_amount||0)-r.amount); if(pur.returned_amount<=0)pur.has_return=false; }
+  }
+
+  // 4. Journal: قيد عكسي (لا نحذف من السجل التاريخي، نعكسه بقيد جديد)
+  if(!db.journal) db.journal=[];
+  if(!db.nextId.journal) db.nextId.journal=1;
+  if(isSales){
+    const revEntries=[
+      {account:lang==='ar'?'مرتجعات المبيعات':'Sales Returns', account_code:'4200', side:'credit', amount:r.base_amount||0},
+      {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'credit', amount:r.vat_amount||0},
+      {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:r.amount}
+    ];
+    if(r.cogs_reversal>0){
+      revEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:r.cogs_reversal});
+      revEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount:r.cogs_reversal});
+    }
+    db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(), description:`عكس مرتجع مبيعات ${r.return_no} — ${r.party}`, entries:revEntries, ref:r.return_no});
+  } else {
+    db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(), description:`عكس مرتجع مشتريات ${r.return_no} — ${r.party}`,
+      entries:[
+        {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:r.amount},
+        {account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'debit', amount:r.base_amount||0},
+        {account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'debit', amount:r.vat_amount||0}
+      ], ref:r.return_no});
   }
 
   db.returns=(db.returns||[]).filter(x=>x.id!==id);
@@ -8794,10 +8918,9 @@ function renderBalanceSheet(c) {
 
   // ── نتيجة الأعمال (لحساب حقوق الملكية) ──────────────────
   const salesReturns = (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.base_amount||0),0);
-  const purchReturns = (db.returns||[]).filter(r=>r.type==='purchases').reduce((s,r)=>s+parseFloat(r.base_amount||0),0);
   const netRevenue = db.invoices.reduce((s,i)=>s+parseFloat(i.subtotal||0),0) - salesReturns;
-  const netCOGS    = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة')
-                       .reduce((s,p)=>s+parseFloat(p.amount||0),0) - purchReturns;
+  const netCOGS    = db.invoices.reduce((s,i)=>s+parseFloat(i.cogs_total||0),0)
+                       - (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.cogs_reversal||0),0);
   const netOPEX    = db.purchases.filter(p=>p.purchase_type==='opex'||(p.category&&p.category!=='بضاعة'&&p.purchase_type!=='goods'))
                        .reduce((s,p)=>s+parseFloat(p.amount||0),0);
   const grossProfit = netRevenue - netCOGS;
@@ -10524,7 +10647,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
 
   // Update treasury
   db.treasury.balance += amount;
-  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount,description:`${voucher.voucher_no}: ${voucher.party}`,reference:inv.invoice_no,date:new Date().toISOString()});
+  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount,description:`${voucher.voucher_no}: ${voucher.party}`,reference:inv.invoice_no,date:new Date().toISOString(),method:voucher.method});
 
   // Update invoice status
   const prevStatus = inv.status;
@@ -10639,7 +10762,7 @@ function saveQuickPayPurchase(purchaseId) {
 
   // تحديث الخزينة
   db.treasury.balance -= amount;
-  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount,description:`${voucher.voucher_no}: ${p.vendor}`,reference:p.invoice_no||'',date:new Date().toISOString()});
+  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount,description:`${voucher.voucher_no}: ${p.vendor}`,reference:p.invoice_no||'',date:new Date().toISOString(),method:voucher.method});
 
   // تحديث الفاتورة
   p.paid_amount = Math.round(((p.paid_amount||0)+amount)*100)/100;
@@ -11932,11 +12055,18 @@ async function runAIAnalysis() {
 
   const monthInvoices  = db.invoices.filter(i=>(i.date||i.created_at||'').startsWith(thisMonth));
   const monthPurchases = db.purchases.filter(p=>(p.date||p.created_at||'').startsWith(thisMonth));
+  const monthReturns   = (db.returns||[]).filter(r=>(r.date||r.created_at||'').startsWith(thisMonth));
 
-  const revenue   = monthInvoices.reduce((s,i)=>s+(i.grand_total||0),0);
+  // الإيراد بدون ضريبة (subtotal)، وتكلفة البضاعة الحقيقية (FIFO) لا إجمالي المشتريات
+  const revenue = monthInvoices.reduce((s,i)=>s+(i.subtotal||0),0)
+    - monthReturns.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||0),0);
   const collected = monthInvoices.reduce((s,i)=>s+(i.paid_amount||0),0);
-  const expenses  = monthPurchases.reduce((s,p)=>s+(p.total||0),0);
-  const treasury  = (db.treasury_entries||[]).reduce((s,e)=>s+(e.type==='in'?e.amount:-e.amount),0);
+  const cogs = monthInvoices.reduce((s,i)=>s+(i.cogs_total||0),0)
+    - monthReturns.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0);
+  const operatingExpenses = monthPurchases
+    .filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods'))
+    .reduce((s,p)=>s+(p.amount||0),0);
+  const treasury = db.treasury.balance || 0;
 
   const summary = {
     period: thisMonth,
@@ -11944,8 +12074,9 @@ async function runAIAnalysis() {
     revenue,
     collected,
     outstanding: revenue - collected,
-    expenses,
-    net_profit: revenue - expenses,
+    cost_of_goods_sold: cogs,
+    operating_expenses: operatingExpenses,
+    net_profit: revenue - cogs - operatingExpenses,
     treasury_balance: treasury,
     invoice_count: monthInvoices.length,
     purchase_count: monthPurchases.length,
@@ -12372,7 +12503,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -12384,6 +12515,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/users').catch(() => null),
         apiFetch('GET', '/api/auth/me').catch(() => null),
         apiFetch('GET', '/api/obligations').catch(() => null),
+        apiFetch('GET', '/api/treasury/moves?limit=1000').catch(() => null),
       ]);
 
       const db = getDB();
@@ -12405,6 +12537,28 @@ async function runAISearchQuery(q) {
         // أو لو الرصيد المحلي صفر (بداية جديدة)
         if (_srvBal > _locBal || _locBal === 0) {
           db.treasury.balance = _srvBal;
+        }
+      }
+
+      // ── حركات الخزينة: اسحب أي حركة سجّلها جهاز ثاني ولم تصل لهذا الجهاز بعد ──
+      if (moveRes?.data?.length) {
+        db.treasury.moves = db.treasury.moves || [];
+        const _knownServerIds = new Set(db.treasury.moves.map(m => m._serverId).filter(Boolean));
+        const _fromServer = moveRes.data
+          .filter(row => !_knownServerIds.has(row.id))
+          .map(row => ({
+            id: 'srv-' + row.id,
+            type: row.type,
+            amount: parseFloat(row.amount) || 0,
+            description: row.description || '',
+            reference: row.reference || '',
+            date: row.created_at,
+            method: row.payment_method || undefined,
+            _serverId: row.id,
+          }));
+        if (_fromServer.length) {
+          db.treasury.moves = [..._fromServer, ...db.treasury.moves]
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
       }
 
@@ -12731,18 +12885,32 @@ async function runAISearchQuery(q) {
         }
       }
 
-      // ── Treasury: حركات يدوية جديدة (إيداع/سحب) ────────────
+      // ── Treasury: كل حركة جديدة (POS، فواتير، مشتريات، سندات، يدوية...) ────
       const _prevMoves = prev.treasury?.moves || [];
       const _newMoves  = newDB.treasury?.moves || [];
       const _accId     = newDB.treasury?._defaultAccountId;
       if (_accId) {
         for (const m of _newMoves) {
-          if (!_prevMoves.find(x => x.id === m.id) && m._manual) {
-            if (SYNC_LOG) console.log('→ API: treasury move', m.type, m.amount);
-            await apiFetch('POST', '/api/treasury/move', {
-              type: m.type, amount: m.amount,
-              description: m.description || '', reference: m.reference || ''
-            }).catch(e => console.warn('treasury move sync:', e.message));
+          // نتجاهل: حركات وصلت أصلاً من السيرفر (id نصي srv-...)، أو حركات
+          // اتزامنت قبل كذا (عندها _serverId)، أو حركات موجودة بالنسخة السابقة
+          if (typeof m.id === 'string' || m._serverId) continue;
+          if (_prevMoves.find(x => x.id === m.id)) continue;
+
+          if (SYNC_LOG) console.log('→ API: treasury move', m.type, m.amount);
+          const res = await apiFetch('POST', '/api/treasury/move', {
+            type: m.type, amount: m.amount,
+            description: m.description || '', reference: m.reference || '',
+            payment_method: m.method || null
+          }).catch(e => { console.warn('treasury move sync:', e.message); return null; });
+
+          if (res?.data?.id) {
+            try {
+              const _db = getDB();
+              const _mv = (_db.treasury?.moves || []).find(x => x.id === m.id);
+              if (_mv) { _mv._serverId = res.data.id; _origSaveDB(_db); }
+              const _smv = (_snap?.treasury?.moves || []).find(x => x.id === m.id);
+              if (_smv) _smv._serverId = res.data.id;
+            } catch (e) { /* ignore */ }
           }
         }
       }
