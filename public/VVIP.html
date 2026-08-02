@@ -5110,6 +5110,7 @@ function renderReports(c) {
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='accounts'?'active':''}" onclick="setReportMainTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>`:''}
       <button class="tab-btn ${reportMainTab==='zakat'?'active':''}" onclick="setReportMainTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
+      <button class="tab-btn ${reportMainTab==='statements'?'active':''}" onclick="setReportMainTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
     </div>
     <div id="report-main-content"></div>
   </div>`;
@@ -5129,6 +5130,7 @@ function renderReportMainContent() {
   else if(reportMainTab==='journal')  renderJournal(mc);
   else if(reportMainTab==='overdue')  renderOverdueReport(mc);
   else if(reportMainTab==='zakat')    renderZakatReport(mc);
+  else if(reportMainTab==='statements') renderStatements(mc);
   else renderAccounts(mc);
 }
 
@@ -11324,34 +11326,264 @@ function exportPayrollPDF() {
   win.document.close();
 }
 
+// ============ الكشوفات (Statements) ============
+let stmtMainTab = 'customers'; // customers | suppliers | bank
+let stmtSelectedParty = null;
+let stmtBankFrom = null;
+let stmtBankTo = null;
+
+// يبني كشف حساب طرف (عميل أو مورد) — يشمل الرصيد الافتتاحي والمرتجعات، والرصيد يُحسب من نفس الحركات المعروضة
+function computePartyStatement(partyName, kind) {
+  const db = getDB();
+  const isCust = kind === 'customer';
+  const obList = (isCust ? db.settings?.opening_balances_data?.customers : db.settings?.opening_balances_data?.suppliers) || [];
+  const obEntry = obList.find(x=>x.name===partyName);
+  const openingBal = obEntry?.balance || 0;
+  const openingDate = db.settings?.opening_balances_date || null;
+
+  const events = [];
+  if (openingBal !== 0) {
+    events.push({ date: openingDate || new Date(0).toISOString(), desc: lang==='ar'?'رصيد افتتاحي':'Opening Balance', type: lang==='ar'?'افتتاحي':'Opening', debit: openingBal>0?openingBal:0, credit: openingBal<0?-openingBal:0, ref:'', isOpening:true });
+  }
+
+  if (isCust) {
+    db.invoices.filter(i=>i.customer_name===partyName).forEach(inv=>{
+      events.push({ date: inv.created_at, desc: `${lang==='ar'?'فاتورة مبيعات':'Sales Invoice'} ${inv.invoice_no}`, type: lang==='ar'?'فاتورة':'Invoice', debit: inv.grand_total, credit: 0, ref: inv.invoice_no });
+      if ((inv.paid_amount||0) > 0) {
+        events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: inv.paid_amount, ref: inv.invoice_no });
+      }
+    });
+    (db.receipts||[]).filter(r=>r.party===partyName && r.type==='receipt').forEach(r=>{
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no });
+    });
+    (db.returns||[]).filter(r=>r.type==='sales' && r.party===partyName).forEach(r=>{
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no });
+    });
+  } else {
+    db.purchases.filter(p=>p.vendor===partyName).forEach(p=>{
+      events.push({ date: p.created_at, desc: p.description || (lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'), type: lang==='ar'?'فاتورة':'Invoice', debit: p.total, credit: 0, ref: p.supplier_ref||'' });
+      if ((p.paid_amount||0) > 0) {
+        events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: p.paid_amount, ref: p.supplier_ref||'' });
+      }
+    });
+    (db.receipts||[]).filter(r=>r.party===partyName && r.type==='payment').forEach(r=>{
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no });
+    });
+    (db.returns||[]).filter(r=>r.type==='purchases' && r.party===partyName).forEach(r=>{
+      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no });
+    });
+  }
+
+  events.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let running = 0;
+  events.forEach(e=>{ running = Math.round((running + (e.debit||0) - (e.credit||0))*100)/100; e.balance = running; });
+
+  const totalDebit  = Math.round(events.filter(e=>!e.isOpening).reduce((s,e)=>s+(e.debit||0),0)*100)/100;
+  const totalCredit = Math.round(events.filter(e=>!e.isOpening).reduce((s,e)=>s+(e.credit||0),0)*100)/100;
+  const txCount = isCust
+    ? db.invoices.filter(i=>i.customer_name===partyName).length
+    : db.purchases.filter(p=>p.vendor===partyName).length;
+
+  return { events, finalBalance: running, totalDebit, totalCredit, txCount, openingBal, openingDate };
+}
+
+// يبني الكشف البنكي: كل حركات الخزينة اللي طريقة دفعها شبكة أو تحويل بنكي، يوميًا + تفصيل الورديات
+function computeBankStatement(fromDate, toDate) {
+  const db = getDB();
+  const inRange = d => { const day=(d||'').slice(0,10); return (!fromDate||day>=fromDate) && (!toDate||day<=toDate); };
+
+  const moves = (db.treasury.moves||[])
+    .filter(m => (m.method==='شبكة' || m.method==='تحويل بنكي') && inRange(m.date))
+    .sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  let running = 0;
+  const rows = moves.map(m=>{
+    running = Math.round((running + (m.type==='in'?m.amount:-m.amount))*100)/100;
+    return { ...m, balance: running };
+  });
+
+  const byDay = {};
+  rows.forEach(r=>{
+    const day=(r.date||'').slice(0,10);
+    if(!byDay[day]) byDay[day]={ day, in:0, out:0, items:[] };
+    if(r.type==='in') byDay[day].in=Math.round((byDay[day].in+r.amount)*100)/100; else byDay[day].out=Math.round((byDay[day].out+r.amount)*100)/100;
+    byDay[day].items.push(r);
+  });
+
+  const shifts = (db.shifts||[])
+    .filter(s=>s.end_time && inRange(s.date))
+    .filter(s=>(s.sales_card||0) > 0)
+    .sort((a,b)=>new Date(a.start_time)-new Date(b.start_time));
+
+  return {
+    rows, finalBalance: rows.length?rows[rows.length-1].balance:0,
+    byDay: Object.values(byDay).sort((a,b)=>new Date(a.day)-new Date(b.day)),
+    shifts,
+    totalIn: Math.round(rows.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0)*100)/100,
+    totalOut: Math.round(rows.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0)*100)/100,
+  };
+}
+
+function setStmtMainTab(tab) {
+  stmtMainTab = tab; stmtSelectedParty = null;
+  renderReportMainContent();
+}
+
+function renderStatements(c) {
+  c.innerHTML = `<div>
+    <div class="tabs" style="margin-bottom:14px;">
+      <button class="tab-btn ${stmtMainTab==='customers'?'active':''}" onclick="setStmtMainTab('customers')">👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>
+      <button class="tab-btn ${stmtMainTab==='suppliers'?'active':''}" onclick="setStmtMainTab('suppliers')">🏭 ${lang==='ar'?'كشوفات الموردين':'Supplier Statements'}</button>
+      <button class="tab-btn ${stmtMainTab==='bank'?'active':''}" onclick="setStmtMainTab('bank')">🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>
+    </div>
+    <div id="stmt-content"></div>
+  </div>`;
+  renderStmtContent();
+}
+
+function renderStmtContent() {
+  const mc = el('stmt-content'); if(!mc) return;
+  if (stmtMainTab==='bank') { renderBankStatementView(mc); return; }
+  if (stmtSelectedParty) { renderPartyStatementDetail(mc, stmtSelectedParty, stmtMainTab==='customers'?'customer':'supplier'); return; }
+  renderPartyStatementList(mc, stmtMainTab==='customers'?'customer':'supplier');
+  refreshIcons();
+}
+
+function renderPartyStatementList(c, kind) {
+  const db = getDB();
+  const isCust = kind==='customer';
+  const list = isCust ? db.customers : db.suppliers;
+  c.innerHTML = `<div class="card"><div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>${lang==='ar'?'الاسم':'Name'}</th><th>${lang==='ar'?'الجوال':'Phone'}</th><th>${lang==='ar'?'الرصيد الحالي':'Current Balance'}</th><th></th></tr></thead>
+    <tbody>${list.length===0?`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا يوجد':'None'}</td></tr>`:
+      list.map(p=>`<tr>
+        <td style="font-weight:700;">${p.name}</td>
+        <td>${p.phone||'-'}</td>
+        <td style="font-weight:700;color:${(p.balance||0)>0?'var(--danger)':'var(--success)'};">${fmtMoney(p.balance||0)}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty='${p.name.replace(/'/g,"\\'")}';renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div></div>`;
+}
+
+function renderPartyStatementDetail(c, partyName, kind) {
+  const isCust = kind==='customer';
+  const st = computePartyStatement(partyName, kind);
+  const label = isCust ? (lang==='ar'?'العميل':'Customer') : (lang==='ar'?'المورد':'Supplier');
+  const balLabel = isCust
+    ? (lang==='ar'?'الرصيد المستحق (لكم)':'Owed to you')
+    : (lang==='ar'?'الرصيد المستحق (عليكم)':'You owe');
+
+  c.innerHTML = `<div>
+    <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="stmtSelectedParty=null;renderStmtContent()">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
+    <div class="card" style="margin-bottom:14px;"><div class="card-pad">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${partyName}</div></div>
+        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF(getDB().customers.find(c=>c.name===\''+partyName.replace(/'/g,"\\'")+'\').id)':'exportSupplierStatementPDF(\''+partyName.replace(/'/g,"\\'")+'\')'}">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
+        <div class="stat-card"><div class="stat-label">${lang==='ar'?'عدد الفواتير':'Invoice Count'}</div><div class="stat-value">${st.txCount}</div></div>
+        <div class="stat-card"><div class="stat-label">${lang==='ar'?'إجمالي المعاملات':'Total Invoiced'}</div><div class="stat-value">${fmtMoney(st.totalDebit)}</div></div>
+        <div class="stat-card"><div class="stat-label">${lang==='ar'?'إجمالي المسدد':'Total Paid'}</div><div class="stat-value" style="color:var(--success);">${fmtMoney(st.totalCredit)}</div></div>
+        <div class="stat-card" style="border-color:${st.finalBalance>0?'var(--danger)':'var(--success)'};"><div class="stat-label">${balLabel}</div><div class="stat-value" style="color:${st.finalBalance>0?'var(--danger)':'var(--success)'};">${fmtMoney(Math.abs(st.finalBalance))}</div></div>
+      </div>
+    </div></div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'النوع':'Type'}</th><th>${lang==='ar'?'مدين':'Debit'}</th><th>${lang==='ar'?'دائن':'Credit'}</th><th>${lang==='ar'?'الرصيد':'Balance'}</th></tr></thead>
+      <tbody>${st.events.length===0?`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد معاملات':'No transactions'}</td></tr>`:
+        st.events.map(e=>`<tr>
+          <td style="font-size:12px;">${fmtDate(e.date)}</td>
+          <td>${e.desc}</td>
+          <td>${e.type}</td>
+          <td style="color:var(--danger);font-weight:700;">${e.debit?fmtMoney(e.debit):''}</td>
+          <td style="color:var(--success);font-weight:700;">${e.credit?fmtMoney(e.credit):''}</td>
+          <td style="font-weight:800;">${fmtMoney(e.balance)}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">${lang==='ar'?'الرصيد النهائي:':'Final Balance:'}</td><td style="font-weight:900;color:${st.finalBalance>0?'var(--danger)':'var(--success)'};">${fmtMoney(st.finalBalance)}</td></tr></tfoot>
+    </table></div></div>
+  </div>`;
+}
+
+function renderBankStatementView(c) {
+  const from = stmtBankFrom || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const to   = stmtBankTo   || new Date().toISOString().slice(0,10);
+  const st = computeBankStatement(from, to);
+
+  c.innerHTML = `<div>
+    <div class="card" style="margin-bottom:14px;"><div class="card-pad">
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'من تاريخ':'From'}</label><input class="input" type="date" id="stmt-bank-from" value="${from}" /></div>
+        <div><label class="form-label">${lang==='ar'?'إلى تاريخ':'To'}</label><input class="input" type="date" id="stmt-bank-to" value="${to}" /></div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="stmtBankFrom=el('stmt-bank-from').value;stmtBankTo=el('stmt-bank-to').value;renderStmtContent()">${lang==='ar'?'تطبيق':'Apply'}</button>
+    </div></div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px;">
+      <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الوارد':'Total In'}</div><div class="stat-value">${fmtMoney(st.totalIn)}</div></div>
+      <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الصادر':'Total Out'}</div><div class="stat-value">${fmtMoney(st.totalOut)}</div></div>
+      <div class="stat-card"><div class="stat-icon blue">${icon('wallet',22)}</div><div class="stat-label">${lang==='ar'?'صافي الحركة':'Net Movement'}</div><div class="stat-value">${fmtMoney(st.finalBalance)}</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-head"><h3>📅 ${lang==='ar'?'الإجمالي اليومي':'Daily Totals'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${lang==='ar'?'اليوم':'Day'}</th><th>${lang==='ar'?'وارد (شبكة/بنك)':'In (Network/Bank)'}</th><th>${lang==='ar'?'صادر':'Out'}</th><th>${lang==='ar'?'صافي اليوم':'Net'}</th></tr></thead>
+        <tbody>${st.byDay.length===0?`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد حركات بهذي الفترة':'No movements in this period'}</td></tr>`:
+          st.byDay.map(d=>`<tr>
+            <td>${fmtDate(d.day)}</td>
+            <td style="color:var(--success);font-weight:700;">${fmtMoney(d.in)}</td>
+            <td style="color:var(--danger);font-weight:700;">${fmtMoney(d.out)}</td>
+            <td style="font-weight:800;">${fmtMoney(Math.round((d.in-d.out)*100)/100)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-head"><h3>⏱️ ${lang==='ar'?'مساهمة كل وردية (مبيعات شبكة)':'Per-Shift Network Contribution'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'الموظف':'Employee'}</th><th>${lang==='ar'?'بداية/نهاية الوردية':'Shift Start/End'}</th><th>${lang==='ar'?'مبيعات شبكة':'Network Sales'}</th></tr></thead>
+        <tbody>${st.shifts.length===0?`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد ورديات مغلقة بهذي الفترة':'No closed shifts in this period'}</td></tr>`:
+          st.shifts.map(s=>`<tr>
+            <td>${fmtDate(s.date)}</td>
+            <td>${s.full_name||s.username}</td>
+            <td style="font-size:12px;">${new Date(s.start_time).toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})} → ${new Date(s.end_time).toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})}</td>
+            <td style="font-weight:800;color:var(--primary);">${fmtMoney(s.sales_card||0)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>📋 ${lang==='ar'?'كل الحركات بالتفصيل':'All Movements (Detail)'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'طريقة الدفع':'Method'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th><th>${lang==='ar'?'الرصيد':'Balance'}</th></tr></thead>
+        <tbody>${st.rows.length===0?`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد حركات':'No movements'}</td></tr>`:
+          st.rows.map(r=>`<tr>
+            <td style="font-size:12px;">${fmtDate(r.date)}</td>
+            <td>${r.description||''}</td>
+            <td><span class="badge badge-blue">${r.method}</span></td>
+            <td style="font-weight:700;color:${r.type==='in'?'var(--success)':'var(--danger)'};">${r.type==='in'?'+':'-'}${fmtMoney(r.amount)}</td>
+            <td style="font-weight:800;">${fmtMoney(r.balance)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
 function exportCustomerStatementPDF(customerId) {
   const db = getDB(); const s = db.settings||{};
   const customer = db.customers.find(c=>c.id===customerId);
   if(!customer) { showToast('العميل غير موجود','error'); return; }
   const now = new Date();
-  const invoices = db.invoices.filter(i=>i.customer_name===customer.name).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-  const receipts = (db.receipts||[]).filter(r=>r.party===customer.name&&r.type==='receipt');
-  let balance = 0;
-  const rows = [];
-  invoices.forEach(inv=>{
-    balance += inv.grand_total;
-    rows.push(`<tr><td>${fmtDate(inv.created_at)}</td><td>${inv.invoice_no}</td><td>${lang==='ar'?'فاتورة':'Invoice'}</td>
-      <td style="color:#dc2626;">${Number(inv.grand_total).toFixed(2)}</td><td></td>
-      <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-    if(inv.paid_amount>0&&inv.payment_method!=='آجل') {
-      balance -= inv.paid_amount;
-      rows.push(`<tr style="background:#f0fdf4;"><td>${fmtDate(inv.created_at)}</td><td>${inv.invoice_no}</td><td style="color:#16a34a;">${lang==='ar'?'سداد':'Payment'}</td>
-        <td></td><td style="color:#16a34a;">${Number(inv.paid_amount).toFixed(2)}</td>
-        <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-    }
-  });
-  receipts.forEach(r=>{
-    balance -= r.amount;
-    rows.push(`<tr style="background:#f0fdf4;"><td>${fmtDate(r.date)}</td><td>${r.voucher_no}</td><td style="color:#16a34a;">${lang==='ar'?'سند قبض':'Receipt'}</td>
-      <td></td><td style="color:#16a34a;">${Number(r.amount).toFixed(2)}</td>
-      <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-  });
-  const finalBalance = customer.balance || balance;
+  const st = computePartyStatement(customer.name, 'customer');
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.ref||''}</td><td>${e.desc}</td>
+    <td style="color:#dc2626;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
+    <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
+  const finalBalance = st.finalBalance;
 
   const win = window.open('','_blank');
   if (!win) return;
@@ -11379,29 +11611,11 @@ function exportSupplierStatementPDF(supplierName) {
   const supplier = db.suppliers.find(s=>s.name===supplierName);
   if(!supplier) { showToast('المورد غير موجود','error'); return; }
   const now = new Date();
-  const purchases = db.purchases.filter(p=>p.vendor===supplierName).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-  const payments = (db.receipts||[]).filter(r=>r.party===supplierName&&r.type==='payment');
-  let balance = 0;
-  const rows = [];
-  purchases.forEach(p=>{
-    balance += p.total;
-    rows.push(`<tr><td>${fmtDate(p.created_at)}</td><td>${p.description||p.vendor}</td><td>${lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'}</td>
-      <td style="color:#dc2626;font-weight:700;">${Number(p.total).toFixed(2)}</td><td></td>
-      <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-    if((p.paid_amount||0)>0) {
-      balance -= (p.paid_amount||0);
-      rows.push(`<tr style="background:#f0fdf4;"><td>${fmtDate(p.created_at)}</td><td>${p.description||''}</td><td style="color:#16a34a;">${lang==='ar'?'دفع جزئي':'Partial Payment'}</td>
-        <td></td><td style="color:#16a34a;">${Number(p.paid_amount).toFixed(2)}</td>
-        <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-    }
-  });
-  payments.forEach(r=>{
-    balance -= r.amount;
-    rows.push(`<tr style="background:#f0fdf4;"><td>${fmtDate(r.date)}</td><td>${r.voucher_no}</td><td style="color:#16a34a;">${lang==='ar'?'سند صرف':'Payment Voucher'}</td>
-      <td></td><td style="color:#16a34a;">${Number(r.amount).toFixed(2)}</td>
-      <td style="font-weight:700;">${Number(balance).toFixed(2)}</td></tr>`);
-  });
-  const finalBalance = balance;
+  const st = computePartyStatement(supplierName, 'supplier');
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.desc}</td><td>${e.type}</td>
+    <td style="color:#dc2626;font-weight:700;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
+    <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
+  const finalBalance = st.finalBalance;
   const win = window.open('','_blank');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف مورد</title></head><body>
