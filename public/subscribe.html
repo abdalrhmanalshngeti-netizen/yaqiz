@@ -44,6 +44,8 @@
     .plan-price { font-size:2rem; font-weight:900; color:#10b981 !important; margin:.4rem 0; }
     .plan-price span { font-size:.9rem; color:#94a3b8 !important; font-weight:600; }
     .plan-desc  { font-size:.85rem; color:#cbd5e1; line-height:1.5; margin-top:6px; }
+    .save-badge { font-size:.78rem; font-weight:800; color:#34d399; background:rgba(52,211,153,.12); border-radius:100px; padding:2px 10px; display:inline-block; margin-bottom:6px; min-height:1.2em; }
+    .save-badge:empty { display:none; }
     .popular-badge {
       position:absolute; top:-12px; right:50%; transform:translateX(50%);
       background:#3b82f6; color:#fff; font-size:.78rem; font-weight:700;
@@ -124,45 +126,46 @@
 
   <div id="alert" class="alert"></div>
 
+  <!-- Billing cycle -->
+  <div class="duration-section">
+    <label>دورة الاشتراك</label>
+    <div class="duration-btns">
+      <button class="dur-btn active" data-cycle="monthly" onclick="selectCycle('monthly')">شهري</button>
+      <button class="dur-btn" data-cycle="annual" onclick="selectCycle('annual')">سنوي <span class="save">وفّر أكثر</span></button>
+    </div>
+  </div>
+
   <!-- Plans -->
   <div class="plans">
     <div class="plan-card" data-plan="basic" onclick="selectPlan('basic')">
       <div class="plan-icon">📗</div>
       <div class="plan-name">الأساسية</div>
-      <div class="plan-price">149 <span>ر.س / شهر</span></div>
+      <div class="plan-price"><span id="price-basic">149</span> <span class="unit" id="unit-basic">ر.س / شهر</span></div>
+      <div class="save-badge" id="save-basic"></div>
       <div class="plan-desc">فواتير، مخزون، تقارير ضريبية، الالتزامات</div>
     </div>
     <div class="plan-card" data-plan="growth" onclick="selectPlan('growth')">
       <div class="popular-badge">⭐ الأكثر اختياراً</div>
       <div class="plan-icon">📘</div>
       <div class="plan-name">النمو</div>
-      <div class="plan-price">299 <span>ر.س / شهر</span></div>
+      <div class="plan-price"><span id="price-growth">299</span> <span class="unit" id="unit-growth">ر.س / شهر</span></div>
+      <div class="save-badge" id="save-growth"></div>
       <div class="plan-desc">+ موظفين، رواتب، نقاط ولاء، تدفقات نقدية</div>
     </div>
     <div class="plan-card" data-plan="pro" onclick="selectPlan('pro')">
       <div class="plan-icon">📙</div>
       <div class="plan-name">الاحترافية</div>
-      <div class="plan-price">499 <span>ر.س / شهر</span></div>
+      <div class="plan-price"><span id="price-pro">499</span> <span class="unit" id="unit-pro">ر.س / شهر</span></div>
+      <div class="save-badge" id="save-pro"></div>
       <div class="plan-desc">+ يومية محاسبية، ميزانية، تسوية بنكية، ذمم</div>
-    </div>
-  </div>
-
-  <!-- Duration -->
-  <div class="duration-section">
-    <label>مدة الاشتراك</label>
-    <div class="duration-btns">
-      <button class="dur-btn active" data-months="1" onclick="selectMonths(1)">شهر واحد</button>
-      <button class="dur-btn" data-months="3" onclick="selectMonths(3)">3 أشهر <span class="save">وفّر 5%</span></button>
-      <button class="dur-btn" data-months="6" onclick="selectMonths(6)">6 أشهر <span class="save">وفّر 10%</span></button>
-      <button class="dur-btn" data-months="12" onclick="selectMonths(12)">سنة <span class="save">وفّر 15%</span></button>
     </div>
   </div>
 
   <!-- Summary -->
   <div class="summary-box">
     <div class="summary-row"><span>الباقة</span><span id="sum-plan">—</span></div>
-    <div class="summary-row"><span>المدة</span><span id="sum-months">—</span></div>
-    <div class="summary-row"><span>السعر الشهري</span><span id="sum-monthly">—</span></div>
+    <div class="summary-row"><span>دورة الاشتراك</span><span id="sum-cycle">—</span></div>
+    <div class="summary-row" id="sum-save-row" style="display:none;"><span>توفيرك مقارنة بالاشتراك الشهري</span><span id="sum-save" style="color:#34d399;font-weight:800;">—</span></div>
     <div class="summary-row total"><span>الإجمالي</span><span id="sum-total">0 ر.س</span></div>
   </div>
 
@@ -178,12 +181,15 @@
 </footer>
 
 <script>
-const PRICES = { basic:149, growth:299, pro:499 };
+const PRICES = {
+  basic:  { monthly:149, annual:1500 },
+  growth: { monthly:299, annual:3200 },
+  pro:    { monthly:499, annual:5500 },
+};
 const LABELS = { basic:'الأساسية', growth:'النمو', pro:'الاحترافية' };
-const DISCOUNTS = { 1:0, 3:0.05, 6:0.10, 12:0.15 };
 
-let selectedPlan   = null;
-let selectedMonths = 1;
+let selectedPlan  = null;
+let selectedCycle = 'monthly'; // 'monthly' | 'annual'
 
 function showAlert(msg, type='error') {
   const el = document.getElementById('alert');
@@ -201,23 +207,53 @@ function selectPlan(plan) {
   document.getElementById('btn-pay').disabled = false;
 }
 
-function selectMonths(m) {
-  selectedMonths = m;
+function selectCycle(cycle) {
+  selectedCycle = cycle;
   document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`[data-months="${m}"]`).classList.add('active');
+  document.querySelector(`[data-cycle="${cycle}"]`).classList.add('active');
+  renderPlanCards();
   updateSummary();
+}
+
+function renderPlanCards() {
+  Object.keys(PRICES).forEach(plan => {
+    const p = PRICES[plan];
+    const priceEl = document.getElementById('price-' + plan);
+    const unitEl  = document.getElementById('unit-' + plan);
+    const saveEl  = document.getElementById('save-' + plan);
+    if (selectedCycle === 'annual') {
+      const savings = (p.monthly * 12) - p.annual;
+      priceEl.textContent = p.annual;
+      unitEl.textContent  = 'ر.س / سنة';
+      saveEl.textContent  = savings > 0 ? `💚 توفّر ${savings} ر.س سنويًا` : '';
+    } else {
+      priceEl.textContent = p.monthly;
+      unitEl.textContent  = 'ر.س / شهر';
+      saveEl.textContent  = '';
+    }
+  });
 }
 
 function updateSummary() {
   if (!selectedPlan) return;
-  const base  = PRICES[selectedPlan];
-  const disc  = DISCOUNTS[selectedMonths] || 0;
-  const total = Math.round(base * selectedMonths * (1 - disc));
-  document.getElementById('sum-plan').textContent    = LABELS[selectedPlan];
-  document.getElementById('sum-months').textContent  = selectedMonths + (selectedMonths===1?' شهر':' أشهر');
-  document.getElementById('sum-monthly').textContent = base + ' ر.س';
-  document.getElementById('sum-total').textContent   = total + ' ر.س';
+  const p = PRICES[selectedPlan];
+  const total   = selectedCycle === 'annual' ? p.annual : p.monthly;
+  const savings = (p.monthly * 12) - p.annual;
+
+  document.getElementById('sum-plan').textContent  = LABELS[selectedPlan];
+  document.getElementById('sum-cycle').textContent = selectedCycle === 'annual' ? 'سنوي' : 'شهري';
+  document.getElementById('sum-total').textContent = total + ' ر.س';
+
+  const saveRow = document.getElementById('sum-save-row');
+  if (selectedCycle === 'annual' && savings > 0) {
+    document.getElementById('sum-save').textContent = savings + ' ر.س';
+    saveRow.style.display = 'flex';
+  } else {
+    saveRow.style.display = 'none';
+  }
 }
+
+renderPlanCards();
 
 async function pay() {
   if (!selectedPlan) return showAlert('اختر باقة أولاً');
@@ -233,15 +269,10 @@ async function pay() {
   btn.classList.add('loading');
 
   try {
-    const disc  = DISCOUNTS[selectedMonths] || 0;
-    const months = disc > 0
-      ? Math.round(PRICES[selectedPlan] * selectedMonths * (1 - disc) / PRICES[selectedPlan] * 100) / 100
-      : selectedMonths;
-
     const res = await fetch('/api/payment/create', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
-      body: JSON.stringify({ plan: selectedPlan, months: selectedMonths })
+      body: JSON.stringify({ plan: selectedPlan, cycle: selectedCycle })
     });
     const data = await res.json();
 

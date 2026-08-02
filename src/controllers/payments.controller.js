@@ -1,7 +1,11 @@
 const https  = require('https');
 const db     = require('../config/db');
 
-const PLAN_PRICES = { basic: 149, growth: 299, pro: 499 };
+const PLAN_PRICES = {
+  basic:  { monthly: 149, annual: 1500 },
+  growth: { monthly: 299, annual: 3200 },
+  pro:    { monthly: 499, annual: 5500 },
+};
 const PLAN_LABELS = { basic: 'الأساسية', growth: 'النمو', pro: 'الاحترافية' };
 
 function moyasarRequest(method, path, body, secretKey) {
@@ -34,14 +38,16 @@ function moyasarRequest(method, path, body, secretKey) {
 
 exports.createPayment = async (req, res, next) => {
   try {
-    const { plan, months = 1 } = req.body;
+    const { plan, cycle = 'monthly' } = req.body;
     const { company_id } = req.user;
 
     if (!PLAN_PRICES[plan]) {
       return res.status(400).json({ success: false, message: 'باقة غير صحيحة' });
     }
 
-    const amount    = PLAN_PRICES[plan] * Math.max(1, Math.min(12, parseInt(months) || 1));
+    const isAnnual  = cycle === 'annual';
+    const amount    = isAnnual ? PLAN_PRICES[plan].annual : PLAN_PRICES[plan].monthly;
+    const months    = isAnnual ? 12 : 1;
     const amountHalala = amount * 100;
     const callbackUrl = `${process.env.APP_URL || 'https://yaqiz.me'}/payment/callback`;
 
@@ -52,10 +58,10 @@ exports.createPayment = async (req, res, next) => {
     const payload = {
       amount: amountHalala,
       currency: 'SAR',
-      description: `اشتراك يقظ — باقة ${PLAN_LABELS[plan]} (${months} شهر)`,
+      description: `اشتراك يقظ — باقة ${PLAN_LABELS[plan]} (${isAnnual ? 'سنوي' : 'شهري'})`,
       callback_url: callbackUrl,
       source: { type: 'creditcard' },
-      metadata: { company_id: String(company_id), plan, months: String(months) }
+      metadata: { company_id: String(company_id), plan, months: String(months), cycle }
     };
 
     const moyasarRes = await moyasarRequest(
