@@ -3900,7 +3900,8 @@ function addGPItem() {
   if(!qty||!price){showToast(lang==='ar'?'أدخل الكمية والسعر':'Enter qty and price','error');return;}
   // auto-fill price from product
   const db=getDB(); const prod=db.products.find(p=>p.name===name);
-  _goodsItems.push({name,qty,price,line_total:qty*price,product_id:prod?.id||null});
+  const lineTotal=Math.round(qty*price*100)/100;
+  _goodsItems.push({name,qty,price,line_total:lineTotal,vat:Math.round(lineTotal*0.15*100)/100,product_id:prod?.id||null});
   el('gp-iname').value=''; el('gp-iqty').value=1; el('gp-iunit').value=0; el('gp-iline').value=0;
   renderGPItems(); updateGPTotals();
 }
@@ -3916,23 +3917,20 @@ function renderGPItems() {
       <th style="padding:6px;text-align:start;">${lang==='ar'?'الصنف':'Item'}</th>
       <th style="padding:6px;text-align:center;">${lang==='ar'?'الكمية':'Qty'}</th>
       <th style="padding:6px;text-align:center;">${lang==='ar'?'سعر الحبة':'Unit Price'}</th>
-      <th style="padding:6px;text-align:center;color:#f59e0b;">${lang==='ar'?'ضريبة الحبة':'Unit VAT'}</th>
-      <th style="padding:6px;text-align:center;">${lang==='ar'?'إجمالي الصنف (ق.ض)':'Line Total'}</th>
-      <th style="padding:6px;text-align:center;color:#f59e0b;">${lang==='ar'?'الضريبة':'VAT'}</th>
+      <th style="padding:6px;text-align:center;">${lang==='ar'?'الإجمالي قبل الضريبة':'Subtotal'}</th>
+      <th style="padding:6px;text-align:center;color:#f59e0b;">${lang==='ar'?'قيمة الضريبة':'VAT Amount'}</th>
       <th style="padding:6px;text-align:center;font-weight:800;">${lang==='ar'?'شامل الضريبة':'With VAT'}</th>
       <th style="padding:6px;"></th>
     </tr></thead>
     <tbody>${_goodsItems.map((i,idx)=>{
-      const unitVat   = Math.round(i.price  * 0.15 * 100) / 100;
-      const lineVat   = Math.round(i.line_total * 0.15 * 100) / 100;
-      const lineTotal = Math.round((i.line_total + lineVat) * 100) / 100;
+      const itemVat   = i.vat!=null ? i.vat : Math.round(i.line_total * 0.15 * 100) / 100;
+      const lineTotal = Math.round((i.line_total + itemVat) * 100) / 100;
       return `<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:6px;font-weight:700;">${i.name}</td>
-        <td style="padding:6px;text-align:center;">${i.qty}</td>
-        <td style="padding:6px;text-align:center;">${fmtMoney(i.price)}</td>
-        <td style="padding:6px;text-align:center;color:#f59e0b;">+${fmtMoney(unitVat)}</td>
+        <td style="padding:4px;text-align:center;"><input class="input" type="number" min="0" step="0.01" value="${i.qty}" style="width:64px;text-align:center;padding:4px;font-size:12px;" onchange="updateGPItem(${idx},'qty',this.value)" /></td>
+        <td style="padding:4px;text-align:center;"><input class="input" type="number" min="0" step="0.01" value="${i.price}" style="width:78px;text-align:center;padding:4px;font-size:12px;" onchange="updateGPItem(${idx},'price',this.value)" /></td>
         <td style="padding:6px;text-align:center;">${fmtMoney(i.line_total)}</td>
-        <td style="padding:6px;text-align:center;color:#f59e0b;">+${fmtMoney(lineVat)}</td>
+        <td style="padding:4px;text-align:center;"><input class="input" type="number" min="0" step="0.01" value="${itemVat}" style="width:78px;text-align:center;padding:4px;font-size:12px;color:#f59e0b;" onchange="updateGPItem(${idx},'vat',this.value)" /></td>
         <td style="padding:6px;text-align:center;font-weight:800;color:var(--primary);">${fmtMoney(lineTotal)}</td>
         <td style="padding:6px;text-align:center;">
           <button class="icon-btn" style="width:24px;height:24px;" onclick="_goodsItems.splice(${idx},1);renderGPItems();updateGPTotals()">${icon('x',12)}</button>
@@ -3942,9 +3940,27 @@ function renderGPItems() {
   </table>`;
 }
 
+// يستدعى عند تعديل الكمية/السعر/الضريبة يدوياً بعد التفريغ الآلي (AI/Excel) أو الإدخال اليدوي
+function updateGPItem(idx, field, value) {
+  const item = _goodsItems[idx];
+  if (!item) return;
+  const num = Math.max(0, Number(value) || 0);
+  if (field === 'qty')   item.qty   = num;
+  if (field === 'price') item.price = num;
+  if (field === 'vat')   { item.vat = num; item._vatManual = true; }
+  item.line_total = Math.round(item.qty * item.price * 100) / 100;
+  if (field !== 'vat' && !item._vatManual) {
+    item.vat = Math.round(item.line_total * 0.15 * 100) / 100;
+  }
+  // نأجّل إعادة الرسم للـ tick التالي — تعديل innerHTML للجدول مباشرة أثناء
+  // حدث change لعنصر جوّاه يسبب خطأ DOM بمتصفحات كروميوم
+  setTimeout(() => { renderGPItems(); updateGPTotals(); }, 0);
+}
+
 function updateGPTotals() {
   const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const vat=sub*0.15; const total=sub+vat;
+  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
+  const total=sub+vat;
   if(el('gp-sub')) el('gp-sub').textContent=fmtMoney(sub);
   if(el('gp-vat-val')) el('gp-vat-val').textContent=fmtMoney(vat);
   if(el('gp-total')) el('gp-total').textContent=fmtMoney(total);
@@ -3961,7 +3977,8 @@ function toggleGPPayment() {
 
 function updateGPRemaining() {
   const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const total=sub*1.15;
+  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
+  const total=sub+vat;
   const paid=Number(el('gp-paid')?.value||0);
   const rem=el('gp-remaining');
   if(rem) rem.textContent=`${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(Math.max(0,total-paid))}`;
@@ -3972,7 +3989,8 @@ function saveGoodsPurchase() {
   if(!el('gp-vendor')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
   if(!_goodsItems.length){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
   const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const vat=sub*0.15; const total=sub+vat;
+  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
+  const total=sub+vat;
   const payment=el('gp-payment').value;
   const paidNow=payment==='نقدي'?total:payment==='آجل'?0:Number(el('gp-paid')?.value||0);
   const remaining=total-paidNow;
@@ -12106,13 +12124,14 @@ function openPurchaseFormWithAIData(data, usage) {
       const qty   = parseFloat(it.qty)        || 1;
       const price = parseFloat(it.unit_price) || parseFloat(it.total) / (parseFloat(it.qty) || 1) || 0;
       const total = parseFloat(it.total)      || qty * price;
-      _goodsItems.push({ name: it.description || 'بند', qty, price, line_total: total, product_id: null });
+      const vat   = Math.round(total * 0.15 * 100) / 100;
+      _goodsItems.push({ name: it.description || 'بند', qty, price, line_total: total, vat, product_id: null });
     });
   } else {
     const grand = parseFloat(data.grand_total) || 0;
     const vat   = parseFloat(data.vat_amount)  || grand * 15 / 115;
     const sub   = grand - vat;
-    _goodsItems.push({ name: data.vendor || 'بضاعة', qty: 1, price: sub, line_total: sub, product_id: null });
+    _goodsItems.push({ name: data.vendor || 'بضاعة', qty: 1, price: sub, line_total: sub, vat, product_id: null });
   }
 
   // افتح النموذج مع الحفاظ على الأصناف (keepItems=true يمنع المسح)
