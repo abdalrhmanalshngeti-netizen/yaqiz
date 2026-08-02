@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -690,13 +690,13 @@ function fmtDate(s) {
   try { return new Date(s).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); } catch { return s; }
 }
 function fmtHijri(s) {
-  try { return new Date(s).toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'}); } catch { return ''; }
+  try { return new Date(s).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'}); } catch { return ''; }
 }
 function fmtDateBoth(s) {
   try {
     const d = new Date(s);
-    const greg = d.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
-    const hijri = d.toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'});
+    const greg = d.toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'});
+    const hijri = d.toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'});
     return `${greg} | ${hijri}`;
   } catch { return s; }
 }
@@ -730,7 +730,9 @@ function $qa(sel,ctx) { return [...(ctx||document).querySelectorAll(sel)]; }
 
 // ============ RENDER APP ============
 function renderApp() {
-  document.documentElement.lang = lang;
+  // نخلي lang ثابتة "en" دايمًا (بغض النظر عن لغة الواجهة) عشان الأرقام بكل حقول
+  // الإدخال والتواريخ تظهر بأرقام لاتينية (0-9) دايمًا، مو أرقام عربية (٠-٩)
+  document.documentElement.lang = 'en';
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
   if (!currentUser) { renderLogin(); return; }
   renderShell();
@@ -1968,7 +1970,7 @@ function renderDashboard(c) {
     const ds = d.toDateString();
     const s = db.invoices.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.grand_total,0);
     const p = db.purchases.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.total,0);
-    days.push({date:d.toLocaleDateString(lang==='ar'?'ar-SA':'en-US',{weekday:'short'}),s,p});
+    days.push({date:d.toLocaleDateString(lang==='ar'?'ar-SA-u-nu-latn':'en-US',{weekday:'short'}),s,p});
   }
   const maxVal = Math.max(...days.map(d=>Math.max(d.s,d.p)),1);
   const chartBars = days.map(d=>`
@@ -2716,7 +2718,7 @@ function printPOSReceipt(id) {
   <div class="dashed"></div>
   <div class="row"><span class="muted">رقم الفاتورة:</span><span class="bold">${inv.invoice_no}</span></div>
   <div class="row"><span class="muted">التاريخ:</span><span>${new Date(inv.created_at).toLocaleDateString('en-US')}</span></div>
-  <div class="row"><span class="muted">التاريخ الهجري:</span><span>${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'})}</span></div>
+  <div class="row"><span class="muted">التاريخ الهجري:</span><span>${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</span></div>
   <div class="row"><span class="muted">الوقت:</span><span>${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="row"><span class="muted">العميل:</span><span class="bold">${inv.customer_name}</span></div>
   <div class="row"><span class="muted">الدفع:</span><span>${inv.payment_method}</span></div>
@@ -3436,7 +3438,7 @@ function printSalesInvoice(id) {
       <div class="inv-title">${inv.invoice_type==='tax'?'فاتورة ضريبية':'فاتورة مبسطة'}</div>
       <div style="font-size:13px;font-weight:700;margin-top:4px;">${inv.invoice_no}</div>
       <div style="font-size:11px;color:#64748b;">${new Date(inv.created_at).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</div>
-      <div style="font-size:11px;color:#64748b;">${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'})}</div>
+      <div style="font-size:11px;color:#64748b;">${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</div>
     </div>
   </div>
   <div class="info-grid">
@@ -3474,7 +3476,7 @@ function printSalesInvoice(id) {
 function printPurchaseInvoice(id) {
   const db=getDB(); const p=db.purchases.find(x=>x.id===id); if(!p)return;
   const s=db.settings||{};
-  const gregDate = new Date(p.created_at).toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const gregDate = new Date(p.created_at).toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'});
   const hijriDate = fmtHijri(p.created_at);
   const win=window.open('','_blank','width=850,height=700');
   if(!win) return;
@@ -4507,7 +4509,7 @@ async function showPriceHistory(productId) {
         <th>${lang==='ar'?'السبب':'Reason'}</th>
       </tr></thead><tbody>
       ${rows.map(r=>`<tr>
-        <td>${new Date(r.created_at).toLocaleDateString('ar-SA')}</td>
+        <td>${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</td>
         <td>${r.old_buy_price||'-'} ← <strong>${r.new_buy_price}</strong></td>
         <td style="color:#34d399">${r.old_sell_price||'-'} ← <strong>${r.new_sell_price}</strong></td>
         <td style="font-size:11px;color:var(--text-muted)">${r.purchase_no||r.reason||'-'}</td>
@@ -5389,7 +5391,7 @@ function renderZakatReport(c) {
 }
 function printARAPReport(section='all') {
   const db = getDB();
-  const today = new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const today = new Date().toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'});
   const companyName = db.settings?.company_name || 'شركتي';
 
   // حساب بيانات العملاء
@@ -5411,7 +5413,7 @@ function printARAPReport(section='all') {
   const totalCustOutstanding = custData.reduce((s,r)=>s+r.outstanding,0);
   const totalSuppOutstanding = suppData.reduce((s,r)=>s+r.outstanding,0);
 
-  const fmt = n => n.toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2})+'';
+  const fmt = n => n.toLocaleString('ar-SA-u-nu-latn',{minimumFractionDigits:2,maximumFractionDigits:2})+'';
 
   const custRows = custData.map(r=>`
     <tr>
@@ -6835,7 +6837,7 @@ function confirmObligationPayment(id, type, amount) {
 function printObligationReceipt(o,amount,type) {
   const db=getDB(); const s=db.settings||{};
   const _now=new Date();
-  const _greg=_now.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const _greg=_now.toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'});
   const _hijri=fmtHijri(_now.toISOString());
   const _refNo=`OBL-${o.id}-${(o.payments||[]).length}`;
   const win=window.open('','_blank','width=750,height=600');
@@ -8545,7 +8547,7 @@ async function showNotifications(){
             <div style="flex:1;">
               <div style="font-weight:800;font-size:13px;color:${n.is_read?'var(--text-main)':'#93c5fd'}">${n.title||'تحديث سعر'}</div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${n.message}</div>
-              <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${new Date(n.created_at).toLocaleString('ar-SA')}</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
             </div>
             ${!n.is_read?`<span style="width:8px;height:8px;background:#3b82f6;border-radius:50%;flex-shrink:0;margin-top:4px;"></span>`:''}
           </div>`).join('')}`
@@ -8969,7 +8971,7 @@ function renderBalanceSheet(c) {
     <div class="page-header">
       <div>
         <div class="page-title-lg">${lang==='ar'?'الميزانية العمومية':'Balance Sheet'}</div>
-        <div class="page-sub">${lang==='ar'?'حتى تاريخ:':'As of:'} ${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="page-sub">${lang==='ar'?'حتى تاريخ:':'As of:'} ${new Date().toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</div>
       </div>
     </div>
 
@@ -11228,7 +11230,7 @@ function exportVATReportPDF() {
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>تقرير الضريبة</title></head><body>
   <div class="rpt-header">
     <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
-    <div><div class="rpt-title">تقرير ضريبة القيمة المضافة</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA')}</div></div>
+    <div><div class="rpt-title">تقرير ضريبة القيمة المضافة</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
     <div class="stat-box"><div class="stat-val green">${Number(d.vatOutput).toFixed(2)}</div><div class="stat-lbl">ضريبة المخرجات (ر.س)</div></div>
@@ -11249,7 +11251,7 @@ function exportVATReportPDF() {
     <tfoot><tr class="total-row"><td colspan="3">الإجمالي</td><td>${Number(d.purchs.filter(p=>p.deductible!==false).reduce((s,p)=>s+p.amount,0)).toFixed(2)}</td><td class="red">${Number(d.vatInput).toFixed(2)}</td></tr></tfoot>
     </table>
   </div>`:''}
-  <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA')} ${now.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')} ${now.toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -11275,14 +11277,14 @@ function exportIncomeStatementPDF() {
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>قائمة الدخل</title></head><body>
   <div class="rpt-header">
     <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
-    <div><div class="rpt-title">قائمة الدخل — بيان الأرباح والخسائر</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA')}</div></div>
+    <div><div class="rpt-title">قائمة الدخل — بيان الأرباح والخسائر</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <table><thead><tr><th>البند</th><th style="text-align:end;">المبلغ (ر.س)</th></tr></thead>
   <tbody>${rows.map(r=>`<tr${r.bold?' class="total-row"':''}>
     <td style="${r.bold?'font-weight:900;':''}">${r.label}</td>
     <td class="${r.color}" style="text-align:end;${r.bold?'font-size:15px;':''}">${r.value>=0?'':'-'}${Math.abs(r.value).toFixed(2)}</td>
   </tr>`).join('')}</tbody></table>
-  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${now.toLocaleDateString('ar-SA')}</span></div>
+  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -11292,7 +11294,7 @@ function exportPayrollPDF() {
   const now = new Date();
   const emps = db.employees||[];
   if(!emps.length) { showToast(lang==='ar'?'لا يوجد موظفون':'No employees','error'); return; }
-  const month = now.toLocaleDateString('ar-SA',{month:'long',year:'numeric'});
+  const month = now.toLocaleDateString('ar-SA-u-nu-latn',{month:'long',year:'numeric'});
   const totalSalaries = emps.filter(e=>e.status==='active').reduce((s,e)=>s+e.salary,0);
   const rows = emps.filter(e=>e.status==='active').map((e,i)=>`<tr>
     <td>${i+1}</td><td style="font-weight:700;">${e.name}</td><td>${e.position}</td>
@@ -11317,7 +11319,7 @@ function exportPayrollPDF() {
     <div style="text-align:center;"><div style="border-bottom:1px solid #94a3b8;height:40px;margin-bottom:8px;"></div><div style="font-size:11px;color:#64748b;font-weight:700;">المحاسب</div></div>
     <div style="text-align:center;"><div style="border-bottom:1px solid #94a3b8;height:40px;margin-bottom:8px;"></div><div style="font-size:11px;color:#64748b;font-weight:700;">المدير العام</div></div>
   </div>
-  <div class="footer"><span>يقظ — نظام إدارة الرواتب</span><span>${now.toLocaleDateString('ar-SA')}</span></div>
+  <div class="footer"><span>يقظ — نظام إدارة الرواتب</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -11356,7 +11358,7 @@ function exportCustomerStatementPDF(customerId) {
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف حساب</title></head><body>
   <div class="rpt-header">
     <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
-    <div><div class="rpt-title">كشف حساب عميل</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA')}</div></div>
+    <div><div class="rpt-title">كشف حساب عميل</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
     <div><div style="font-weight:900;font-size:16px;">${customer.name}</div><div style="font-size:12px;color:#64748b;">${customer.phone||''}</div>${customer.vat_num?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${customer.vat_num}</div>`:''}</div>
@@ -11367,7 +11369,7 @@ function exportCustomerStatementPDF(customerId) {
     <tbody>${rows.join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
     <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
   </table>
-  <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA')}</span></div>
+  <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -11405,7 +11407,7 @@ function exportSupplierStatementPDF(supplierName) {
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف مورد</title></head><body>
   <div class="rpt-header">
     <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
-    <div><div class="rpt-title">كشف حساب مورد</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA')}</div></div>
+    <div><div class="rpt-title">كشف حساب مورد</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
     <div><div style="font-weight:900;font-size:16px;">${supplier.name}</div><div style="font-size:12px;color:#64748b;">${supplier.phone||''}</div></div>
@@ -11416,7 +11418,7 @@ function exportSupplierStatementPDF(supplierName) {
     <tbody>${rows.join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">لا توجد معاملات</td></tr>'}</tbody>
     <tfoot><tr class="total-row"><td colspan="5" style="text-align:end;">الرصيد النهائي:</td><td style="font-size:16px;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</td></tr></tfoot>
   </table>
-  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${now.toLocaleDateString('ar-SA')}</span></div>
+  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
