@@ -1,15 +1,15 @@
 /**
- * Qeema API Client
+ * Yaqiz API Client
  * أضف هذا الملف في VVIP.html قبل سكريبت النظام:
  * <script src="api-client.js"></script>
  */
 
-const QeemaAPI = (() => {
+const YaqizAPI = (() => {
   const BASE = 'http://localhost:3000';
 
-  let _accessToken  = localStorage.getItem('qeema_access_token');
-  let _refreshToken = localStorage.getItem('qeema_refresh_token');
-  let _user         = JSON.parse(localStorage.getItem('qeema_user') || 'null');
+  let _accessToken  = localStorage.getItem('yaqiz_access_token');
+  let _refreshToken = localStorage.getItem('yaqiz_refresh_token');
+  let _user         = JSON.parse(localStorage.getItem('yaqiz_user') || 'null');
 
   // ── طلب مع تجديد تلقائي للـ Token ─────────────────────────
   async function request(method, path, body) {
@@ -35,7 +35,7 @@ const QeemaAPI = (() => {
         if (r.ok) {
           const refreshData = await r.json();
           _accessToken = refreshData.accessToken;
-          localStorage.setItem('qeema_access_token', _accessToken);
+          localStorage.setItem('yaqiz_access_token', _accessToken);
           res = await doFetch(_accessToken);
         } else {
           _logout();
@@ -55,12 +55,12 @@ const QeemaAPI = (() => {
   }
 
   function _logout() {
-    localStorage.removeItem('qeema_access_token');
-    localStorage.removeItem('qeema_refresh_token');
-    localStorage.removeItem('qeema_user');
+    localStorage.removeItem('yaqiz_access_token');
+    localStorage.removeItem('yaqiz_refresh_token');
+    localStorage.removeItem('yaqiz_user');
     _accessToken = _refreshToken = _user = null;
     // إعادة تحميل الصفحة لعرض شاشة تسجيل الدخول
-    window.dispatchEvent(new Event('qeema:session-expired'));
+    window.dispatchEvent(new Event('yaqiz:session-expired'));
   }
 
   // ── Auth ────────────────────────────────────────────────────
@@ -76,9 +76,9 @@ const QeemaAPI = (() => {
     _accessToken  = data.accessToken;
     _refreshToken = data.refreshToken;
     _user         = data.user;
-    localStorage.setItem('qeema_access_token',  _accessToken);
-    localStorage.setItem('qeema_refresh_token', _refreshToken);
-    localStorage.setItem('qeema_user',          JSON.stringify(_user));
+    localStorage.setItem('yaqiz_access_token',  _accessToken);
+    localStorage.setItem('yaqiz_refresh_token', _refreshToken);
+    localStorage.setItem('yaqiz_user',          JSON.stringify(_user));
     return _user;
   }
 
@@ -192,7 +192,7 @@ const QeemaAPI = (() => {
 })();
 
 // ── حدث انتهاء الجلسة ─────────────────────────────────────────
-window.addEventListener('qeema:session-expired', () => {
+window.addEventListener('yaqiz:session-expired', () => {
   alert('انتهت جلستك. سيتم إعادة تسجيل الدخول.');
   location.reload();
 });

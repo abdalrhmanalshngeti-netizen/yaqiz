@@ -1,4 +1,4 @@
-# Qeema — إعداد قاعدة البيانات
+# Yaqiz — إعداد قاعدة البيانات
 # شغّل هذا الملف بعد تثبيت PostgreSQL
 
 $pgBin = "C:\Program Files\PostgreSQL\17\bin"
@@ -11,7 +11,7 @@ Write-Host "1. إنشاء المستخدم والقاعدة..." -ForegroundColor
 & "$pgBin\psql.exe" -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE qeema_db TO qeema_user;" 2>$null
 
 Write-Host "2. تشغيل الـ Migration (إنشاء الجداول)..." -ForegroundColor Cyan
-Set-Location "C:\Users\abdal\qeema-backend"
+Set-Location "C:\Users\abdal\yaqiz-backend"
 node src/db/migrate.js
 
 Write-Host "3. إضافة البيانات الأولية..." -ForegroundColor Cyan

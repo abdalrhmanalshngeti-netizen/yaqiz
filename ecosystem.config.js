@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name:         'qeema-backend',
+    name:         'yaqiz-backend',
     script:       'src/app.js',
     instances:    'max',
     exec_mode:    'cluster',

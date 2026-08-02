@@ -1,5 +1,5 @@
-// Qeema Service Worker — App Shell strategy
-const CACHE_NAME = 'qeema-v3';
+// Yaqiz Service Worker — App Shell strategy
+const CACHE_NAME = 'yaqiz-v1';
 const SHELL_URLS = ['/VVIP.html', '/public/api-client.js', '/public/manifest.json'];
 
 // تثبيت: تحميل App Shell

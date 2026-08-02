@@ -1,4 +1,4 @@
-# Qeema — تشغيل سريع
+# Yaqiz — تشغيل سريع
 # شغّل هذا الملف في كل مرة تريد تشغيل النظام
 
 $pgBin  = "C:\Program Files\PostgreSQL\17\bin"
@@ -24,6 +24,6 @@ if ($oldPid) {
 }
 
 # تشغيل الخادم
-Write-Host "Starting Qeema backend on http://localhost:3000" -ForegroundColor Cyan
-Set-Location "C:\Users\abdal\qeema-backend"
+Write-Host "Starting Yaqiz backend on http://localhost:3000" -ForegroundColor Cyan
+Set-Location "C:\Users\abdal\yaqiz-backend"
 npm run dev

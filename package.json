@@ -1,7 +1,7 @@
 {
   "name": "yaqiz-backend",
   "version": "1.0.0",
-  "description": "Awj Accounting System — Saudi ZATCA-compliant backend",
+  "description": "Yaqiz Accounting System — Saudi ZATCA-compliant backend",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/db/migrate.js && node src/app.js",

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-title قيمة - تشغيل لوحة المالك
+title يقظ - تشغيل لوحة المالك
 
 echo جارٍ التحقق من الخادم...
 curl -s http://localhost:3000/health > nul 2>&1

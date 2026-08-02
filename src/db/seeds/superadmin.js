@@ -6,7 +6,7 @@ async function seedSuperAdmin() {
   try {
     const username  = 'superadmin';
     const password  = 'SuperAdmin@2026!';
-    const full_name = 'مدير قيمة';
+    const full_name = 'مدير يقظ';
 
     // تحقق من وجوده
     const { rows } = await db.query(`SELECT id FROM users WHERE username = $1 AND is_super_admin = true`, [username]);
