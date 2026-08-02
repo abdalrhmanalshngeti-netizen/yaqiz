@@ -284,6 +284,18 @@
     }
     .price-num sup { font-size:1.1rem; font-weight:700; color:rgba(255,255,255,.6); vertical-align:super; }
     .price-period { font-size:.88rem; font-weight:700; color:rgba(255,255,255,.6); margin-top:5px; }
+    .price-save { font-size:.8rem; font-weight:800; color:#34d399; background:rgba(52,211,153,.12); border-radius:100px; padding:2px 12px; display:inline-block; margin-top:8px; min-height:1.4em; }
+    .price-save:empty { display:none; }
+    .cycle-toggle { display:flex; justify-content:center; gap:.6rem; margin:1.75rem 0 .5rem; }
+    .cycle-btn {
+      border:1.5px solid rgba(255,255,255,.18); border-radius:100px; padding:.55rem 1.5rem;
+      background:rgba(255,255,255,.04); color:rgba(255,255,255,.75); cursor:pointer;
+      font-family:inherit; font-size:.92rem; font-weight:800; transition:all .2s;
+    }
+    .cycle-btn:hover  { border-color:rgba(255,255,255,.4); color:#fff; }
+    .cycle-btn.active { border-color:var(--blue); background:var(--blue); color:#fff; }
+    .cycle-btn .tag   { font-size:.72rem; color:#34d399; margin-inline-start:4px; }
+    .cycle-btn.active .tag { color:#d1fae5; }
     .feat-list { list-style:none; flex:1; margin-bottom:2rem; }
     .feat-list li {
       display:flex; align-items:flex-start; gap:10px;
@@ -590,6 +602,11 @@
       <p class="sec-sub light">جميع الباقات تبدأ بتجربة مجانية 30 يوماً بكامل المميزات — لا يلزم بطاقة بنكية</p>
     </div>
 
+    <div class="cycle-toggle">
+      <button class="cycle-btn active" data-cycle="monthly" onclick="setPricingCycle('monthly')">شهري</button>
+      <button class="cycle-btn" data-cycle="annual" onclick="setPricingCycle('annual')">سنوي <span class="tag">وفّر أكثر</span></button>
+    </div>
+
     <div class="pricing-row">
 
       <!-- BASIC -->
@@ -600,8 +617,9 @@
           <div class="plan-tagline">مثالية للمنشآت الصغيرة</div>
         </div>
         <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> 149</div>
-          <div class="price-period">شهرياً</div>
+          <div class="price-num"><sup>ر.س</sup> <span id="price-basic">149</span></div>
+          <div class="price-period" id="period-basic">شهرياً</div>
+          <div class="price-save" id="save-basic"></div>
         </div>
         <ul class="feat-list">
           <li class="sect">الفوترة والمبيعات</li>
@@ -631,8 +649,9 @@
           <div class="plan-tagline">للمنشآت التي تحتاج تحكم أكبر</div>
         </div>
         <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> 299</div>
-          <div class="price-period">شهرياً</div>
+          <div class="price-num"><sup>ر.س</sup> <span id="price-growth">299</span></div>
+          <div class="price-period" id="period-growth">شهرياً</div>
+          <div class="price-save" id="save-growth"></div>
         </div>
         <ul class="feat-list">
           <li class="sect">كل ما في الأساسية، إضافةً إلى</li>
@@ -660,8 +679,9 @@
           <div class="plan-tagline">للمنشآت ذات المتطلبات المتقدمة</div>
         </div>
         <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> 499</div>
-          <div class="price-period">شهرياً</div>
+          <div class="price-num"><sup>ر.س</sup> <span id="price-pro">499</span></div>
+          <div class="price-period" id="period-pro">شهرياً</div>
+          <div class="price-save" id="save-pro"></div>
         </div>
         <ul class="feat-list">
           <li class="sect">كل ما في باقة النمو، إضافةً إلى</li>
@@ -781,6 +801,33 @@
 
 <script>
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%"><rect width="100" height="100" rx="17" fill="#0d0f14"/><circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/><circle cx="43" cy="42" r="12" fill="white"/><path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/><path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/><g fill="white"><g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g><g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g></g><polygon points="49,58 60,68 83,91 71,88" fill="white"/><polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/></svg>`;
+
+const PRICING = {
+  basic:  { monthly:149, annual:1500 },
+  growth: { monthly:299, annual:3200 },
+  pro:    { monthly:499, annual:5500 },
+};
+
+function setPricingCycle(cycle) {
+  document.querySelectorAll('.cycle-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.cycle-btn[data-cycle="${cycle}"]`).classList.add('active');
+  Object.keys(PRICING).forEach(plan => {
+    const p = PRICING[plan];
+    const priceEl  = document.getElementById('price-' + plan);
+    const periodEl = document.getElementById('period-' + plan);
+    const saveEl   = document.getElementById('save-' + plan);
+    if (cycle === 'annual') {
+      const savings = (p.monthly * 12) - p.annual;
+      priceEl.textContent  = p.annual;
+      periodEl.textContent = 'سنوياً';
+      saveEl.textContent   = savings > 0 ? `💚 توفّر ${savings} ر.س سنويًا` : '';
+    } else {
+      priceEl.textContent  = p.monthly;
+      periodEl.textContent = 'شهرياً';
+      saveEl.textContent   = '';
+    }
+  });
+}
 
 function openModal(plan) {
   document.getElementById('regOverlay').classList.add('show');

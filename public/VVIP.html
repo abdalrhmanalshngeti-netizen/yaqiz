@@ -10343,21 +10343,27 @@ function renderSettingsGeneral(c) {
       };
       const cur = getCurrentPlan();
       const p = planMeta[cur] || planMeta.basic;
-      const daysLeft = cur === 'basic' ? null : getTrialDaysLeft();
+      const hasPaid   = !!db.settings?.has_paid_subscription;
+      const daysLeft  = cur === 'basic' ? null : getTrialDaysLeft();
       const isExpired = daysLeft !== null && daysLeft <= 0;
-      const isTrial   = daysLeft !== null && daysLeft > 0;
-      const expStr = daysLeft !== null
-        ? (isTrial ? ` · ${lang==='ar'?`تجربة مجانية — ${daysLeft} يوم متبقٍ`:`Free trial — ${daysLeft} days left`}` : '')
+      const isTrial   = daysLeft !== null && daysLeft > 0 && !hasPaid;
+      const isPaidActive = daysLeft !== null && daysLeft > 0 && hasPaid;
+      const expDate = db.settings?.plan_expires_at ? fmtDate(db.settings.plan_expires_at) : '';
+      const expStr = isTrial
+        ? ` · ${lang==='ar'?`تجربة مجانية — ${daysLeft} يوم متبقٍ`:`Free trial — ${daysLeft} days left`}`
+        : isPaidActive
+        ? ` · ${lang==='ar'?`يتجدد بتاريخ ${expDate}`:`Renews on ${expDate}`}`
         : '';
       return `<div class="card" style="border:2px solid ${p.color};"><div class="card-pad">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
           <div style="font-size:36px;">${isTrial?'🎁':p.icon}</div>
           <div style="flex:1;">
             <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:2px;">${lang==='ar'?'باقتك الحالية':'Current Plan'}</div>
-            <div style="font-size:20px;font-weight:900;color:${p.color};">${p.label}${isTrial?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">${lang==='ar'?'تجربة':'Trial'}</span>`:''}</div>
+            <div style="font-size:20px;font-weight:900;color:${p.color};">${p.label}${isTrial?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">${lang==='ar'?'تجربة':'Trial'}</span>`:''}${isPaidActive?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">✅ ${lang==='ar'?'مشترك':'Subscribed'}</span>`:''}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.desc}${expStr}</div>
-            ${isExpired?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⚠️ ${lang==='ar'?'انتهت فترة التجربة — تواصل مع فريق قيمة لتفعيل اشتراكك':'Trial expired — contact Qeema team'}</div>`:''}
+            ${isExpired?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⚠️ ${lang==='ar'?'انتهى اشتراكك — رقّي أو جدّد الآن للمتابعة':'Subscription ended — upgrade or renew to continue'}</div>`:''}
             ${isTrial&&daysLeft<=7?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⏳ ${lang==='ar'?`تجربتك تنتهي خلال ${daysLeft} أيام!`:`Trial ends in ${daysLeft} days!`}</div>`:''}
+            <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="showSubscriptionModal()">🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</button>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${Object.entries(planMeta).map(([k,v])=>`
@@ -10461,6 +10467,83 @@ function renderSettingsGeneral(c) {
       <div style="margin-top:10px;font-size:11px;color:var(--text-muted);">${lang==='ar'?'آخر حفظ:':'Last saved:'} ${new Date().toLocaleString('en-US')}</div>
     </div></div>
   </div>`;
+}
+
+// ============ SUBSCRIPTION UPGRADE / RENEW ============
+const SUB_PRICING = {
+  basic:  { monthly:149, annual:1500, label:'الأساسية',   labelEn:'Basic',  icon:'📗' },
+  growth: { monthly:299, annual:3200, label:'النمو',       labelEn:'Growth', icon:'📘' },
+  pro:    { monthly:499, annual:5500, label:'الاحترافية',  labelEn:'Pro',    icon:'📙' },
+};
+let _subModalPlan  = null;
+let _subModalCycle = 'monthly';
+
+function showSubscriptionModal() {
+  const cur = getCurrentPlan();
+  _subModalPlan  = cur === 'basic' ? 'growth' : cur;
+  _subModalCycle = 'monthly';
+  const mc = el('modal-container');
+  mc.innerHTML = renderSubscriptionModalHTML();
+  refreshIcons();
+}
+
+function _refreshSubscriptionModal() {
+  const mc = el('modal-container');
+  if (mc) { mc.innerHTML = renderSubscriptionModalHTML(); refreshIcons(); }
+}
+
+function renderSubscriptionModalHTML() {
+  const p = SUB_PRICING[_subModalPlan];
+  const total   = _subModalCycle === 'annual' ? p.annual : p.monthly;
+  const savings = (p.monthly * 12) - p.annual;
+  return `<div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:460px;">
+      <div class="modal-head"><h3>🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+      <div style="padding:0 20px 20px;">
+        <label class="form-label">${lang==='ar'?'الباقة':'Plan'}</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          ${Object.entries(SUB_PRICING).map(([k,v])=>`
+            <button class="btn btn-sm ${k===_subModalPlan?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalPlan='${k}';_refreshSubscriptionModal();">${v.icon} ${lang==='ar'?v.label:v.labelEn}</button>
+          `).join('')}
+        </div>
+        <label class="form-label">${lang==='ar'?'دورة الاشتراك':'Billing Cycle'}</label>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button class="btn btn-sm ${_subModalCycle==='monthly'?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalCycle='monthly';_refreshSubscriptionModal();">${lang==='ar'?'شهري':'Monthly'}</button>
+          <button class="btn btn-sm ${_subModalCycle==='annual'?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalCycle='annual';_refreshSubscriptionModal();">${lang==='ar'?'سنوي':'Annual'}</button>
+        </div>
+        <div style="background:var(--bg);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
+          <div style="font-size:28px;font-weight:900;color:var(--primary);">${fmtMoney(total)} <span style="font-size:13px;color:var(--text-muted);">${lang==='ar'?'ر.س':'SAR'}</span></div>
+          ${_subModalCycle==='annual'&&savings>0?`<div style="font-size:12px;color:var(--success);font-weight:700;margin-top:4px;">💚 ${lang==='ar'?`توفّر ${fmtMoney(savings)} ر.س سنويًا مقارنة بالشهري`:`Save ${fmtMoney(savings)} SAR/year vs. monthly`}</div>`:''}
+        </div>
+        <div id="sub-modal-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;text-align:center;"></div>
+        <button class="btn btn-primary btn-full" id="sub-pay-btn" onclick="paySubscription()">💳 ${lang==='ar'?'ادفع الآن':'Pay Now'}</button>
+        <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:10px;">🔒 ${lang==='ar'?'دفع آمن عبر Moyasar':'Secure payment via Moyasar'}</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function paySubscription() {
+  const btn   = el('sub-pay-btn');
+  const errEl = el('sub-modal-err');
+  if (errEl) errEl.style.display = 'none';
+  if (!window._cloudApiFetch) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = lang==='ar'?'يجب الاتصال بالإنترنت لإتمام الدفع':'Internet connection required to pay'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = lang==='ar'?'⏳ جارٍ التحويل لبوابة الدفع...':'⏳ Redirecting to payment...'; }
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/payment/create', { plan: _subModalPlan, cycle: _subModalCycle });
+    if (res?.success && res?.payment_url) {
+      window.location.href = res.payment_url;
+    } else {
+      if (errEl) { errEl.style.display = 'block'; errEl.textContent = res?.message || (lang==='ar'?'حدث خطأ، حاول مرة أخرى':'Something went wrong, try again'); }
+      if (btn) { btn.disabled = false; btn.textContent = `💳 ${lang==='ar'?'ادفع الآن':'Pay Now'}`; }
+    }
+  } catch (e) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = lang==='ar'?'تعذر الاتصال بالخادم':'Could not reach the server'; }
+    if (btn) { btn.disabled = false; btn.textContent = `💳 ${lang==='ar'?'ادفع الآن':'Pay Now'}`; }
+  }
 }
 
 function saveSettings() {
@@ -12503,7 +12586,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -12516,6 +12599,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/auth/me').catch(() => null),
         apiFetch('GET', '/api/obligations').catch(() => null),
         apiFetch('GET', '/api/treasury/moves?limit=1000').catch(() => null),
+        apiFetch('GET', '/api/payment/status').catch(() => null),
       ]);
 
       const db = getDB();
@@ -12560,6 +12644,14 @@ async function runAISearchQuery(q) {
           db.treasury.moves = [..._fromServer, ...db.treasury.moves]
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
+      }
+
+      // ── حالة الاشتراك: هل سبق ودفع فعليًا (مو مجرد تجربة مجانية)؟ ──
+      if (paymentStatusRes?.data) {
+        const payHistory = paymentStatusRes.data.payments || [];
+        db.settings = db.settings || {};
+        db.settings.has_paid_subscription = payHistory.some(p => p.status === 'paid');
+        db.settings.payment_history = payHistory;
       }
 
       if (oblRes?.data) {

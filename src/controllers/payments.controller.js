@@ -114,6 +114,7 @@ exports.verifyCallback = async (req, res) => {
     const companyId = parseInt(meta.company_id);
     const plan      = meta.plan;
     const months    = parseInt(meta.months) || 1;
+    const isAnnual  = meta.cycle === 'annual';
 
     if (!companyId || !PLAN_PRICES[plan]) {
       return res.redirect(`${redirectBase}/subscribe?error=invalid_meta`);
@@ -124,7 +125,8 @@ exports.verifyCallback = async (req, res) => {
       WHERE moyasar_id=$1 AND status='pending'
     `, [id]);
 
-    const expiresInterval = `${months * 30} days`;
+    // اشتراك سنوي = سنة تقويمية كاملة، مو 12×30 يوم تقريبية
+    const expiresInterval = isAnnual ? '1 year' : '1 month';
     await db.query(`
       UPDATE companies
       SET plan=$1,
