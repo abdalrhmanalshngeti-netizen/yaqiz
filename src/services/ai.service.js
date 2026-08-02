@@ -45,8 +45,9 @@ async function callAI(messages, opts = {}) {
 }
 
 async function extractDocument(imageBase64, mimeType = 'image/jpeg') {
-  const systemPrompt = `أنت نظام استخراج بيانات محاسبية متخصص في الفواتير السعودية والعربية.
-اقرأ الصورة بعناية شديدة واستخرج كل الأرقام والنصوص بدقة تامة.
+  const systemPrompt = `أنت نظام استخراج بيانات محاسبية متخصص في الفواتير السعودية والعربية،
+بما فيها إيصالات الجملة الحرارية الطويلة، والصور الملتقطة بزاوية أو إضاءة غير مثالية.
+اقرأ الصورة بعناية شديدة، سطراً سطراً وعموداً عموداً، واستخرج كل الأرقام والنصوص بدقة تامة.
 أعد JSON فقط — لا تكتب أي كلام قبله أو بعده، لا شرح، لا ملاحظات.
 
 التنسيق المطلوب بالضبط:
@@ -68,9 +69,11 @@ async function extractDocument(imageBase64, mimeType = 'image/jpeg') {
 3. إذا ظهر التاريخ هجرياً: اجمع 621 للسنة الهجرية للحصول على الميلادي تقريباً
 4. إذا كانت الضريبة مدمجة في المجموع: احسب vat_amount = grand_total × 15 / 115
 5. grand_total هو المبلغ الأخير النهائي في الفاتورة (شامل الضريبة)
-6. إذا كانت هناك أصناف متعددة أدرجها كلها — لا تدمج الأصناف
-7. إذا لم تظهر أصناف محددة: أنشئ صنفاً واحداً باسم vendor وسعره = subtotal
-8. لا تضع null أبداً — ضع قيمة افتراضية منطقية ("" للنصوص، 0 للأرقام)`;
+6. عدّ صفوف الأصناف بعناية قبل البدء — لازم يطابق عدد الأصناف بالـ JSON عدد الصفوف الظاهرة بالجدول بالضبط. لا تدمج صفّين ببعض ولا تحذف أي صف حتى لو كان النص بجنبه صغيراً أو غير واضح
+7. لكل صنف: اقرأ الكمية (QTY) من عمودها الخاص بها بجانب ذاك الصنف تحديداً — لا تفترض أبداً أن الكمية = 1 افتراضياً، اقرأها فعلياً من الجدول حتى لو كانت كسرية (مثل 0.5)
+8. رقم الفاتورة غالباً سلسلة أرقام/حروف طويلة قرب أعلى الفاتورة — اقرأه رقماً رقماً بعناية، لا تُدخل أو تحذف أي رقم منه
+9. إذا لم تظهر أصناف محددة: أنشئ صنفاً واحداً باسم vendor وسعره = subtotal
+10. لا تضع null أبداً — ضع قيمة افتراضية منطقية ("" للنصوص، 0 للأرقام)`;
 
   return callAI([
     { role: 'system', content: systemPrompt },
@@ -147,35 +150,38 @@ ${JSON.stringify(context, null, 2)}`;
   return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 800, temperature: 0.3 });
 }
 
+// نحوّل أول صفحة من الـ PDF لصورة ونمررها لنفس محرك قراءة الصور (extractDocument).
+// استخراج النص الخام من PDF (pdf-parse) غير موثوق مع النصوص العربية — يطلع فارغاً
+// أو مشوّهاً حتى مع ملفات نصية حقيقية، فنعتمد على الرؤية البصرية دائماً بدلاً منه.
 async function extractFromPDF(pdfBuffer) {
-  let text = '';
+  const { PDFiumLibrary } = require('@hyzyla/pdfium');
+  const sharp = require('sharp');
+
+  let library;
   try {
-    const pdfParse = require('pdf-parse');
-    const data = await pdfParse(pdfBuffer);
-    text = data.text?.trim() || '';
-  } catch { text = ''; }
+    library = await PDFiumLibrary.init();
+    const document = await library.loadDocument(pdfBuffer);
 
-  if (!text || text.length < 20) {
-    throw new Error('ملف PDF لا يحتوي على نص قابل للقراءة — يُرجى رفع صورة للفاتورة بدلاً من ذلك');
+    let firstPage = null;
+    for (const page of document.pages()) { firstPage = page; break; }
+    if (!firstPage) throw new Error('empty');
+
+    const image = await firstPage.render({
+      scale: 3,
+      render: async (options) => sharp(options.data, {
+        raw: { width: options.width, height: options.height, channels: 4 },
+      }).png().toBuffer(),
+    });
+
+    const imageBase64 = Buffer.from(image.data).toString('base64');
+    document.destroy();
+
+    return await extractDocument(imageBase64, 'image/png');
+  } catch (err) {
+    throw new Error('تعذّرت قراءة ملف PDF — يُرجى رفع صورة للفاتورة بدلاً من ذلك');
+  } finally {
+    if (library) library.destroy();
   }
-
-  const systemPrompt = `أنت نظام استخراج بيانات محاسبية. استخرج البيانات من نص الفاتورة وأعد JSON فقط بدون أي نص إضافي.
-التنسيق المطلوب:
-{
-  "vendor": "اسم المورد أو الشركة البائعة",
-  "date": "YYYY-MM-DD",
-  "invoice_no": "رقم الفاتورة",
-  "items": [{"description": "اسم الصنف", "qty": 1, "unit_price": 0.00, "total": 0.00}],
-  "subtotal": 0.00,
-  "vat_amount": 0.00,
-  "grand_total": 0.00
-}
-قواعد: الأرقام بدون رموز عملة، التاريخ ميلادي، JSON فقط لا شيء آخر.`;
-
-  return callAI([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `استخرج بيانات هذه الفاتورة:\n\n${text.slice(0, 4000)}` },
-  ], { model: 'gpt-4o-mini', maxTokens: 1000 });
 }
 
 module.exports = { extractDocument, extractFromPDF, analyzeFinancials, askAssistant };
