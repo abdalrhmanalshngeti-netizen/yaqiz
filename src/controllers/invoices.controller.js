@@ -61,7 +61,7 @@ exports.create = async (req, res, next) => {
     const {
       customer_id, customer_name, customer_vat, invoice_type,
       date, due_date, items = [], discount_type, discount_value,
-      payment_method, notes
+      payment_method, notes, cogs_total
     } = req.body;
 
     if (!items.length) {
@@ -102,13 +102,14 @@ exports.create = async (req, res, next) => {
         (company_id, invoice_no, invoice_type, customer_id, customer_name, customer_vat,
          date, due_date, subtotal, discount_type, discount_value, discount_amount,
          taxable_amount, vat_amount, grand_total, payment_method, notes,
-         status, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18)
+         status, created_by, cogs_total)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19)
       RETURNING *
     `, [company_id, invoice_no, invoice_type || 'simplified',
         customer_id, customer_name, customer_vat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
-        taxable, vat_amount, grand, payment_method, notes, user_id]);
+        taxable, vat_amount, grand, payment_method, notes, user_id,
+        parseFloat(cogs_total) || 0]);
 
     // ── إدراج البنود + خصم المخزون ────────────
     for (let i = 0; i < processedItems.length; i++) {

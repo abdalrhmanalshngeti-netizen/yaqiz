@@ -5,6 +5,12 @@ const planGuard  = require('../middleware/planGuard');
 const ctrl       = require('../controllers/employees.controller');
 
 router.use(auth);
+
+// Shifts — متاحة لكل الباقات (مو ميزة employees)، لازم تُعرَّف قبل planGuard
+router.get ('/shifts/list',       can('settings.view'),  ctrl.listShifts);
+router.post('/shifts/open',       ctrl.openShift);
+router.put ('/shifts/:id/close',  ctrl.closeShift);
+
 router.use(planGuard('employees'));
 
 router.get ('/',                  can('settings.view'),  ctrl.list);
@@ -17,10 +23,5 @@ router.delete('/:id',             can('settings.edit'),  ctrl.remove);
 router.get ('/payroll/list',      can('reports.view'),   ctrl.listPayroll);
 router.post('/payroll/generate',  can('settings.edit'),  ctrl.generatePayroll);
 router.put ('/payroll/:id/pay',   can('settings.edit'),  ctrl.markPayrollPaid);
-
-// Shifts
-router.get ('/shifts/list',       can('settings.view'),  ctrl.listShifts);
-router.post('/shifts/open',       ctrl.openShift);
-router.put ('/shifts/:id/close',  ctrl.closeShift);
 
 module.exports = router;

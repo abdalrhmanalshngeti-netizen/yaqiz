@@ -264,13 +264,13 @@ exports.closeShift = async (req, res, next) => {
     );
     if (!shift) return res.status(404).json({ success: false, message: 'الوردية غير موجودة أو مغلقة' });
 
-    // جمع مبيعات الوردية
+    // جمع مبيعات الوردية — طرق الدفع تُحفظ بالعربي من الواجهة (نقدي/شبكة/تحويل/آجل)
     const { rows: [sales] } = await db.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN payment_method='cash'     THEN grand_total ELSE 0 END),0) AS cash,
-        COALESCE(SUM(CASE WHEN payment_method='card'     THEN grand_total ELSE 0 END),0) AS card,
-        COALESCE(SUM(CASE WHEN payment_method='transfer' THEN grand_total ELSE 0 END),0) AS transfer,
-        COALESCE(SUM(CASE WHEN payment_method='credit'   THEN grand_total ELSE 0 END),0) AS credit,
+        COALESCE(SUM(CASE WHEN payment_method IN ('نقدي','cash') THEN grand_total ELSE 0 END),0) AS cash,
+        COALESCE(SUM(CASE WHEN payment_method IN ('شبكة','card') THEN grand_total ELSE 0 END),0) AS card,
+        COALESCE(SUM(CASE WHEN payment_method IN ('تحويل','تحويل بنكي','transfer') THEN grand_total ELSE 0 END),0) AS transfer,
+        COALESCE(SUM(CASE WHEN payment_method IN ('آجل','credit') THEN grand_total ELSE 0 END),0) AS credit,
         COUNT(*) AS cnt
       FROM invoices
       WHERE created_by = $1 AND created_at >= $2 AND company_id = $3

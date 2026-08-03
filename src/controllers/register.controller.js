@@ -90,6 +90,38 @@ exports.register = async (req, res, next) => {
       VALUES ($1,'الحساب البنكي','bank',0,false)
     `, [company.id]);
 
+    // 4b. دليل الحسابات (لازم لربط قيود دفتر اليومية) — نفس القائمة المحلية بالواجهة
+    const coaRows = [
+      ['1000','الأصول','Assets','أصول',true,null],
+      ['1100','النقدية والبنوك','Cash & Banks','أصول',false,'1000'],
+      ['1200','الذمم المدينة','Accounts Receivable','أصول',false,'1000'],
+      ['1300','المخزون','Inventory','أصول',false,'1000'],
+      ['2000','الالتزامات','Liabilities','التزامات',true,null],
+      ['2100','الذمم الدائنة','Accounts Payable','التزامات',false,'2000'],
+      ['2200','ضريبة القيمة المضافة','VAT Payable','التزامات',false,'2000'],
+      ['3000','حقوق الملكية','Equity','حقوق الملكية',true,null],
+      ['4000','الإيرادات','Revenue','إيرادات',true,null],
+      ['4100','إيرادات المبيعات','Sales Revenue','إيرادات',false,'4000'],
+      ['5000','المصروفات','Expenses','مصروفات',true,null],
+      ['5100','تكلفة البضاعة المباعة','Cost of Goods Sold','مصروفات',false,'5000'],
+      ['5200','المصاريف التشغيلية','Operating Expenses','مصروفات',false,'5000'],
+    ];
+    const coaIdByCode = {};
+    for (const [code, name, name_en, type, is_group] of coaRows) {
+      const { rows: [row] } = await client.query(
+        `INSERT INTO chart_of_accounts (company_id, code, name, name_en, type, is_group)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [company.id, code, name, name_en, type, is_group]
+      );
+      coaIdByCode[code] = row.id;
+    }
+    for (const [code, , , , , parentCode] of coaRows) {
+      if (parentCode) {
+        await client.query(`UPDATE chart_of_accounts SET parent_id = $1 WHERE id = $2`,
+          [coaIdByCode[parentCode], coaIdByCode[code]]);
+      }
+    }
+
     // 5. تسجيل الحدث في platform_log
     await client.query(`
       INSERT INTO platform_log (event_type, company_id, user_id, description, ip_address)

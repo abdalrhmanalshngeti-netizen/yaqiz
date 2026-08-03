@@ -187,15 +187,41 @@ exports.manualMove = async (req, res, next) => {
       user_id: req.user.sub
     };
 
-    if (type === 'in')  await stock.add(client, args);
-    if (type === 'out') await stock.deduct(client, args);
+    let move;
+    if (type === 'in')  move = await stock.add(client, args);
+    if (type === 'out') move = await stock.deduct(client, args);
 
     await client.query('COMMIT');
-    res.json({ success: true });
+    res.json({ success: true, data: move });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
   } finally {
     client.release();
   }
+};
+
+exports.listAllMoves = async (req, res, next) => {
+  try {
+    const { from, to, limit = 500 } = req.query;
+    // نرجّع فقط الحركات اليدوية (تسويات المخزون) — حركات الفواتير/المشتريات
+    // التلقائية تبقى محلية عند كل جهاز لتفادي تكرارها مع نسخته المحلية
+    let where  = [`sm.company_id = $1`, `sm.source_type = 'manual'`];
+    let params = [req.user.company_id];
+    let idx    = 2;
+
+    if (from) { where.push(`sm.created_at >= $${idx++}`); params.push(from); }
+    if (to)   { where.push(`sm.created_at <= $${idx++}`); params.push(to); }
+
+    const { rows } = await db.query(`
+      SELECT sm.*, p.name AS product_name, p.code AS product_code
+      FROM stock_moves sm
+      JOIN products p ON p.id = sm.product_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY sm.created_at DESC
+      LIMIT $${idx}
+    `, [...params, limit]);
+
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
 };

@@ -90,6 +90,9 @@ app.use('/api/payment',   require('./routes/payments.routes'));
 app.use('/api/ai',            require('./routes/ai.routes'));
 app.use('/api/notifications', require('./routes/notifications.routes'));
 app.use('/api/obligations',   require('./routes/obligations.routes'));
+app.use('/api/journal',       require('./routes/journal.routes'));
+app.use('/api/returns',       require('./routes/returns.routes'));
+app.use('/api/purchase-orders', require('./routes/purchaseOrders.routes'));
 
 // ── Static Pages ─────────────────────────────────────────────
 app.get('/robots.txt', (_, res) => {

@@ -98,6 +98,7 @@ exports.login = async (req, res, next) => {
         role:         user.role,
         permissions:  user.permissions || [],
         pos_access:   user.pos_access,
+        shift_enabled: user.shift_enabled,
         company_id:              user.company_id,
         company_name:            user.company_name,
         company_vat:             user.company_vat,
@@ -162,7 +163,7 @@ exports.redeemImpersonation = async (req, res, next) => {
 
     const { rows } = await db.query(`
       SELECT ic.code, ic.company_name, ic.created_by, ic.user_id,
-             u.username, u.full_name, u.role, u.permissions, u.pos_access, u.company_id,
+             u.username, u.full_name, u.role, u.permissions, u.pos_access, u.shift_enabled, u.company_id,
              c.vat_number AS company_vat
       FROM impersonation_codes ic
       JOIN users u ON u.id = ic.user_id
@@ -191,7 +192,7 @@ exports.redeemImpersonation = async (req, res, next) => {
       user: {
         id: rec.user_id, username: rec.username, full_name: rec.full_name,
         role: rec.role, permissions: rec.permissions || [],
-        pos_access: rec.pos_access, company_id: rec.company_id,
+        pos_access: rec.pos_access, shift_enabled: rec.shift_enabled, company_id: rec.company_id,
         company_name: rec.company_name, company_vat: rec.company_vat,
       }
     });

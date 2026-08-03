@@ -7,6 +7,7 @@ router.use(auth);
 
 router.get ('/',             can('inventory.view'),   ctrl.list);
 router.post('/',             can('inventory.edit'),   ctrl.create);
+router.get ('/stock-moves/list', can('inventory.view'), ctrl.listAllMoves);
 router.get ('/:id',          can('inventory.view'),   ctrl.getOne);
 router.put ('/:id',          can('inventory.edit'),   ctrl.update);
 router.delete('/:id',        can('inventory.edit'),   ctrl.remove);

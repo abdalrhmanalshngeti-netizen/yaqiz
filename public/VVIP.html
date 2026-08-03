@@ -2909,11 +2909,18 @@ function deleteInvoice(id) {
   // 1. عكس القيد اليومي — حذف القيد المرتبط بالفاتورة
   if(db.journal) db.journal=db.journal.filter(j=>j.ref!==inv.invoice_no);
 
-  // 2. عكس المخزون — استرجاع الكميات المُبَاعة
+  // 2. عكس المخزون — استرجاع الكميات المُبَاعة + إعادة دفعة FIFO
+  //    (بتكلفة الشراء الحالية كتقدير — نفس الأسلوب المستخدم في تقييم المخزون
+  //    بالميزانية العمومية وميزان المراجعة، لأن التكلفة الدقيقة لكل صنف وقت
+  //    البيع غير محفوظة على مستوى البند بالفاتورة)
   if(db.stock_moves && inv.items){
     inv.items.forEach(item=>{
       const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
-      if(prod){ prod.qty=Math.min(999999, (prod.qty||0)+item.qty); }
+      if(prod){
+        prod.qty=Math.min(999999, (prod.qty||0)+item.qty);
+        if(!prod.lots) prod.lots=[];
+        prod.lots.push({ qty:item.qty, cost:prod.buy_price||0, date:new Date().toISOString(), ref:'del-'+inv.invoice_no });
+      }
     });
     db.stock_moves=db.stock_moves.filter(m=>m.reference!==inv.invoice_no);
   }
@@ -5191,31 +5198,34 @@ function renderReportMainContent() {
 
 function renderTrialBalance(c) {
   const db  = getDB();
-  const now = new Date();
-  const month = now.getMonth(), year = now.getFullYear();
   const fmt = v => fmtMoney(Math.abs(v));
 
-  const totalSales    = (db.invoices||[]).reduce((s,i)=>s+(i.grand_total||0),0);
-  const totalPurch    = (db.purchases||[]).reduce((s,p)=>s+(p.total||0),0);
-  const treasury      = db.treasury?.balance || 0;
-  const receivables   = (db.customers||[]).reduce((s,c)=>s+Math.max(0,c.balance||0),0);
-  const payables      = (db.suppliers||[]).reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
-  const invValue      = (db.products||[]).reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
-  const netProfit     = totalSales - totalPurch;
+  // ميزان مراجعة مبني على معادلة المحاسبة الأساسية (الأصول = الالتزامات + حقوق الملكية)
+  // بالاعتماد على نفس البيانات المُزامَنة مع السيرفر والمستخدمة في قائمة الدخل
+  // (calcReportData) — بدل دفتر اليومية المحلي البحت (غير متزامن مع السيرفر إطلاقاً
+  // وبالتالي يكون فارغاً بعد أي تسجيل دخول جديد). هذا يضمن توازن دائم بين
+  // المدين والدائن ويطابق أرقام قائمة الدخل دائماً.
+  const rpt = calcReportData(db, null);
+  const treasury    = db.treasury?.balance || 0;
+  const receivables = (db.customers||[]).reduce((s,cu)=>s+Math.max(0,cu.balance||0),0);
+  const payables    = (db.suppliers||[]).reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
+  const invValue    = (db.products||[]).reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
+  const netProfit   = rpt.netProfit;
+  const vatNet      = rpt.vatNet; // موجب = مستحق علينا لهيئة الزكاة والضريبة (التزام) — سالب = له (أصل)
 
   const rows = [
-    { name: lang==='ar'?'النقدية والخزينة':'Cash & Treasury',         debit: treasury,    credit: 0,           type:'asset' },
-    { name: lang==='ar'?'ذمم مدينة — عملاء':'Accounts Receivable',   debit: receivables, credit: 0,           type:'asset' },
-    { name: lang==='ar'?'قيمة المخزون':'Inventory Value',            debit: invValue,    credit: 0,           type:'asset' },
-    { name: lang==='ar'?'إيرادات المبيعات':'Sales Revenue',           debit: 0,           credit: totalSales,  type:'income' },
-    { name: lang==='ar'?'مصاريف المشتريات':'Purchase Expenses',       debit: totalPurch,  credit: 0,           type:'expense' },
-    { name: lang==='ar'?'ذمم دائنة — موردون':'Accounts Payable',      debit: 0,           credit: payables,    type:'liability' },
+    { name: lang==='ar'?'النقدية والخزينة':'Cash & Treasury',       debit: treasury,                    credit: 0,                           type:'asset' },
+    { name: lang==='ar'?'ذمم مدينة — عملاء':'Accounts Receivable', debit: receivables,                 credit: 0,                           type:'asset' },
+    { name: lang==='ar'?'قيمة المخزون':'Inventory Value',          debit: invValue,                    credit: 0,                           type:'asset' },
+    { name: lang==='ar'?'ذمم دائنة — موردون':'Accounts Payable',   debit: 0,                           credit: payables,                    type:'liability' },
+    { name: lang==='ar'?'ضريبة القيمة المضافة المستحقة':'VAT Payable (Net)', debit: vatNet<0?-vatNet:0, credit: vatNet>0?vatNet:0,           type: vatNet<0?'asset':'liability' },
+    { name: lang==='ar'?'صافي الربح المتراكم':'Accumulated Net Profit', debit: netProfit<0?-netProfit:0, credit: netProfit>0?netProfit:0, type:'equity' },
   ];
   const totDebit  = rows.reduce((s,r)=>s+r.debit,0);
   const totCredit = rows.reduce((s,r)=>s+r.credit,0);
 
-  const typeColor = {asset:'#3b82f6',income:'#10b981',expense:'#ef4444',liability:'#f59e0b'};
-  const typeBadge = {asset:'أصل',income:'إيراد',expense:'مصروف',liability:'التزام'};
+  const typeColor = {asset:'#3b82f6',income:'#10b981',expense:'#ef4444',liability:'#f59e0b',equity:'#8b5cf6'};
+  const typeBadge = {asset:'أصل',income:'إيراد',expense:'مصروف',liability:'التزام',equity:'حقوق ملكية'};
 
   c.innerHTML = `
   <div style="margin-top:16px;">
@@ -7226,6 +7236,7 @@ function saveVoucher(type, printAfter=true) {
           .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); // الأقدم أولاً
 
     let left = amount;
+    const appliedInvoices = [];
     for(const inv of targetInvs) {
       if(left<=0) break;
       const prevStatus = inv.status;
@@ -7241,13 +7252,16 @@ function saveVoucher(type, printAfter=true) {
       inv.last_payment_date = new Date().toISOString();
       inv.last_voucher_no = voucher.voucher_no;
       inv.last_payment_method = voucher.method || 'نقدي';
+      appliedInvoices.push({ id: inv.id, applying, prevStatus });
       left = Math.round((left-applying)*100)/100;
       logActivity('مبيعات', `تحديث فاتورة ${inv.invoice_no} من "${prevStatus}" إلى "${inv.status}" — سند ${voucher.voucher_no}`);
     }
     // تحديث رصيد العميل
+    const _applied = amount - left;
+    voucher.applied_amount = _applied;
+    voucher.applied_invoices = appliedInvoices;
     const _vCust = db.customers.find(c=>c.name===party);
     if(_vCust) {
-      const _applied = amount - left;
       _vCust.balance = Math.max(0, Math.round((((_vCust.balance)||0) - _applied)*100)/100);
     }
   }
@@ -7262,6 +7276,7 @@ function saveVoucher(type, printAfter=true) {
           .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
 
     let left = amount;
+    const appliedPurchases = [];
     for(const pur of targetPurs) {
       if(left<=0) break;
       const purRemaining = Math.max(0, pur.remaining_amount!=null ? pur.remaining_amount : pur.total-(pur.paid_amount||0));
@@ -7270,13 +7285,16 @@ function saveVoucher(type, printAfter=true) {
       pur.remaining_amount = Math.round((purRemaining-applying)*100)/100;
       pur.status = pur.remaining_amount<=0 ? 'مسدد' : 'جزئي';
       pur.last_payment_date = new Date().toISOString();
+      appliedPurchases.push({ id: pur.id, applying });
       left = Math.round((left-applying)*100)/100;
       logActivity('مشتريات', `تحديث مشتريات ${pur.vendor} — المتبقي: ${fmtMoney(pur.remaining_amount)}`);
     }
     // تحديث رصيد المورد
+    const _applied = amount - left;
+    voucher.applied_amount = _applied;
+    voucher.applied_purchases = appliedPurchases;
     const _vSup = db.suppliers.find(s=>s.name===party);
     if(_vSup) {
-      const _applied = amount - left;
       _vSup.balance = Math.max(0, Math.round((((_vSup.balance)||0) - _applied)*100)/100);
     }
   }
@@ -7308,16 +7326,8 @@ function saveVoucher(type, printAfter=true) {
   }
   db.nextId.journal = (db.nextId.journal||1)+1;
 
-  // تحديث رصيد الطرف (عميل أو مورد)
-  if(isReceipt) {
-    // سند قبض: خصم من رصيد العميل
-    const cust = db.customers.find(c => c.name === voucher.party);
-    if(cust) cust.balance = Math.round((Math.max(0, (cust.balance||0) - amount)) * 100) / 100;
-  } else {
-    // سند صرف: خصم من رصيد المورد
-    const sup = db.suppliers.find(s => s.name === voucher.party);
-    if(sup) sup.balance = Math.round((Math.max(0, (sup.balance||0) - amount)) * 100) / 100;
-  }
+  // ملاحظة: رصيد العميل/المورد يُحدَّث مسبقاً أعلاه (الخطوة 2/2ب) أثناء تطبيق
+  // السند على الفواتير/المشتريات الفعلية — لا نكرر الخصم هنا مرة ثانية.
 
   saveDB(db);
   logActivity('سندات', `${isReceipt?'سند قبض':'سند صرف'} ${voucher.voucher_no} — ${voucher.party} — ${fmtMoney(amount)}`);
@@ -7418,34 +7428,58 @@ function deleteReceipt(id) {
   // 2. حذف القيد اليومي
   if(db.journal) db.journal = db.journal.filter(j=>j.ref!==v.voucher_no);
 
-  // 3. عكس الفاتورة (إذا سند قبض)
+  // 3. عكس الفاتورة/الفواتير (إذا سند قبض)
   if(isReceipt) {
-    const inv = v.linked_invoice_id
-      ? db.invoices.find(i=>i.id===v.linked_invoice_id)
-      : db.invoices.find(i=>i.invoice_no===v.ref);
-    if(inv){
-      inv.paid_amount = Math.round((Math.max(0,(inv.paid_amount||0)-amount))*100)/100;
-      if(inv.paid_amount<=0){ inv.status='آجل'; inv.paid_amount=0; }
-      else { inv.status='جزئي'; }
+    if(v.applied_invoices && v.applied_invoices.length) {
+      // سند مطبّق تلقائياً على عدة فواتير — نعكس كل واحدة بالضبط بنفس المبلغ اللي تطبّق عليها
+      for(const a of v.applied_invoices) {
+        const inv = db.invoices.find(i=>i.id===a.id);
+        if(!inv) continue;
+        inv.paid_amount = Math.round((Math.max(0,(inv.paid_amount||0)-a.applying))*100)/100;
+        inv.status = a.prevStatus || (inv.paid_amount<=0?'آجل':'جزئي');
+        if(inv.paid_amount<=0) inv.paid_amount = 0;
+      }
+    } else {
+      // سند قديم من قبل هذا الإصلاح — سلوك احتياطي كما كان
+      const inv = v.linked_invoice_id
+        ? db.invoices.find(i=>i.id===v.linked_invoice_id)
+        : db.invoices.find(i=>i.invoice_no===v.ref);
+      if(inv){
+        inv.paid_amount = Math.round((Math.max(0,(inv.paid_amount||0)-amount))*100)/100;
+        if(inv.paid_amount<=0){ inv.status='آجل'; inv.paid_amount=0; }
+        else { inv.status='جزئي'; }
+      }
     }
-    // عكس رصيد العميل
+    // عكس رصيد العميل — بنفس المبلغ اللي فعلياً اتخصم منه وقت إنشاء السند
+    const reversedAmt = v.applied_amount!=null ? v.applied_amount : amount;
     const cust = db.customers.find(c=>c.name===v.party);
-    if(cust) cust.balance = Math.round(((cust.balance||0)+amount)*100)/100;
+    if(cust) cust.balance = Math.round(((cust.balance||0)+reversedAmt)*100)/100;
   }
 
   // 4. عكس المشتريات (إذا سند صرف)
   if(!isReceipt) {
-    const pur = v.linked_purchase_id
-      ? db.purchases.find(p=>p.id===v.linked_purchase_id)
-      : null;
-    if(pur){
-      pur.paid_amount = Math.round((Math.max(0,(pur.paid_amount||0)-amount))*100)/100;
-      pur.remaining_amount = Math.round(((pur.remaining_amount||0)+amount)*100)/100;
-      pur.status = pur.remaining_amount<=0?'مسدد':'جزئي';
+    if(v.applied_purchases && v.applied_purchases.length) {
+      for(const a of v.applied_purchases) {
+        const pur = db.purchases.find(p=>p.id===a.id);
+        if(!pur) continue;
+        pur.paid_amount = Math.round((Math.max(0,(pur.paid_amount||0)-a.applying))*100)/100;
+        pur.remaining_amount = Math.round(((pur.remaining_amount||0)+a.applying)*100)/100;
+        pur.status = pur.remaining_amount<=0?'مسدد':'جزئي';
+      }
+    } else {
+      const pur = v.linked_purchase_id
+        ? db.purchases.find(p=>p.id===v.linked_purchase_id)
+        : null;
+      if(pur){
+        pur.paid_amount = Math.round((Math.max(0,(pur.paid_amount||0)-amount))*100)/100;
+        pur.remaining_amount = Math.round(((pur.remaining_amount||0)+amount)*100)/100;
+        pur.status = pur.remaining_amount<=0?'مسدد':'جزئي';
+      }
     }
     // عكس رصيد المورد
+    const reversedAmt = v.applied_amount!=null ? v.applied_amount : amount;
     const sup = db.suppliers.find(s=>s.name===v.party);
-    if(sup) sup.balance = Math.round(((sup.balance||0)+amount)*100)/100;
+    if(sup) sup.balance = Math.round(((sup.balance||0)+reversedAmt)*100)/100;
   }
 
   db.receipts=(db.receipts||[]).filter(r=>r.id!==id);
@@ -8440,7 +8474,8 @@ function saveStockMove(){
     reason:el('sm-reason').value, note:el('sm-note').value,
     source:el('sm-source')?.value||'',
     reference:el('sm-ref')?.value||'MANUAL',
-    date:new Date().toISOString()
+    date:new Date().toISOString(),
+    _manual:true
   };
   db.stock_moves.push(move); db.nextId.stock_move=(db.nextId.stock_move||1)+1;
   saveDB(db);
@@ -8695,6 +8730,15 @@ function startShift(user) {
   db.nextId.shift = (db.nextId.shift||1)+1;
   saveDB(db);
   localStorage.setItem('yaqiz_shift_id', shift.id);
+
+  // مزامنة مع السيرفر (بدون انتظار حتى ما نأخر تسجيل الدخول)
+  window._cloudApiFetch?.('POST', '/api/employees/shifts/open', { opening_cash: 0 })
+    .then(res => {
+      if (!res?.data?.id) return;
+      const _db = getDB();
+      const _sh = (_db.shifts||[]).find(s=>s.id===shift.id);
+      if (_sh) { _sh._serverId = res.data.id; saveDB(_db); }
+    }).catch(()=>{});
 }
 
 function endShift(user) {
@@ -8704,6 +8748,9 @@ function endShift(user) {
   if(shift) {
     shift.end_time = new Date().toISOString();
     saveDB(db);
+    if (shift._serverId) {
+      window._cloudApiFetch?.('PUT', `/api/employees/shifts/${shift._serverId}/close`, { closing_cash: 0 }).catch(()=>{});
+    }
   }
   localStorage.removeItem('yaqiz_shift_id');
 }
@@ -12756,6 +12803,7 @@ async function runAISearchQuery(q) {
       payment_method: inv.payment_method||'نقدي',
       discount_type:  inv.discount>0 ? 'value' : null,
       discount_value: parseFloat(inv.discount)||0,
+      cogs_total: parseFloat(inv.cogs_total)||0,
       notes: '',
       items: (inv.items||[]).map(it => {
         const _prod = _liveDB.products.find(p=>p.id===(it.id||it.product_id)) ||
@@ -12786,6 +12834,7 @@ async function runAISearchQuery(q) {
       vat_total:      parseFloat(inv.vat_amount)||0,
       grand_total:    parseFloat(inv.grand_total)||0,
       paid_amount:    parseFloat(inv.paid_amount)||0,
+      cogs_total:     parseFloat(inv.cogs_total)||0,
       remaining_amount: parseFloat(inv.grand_total||0) - parseFloat(inv.paid_amount||0),
       payment_method: inv.payment_method||'',
       status:         STATUS_TO_FE[inv.status]||inv.status,
@@ -12920,7 +12969,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -12934,6 +12983,11 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/obligations').catch(() => null),
         apiFetch('GET', '/api/treasury/moves?limit=1000').catch(() => null),
         apiFetch('GET', '/api/payment/status').catch(() => null),
+        apiFetch('GET', '/api/journal').catch(() => null),
+        apiFetch('GET', '/api/returns').catch(() => null),
+        apiFetch('GET', '/api/purchase-orders').catch(() => null),
+        apiFetch('GET', '/api/employees/shifts/list').catch(() => null),
+        apiFetch('GET', '/api/products/stock-moves/list').catch(() => null),
       ]);
 
       const db = getDB();
@@ -12977,6 +13031,116 @@ async function runAISearchQuery(q) {
           }));
         if (_fromServer.length) {
           db.treasury.moves = [..._fromServer, ...db.treasury.moves]
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+      }
+
+      // ── دفتر اليومية: اسحب أي قيد سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
+      if (journalRes?.data?.length) {
+        db.journal = db.journal || [];
+        const _knownJIds = new Set(db.journal.map(j => j._serverId).filter(Boolean));
+        const _jFromServer = journalRes.data
+          .filter(row => !_knownJIds.has(row.id))
+          .map(row => ({
+            id: 'srv-' + row.id,
+            description: row.description || '',
+            ref: row.ref || '',
+            date: row.date,
+            entries: row.entries || [],
+            _serverId: row.id,
+          }));
+        if (_jFromServer.length) {
+          db.journal = [..._jFromServer, ...db.journal]
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+      }
+
+      // ── المرتجعات: اسحب أي مرتجع سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
+      if (returnsRes?.data?.length) {
+        db.returns = db.returns || [];
+        const _knownRIds = new Set(db.returns.map(r => r._serverId).filter(Boolean));
+        const _rFromServer = returnsRes.data
+          .filter(row => !_knownRIds.has(row.id))
+          .map(row => ({
+            id: 'srv-' + row.id,
+            return_no: row.return_no, type: row.type, party: row.party_name || '',
+            product_id: row.product_id, product_name: row.product_name || '',
+            qty: parseFloat(row.qty) || 0,
+            base_amount: parseFloat(row.base_amount) || 0, vat_amount: parseFloat(row.vat_amount) || 0,
+            amount: parseFloat(row.amount) || 0, reason: row.reason || '',
+            linked_id: row.linked_invoice_id || row.linked_purchase_id || null,
+            date: row.date, created_at: row.created_at,
+            payment_method: row.payment_method || null, cogs_reversal: parseFloat(row.cogs_reversal) || 0,
+            _serverId: row.id,
+          }));
+        if (_rFromServer.length) {
+          db.returns = [..._rFromServer, ...db.returns]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        }
+      }
+
+      // ── أوامر الشراء: اسحب أي أمر سجّله جهاز ثاني، وحدّث حالة الموجود محلياً ──
+      if (poRes?.data?.length) {
+        db.purchase_orders = db.purchase_orders || [];
+        const _knownPoServerIds = new Set(db.purchase_orders.map(p => p._serverId).filter(Boolean));
+        poRes.data.forEach(row => {
+          const local = db.purchase_orders.find(p => p._serverId === row.id);
+          if (local) {
+            local.status = row.status; // زامن الحالة (مثلاً بعد الاستلام من جهاز ثاني)
+          } else if (!_knownPoServerIds.has(row.id)) {
+            db.purchase_orders.unshift({
+              id: 'srv-' + row.id, po_no: row.po_no, supplier: row.supplier_name || '',
+              items: (row.items || []).map(i => ({ name: i.product_name, qty: parseFloat(i.ordered_qty) || 0, price: parseFloat(i.unit_price) || 0, total: parseFloat(i.line_total) || 0 })),
+              total: parseFloat(row.grand_total) || 0, notes: row.notes || '',
+              expected_delivery: row.expected_date, status: row.status,
+              created_at: row.created_at, _serverId: row.id,
+            });
+          }
+        });
+      }
+
+      // ── الورديات: اسحب أي وردية من جهاز ثاني، وحدّث حالة/أرقام الموجودة محلياً ──
+      if (shiftsRes?.data?.length) {
+        db.shifts = db.shifts || [];
+        const _knownShiftServerIds = new Set(db.shifts.map(s => s._serverId).filter(Boolean));
+        shiftsRes.data.forEach(row => {
+          const local = db.shifts.find(s => s._serverId === row.id);
+          if (local) {
+            local.end_time = row.end_time; local.sales_cash = parseFloat(row.sales_cash)||0;
+            local.sales_card = parseFloat(row.sales_card)||0; local.sales_transfer = parseFloat(row.sales_transfer)||0;
+            local.sales_credit = parseFloat(row.sales_credit)||0; local.invoices_count = row.invoices_count||0;
+          } else if (!_knownShiftServerIds.has(row.id)) {
+            db.shifts.unshift({
+              id: 'srv-' + row.id, username: '', full_name: row.full_name || '',
+              start_time: row.start_time, end_time: row.end_time,
+              date: (row.start_time||'').slice(0,10),
+              sales_cash: parseFloat(row.sales_cash)||0, sales_card: parseFloat(row.sales_card)||0,
+              sales_transfer: parseFloat(row.sales_transfer)||0, sales_credit: parseFloat(row.sales_credit)||0,
+              invoices_count: row.invoices_count||0, invoice_ids: [],
+              _serverId: row.id,
+            });
+          }
+        });
+      }
+
+      // ── حركات المخزون: اسحب أي حركة (تلقائية من فاتورة/مشتريات، أو يدوية من جهاز ثاني)
+      // لم تصل بعد لهذا الجهاز، مع تجنّب تكرار ما هو موجود محلياً أصلاً ──
+      if (stockMovesRes?.data?.length) {
+        db.stock_moves = db.stock_moves || [];
+        const _knownSmServerIds = new Set(db.stock_moves.map(m => m._serverId).filter(Boolean));
+        const _smFromServer = stockMovesRes.data
+          .filter(row => !_knownSmServerIds.has(row.id))
+          .map(row => ({
+            id: 'srv-' + row.id,
+            product_id: row.product_id, product_name: row.product_name || '', product_code: row.product_code || '',
+            type: row.type, qty: parseFloat(row.qty) || 0,
+            balance_before: parseFloat(row.balance_before) || 0, balance_after: parseFloat(row.balance_after) || 0,
+            reason: row.reason || '', reference: row.reference || '',
+            date: row.created_at,
+            _serverId: row.id,
+          }));
+        if (_smFromServer.length) {
+          db.stock_moves = [..._smFromServer, ...db.stock_moves]
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
       }
@@ -13342,6 +13506,125 @@ async function runAISearchQuery(q) {
         }
       }
 
+      // ── دفتر اليومية: قيود جديدة → إنشاء، قيود محذوفة محلياً → حذف من السيرفر ──
+      const _prevJournal = prev.journal || [];
+      const _newJournal  = newDB.journal || [];
+      for (const j of _newJournal) {
+        if (typeof j.id === 'string' || j._serverId) continue;
+        if (_prevJournal.find(x => x.id === j.id)) continue;
+
+        if (SYNC_LOG) console.log('→ API: journal entry', j.description);
+        const res = await apiFetch('POST', '/api/journal', {
+          description: j.description || '', ref: j.ref || null, date: j.date || new Date().toISOString(),
+          entries: j.entries || []
+        }).catch(e => { console.warn('journal entry sync:', e.message); return null; });
+
+        if (res?.data?.id) {
+          try {
+            const _db = getDB();
+            const _je = (_db.journal || []).find(x => x.id === j.id);
+            if (_je) { _je._serverId = res.data.id; _origSaveDB(_db); }
+            const _sje = (_snap?.journal || []).find(x => x.id === j.id);
+            if (_sje) _sje._serverId = res.data.id;
+          } catch (e) { /* ignore */ }
+        }
+      }
+      for (const old of _prevJournal) {
+        const stillExists = _newJournal.find(j => j.id === old.id);
+        if (!stillExists && old._serverId) {
+          if (SYNC_LOG) console.log('→ API: delete journal entry', old.description);
+          await apiFetch('DELETE', `/api/journal/${old._serverId}`).catch(e => console.warn('journal delete sync:', e.message));
+        }
+      }
+
+      // ── المرتجعات: مرتجعات جديدة → إنشاء، محذوفة محلياً → حذف من السيرفر ──
+      const _prevReturns = prev.returns || [];
+      const _newReturns  = newDB.returns || [];
+      for (const r of _newReturns) {
+        if (typeof r.id === 'string' || r._serverId) continue;
+        if (_prevReturns.find(x => x.id === r.id)) continue;
+
+        if (SYNC_LOG) console.log('→ API: return', r.return_no);
+        const res = await apiFetch('POST', '/api/returns', {
+          type: r.type === 'sales' ? 'sales' : 'purchases',
+          party_name: r.party || '', product_id: r.product_id || null, product_name: r.product_name || '',
+          qty: r.qty || 0, base_amount: r.base_amount || 0, vat_amount: r.vat_amount || 0, amount: r.amount,
+          reason: r.reason || '',
+          linked_invoice_id: r.type === 'sales' ? (r.linked_id || null) : null,
+          linked_purchase_id: r.type === 'purchases' ? (r.linked_id || null) : null,
+          date: r.date || new Date().toISOString().slice(0, 10),
+          payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0
+        }).catch(e => { console.warn('return sync:', e.message); return null; });
+
+        if (res?.data?.id) {
+          try {
+            const _db = getDB();
+            const _re = (_db.returns || []).find(x => x.id === r.id);
+            if (_re) { _re._serverId = res.data.id; _origSaveDB(_db); }
+            const _sre = (_snap?.returns || []).find(x => x.id === r.id);
+            if (_sre) _sre._serverId = res.data.id;
+          } catch (e) { /* ignore */ }
+        }
+      }
+      for (const old of _prevReturns) {
+        const stillExists = _newReturns.find(r => r.id === old.id);
+        if (!stillExists && old._serverId) {
+          if (SYNC_LOG) console.log('→ API: delete return', old.return_no);
+          await apiFetch('DELETE', `/api/returns/${old._serverId}`).catch(e => console.warn('return delete sync:', e.message));
+        }
+      }
+
+      // ── أوامر الشراء: جديدة → إنشاء، تغيّر الحالة (استلام) → تحديث ──
+      const _prevPOs = prev.purchase_orders || [];
+      const _newPOs  = newDB.purchase_orders || [];
+      for (const po of _newPOs) {
+        const old = _prevPOs.find(x => x.id === po.id);
+        if (!old && typeof po.id !== 'string') {
+          if (SYNC_LOG) console.log('→ API: create PO', po.po_no);
+          const res = await apiFetch('POST', '/api/purchase-orders', {
+            supplier_name: po.supplier || '', items: po.items || [],
+            notes: po.notes || '', expected_date: po.expected_delivery || null, status: po.status
+          }).catch(e => { console.warn('PO create sync:', e.message); return null; });
+          if (res?.data?.id) {
+            try {
+              const _db = getDB();
+              const _po = (_db.purchase_orders || []).find(x => x.id === po.id);
+              if (_po) { _po._serverId = res.data.id; _origSaveDB(_db); }
+              const _spo = (_snap?.purchase_orders || []).find(x => x.id === po.id);
+              if (_spo) _spo._serverId = res.data.id;
+            } catch (e) { /* ignore */ }
+          }
+        } else if (old && old.status !== po.status && po._serverId) {
+          if (SYNC_LOG) console.log('→ API: update PO status', po.po_no, po.status);
+          await apiFetch('PUT', `/api/purchase-orders/${po._serverId}`, { status: po.status }).catch(e => console.warn('PO status sync:', e.message));
+        }
+      }
+
+      // ── حركات المخزون اليدوية فقط (تسويات) — الحركات التلقائية من الفواتير/المشتريات
+      // تُسجَّل في السيرفر تلقائياً عند مزامنة تلك الفواتير/المشتريات، فلا نكررها هنا ──
+      const _prevMoves2 = prev.stock_moves || [];
+      const _newMoves2  = newDB.stock_moves || [];
+      for (const sm of _newMoves2) {
+        if (!sm._manual || typeof sm.id === 'string' || sm._serverId) continue;
+        if (_prevMoves2.find(x => x.id === sm.id)) continue;
+
+        if (SYNC_LOG) console.log('→ API: manual stock move', sm.product_name, sm.type, sm.qty);
+        const res = await apiFetch('POST', `/api/products/${sm.product_id}/move`, {
+          type: sm.type, qty: sm.qty, reason: sm.reason || '',
+          source: sm.source || '', reference: sm.reference || 'MANUAL'
+        }).catch(e => { console.warn('stock move sync:', e.message); return null; });
+
+        if (res?.data?.id) {
+          try {
+            const _db = getDB();
+            const _smv = (_db.stock_moves || []).find(x => x.id === sm.id);
+            if (_smv) { _smv._serverId = res.data.id; _origSaveDB(_db); }
+            const _ssm = (_snap?.stock_moves || []).find(x => x.id === sm.id);
+            if (_ssm) _ssm._serverId = res.data.id;
+          } catch (e) { /* ignore */ }
+        }
+      }
+
     } finally {
       _syncBusy = false;
     }
@@ -13387,7 +13670,7 @@ async function runAISearchQuery(q) {
         id: apiUser.id, username: apiUser.username,
         full_name: apiUser.full_name, role: apiUser.role,
         permissions: apiUser.permissions||[], active: true,
-        pos_access: apiUser.pos_access, shift_enabled: false
+        pos_access: apiUser.pos_access, shift_enabled: !!apiUser.shift_enabled
       };
 
       // حفظ بيانات الشركة في الإعدادات فوراً
@@ -13416,6 +13699,7 @@ async function runAISearchQuery(q) {
       await loadAllFromAPI();
       _hideSyncBar();
 
+      if (u.shift_enabled) window.startShift?.(u);
       window.logActivity?.('نظام', `تسجيل دخول (API): ${u.full_name}`);
       window.renderApp?.();
 
@@ -13569,7 +13853,7 @@ async function runAISearchQuery(q) {
             id: me.data.id, username: me.data.username,
             full_name: me.data.full_name, role: me.data.role,
             permissions: me.data.permissions||[], active: true,
-            pos_access: me.data.pos_access, shift_enabled: false
+            pos_access: me.data.pos_access, shift_enabled: !!me.data.shift_enabled
           };
           currentUser = u;
           localStorage.setItem('yaqiz_user', JSON.stringify(u));
@@ -13767,7 +14051,7 @@ async function runAISearchQuery(q) {
       localStorage.setItem(TOKEN_KEY,   data.accessToken);
       localStorage.setItem(REFRESH_KEY, data.refreshToken);
 
-      const u = { ...data.user, active: true, pos_access: true, shift_enabled: false, permissions: [] };
+      const u = { ...data.user, active: true, pos_access: true, shift_enabled: !!data.user.shift_enabled, permissions: [] };
       currentUser = u;
       localStorage.setItem('yaqiz_user', JSON.stringify(u));
       closeModal();

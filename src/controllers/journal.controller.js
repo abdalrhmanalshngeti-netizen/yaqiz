@@ -1,0 +1,104 @@
+const db = require('../config/db');
+
+// يحدد نوع الحساب الافتراضي لأي كود غير معروف بالاعتماد على الرقم الأول
+// (1=أصول، 2=التزامات، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات) — احتياطي فقط
+// للحسابات التي لم تُزرع مسبقاً بدليل الحسابات (chart_of_accounts)
+function inferAccountType(code) {
+  const map = { '1': 'أصول', '2': 'التزامات', '3': 'حقوق الملكية', '4': 'إيرادات', '5': 'مصروفات' };
+  return map[String(code || '')[0]] || 'أصول';
+}
+
+// يرجّع id الحساب بدليل الحسابات حسب الكود، وينشئه تلقائياً إذا ما كان موجوداً
+async function resolveAccountId(client, companyId, code, name) {
+  const safeCode = code || '0000';
+  const { rows: [existing] } = await client.query(
+    `SELECT id FROM chart_of_accounts WHERE company_id = $1 AND code = $2`,
+    [companyId, safeCode]
+  );
+  if (existing) return existing.id;
+  const { rows: [created] } = await client.query(
+    `INSERT INTO chart_of_accounts (company_id, code, name, name_en, type, is_group)
+     VALUES ($1,$2,$3,$3,$4,false) RETURNING id`,
+    [companyId, safeCode, name || safeCode, inferAccountType(safeCode)]
+  );
+  return created.id;
+}
+
+exports.list = async (req, res, next) => {
+  try {
+    const { rows: entries } = await db.query(
+      `SELECT id, entry_no, description, reference, date, created_at FROM journal_entries
+       WHERE company_id = $1 ORDER BY date DESC, id DESC LIMIT 2000`,
+      [req.user.company_id]
+    );
+    if (!entries.length) return res.json({ success: true, data: [] });
+
+    const ids = entries.map(e => e.id);
+    const { rows: lines } = await db.query(
+      `SELECT entry_id, account_name, account_code, side, amount::float AS amount
+       FROM journal_items WHERE entry_id = ANY($1) ORDER BY entry_id, id`,
+      [ids]
+    );
+    const byEntry = {};
+    lines.forEach(l => { (byEntry[l.entry_id] = byEntry[l.entry_id] || []).push(l); });
+
+    const data = entries.map(e => ({
+      id: e.id, description: e.description, ref: e.reference, date: e.date,
+      entries: (byEntry[e.id] || []).map(l => ({ account: l.account_name, account_code: l.account_code, side: l.side, amount: l.amount }))
+    }));
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+};
+
+exports.create = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { description, ref, date, entries = [] } = req.body;
+    if (!entries.length) {
+      return res.status(400).json({ success: false, message: 'يجب إضافة سطر واحد على الأقل' });
+    }
+    const debit  = entries.filter(e => e.side === 'debit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const credit = entries.filter(e => e.side === 'credit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    // سماحية بسيطة لفروق التقريب المتراكمة عبر عدة بنود (نسبة الضريبة، الخصومات...)
+    if (Math.abs(debit - credit) > 0.05) {
+      return res.status(400).json({ success: false, message: 'القيد غير متوازن — المدين لا يساوي الدائن' });
+    }
+
+    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('entry_seq') AS n`);
+    const entry_no = `JE-${String(seq.n).padStart(6, '0')}`;
+
+    const { rows: [entry] } = await client.query(
+      `INSERT INTO journal_entries (company_id, entry_no, description, reference, date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.company_id, entry_no, description || '', ref || null,
+       (date ? new Date(date) : new Date()).toISOString().slice(0, 10), req.user.sub]
+    );
+
+    for (const e of entries) {
+      const accountId = await resolveAccountId(client, req.user.company_id, e.account_code, e.account);
+      await client.query(
+        `INSERT INTO journal_items (entry_id, account_id, account_code, account_name, side, amount)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [entry.id, accountId, e.account_code || '', e.account || '', e.side, parseFloat(e.amount) || 0]
+      );
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: { id: entry.id, description: entry.description, ref: entry.reference, date: entry.date, entries } });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+exports.remove = async (req, res, next) => {
+  try {
+    await db.query(
+      `DELETE FROM journal_entries WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
