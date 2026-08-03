@@ -68,6 +68,14 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'يجب إضافة منتج واحد على الأقل' });
     }
 
+    if (customer_id) {
+      const { rows: [custRow] } = await client.query(
+        `SELECT id FROM customers WHERE id = $1 AND company_id = $2`,
+        [customer_id, company_id]
+      );
+      if (!custRow) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
+    }
+
     // ── حساب المبالغ ──────────────────────────
     let subtotal = 0;
     const processedItems = items.map(item => {

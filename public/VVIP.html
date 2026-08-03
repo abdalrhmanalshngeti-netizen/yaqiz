@@ -1079,7 +1079,7 @@ function renderShell() {
         <div class="user-pill">
           <div class="user-avatar">${(currentUser.full_name||'U')[0]}</div>
           <div>
-            <div class="user-name-sm">${currentUser.full_name}</div>
+            <div class="user-name-sm">${sanitize(currentUser.full_name)}</div>
             <div class="user-role-sm" style="font-size:10px;color:var(--text-muted);">@${currentUser.username}</div>
           </div>
           <button class="icon-btn" onclick="doLogout()" title="${t('logout')}" style="width:30px;height:30px;margin-inline-start:4px;">${icon('log-out',14)}</button>
@@ -1106,7 +1106,7 @@ function renderShell() {
   <div id="modal-container"></div>
   <div id="cs-panel-root"></div>
   <div id="ai-chat-root"></div>
-  <div class="user-corner" title="${currentUser.full_name} (@${currentUser.username})">
+  <div class="user-corner" title="${sanitize(currentUser.full_name)} (@${currentUser.username})">
     <div class="user-corner-avatar">${(currentUser.full_name||'U')[0]}</div>
   </div>\``;
   refreshIcons();
@@ -2008,7 +2008,7 @@ function renderDashboard(c) {
         <div style="padding:12px;">
           ${lowStock.length===0?`<div class="empty" style="padding:20px;"><div class="empty-icon">✅</div>${lang==='ar'?'لا توجد تنبيهات':'No alerts'}</div>`:
           lowStock.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="goTo('inventory')">
-            <div style="font-weight:700;font-size:13px;">${p.name}</div>
+            <div style="font-weight:700;font-size:13px;">${sanitize(p.name)}</div>
             <span class="badge badge-red">${p.qty} ${lang==='ar'?'قطعة':'units'}</span>
           </div>`).join('')}
         </div>
@@ -2039,7 +2039,7 @@ function renderDashboard(c) {
                   const days = Math.floor((new Date()-new Date(i.created_at))/(1000*60*60*24));
                   return `
                 <tr>
-                  <td><b>${i.customer_name}</b>${i.customer_vat?`<div style="font-size:10px;color:var(--text-muted);">${i.customer_vat}</div>`:''}</td>
+                  <td><b>${sanitize(i.customer_name)}</b>${i.customer_vat?`<div style="font-size:10px;color:var(--text-muted);">${i.customer_vat}</div>`:''}</td>
                   <td><code>${i.invoice_no}</code></td>
                   <td>${fmtDate(i.created_at)}<div style="font-size:10px;color:${days>30?'var(--danger)':'var(--text-muted)'};">${days} ${lang==='ar'?'يوم':'d'}</div></td>
                   <td style="color:var(--danger);font-weight:800;">${fmtMoney(remaining)}</td>
@@ -2078,8 +2078,8 @@ function renderDashboard(c) {
                 if(!unpaidSup.length) return `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم دائنة':'No payables'}</td></tr>`;
                 return unpaidSup.map(s=>`
                 <tr style="cursor:pointer;" onclick="goTo('suppliers')">
-                  <td><b>${s.name}</b></td>
-                  <td style="color:var(--text-muted);font-size:12px;">${s.phone||'-'}</td>
+                  <td><b>${sanitize(s.name)}</b></td>
+                  <td style="color:var(--text-muted);font-size:12px;">${sanitize(s.phone)||'-'}</td>
                   <td style="color:var(--warning);font-weight:800;">${fmtMoney(s.balance)}</td>
                   <td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();goTo('receipts')" style="font-size:11px;">💸 ${lang==='ar'?'دفع':'Pay'}</button></td>
                 </tr>`).join('');
@@ -2196,7 +2196,7 @@ function renderPOS(sc) {
         ${db.products.map(p=>`
           <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id})" title="${p.code}">
             <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${p.code}</div>
-            <div class="product-name">${p.name}</div>
+            <div class="product-name">${sanitize(p.name)}</div>
             <div class="product-price">${fmtMoney(p.sell_price)}</div>
             <div class="product-qty ${p.qty<=p.min_qty?'':''}">
               ${p.qty<=p.min_qty?'⚠️ ':''} ${p.qty} ${lang==='ar'?'متبقي':'left'}
@@ -2214,7 +2214,7 @@ function renderPOS(sc) {
         ${icon('user',16)}
         <input class="input" placeholder="${t('customer')}" value="${posCustomer}" id="pos-customer"
           oninput="posCustomer=this.value" list="cust-list" style="flex:1;" />
-        <datalist id="cust-list">${db.customers.map(c=>`<option value="${c.name}">`).join('')}</datalist>
+        <datalist id="cust-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
       </div>
 
       <!-- Cart items -->
@@ -2224,7 +2224,7 @@ function renderPOS(sc) {
           :cart.map(i=>`
           <div class="inv-item-row">
             <div style="flex:1;min-width:0;">
-              <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i.name}</div>
+              <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sanitize(i.name)}</div>
               <div style="font-size:11px;color:var(--text-muted);">${fmtMoney(i.price)} × ${i.qty} = <b>${fmtMoney(i.price*i.qty)}</b></div>
             </div>
             <div class="qty-ctrl">
@@ -2305,7 +2305,7 @@ function posSearchInput(val) {
       style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;"
       onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background=''">
       <div>
-        <div style="font-weight:700;font-size:13px;">${p.name}</div>
+        <div style="font-weight:700;font-size:13px;">${sanitize(p.name)}</div>
         <div style="font-size:11px;color:var(--text-muted);">${p.code} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
       </div>
       <div style="font-weight:800;color:var(--primary);">${fmtMoney(p.sell_price)}</div>
@@ -2361,7 +2361,7 @@ function filterProductGrid(q) {
   grid.innerHTML=matches.map(p=>`
     <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id});el('pos-search').value='';el('pos-search-results').style.display='none';el('pos-search').focus();" title="${p.code}">
       <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${p.code}</div>
-      <div class="product-name">${p.name}</div>
+      <div class="product-name">${sanitize(p.name)}</div>
       <div class="product-price">${fmtMoney(p.sell_price)}</div>
       <div class="product-qty">${p.qty<=p.min_qty?'⚠️ ':''} ${p.qty}</div>
     </div>`).join('');
@@ -2393,7 +2393,7 @@ function updateCartDisplay() {
     cartEl.innerHTML=cart.map(i=>`
       <div class="inv-item-row">
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i.name}</div>
+          <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sanitize(i.name)}</div>
           <div style="font-size:11px;color:var(--text-muted);">${fmtMoney(i.price)} × ${i.qty} = <b>${fmtMoney(i.price*i.qty)}</b></div>
         </div>
         <div class="qty-ctrl">
@@ -2539,10 +2539,10 @@ function showInvoiceModal(inv) {
 
         <!-- Header -->
         <div style="text-align:center;border-bottom:2px dashed var(--border);padding-bottom:14px;margin-bottom:14px;">
-          <div style="font-size:20px;font-weight:900;color:#1e40af;">${s.company_name||'يقظ'}</div>
-          ${s.vat_number?`<div style="font-size:11px;color:#64748b;margin-top:2px;">الرقم الضريبي: <b>${s.vat_number}</b></div>`:''}
-          ${s.address?`<div style="font-size:11px;color:#64748b;">${s.address}</div>`:''}
-          ${s.phone?`<div style="font-size:11px;color:#64748b;">📞 ${s.phone}</div>`:''}
+          <div style="font-size:20px;font-weight:900;color:#1e40af;">${sanitize(s.company_name)||'يقظ'}</div>
+          ${s.vat_number?`<div style="font-size:11px;color:#64748b;margin-top:2px;">الرقم الضريبي: <b>${sanitize(s.vat_number)}</b></div>`:''}
+          ${s.address?`<div style="font-size:11px;color:#64748b;">${sanitize(s.address)}</div>`:''}
+          ${s.phone?`<div style="font-size:11px;color:#64748b;">📞 ${sanitize(s.phone)}</div>`:''}
           <div style="margin-top:8px;display:inline-block;background:#dbeafe;padding:4px 14px;border-radius:999px;font-size:11px;font-weight:800;color:#1e40af;">فاتورة ضريبية مبسطة</div>
         </div>
 
@@ -2558,7 +2558,7 @@ function showInvoiceModal(inv) {
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
             <span style="color:#64748b;">العميل:</span>
-            <b>${inv.customer_name}</b>
+            <b>${sanitize(inv.customer_name)}</b>
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;">
             <span style="color:#64748b;">طريقة الدفع:</span>
@@ -2573,7 +2573,7 @@ function showInvoiceModal(inv) {
           </div>
           ${inv.items.map(i=>`
           <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;font-size:12px;padding:5px 2px;border-bottom:1px dashed #f1f5f9;">
-            <span style="font-weight:700;">${i.name}</span>
+            <span style="font-weight:700;">${sanitize(i.name)}</span>
             <span style="text-align:center;">${i.qty}</span>
             <span style="text-align:end;">${Number(i.price).toFixed(2)}</span>
             <span style="text-align:end;font-weight:700;">${Number(i.line_total||i.qty*i.price).toFixed(2)}</span>
@@ -2608,7 +2608,7 @@ function showInvoiceModal(inv) {
 
         <!-- Footer -->
         <div style="text-align:center;font-size:10px;color:#94a3b8;border-top:1px dashed var(--border);padding-top:10px;margin-top:4px;">
-          شكراً لتعاملكم معنا 🌟<br>${s.company_name||'يقظ'} • ${new Date().getFullYear()}
+          شكراً لتعاملكم معنا 🌟<br>${sanitize(s.company_name)||'يقظ'} • ${new Date().getFullYear()}
         </div>
       </div>
 
@@ -2709,10 +2709,10 @@ function printPOSReceipt(id) {
   </style>
   </head><body>
   <div class="center" style="margin-bottom:10px;">
-    <div class="heavy" style="font-size:18px;color:#1e40af;">${s.company_name||'يقظ'}</div>
-    ${s.vat_number?`<div class="muted" style="font-size:10px;">الرقم الضريبي: <b>${s.vat_number}</b></div>`:''}
-    ${s.address?`<div class="muted" style="font-size:10px;">${s.address}</div>`:''}
-    ${s.phone?`<div class="muted" style="font-size:10px;">📞 ${s.phone}</div>`:''}
+    <div class="heavy" style="font-size:18px;color:#1e40af;">${sanitize(s.company_name)||'يقظ'}</div>
+    ${s.vat_number?`<div class="muted" style="font-size:10px;">الرقم الضريبي: <b>${sanitize(s.vat_number)}</b></div>`:''}
+    ${s.address?`<div class="muted" style="font-size:10px;">${sanitize(s.address)}</div>`:''}
+    ${s.phone?`<div class="muted" style="font-size:10px;">📞 ${sanitize(s.phone)}</div>`:''}
     <div style="margin-top:6px;font-size:10px;background:#dbeafe;display:inline-block;padding:2px 10px;border-radius:999px;color:#1e40af;font-weight:800;">فاتورة ضريبية مبسطة</div>
   </div>
   <div class="dashed"></div>
@@ -2720,13 +2720,13 @@ function printPOSReceipt(id) {
   <div class="row"><span class="muted">التاريخ:</span><span>${new Date(inv.created_at).toLocaleDateString('en-US')}</span></div>
   <div class="row"><span class="muted">التاريخ الهجري:</span><span>${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</span></div>
   <div class="row"><span class="muted">الوقت:</span><span>${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span></div>
-  <div class="row"><span class="muted">العميل:</span><span class="bold">${inv.customer_name}</span></div>
+  <div class="row"><span class="muted">العميل:</span><span class="bold">${sanitize(inv.customer_name)}</span></div>
   <div class="row"><span class="muted">الدفع:</span><span>${inv.payment_method}</span></div>
   <div class="dashed"></div>
   <div class="items-header"><span>الصنف</span><span style="text-align:center;">كمية</span><span style="text-align:end;">سعر</span><span style="text-align:end;">مجموع</span></div>
   ${(inv.items||[]).map(i=>`
   <div class="item-row">
-    <span class="bold">${i.name}</span>
+    <span class="bold">${sanitize(i.name)}</span>
     <span style="text-align:center;">${i.qty}</span>
     <span style="text-align:end;">${Number(i.price).toFixed(2)}</span>
     <span style="text-align:end;" class="bold">${Number(i.line_total||i.qty*i.price).toFixed(2)}</span>
@@ -2844,7 +2844,7 @@ function renderInvoicesList(sc) {
                 </td>
                 <td style="font-size:12px;">${fmtDate(i.created_at)}</td>
                 <td>
-                  <div style="font-weight:700;">${i.customer_name}</div>
+                  <div style="font-weight:700;">${sanitize(i.customer_name)}</div>
                   ${i.customer_vat?`<div style="font-size:10px;color:var(--text-muted);">${i.customer_vat}</div>`:''}
                 </td>
                 <td>${fmtMoney(i.subtotal)}</td>
@@ -2979,7 +2979,7 @@ function showNewInvoiceModal() {
               <input class="input" id="ni-customer" list="ni-cust-list"
                 placeholder="${lang==='ar'?'اختر عميل أو اكتب اسماً':'Select or type customer'}"
                 oninput="onNiCustomerInput(this.value)" />
-              <datalist id="ni-cust-list">${db.customers.map(c=>`<option value="${c.name}">`).join('')}</datalist>
+              <datalist id="ni-cust-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
               <div id="ni-customer-warn" style="display:none;margin-top:4px;font-size:11px;color:#b45309;background:#fef3c7;border-radius:6px;padding:4px 8px;">
                 ⚠️ ${lang==='ar'?'العميل غير موجود في قاعدة البيانات — سيتم الحفظ كعميل نقدي':'Customer not found — will be saved as cash customer'}
               </div>
@@ -3209,7 +3209,7 @@ function niSearchInput(val) {
       style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);"
       onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background=''">
       <div>
-        <div style="font-weight:700;font-size:13px;">${p.name}</div>
+        <div style="font-weight:700;font-size:13px;">${sanitize(p.name)}</div>
         <div style="font-size:11px;color:var(--text-muted);">${p.code} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
       </div>
       <div style="font-weight:800;color:var(--primary);">${fmtMoney(p.sell_price)}</div>
@@ -3265,7 +3265,7 @@ function renderNewInvItems() {
     </tr></thead>
     <tbody>${newInvItems.map((i,idx)=>`<tr>
       <td><code style="font-size:11px;">${i.code}</code></td>
-      <td style="font-weight:700;">${i.name}</td>
+      <td style="font-weight:700;">${sanitize(i.name)}</td>
       <td style="color:var(--text-muted);">${i.unit}</td>
       <td><div style="display:flex;align-items:center;gap:4px;">
         <button class="qty-btn" onclick="niQty(${idx},-1)">−</button>
@@ -3430,9 +3430,9 @@ function printSalesInvoice(id) {
   </style></head><body>
   <div class="header">
     <div>
-      <div class="company">${s.company_name||'يقظ'}</div>
-      ${s.vat_number?`<div class="company-sub">الرقم الضريبي: ${s.vat_number}</div>`:''}
-      <div class="company-sub">${s.address||''}</div>
+      <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
+      ${s.vat_number?`<div class="company-sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
+      <div class="company-sub">${sanitize(s.address)}</div>
     </div>
     <div style="text-align:end;">
       <div class="inv-title">${inv.invoice_type==='tax'?'فاتورة ضريبية':'فاتورة مبسطة'}</div>
@@ -3442,7 +3442,7 @@ function printSalesInvoice(id) {
     </div>
   </div>
   <div class="info-grid">
-    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${inv.customer_name}</div>${inv.customer_vat?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${inv.customer_vat}</div>`:''}</div>
+    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${sanitize(inv.customer_name)}</div>${inv.customer_vat?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${inv.customer_vat}</div>`:''}</div>
     <div class="info-box">
       <div class="info-label">طريقة الدفع</div><div class="info-val">${inv.payment_method}</div>
       <div style="margin-top:6px;"><span class="badge ${inv.status==='مسددة'?'badge-paid':'badge-pending'}">${inv.status}</span></div>
@@ -3451,7 +3451,7 @@ function printSalesInvoice(id) {
   <table>
     <thead><tr><th>#</th><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
     <tbody>${(inv.items||[]).map((i,idx)=>`<tr>
-      <td>${idx+1}</td><td><code>${i.code||'-'}</code></td><td style="font-weight:700;">${i.name}</td>
+      <td>${idx+1}</td><td><code>${i.code||'-'}</code></td><td style="font-weight:700;">${sanitize(i.name)}</td>
       <td>${i.unit||'-'}</td><td>${i.qty}</td>
       <td>${fmtMoney(i.price)}</td><td style="font-weight:800;">${fmtMoney(i.line_total||i.qty*i.price)}</td>
     </tr>`).join('')}</tbody>
@@ -3466,8 +3466,8 @@ function printSalesInvoice(id) {
       <div class="tot-row" style="color:#dc2626;font-weight:700;"><span>المتبقي:</span><span>${fmtMoney(inv.grand_total-(inv.paid_amount||0))}</span></div>`:''}
     </div>
   </div>
-  ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${inv.notes}</div>`:''}
-  <div class="footer">${s.company_name||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
+  ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${sanitize(inv.notes)}</div>`:''}
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -3506,9 +3506,9 @@ function printPurchaseInvoice(id) {
   </div>
   <div class="header">
     <div>
-      <div class="company">${s.company_name||'يقظ'}</div>
-      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${s.vat_number}</div>`:''}
-      <div class="sub">${s.address||''} ${s.city||''}</div>
+      <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
+      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
+      <div class="sub">${sanitize(s.address)} ${s.city||''}</div>
     </div>
     <div style="text-align:end;">
       <div class="title">فاتورة شراء</div>
@@ -3519,12 +3519,12 @@ function printPurchaseInvoice(id) {
   </div>
   <div class="info-grid">
     <div class="info-box">
-      <div class="lbl">المورد</div><div class="val">${p.vendor||'—'}</div>
-      ${p.supplier_ref?`<div style="font-size:11px;color:#64748b;margin-top:4px;">المرجع: ${p.supplier_ref}</div>`:''}
+      <div class="lbl">المورد</div><div class="val">${sanitize(p.vendor)||'—'}</div>
+      ${p.supplier_ref?`<div style="font-size:11px;color:#64748b;margin-top:4px;">المرجع: ${sanitize(p.supplier_ref)}</div>`:''}
     </div>
     <div class="info-box">
       <div class="lbl">طريقة الدفع</div><div class="val">${p.payment_method||'—'}</div>
-      <div style="margin-top:6px;"><div class="lbl">التصنيف</div><div class="val">${p.category||'—'}</div></div>
+      <div style="margin-top:6px;"><div class="lbl">التصنيف</div><div class="val">${sanitize(p.category)||'—'}</div></div>
     </div>
   </div>
   ${(p.items||[]).length?`
@@ -3539,7 +3539,7 @@ function printPurchaseInvoice(id) {
       const lineIncl = Math.round((lineP + lineVat)*100)/100;
       return `<tr>
         <td>${i+1}</td>
-        <td style="font-weight:700;">${it.name}</td>
+        <td style="font-weight:700;">${sanitize(it.name)}</td>
         <td>${qty}</td>
         <td>${unitP.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
         <td style="color:#b45309;">+${unitVat.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
@@ -3549,7 +3549,7 @@ function printPurchaseInvoice(id) {
       </tr>`;
     }).join('')}</tbody>
   </table>`:
-  `<div style="background:#f8fafc;padding:12px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">${p.description||''}</div>`}
+  `<div style="background:#f8fafc;padding:12px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;">${sanitize(p.description)}</div>`}
   <div style="display:flex;justify-content:flex-end;">
     <div class="tot-box">
       <div class="tr"><span>المبلغ قبل الضريبة:</span><span>${Number(p.amount||0).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
@@ -3557,8 +3557,8 @@ function printPurchaseInvoice(id) {
       <div class="tr tr-final"><span>الإجمالي:</span><span>${Number(p.total||0).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
     </div>
   </div>
-  ${p.notes?`<div style="margin-top:16px;padding:12px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;"><b>ملاحظات:</b> ${p.notes}</div>`:''}
-  <div class="footer">${s.company_name||'يقظ'} • ${p.purchase_no||''} • نظام يقظ للمحاسبة</div>
+  ${p.notes?`<div style="margin-top:16px;padding:12px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;"><b>ملاحظات:</b> ${sanitize(p.notes)}</div>`:''}
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • ${p.purchase_no||''} • نظام يقظ للمحاسبة</div>
   </body></html>`);
   win.document.close();
 }
@@ -3701,9 +3701,9 @@ function renderPurchContent() {
             <div>${fmtDate(p.created_at)}</div>
             <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
           </td>
-          <td><b>${p.vendor}</b></td>
-          <td style="color:var(--text-muted);font-size:12px;">${_itemDesc||p.description}</td>
-          <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${p.category}</span></td>
+          <td><b>${sanitize(p.vendor)}</b></td>
+          <td style="color:var(--text-muted);font-size:12px;">${sanitize(_itemDesc||p.description)}</td>
+          <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${sanitize(p.category)}</span></td>
           <td>${fmtMoney(p.amount)}</td>
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
           <td><b>${fmtMoney(p.total)}</b></td>
@@ -3754,7 +3754,7 @@ function showAddOpexPurchase() {
         <div>
           <label class="form-label">${lang==='ar'?'الجهة / المستفيد':'Payee'} *</label>
           <input class="input" id="p-vendor" list="opex-payee-list" placeholder="${lang==='ar'?'اسم الجهة أو الشركة':'Payee name'}" />
-          <datalist id="opex-payee-list">${db.suppliers.map(s=>`<option value="${s.name}">`).join('')}</datalist>
+          <datalist id="opex-payee-list">${db.suppliers.map(s=>`<option value="${sanitize(s.name)}">`).join('')}</datalist>
         </div>
         <div>
           <label class="form-label">${lang==='ar'?'تصنيف المصروف':'Category'} *</label>
@@ -3816,7 +3816,7 @@ function showAddGoodsPurchase(keepItems) {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
         <div><label class="form-label">${lang==='ar'?'المورد':'Supplier'} *</label>
           <input class="input" id="gp-vendor" list="gp-sup-list" oninput="onGpVendorInput(this.value)" />
-          <datalist id="gp-sup-list">${db.suppliers.map(s=>`<option value="${s.name}">`).join('')}</datalist>
+          <datalist id="gp-sup-list">${db.suppliers.map(s=>`<option value="${sanitize(s.name)}">`).join('')}</datalist>
           <div id="gp-vendor-warn" style="display:none;margin-top:4px;font-size:11px;color:#b45309;background:#fef3c7;border-radius:6px;padding:4px 8px;">
             ⚠️ ${lang==='ar'?'المورد غير موجود في القائمة — يمكنك إضافته من قسم الموردين':'Supplier not found — you can add from Suppliers section'}
           </div>
@@ -3831,7 +3831,7 @@ function showAddGoodsPurchase(keepItems) {
       <div style="font-weight:800;font-size:13px;margin-bottom:8px;">📋 ${lang==='ar'?'الأصناف:':'Items:'}</div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:4px;">
         <input class="input" id="gp-iname" placeholder="${lang==='ar'?'اسم الصنف':'Item name'}" list="gp-prod-list" />
-        <datalist id="gp-prod-list">${db.products.map(p=>`<option value="${p.name}" data-price="${p.buy_price}">`).join('')}</datalist>
+        <datalist id="gp-prod-list">${db.products.map(p=>`<option value="${sanitize(p.name)}" data-price="${p.buy_price}">`).join('')}</datalist>
         <input class="input" type="number" id="gp-iqty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" min="1" oninput="calcGPLine()" />
         <div>
           <input class="input" type="number" id="gp-iunit" value="0" placeholder="${lang==='ar'?'سعر الحبة (ق.ض)':'Unit Price (ex-VAT)'}" oninput="calcGPLine()" />
@@ -3928,7 +3928,7 @@ function renderGPItems() {
       const itemVat   = i.vat!=null ? i.vat : Math.round(i.line_total * 0.15 * 100) / 100;
       const lineTotal = Math.round((i.line_total + itemVat) * 100) / 100;
       return `<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:6px;font-weight:700;">${i.name}</td>
+        <td style="padding:6px;font-weight:700;">${sanitize(i.name)}</td>
         <td style="padding:4px;text-align:center;"><input class="input" type="number" min="0" step="0.01" value="${i.qty}" style="width:64px;text-align:center;padding:4px;font-size:12px;" onchange="updateGPItem(${idx},'qty',this.value)" /></td>
         <td style="padding:4px;text-align:center;"><input class="input" type="number" min="0" step="0.01" value="${i.price}" style="width:78px;text-align:center;padding:4px;font-size:12px;" onchange="updateGPItem(${idx},'price',this.value)" /></td>
         <td style="padding:6px;text-align:center;">${fmtMoney(i.line_total)}</td>
@@ -4068,7 +4068,7 @@ function showInventoryAddDialog() {
         <p style="font-size:14px;margin:0 0 14px;">${lang==='ar'?'هل ترغب في إدراج الأصناف المشتراة في المخزون؟':'Add purchased items to inventory?'}</p>
         <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:16px;">
           ${items.map(i=>`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border);">
-            <span>📦 ${i.name}</span><span style="color:var(--primary);font-weight:700;">كمية: ${i.qty}</span>
+            <span>📦 ${sanitize(i.name)}</span><span style="color:var(--primary);font-weight:700;">كمية: ${i.qty}</span>
           </div>`).join('')}
         </div>
         <div style="display:flex;gap:10px;">
@@ -4166,7 +4166,7 @@ function showMissingProductsForm(missingItems) {
         </p>
         ${missingItems.map((item,i)=>`
         <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:10px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:10px;">📦 ${item.name} &nbsp;<span style="color:var(--text-muted);font-weight:400;">(${lang==='ar'?'الكمية':'Qty'}: ${item.qty} — ${lang==='ar'?'سعر الشراء':'Buy price'}: ${fmtMoney(item.price)})</span></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:10px;">📦 ${sanitize(item.name)} &nbsp;<span style="color:var(--text-muted);font-weight:400;">(${lang==='ar'?'الكمية':'Qty'}: ${item.qty} — ${lang==='ar'?'سعر الشراء':'Buy price'}: ${fmtMoney(item.price)})</span></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div>
               <label class="form-label">${lang==='ar'?'الباركود':'Barcode'} *</label>
@@ -4289,7 +4289,7 @@ function renderInventory(c) {
       <span style="font-size:20px;">🔴</span>
       <div style="flex:1;">
         <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_lowStock.length} صنف${_lowStock.length>1?'':'ًا'} وصل لحد الطلب الأدنى`:`You have ${_lowStock.length} product(s) at or below minimum stock`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStock.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${p.name} — ${p.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${p.min_qty})</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStock.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(p.name)} — ${p.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${p.min_qty})</span>`).join('')}</div>
       </div>
     </div>` : '';
   c.innerHTML = `<div>
@@ -4328,7 +4328,7 @@ function renderInventoryInner(c) {
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
         <tbody>${db.products.map(p=>`<tr>
-          <td><code>${p.code}</code></td><td><b>${p.name}</b></td><td>${p.category}</td>
+          <td><code>${p.code}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(p.category)}</td>
           <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
           <td><span class="badge ${p.qty<=p.min_qty?'badge-red':'badge-green'}">${p.qty}</span></td>
           <td>${p.min_qty}</td>
@@ -4640,7 +4640,7 @@ function renderCusContent() {
         <span style="font-size:20px;">🔴</span>
         <div style="flex:1;">
           <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${custWithBal.length} عميل${custWithBal.length>1?'ون':''} بمبالغ مستحقة`:`You have ${custWithBal.length} customer(s) with outstanding balances`}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;">${custWithBal.map(c=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${c.name} — ${fmtMoney(c.balance)}</span>`).join('')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">${custWithBal.map(c=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(c.name)} — ${fmtMoney(c.balance)}</span>`).join('')}</div>
         </div>
       </div>` : '';
     cc.innerHTML = `
@@ -4656,8 +4656,8 @@ function renderCusContent() {
         <th></th>
       </tr></thead>
       <tbody>${custRows.map(({c,totalTx,invCount,outstanding})=>`<tr>
-        <td><b>${c.name}</b></td>
-        <td>${c.phone||'-'}</td>
+        <td><b>${sanitize(c.name)}</b></td>
+        <td>${sanitize(c.phone)||'-'}</td>
         <td>${c.vat_num||'-'}</td>
         <td style="color:var(--text-muted);font-weight:600;">${fmtMoney(totalTx)}<br><span style="font-size:10px;font-weight:400;">${invCount} ${lang==='ar'?'فاتورة':'inv'}</span></td>
         <td>
@@ -4666,9 +4666,9 @@ function renderCusContent() {
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${c.name}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
-          <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${c.name}')">${icon('printer',13)} PDF</button>
-          ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${c.name.replace(/'/g,"\\'")}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
+          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(c.name)}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
+          <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${escJsAttr(c.name)}')">${icon('printer',13)} PDF</button>
+          ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${escJsAttr(c.name)}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table>${db.customers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد عملاء':'No customers'}</div>`:''}</div></div>`;
@@ -4692,7 +4692,7 @@ function renderSuppliers(c) {
       <span style="font-size:20px;">🔴</span>
       <div style="flex:1;">
         <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${suppWithBal.length} مورد${suppWithBal.length>1?'ون':''} بمبالغ مستحقة عليك`:`You have ${suppWithBal.length} supplier(s) with outstanding balances`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">${suppWithBal.map(s=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${s.name} — ${fmtMoney(s.balance)}</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${suppWithBal.map(s=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(s.name)} — ${fmtMoney(s.balance)}</span>`).join('')}</div>
       </div>
     </div>` : '';
   c.innerHTML = `
@@ -4712,8 +4712,8 @@ function renderSuppliers(c) {
         <th></th>
       </tr></thead>
       <tbody>${suppRows.map(({s,totalTx,purCount,outstanding})=>`<tr>
-        <td><b>${s.name}</b></td>
-        <td>${s.phone||'-'}</td>
+        <td><b>${sanitize(s.name)}</b></td>
+        <td>${sanitize(s.phone)||'-'}</td>
         <td>${s.vat_num||'-'}</td>
         <td style="color:var(--text-muted);font-weight:600;">${fmtMoney(totalTx)}<br><span style="font-size:10px;font-weight:400;">${purCount} ${lang==='ar'?'فاتورة':'inv'}</span></td>
         <td>
@@ -4722,9 +4722,9 @@ function renderSuppliers(c) {
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${s.name}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
-          <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${s.name}')">${icon('printer',13)} PDF</button>
-          ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${s.name.replace(/'/g,"\\'")}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
+          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(s.name)}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
+          <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${escJsAttr(s.name)}')">${icon('printer',13)} PDF</button>
+          ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${escJsAttr(s.name)}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table>${db.suppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>
@@ -4802,7 +4802,7 @@ function renderTreasury(c) {
       <tbody>${[...db.treasury.moves].map(m=>`<tr>
         <td>${fmtDate(m.date)}</td>
         <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
-        <td>${m.description}</td><td>${m.reference||'-'}</td>
+        <td>${sanitize(m.description)}</td><td>${sanitize(m.reference)||'-'}</td>
         <td style="color:${m.type==='in'?'var(--success)':'var(--danger)'};font-weight:700;">${m.type==='in'?'+':'−'}${fmtMoney(m.amount)}</td>
       </tr>`).join('')}</tbody>
     </table></div></div>
@@ -4935,7 +4935,7 @@ function renderAccounts(c) {
         ${children.length ? `<table class="tbl" style="margin:0"><tbody>
           ${children.map(a=>`<tr>
             <td style="width:90px"><code style="font-weight:700">${a.code}</code></td>
-            <td style="font-weight:600">${a.name}${a.name_en?`<span style="font-size:11px;color:var(--text-muted);margin-inline-start:6px">${a.name_en}</span>`:''}</td>
+            <td style="font-weight:600">${sanitize(a.name)}${a.name_en?`<span style="font-size:11px;color:var(--text-muted);margin-inline-start:6px">${a.name_en}</span>`:''}</td>
             <td><span class="badge ${cat.color}" style="font-size:11px">${a.sub_type||cat.type}</span></td>
             ${has('accounts.manage')?`<td style="width:40px"><button class="icon-btn" style="width:26px;height:26px" onclick="deleteAccount(${a.id})">${icon('trash-2',12)}</button></td>`:''}
           </tr>`).join('')}
@@ -5183,7 +5183,7 @@ function renderTrialBalance(c) {
         </tr></thead>
         <tbody>
           ${rows.map(r=>`<tr>
-            <td style="font-weight:700;">${r.name}</td>
+            <td style="font-weight:700;">${sanitize(r.name)}</td>
             <td><span style="background:${typeColor[r.type]}18;color:${typeColor[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeBadge[r.type]||r.type}</span></td>
             <td style="text-align:end;font-weight:700;color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmt(r.debit):'—'}</td>
             <td style="text-align:end;font-weight:700;color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmt(r.credit):'—'}</td>
@@ -5314,7 +5314,7 @@ function renderOverdueReport(c) {
           const color=r.days>90?'#7f1d1d':r.days>60?'#dc2626':r.days>30?'#ef4444':'#f59e0b';
           const grandTotal = isCust ? r.grand_total : r.total;
           return `<tr>
-            <td><b>${r.party}</b></td>
+            <td><b>${sanitize(r.party)}</b></td>
             <td style="text-align:center;"><code>${isCust?r.invoice_no:r.ref}</code></td>
             <td>${fmtDate(r.created_at)}</td>
             <td>${fmtMoney(grandTotal)}</td>
@@ -5419,8 +5419,8 @@ function printARAPReport(section='all') {
 
   const custRows = custData.map(r=>`
     <tr>
-      <td>${r.name}</td>
-      <td>${r.phone}</td>
+      <td>${sanitize(r.name)}</td>
+      <td>${sanitize(r.phone)}</td>
       <td style="text-align:center;">${fmt(r.totalInv)}</td>
       <td style="text-align:center;">${fmt(r.totalRcv)}</td>
       <td style="text-align:center;font-weight:700;color:${r.outstanding>0?'#dc2626':'#16a34a'};">
@@ -5430,8 +5430,8 @@ function printARAPReport(section='all') {
 
   const suppRows = suppData.map(r=>`
     <tr>
-      <td>${r.name}</td>
-      <td>${r.phone}</td>
+      <td>${sanitize(r.name)}</td>
+      <td>${sanitize(r.phone)}</td>
       <td style="text-align:center;">${fmt(r.totalPur)}</td>
       <td style="text-align:center;">${fmt(r.totalPaid)}</td>
       <td style="text-align:center;font-weight:700;color:${r.outstanding>0?'#dc2626':'#16a34a'};">
@@ -5725,7 +5725,7 @@ function renderReportsInner(c) {
         <div class="tbl-wrap"><table class="tbl">
           <thead><tr><th>${lang==='ar'?'الرمز':'Code'}</th><th>${lang==='ar'?'اسم الحساب':'Account'}</th><th>${lang==='ar'?'التصنيف':'Type'}</th><th>${lang==='ar'?'مدين':'Debit'}</th><th>${lang==='ar'?'دائن':'Credit'}</th></tr></thead>
           <tbody>${trialRows.map(r=>`<tr>
-            <td><code>${r.code}</code></td><td>${r.name}</td><td><span class="badge badge-blue">${r.type}</span></td>
+            <td><code>${r.code}</code></td><td>${sanitize(r.name)}</td><td><span class="badge badge-blue">${r.type}</span></td>
             <td style="font-weight:${r.debit>0?700:400};color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmtMoney(r.debit):'-'}</td>
             <td style="font-weight:${r.credit>0?700:400};color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmtMoney(r.credit):'-'}</td>
           </tr>`).join('')}</tbody>
@@ -5861,7 +5861,7 @@ function renderProductsReport(d, db) {
           ?`<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد مبيعات':'No sales data'}</td></tr>`
           :rows.map((r,i)=>`<tr>
           <td style="font-weight:800;color:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'inherit'};">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
-          <td><b>${r.name}</b></td>
+          <td><b>${sanitize(r.name)}</b></td>
           <td style="text-align:center;font-weight:700;">${r.qty}</td>
           <td style="color:var(--success);font-weight:700;">${fmtMoney(r.revenue)}</td>
           <td style="color:var(--text-muted);">${fmtMoney(r.cost)}</td>
@@ -5889,7 +5889,7 @@ function renderProductsReport(d, db) {
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${lang==='ar'?'المنتج':'Product'}</th><th>${lang==='ar'?'المخزون':'Stock'}</th><th>${lang==='ar'?'حد الأمان':'Min'}</th><th>${lang==='ar'?'الكمية المقترحة':'Suggested'}</th></tr></thead>
         <tbody>${db.products.filter(p=>p.qty<=p.min_qty).map(p=>`<tr>
-          <td><b>${p.name}</b></td>
+          <td><b>${sanitize(p.name)}</b></td>
           <td><span class="badge badge-red">${p.qty}</span></td>
           <td>${p.min_qty}</td>
           <td style="font-weight:800;color:var(--primary);">${Math.max(0,p.min_qty*3-p.qty)}</td>
@@ -5932,7 +5932,7 @@ function renderSuppliersReport(db) {
         <tbody>${rows.length===0
           ?`<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد مشتريات':'No purchases'}</td></tr>`
           :rows.map((r,i)=>`<tr>
-          <td style="font-weight:800;">${i+1}</td><td><b>${r.name}</b></td>
+          <td style="font-weight:800;">${i+1}</td><td><b>${sanitize(r.name)}</b></td>
           <td style="text-align:center;">${r.count}</td>
           <td style="color:var(--warning);">${r.goods>0?fmtMoney(r.goods):'-'}</td>
           <td style="color:var(--primary);">${r.opex>0?fmtMoney(r.opex):'-'}</td>
@@ -6031,7 +6031,7 @@ function renderBankRecon(db) {
       `<div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'النوع':'Type'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th><th>${lang==='ar'?'التاريخ':'Date'}</th><th></th></tr></thead>
         <tbody>${adjs.map((a,i)=>`<tr>
-          <td>${a.desc}</td>
+          <td>${sanitize(a.desc)}</td>
           <td><span class="badge ${a.type==='add'?'badge-green':'badge-red'}">${a.type==='add'?(lang==='ar'?'إضافة':'Add'):(lang==='ar'?'خصم':'Deduct')}</span></td>
           <td style="font-weight:700;color:${a.type==='add'?'var(--success)':'var(--danger)'};">${a.type==='add'?'+':'-'}${fmtMoney(a.amount)}</td>
           <td style="font-size:12px;">${fmtDate(a.date)}</td>
@@ -6140,7 +6140,7 @@ function renderUsers(c) {
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('username')}</th><th>${t('fullName')}</th><th>${t('role')}</th><th>${t('permissions')}</th><th>${t('status')}</th>${has('users.manage')?'<th></th>':''}</tr></thead>
       <tbody>${db.users.map(u=>`<tr>
-        <td><code>${u.username}</code></td><td>${u.full_name}</td>
+        <td><code>${u.username}</code></td><td>${sanitize(u.full_name)}</td>
         <td><span class="badge ${u.role==='owner'?'badge-blue':u.role==='accountant'?'badge-amber':'badge-gray'}">${t(u.role)}</span></td>
         <td><span style="font-size:11px;color:var(--text-muted);">${(u.permissions||[]).length} ${lang==='ar'?'صلاحية':'perms'}</span></td>
         <td><span class="badge ${u.active!==false?'badge-green':'badge-red'}">${u.active!==false?t('active'):t('inactive')}</span></td>
@@ -6498,11 +6498,11 @@ function renderEmployees(c) {
           <td>
             <div style="display:flex;align-items:center;gap:10px;">
               <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;">${e.name[0]}</div>
-              <b>${e.name}</b>
+              <b>${sanitize(e.name)}</b>
             </div>
           </td>
-          <td><span class="badge badge-blue">${e.position}</span></td>
-          <td>${e.phone||'-'}</td>
+          <td><span class="badge badge-blue">${sanitize(e.position)}</span></td>
+          <td>${sanitize(e.phone)||'-'}</td>
           <td>${fmtDate(e.start_date)}</td>
           <td style="font-weight:800;color:var(--primary);">${fmtMoney(e.salary)}</td>
           <td><span class="badge ${e.status==='active'?'badge-green':'badge-red'}">${e.status==='active'?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'موقوف':'Inactive')}</span></td>
@@ -6596,7 +6596,7 @@ function renderObligations(c) {
       <span style="font-size:20px;">🔴</span>
       <div style="flex:1;">
         <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:8px;">${lang==='ar'?`لديك ${dueSoon.length} التزام${dueSoon.length>1?'ات':''} مستحقة خلال 30 يوماً`:`You have ${dueSoon.length} obligation(s) due within 30 days`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">${dueSoon.map(o=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${o.name} — ${fmtMoney(o.amount)} (${o.frequency})</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${dueSoon.map(o=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(o.name)} — ${fmtMoney(o.amount)} (${o.frequency})</span>`).join('')}</div>
       </div>
     </div>` : '';
 
@@ -6635,9 +6635,9 @@ function renderObligations(c) {
           const isSoon = daysLeft<=30 && o.status==='active';
           const lastPay = (o.payments||[]).slice(-1)[0];
           return `<tr style="${isUrgent?'background:#fff5f5;':''}">
-            <td><b>${o.name}</b></td>
-            <td style="color:var(--text-muted);">${o.vendor||'-'}</td>
-            <td><span class="badge ${catColors[o.category]||'badge-gray'}">${o.category}</span></td>
+            <td><b>${sanitize(o.name)}</b></td>
+            <td style="color:var(--text-muted);">${sanitize(o.vendor)||'-'}</td>
+            <td><span class="badge ${catColors[o.category]||'badge-gray'}">${sanitize(o.category)}</span></td>
             <td><span class="badge ${freqColors[o.frequency]||'badge-gray'}">${o.frequency}</span></td>
             <td style="font-weight:800;color:var(--primary);">${fmtMoney(o.amount)}</td>
             <td>
@@ -6746,8 +6746,8 @@ function payObligation(id) {
       </div>
       <div style="padding:0 20px 20px;display:flex;flex-direction:column;gap:14px;">
         <div style="background:var(--bg);border-radius:10px;padding:14px;">
-          <div style="font-weight:800;font-size:15px;">${o.name}</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:3px;">${o.vendor||o.category} • ${o.frequency}</div>
+          <div style="font-weight:800;font-size:15px;">${sanitize(o.name)}</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:3px;">${sanitize(o.vendor||o.category)} • ${sanitize(o.frequency)}</div>
           <div style="font-size:22px;font-weight:900;color:var(--primary);margin-top:6px;">${fmtMoney(o.amount)}</div>
         </div>
         <button class="btn btn-primary btn-full" style="padding:16px;font-size:15px;gap:10px;"
@@ -6845,7 +6845,7 @@ function printObligationReceipt(o,amount,type) {
   const win=window.open('','_blank','width=750,height=600');
   if(!win)return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
-  <meta charset="UTF-8"><title>سند صرف — ${o.name}</title>
+  <meta charset="UTF-8"><title>سند صرف — ${sanitize(o.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
@@ -6870,9 +6870,9 @@ function printObligationReceipt(o,amount,type) {
   </div>
   <div class="hdr">
     <div>
-      <div class="co">${s.company_name||'يقظ'}</div>
-      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${s.vat_number}</div>`:''}
-      <div class="sub">${s.address||''} ${s.city||''}</div>
+      <div class="co">${sanitize(s.company_name)||'يقظ'}</div>
+      ${s.vat_number?`<div class="sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
+      <div class="sub">${sanitize(s.address)} ${s.city||''}</div>
     </div>
     <div style="text-align:end;">
       <div class="ttl">سند صرف</div>
@@ -6883,11 +6883,11 @@ function printObligationReceipt(o,amount,type) {
   </div>
   <div class="grid">
     <div class="box">
-      <div class="lbl">الالتزام</div><div class="val">${o.name}</div>
-      <div style="font-size:11px;color:#64748b;margin-top:4px;">${o.category} • ${o.frequency}</div>
+      <div class="lbl">الالتزام</div><div class="val">${sanitize(o.name)}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:4px;">${sanitize(o.category)} • ${o.frequency}</div>
     </div>
     <div class="box">
-      <div class="lbl">الجهة المستفيدة</div><div class="val">${o.vendor||o.name}</div>
+      <div class="lbl">الجهة المستفيدة</div><div class="val">${sanitize(o.vendor||o.name)}</div>
       <div style="margin-top:6px;"><div class="lbl">المبلغ الأصلي للالتزام</div><div class="val">${Number(o.amount).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</div></div>
     </div>
   </div>
@@ -6898,14 +6898,14 @@ function printObligationReceipt(o,amount,type) {
   </div>
   <div class="box" style="margin-bottom:16px;">
     <div style="font-weight:700;margin-bottom:10px;font-size:12px;">تفاصيل القيد المحاسبي</div>
-    <div class="entry-row"><span>مدين — ${o.category}</span><span>${Number(Math.round(amount/1.15*100)/100).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
+    <div class="entry-row"><span>مدين — ${sanitize(o.category)}</span><span>${Number(Math.round(amount/1.15*100)/100).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
     <div class="entry-row"><span>مدين — ضريبة المدخلات (15%)</span><span>${Number(Math.round((amount-amount/1.15)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
     <div class="entry-row" style="border:none;font-weight:800;color:#1e40af;"><span>دائن — النقدية</span><span>${Number(amount).toLocaleString('en-US',{minimumFractionDigits:2})} ر.س</span></div>
   </div>
   <div class="ftr">
     <div class="sig"><div class="sig-l">توقيع المحاسب</div></div>
     <div class="sig"><div class="sig-l">توقيع المدير</div></div>
-    <div style="text-align:start;font-size:10px;color:#94a3b8;"><div>${s.company_name||'يقظ'} • سند صرف</div><div>نظام يقظ للمحاسبة</div></div>
+    <div style="text-align:start;font-size:10px;color:#94a3b8;"><div>${sanitize(s.company_name)||'يقظ'} • سند صرف</div><div>نظام يقظ للمحاسبة</div></div>
   </div>
   </body></html>`);
   win.document.close();
@@ -6977,9 +6977,9 @@ function renderReceiptContent() {
         :rows.map(r=>`<tr>
           <td><b>${r.voucher_no}</b></td>
           <td>${fmtDate(r.date)}</td>
-          <td><b>${r.party}</b>${r.ref?`<div style="font-size:10px;color:var(--text-muted);">${r.ref}</div>`:''}</td>
-          <td style="color:var(--text-muted);font-size:12px;">${r.description}</td>
-          <td><span class="badge badge-blue">${r.method||lang==='ar'?'نقدي':'Cash'}</span></td>
+          <td><b>${sanitize(r.party)}</b>${r.ref?`<div style="font-size:10px;color:var(--text-muted);">${sanitize(r.ref)}</div>`:''}</td>
+          <td style="color:var(--text-muted);font-size:12px;">${sanitize(r.description)}</td>
+          <td><span class="badge badge-blue">${sanitize(r.method)||(lang==='ar'?'نقدي':'Cash')}</span></td>
           <td style="font-weight:800;color:${isReceipt?'var(--success)':'var(--danger)'};">${isReceipt?'+':'−'}${fmtMoney(r.amount)}</td>
           <td style="display:flex;gap:4px;">
             <button class="btn btn-sm btn-outline" onclick="printVoucher(${r.id})" title="${lang==='ar'?'طباعة PDF':'Print PDF'}">${icon('printer',14)} PDF</button>
@@ -7021,7 +7021,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بفاتورة آجلة (اختياري):':'Link to pending invoice (optional):'}</div>
         <select class="select" id="v-invoice-link" onchange="onInvoiceLinkChange()">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${i.grand_total-(i.paid_amount||0)}" data-party="${i.customer_name}" data-no="${i.invoice_no}">${i.invoice_no} — ${i.customer_name} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
+          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${i.grand_total-(i.paid_amount||0)}" data-party="${sanitize(i.customer_name)}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
         </select>
         <div id="v-invoice-info" style="margin-top:8px;display:none;background:white;border-radius:8px;padding:10px;font-size:12px;"></div>
       </div>` : ''}
@@ -7031,7 +7031,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بمشتريات مستحقة (اختياري):':'Link to pending purchase (optional):'}</div>
         <select class="select" id="v-purchase-link" onchange="onPurchaseLinkChange()">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${p.vendor}">${p.vendor} — ${p.description||''} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
+          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${sanitize(p.vendor)}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
         </select>
       </div>` : ''}
 
@@ -7040,7 +7040,7 @@ function showVoucherModal(type) {
           <label class="form-label">${partyLabel} *</label>
           <select class="select" id="v-party-select" onchange="el('v-party').value=this.value">
             <option value="">${lang==='ar'?'— اختر —':'— Select —'}</option>
-            ${partyList.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
+            ${partyList.map(p=>`<option value="${sanitize(p.name)}">${sanitize(p.name)}</option>`).join('')}
           </select>
           <input class="input" id="v-party" placeholder="${lang==='ar'?'أو اكتب اسماً آخر...':'Or type another name...'}" style="margin-top:6px;font-size:12px;" />
         </div>
@@ -7301,9 +7301,9 @@ function printVoucher(id) {
   <div class="voucher">
     <div class="header">
       <div>
-        <div class="company">${s.company_name||'يقظ'}</div>
+        <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
         <div class="company-sub">${s.vat_number?(lang==='ar'?'الرقم الضريبي: ':'VAT: ')+s.vat_number:''}</div>
-        <div class="company-sub">${s.address||''}</div>
+        <div class="company-sub">${sanitize(s.address)}</div>
       </div>
       <div style="text-align:end;">
         <div class="type-badge">${isReceipt?'سند قبض':'سند صرف'}</div>
@@ -7315,9 +7315,9 @@ function printVoucher(id) {
       <div class="amount-label">${isReceipt?'المبلغ المستلم':'المبلغ المصروف'}</div>
       <div class="amount-val">${isReceipt?'+':'-'} ${fmtMoney(v.amount)}</div>
     </div>
-    <div class="row"><span class="row-label">${isReceipt?'المستلم منه':'المصروف إليه'}</span><span class="row-val">${v.party}</span></div>
-    <div class="row"><span class="row-label">البيان</span><span class="row-val">${v.description||'-'}</span></div>
-    <div class="row"><span class="row-label">طريقة الدفع</span><span class="row-val">${v.method||'نقدي'}</span></div>
+    <div class="row"><span class="row-label">${isReceipt?'المستلم منه':'المصروف إليه'}</span><span class="row-val">${sanitize(v.party)}</span></div>
+    <div class="row"><span class="row-label">البيان</span><span class="row-val">${sanitize(v.description)||'-'}</span></div>
+    <div class="row"><span class="row-label">طريقة الدفع</span><span class="row-val">${sanitize(v.method)||'نقدي'}</span></div>
     ${v.ref?`<div class="row"><span class="row-label">المرجع</span><span class="row-val">${v.ref}</span></div>`:''}
     <div class="row"><span class="row-label">التاريخ</span><span class="row-val">${fmtDate(v.date)}</span></div>
     <div class="sigs">
@@ -7442,7 +7442,7 @@ function renderReturnContent() {
         :rows.map(r=>`<tr>
           <td><b>${r.return_no}</b></td>
           <td>${fmtDate(r.date)}</td>
-          <td><b>${r.party}</b></td>
+          <td><b>${sanitize(r.party)}</b></td>
           <td style="font-size:12px;">${r.item}</td>
           <td><span class="badge badge-amber">${r.reason}</span></td>
           <td style="font-weight:800;color:var(--danger);">${fmtMoney(r.amount)}</td>
@@ -7506,8 +7506,8 @@ function showReturnModal(type) {
         <select class="select" id="rt-link" onchange="onReturnLinkChange('${type}')">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
           ${isSales
-            ? linkItems.map(i=>`<option value="${i.id}" data-party="${i.customer_name}" data-amount="${i.grand_total}" data-no="${i.invoice_no}">${i.invoice_no} — ${i.customer_name} — ${fmtMoney(i.grand_total)}</option>`).join('')
-            : linkItems.map(p=>`<option value="${p.id}" data-party="${p.vendor}" data-amount="${p.total}" data-no="PO-${p.id}">${p.vendor} — ${p.description} — ${fmtMoney(p.total)}</option>`).join('')
+            ? linkItems.map(i=>`<option value="${i.id}" data-party="${sanitize(i.customer_name)}" data-amount="${i.grand_total}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${fmtMoney(i.grand_total)}</option>`).join('')
+            : linkItems.map(p=>`<option value="${p.id}" data-party="${sanitize(p.vendor)}" data-amount="${p.total}" data-no="PO-${p.id}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${fmtMoney(p.total)}</option>`).join('')
           }
         </select>
       </div>
@@ -7515,7 +7515,7 @@ function showReturnModal(type) {
       <div class="form-row">
         <div><label class="form-label">${isSales?(lang==='ar'?'العميل':'Customer'):(lang==='ar'?'المورد':'Supplier')} *</label>
           <input class="input" id="rt-party" list="rt-list" />
-          <datalist id="rt-list">${(isSales?db.customers:db.suppliers).map(x=>`<option value="${x.name}">`).join('')}</datalist>
+          <datalist id="rt-list">${(isSales?db.customers:db.suppliers).map(x=>`<option value="${sanitize(x.name)}">`).join('')}</datalist>
         </div>
         <div><label class="form-label">${lang==='ar'?'المبلغ (شامل الضريبة)':'Amount (incl. VAT)'} *</label>
           <input class="input" type="number" id="rt-amount" value="0" oninput="calcReturnVat()" />
@@ -7534,7 +7534,7 @@ function showReturnModal(type) {
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'المنتج (للربط بالمخزون)':'Product (for inventory link)'}</label>
         <select class="select" id="rt-product">
           <option value="">${lang==='ar'?'— بدون ربط بمنتج —':'— No product link —'}</option>
-          ${db.products.map(p=>`<option value="${p.id}" data-name="${p.name}" data-code="${p.code}">${p.name} (${lang==='ar'?'مخزون:':'Stock:'} ${p.qty})</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${p.code}">${sanitize(p.name)} (${lang==='ar'?'مخزون:':'Stock:'} ${p.qty})</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
@@ -7838,7 +7838,7 @@ function renderAgingReport() {
     ${aging.length>0?`<div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('invoiceNo')}</th><th>${t('customer')}</th><th>${lang==='ar'?'تاريخ الفاتورة':'Invoice Date'}</th><th>${lang==='ar'?'عدد الأيام':'Days'}</th><th>${t('total')}</th></tr></thead>
       <tbody>${aging.sort((a,b)=>b.days-a.days).map(i=>`<tr>
-        <td><b>${i.invoice_no}</b></td><td>${i.customer_name}</td><td>${fmtDate(i.created_at)}</td>
+        <td><b>${i.invoice_no}</b></td><td>${sanitize(i.customer_name)}</td><td>${fmtDate(i.created_at)}</td>
         <td><span class="badge ${i.days<=30?'badge-green':i.days<=60?'badge-amber':i.days<=90?'badge-red':'badge-red'}">${i.days} ${lang==='ar'?'يوم':'d'}</span></td>
         <td style="font-weight:800;color:var(--danger);">${fmtMoney(i.grand_total)}</td>
       </tr>`).join('')}</tbody>
@@ -7964,7 +7964,7 @@ function renderQuotes(c) {
             return `<tr>
               <td><b>${q.quote_no}</b></td>
               <td>${fmtDate(q.created_at)}</td>
-              <td><b>${q.customer_name}</b></td>
+              <td><b>${sanitize(q.customer_name)}</b></td>
               <td style="color:${expired?'var(--danger)':'inherit'};">${fmtDate(q.valid_until)}${expired?`<div style="font-size:10px;color:var(--danger);font-weight:700;">${lang==='ar'?'منتهي':'Expired'}</div>`:''}</td>
               <td><b>${fmtMoney(q.grand_total)}</b></td>
               <td><span class="badge ${q.status==='مقبول'?'badge-green':q.status==='مرفوض'?'badge-red':expired?'badge-red':'badge-amber'}">${q.status}</span></td>
@@ -7995,7 +7995,7 @@ function showQuoteModal() {
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'العميل':'Customer'} *</label>
           <input class="input" id="q-customer" list="q-cust-list" placeholder="${lang==='ar'?'اسم العميل':'Customer name'}" />
-          <datalist id="q-cust-list">${db.customers.map(c=>`<option value="${c.name}">`).join('')}</datalist>
+          <datalist id="q-cust-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
         </div>
         <div><label class="form-label">${lang==='ar'?'صالح حتى':'Valid Until'} *</label>
           <input class="input" type="date" id="q-valid" value="${new Date(Date.now()+30*86400000).toISOString().slice(0,10)}" />
@@ -8005,7 +8005,7 @@ function showQuoteModal() {
       <div style="margin-bottom:10px;font-weight:800;">${lang==='ar'?'المنتجات / الخدمات:':'Items:'}</div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
         <input class="input" id="qi-name" placeholder="${lang==='ar'?'اسم المنتج/الخدمة':'Item name'}" list="qi-prod-list" />
-        <datalist id="qi-prod-list">${db.products.map(p=>`<option value="${p.name}" data-price="${p.sell_price}">`).join('')}</datalist>
+        <datalist id="qi-prod-list">${db.products.map(p=>`<option value="${sanitize(p.name)}" data-price="${p.sell_price}">`).join('')}</datalist>
         <input class="input" type="number" id="qi-qty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" />
         <input class="input" type="number" id="qi-price" placeholder="${lang==='ar'?'السعر':'Price'}" oninput="autoFillPrice()" />
         <button class="btn btn-primary" onclick="addQuoteItem()">${icon('plus',16)}</button>
@@ -8042,7 +8042,7 @@ function renderQuoteItems(){
   const list=el('q-items-list'); const totals=el('q-totals'); if(!list) return;
   if(c_quoteItems.length===0){list.innerHTML=`<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px;">${lang==='ar'?'أضف منتجات أو خدمات':'Add items'}</div>`;if(totals)totals.innerHTML='';return;}
   list.innerHTML=c_quoteItems.map((i,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:white;border-radius:8px;margin-bottom:6px;border:1px solid var(--border);">
-    <div style="flex:1;font-weight:700;">${i.name}</div>
+    <div style="flex:1;font-weight:700;">${sanitize(i.name)}</div>
     <div style="color:var(--text-muted);font-size:12px;">${i.qty} × ${fmtMoney(i.price)}</div>
     <div style="font-weight:800;color:var(--primary);">${fmtMoney(i.line_total)}</div>
     <button class="icon-btn" style="width:26px;height:26px;" onclick="removeQuoteItem(${idx})">${icon('x',12)}</button>
@@ -8104,25 +8104,25 @@ function printQuote(id){
     @media print{body{padding:10px;}}
   </style></head><body>
   <div class="header">
-    <div><div class="company">${s.company_name||'يقظ'}</div>${s.vat_number?`<div class="company-sub">الرقم الضريبي: ${s.vat_number}</div>`:''}<div class="company-sub">${s.address||''}</div></div>
+    <div><div class="company">${sanitize(s.company_name)||'يقظ'}</div>${s.vat_number?`<div class="company-sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}<div class="company-sub">${sanitize(s.address)}</div></div>
     <div style="text-align:end;"><div class="quote-label">عرض سعر</div><div class="quote-no">${q.quote_no}</div><div class="quote-no">${fmtDate(q.created_at)}</div></div>
   </div>
   <div class="validity">⏰ صالح حتى: ${fmtDate(q.valid_until)}</div>
   <div class="info-grid">
-    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${q.customer_name}</div></div>
+    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${sanitize(q.customer_name)}</div></div>
     <div class="info-box"><div class="info-label">الحالة</div><div class="info-val">${q.status}</div></div>
   </div>
   <table>
     <thead><tr><th>#</th><th>المنتج / الخدمة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
-    <tbody>${q.items.map((i,idx)=>`<tr><td>${idx+1}</td><td>${i.name}</td><td>${i.qty}</td><td>${fmtMoney(i.price)}</td><td>${fmtMoney(i.line_total)}</td></tr>`).join('')}</tbody>
+    <tbody>${q.items.map((i,idx)=>`<tr><td>${idx+1}</td><td>${sanitize(i.name)}</td><td>${i.qty}</td><td>${fmtMoney(i.price)}</td><td>${fmtMoney(i.line_total)}</td></tr>`).join('')}</tbody>
   </table>
   <div class="totals"><div class="totals-box">
     <div class="tot-row"><span>المجموع:</span><span>${fmtMoney(q.subtotal)}</span></div>
     <div class="tot-row"><span>ضريبة 15%:</span><span>${fmtMoney(q.vat_total)}</span></div>
     <div class="tot-row tot-total"><span>الإجمالي:</span><span>${fmtMoney(q.grand_total)}</span></div>
   </div></div>
-  ${q.notes?`<div style="margin-top:20px;padding:14px;background:#f8fafc;border-radius:8px;font-size:13px;"><b>ملاحظات:</b> ${q.notes}</div>`:''}
-  <div class="footer">${s.company_name||'يقظ'} • ${q.quote_no} • هذا العرض مُعدّ إلكترونياً ولا يحتاج توقيع</div>
+  ${q.notes?`<div style="margin-top:20px;padding:14px;background:#f8fafc;border-radius:8px;font-size:13px;"><b>ملاحظات:</b> ${sanitize(q.notes)}</div>`:''}
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • ${q.quote_no} • هذا العرض مُعدّ إلكترونياً ولا يحتاج توقيع</div>
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -8230,7 +8230,7 @@ function renderStockMoves(c){
             ?`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد حركات مخزون':'No stock movements'}</td></tr>`
             :moves.map(m=>`<tr>
               <td>${fmtDate(m.date)}</td>
-              <td><b>${m.product_name}</b><div style="font-size:10px;color:var(--text-muted);">${m.product_code||''}</div></td>
+              <td><b>${sanitize(m.product_name)}</b><div style="font-size:10px;color:var(--text-muted);">${m.product_code||''}</div></td>
               <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
               <td style="font-weight:800;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${m.qty}</td>
               <td><span class="badge ${m.balance_after<=0?'badge-red':m.balance_after<=5?'badge-amber':'badge-green'}">${m.balance_after}</span></td>
@@ -8239,7 +8239,7 @@ function renderStockMoves(c){
                 ${m.source?`<div style="font-size:10px;color:var(--text-muted);">📦 ${m.source}</div>`:''}
                 ${m.note?`<div style="font-size:10px;color:var(--text-muted);">${m.note}</div>`:''}
               </td>
-              <td style="font-size:11px;"><code>${m.reference||'-'}</code></td>
+              <td style="font-size:11px;"><code>${sanitize(m.reference)||'-'}</code></td>
             </tr>`).join('')}
         </tbody>
       </table></div>
@@ -8283,12 +8283,12 @@ function filterStockMoves(){
     ?`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">${lang==='ar'?'لا نتائج':'No results'}</td></tr>`
     :moves.map(m=>`<tr>
       <td>${fmtDate(m.date)}</td>
-      <td><b>${m.product_name}</b><div style="font-size:10px;color:var(--text-muted);">${m.product_code||''}</div></td>
+      <td><b>${sanitize(m.product_name)}</b><div style="font-size:10px;color:var(--text-muted);">${m.product_code||''}</div></td>
       <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
       <td style="font-weight:800;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${m.qty}</td>
       <td><span class="badge ${m.balance_after<=0?'badge-red':m.balance_after<=5?'badge-amber':'badge-green'}">${m.balance_after}</span></td>
       <td style="font-size:12px;"><div style="font-weight:700;">${m.reason||'-'}</div>${m.note?`<div style="font-size:10px;color:var(--text-muted);">${m.note}</div>`:''}</td>
-      <td style="font-size:11px;"><code>${m.reference||'-'}</code></td>
+      <td style="font-size:11px;"><code>${sanitize(m.reference)||'-'}</code></td>
     </tr>`).join('');
 }
 
@@ -8301,7 +8301,7 @@ function showStockMoveModal(){
       <div><label class="form-label">${lang==='ar'?'المنتج':'Product'} *</label>
         <select class="select" id="sm-product">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
-          ${db.products.map(p=>`<option value="${p.id}" data-name="${p.name}" data-code="${p.code}" data-qty="${p.qty}">${p.name} (${lang==='ar'?'متاح:':'Stock:'} ${p.qty})</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${p.code}" data-qty="${p.qty}">${sanitize(p.name)} (${lang==='ar'?'متاح:':'Stock:'} ${p.qty})</option>`).join('')}
         </select>
       </div>
       <div><label class="form-label">${lang==='ar'?'نوع الحركة':'Type'}</label>
@@ -8336,7 +8336,7 @@ function showStockMoveModal(){
     <div class="form-row">
       <div><label class="form-label">${lang==='ar'?'المورد / المستلم منه':'Supplier / From'}</label>
         <input class="input" id="sm-source" list="sm-sup-list" placeholder="${lang==='ar'?'اختياري':'Optional'}" />
-        <datalist id="sm-sup-list">${db.suppliers.map(s=>`<option value="${s.name}">`).join('')}</datalist>
+        <datalist id="sm-sup-list">${db.suppliers.map(s=>`<option value="${sanitize(s.name)}">`).join('')}</datalist>
       </div>
       <div><label class="form-label">${lang==='ar'?'رقم المرجع':'Reference #'}</label><input class="input" id="sm-ref" placeholder="${lang==='ar'?'رقم الفاتورة / أمر الشراء':'Invoice / PO Number'}" /></div>
     </div>
@@ -8465,7 +8465,7 @@ function printPartyStatement(partyName){
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
   <style>body{font-family:'Tajawal',sans-serif;padding:30px;}table{width:100%;border-collapse:collapse;}th{background:#1e40af;color:white;padding:8px;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;}.header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1e40af;}@media print{body{padding:10px;}}</style>
   </head><body>
-  <div class="header"><div><b style="font-size:18px;color:#1e40af;">${s.company_name||'يقظ'}</b>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${s.vat_number}</div>`:''}</div>
+  <div class="header"><div><b style="font-size:18px;color:#1e40af;">${sanitize(s.company_name)||'يقظ'}</b>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}</div>
   <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${partyName}</div><div style="font-size:11px;color:#64748b;">${new Date().toLocaleDateString('en-US')}</div></div></div>
   ${table.outerHTML}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
@@ -8538,7 +8538,7 @@ async function showNotifications(){
           <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'تنبيهات النظام':'System Alerts'}</div>
           ${alerts.map(a=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${a.type==='danger'?'rgba(239,68,68,.1)':'rgba(245,158,11,.1)'};border-radius:10px;cursor:pointer;border:1px solid ${a.type==='danger'?'rgba(239,68,68,.2)':'rgba(245,158,11,.2)'};" onclick="closeModal();goTo('${a.page}')">
             <div style="width:36px;height:36px;border-radius:8px;background:${a.type==='danger'?'#dc2626':'#f59e0b'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon(a.icon,16)}</div>
-            <div><div style="font-weight:800;font-size:13px;">${a.title}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${a.msg}</div></div>
+            <div><div style="font-weight:800;font-size:13px;">${a.title}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${sanitize(a.msg)}</div></div>
           </div>`).join('')}`:''}
         ${apiNotifs===null?`<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">⏳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>`
         :apiNotifs.length>0?`
@@ -8801,7 +8801,7 @@ function showPOModal() {
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'المورد':'Supplier'} *</label>
           <input class="input" id="po-supplier" list="po-sup-list" />
-          <datalist id="po-sup-list">${db.suppliers.map(s=>`<option value="${s.name}">`).join('')}</datalist>
+          <datalist id="po-sup-list">${db.suppliers.map(s=>`<option value="${sanitize(s.name)}">`).join('')}</datalist>
         </div>
         <div><label class="form-label">${lang==='ar'?'تاريخ التسليم المتوقع':'Expected Delivery'}</label>
           <input class="input" type="date" id="po-delivery" value="${new Date(Date.now()+7*86400000).toISOString().slice(0,10)}" />
@@ -8810,7 +8810,7 @@ function showPOModal() {
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'ملاحظات':'Notes'}</label><input class="input" id="po-notes" /></div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
         <input class="input" id="po-item-name" placeholder="${lang==='ar'?'اسم الصنف':'Item name'}" list="po-prod-list" />
-        <datalist id="po-prod-list">${db.products.map(p=>`<option value="${p.name}">`).join('')}</datalist>
+        <datalist id="po-prod-list">${db.products.map(p=>`<option value="${sanitize(p.name)}">`).join('')}</datalist>
         <input class="input" type="number" id="po-item-qty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" />
         <input class="input" type="number" id="po-item-price" value="0" placeholder="${lang==='ar'?'السعر':'Price'}" />
         <button class="btn btn-primary" onclick="addPOItem()">${icon('plus',16)}</button>
@@ -8840,7 +8840,7 @@ function renderPOItems() {
   if(!window._poItems.length){list.innerHTML=`<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:16px;">${lang==='ar'?'أضف أصنافاً':'Add items'}</div>`;if(tot)tot.innerHTML='';return;}
   list.innerHTML=window._poItems.map((i,idx)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px;background:white;border-radius:8px;margin-bottom:6px;border:1px solid var(--border);">
-      <div style="flex:1;font-weight:700;">${i.name}</div>
+      <div style="flex:1;font-weight:700;">${sanitize(i.name)}</div>
       <div style="font-size:12px;color:var(--text-muted);">${i.qty} × ${fmtMoney(i.price)}</div>
       <div style="font-weight:800;color:var(--primary);">${fmtMoney(i.total)}</div>
       <button class="icon-btn" style="width:26px;height:26px;" onclick="window._poItems.splice(${idx},1);renderPOItems()">${icon('x',12)}</button>
@@ -9098,7 +9098,7 @@ function renderJournal(c) {
           :entries.flatMap(e=>e.entries.map((row,i)=>`<tr style="${i===0?'border-top:2px solid var(--border-strong)':''}">
             ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${e.id}</td>
             <td rowspan="${e.entries.length}" style="font-size:11px;vertical-align:top;">${fmtDate(e.date)}</td>
-            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${e.description}</td>`:''}
+            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(e.description)}</td>`:''}
             <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${row.account} <code style="font-size:10px;">${row.account_code}</code></td>
             <td style="color:var(--danger);font-weight:700;">${row.side==='debit'?fmtMoney(row.amount):'-'}</td>
             <td style="color:var(--success);font-weight:700;">${row.side==='credit'?fmtMoney(row.amount):'-'}</td>
@@ -9145,7 +9145,7 @@ function renderJELines() {
     <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
       <select class="select" onchange="window._jEntries[${i}].account=this.options[this.selectedIndex].text;window._jEntries[${i}].account_code=this.value;renderJEBalance()">
         <option value="">${lang==='ar'?'اختر حساب':'Select account'}</option>
-        ${accounts.map(a=>`<option value="${a.code}" ${a.code===e.account_code?'selected':''}>${a.code} - ${a.name}</option>`).join('')}
+        ${accounts.map(a=>`<option value="${a.code}" ${a.code===e.account_code?'selected':''}>${a.code} - ${sanitize(a.name)}</option>`).join('')}
       </select>
       <select class="select" onchange="window._jEntries[${i}].side=this.value;renderJEBalance()">
         <option value="debit" ${e.side==='debit'?'selected':''}>${lang==='ar'?'مدين':'Debit'}</option>
@@ -9252,10 +9252,10 @@ function renderLoyalty(c) {
           ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد نقاط':'No points yet'}</td></tr>`
           :customers.map((cu,i)=>`<tr>
             <td><b style="color:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'inherit'};">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</b></td>
-            <td><b>${cu.name}</b></td>
+            <td><b>${sanitize(cu.name)}</b></td>
             <td><span style="font-weight:900;font-size:15px;color:var(--primary);">${(cu.points||0).toLocaleString()}</span> ${lang==='ar'?'نقطة':'pts'}</td>
             <td style="color:var(--success);font-weight:700;">${fmtMoney(cu.value)}</td>
-            <td><button class="btn btn-sm btn-outline" onclick="redeemPoints('${cu.name}')" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
+            <td><button class="btn btn-sm btn-outline" onclick="redeemPoints('${escJsAttr(cu.name)}')" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
           </tr>`).join('')}
         </tbody>
       </table></div>
@@ -9288,7 +9288,7 @@ function showAddPointsModal() {
     <div class="modal-head"><h3>${lang==='ar'?'إضافة نقاط يدوي':'Add Points Manually'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
     <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'العميل':'Customer'}</label>
       <input class="input" id="ap-cust" list="ap-list" />
-      <datalist id="ap-list">${db.customers.map(c=>`<option value="${c.name}">`).join('')}</datalist>
+      <datalist id="ap-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
     </div>
     <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'عدد النقاط':'Points'}</label><input class="input" type="number" id="ap-pts" value="0" /></div>
     <div style="display:flex;gap:8px;">
@@ -9338,10 +9338,10 @@ function printShiftReport(shiftId) {
   th{background:#1e40af;color:white;padding:8px;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;}
   @media print{body{padding:8px;}}</style></head><body>
   <div class="header">
-    <div><div class="company">${s.company_name||'يقظ'}</div>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${s.vat_number}</div>`:''}</div>
-    <div style="text-align:end;"><div style="font-size:16px;font-weight:900;">تقرير وردية</div><div style="font-size:12px;color:#64748b;">${shift.full_name}</div></div>
+    <div><div class="company">${sanitize(s.company_name)||'يقظ'}</div>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}</div>
+    <div style="text-align:end;"><div style="font-size:16px;font-weight:900;">تقرير وردية</div><div style="font-size:12px;color:#64748b;">${sanitize(shift.full_name)}</div></div>
   </div>
-  <div class="row"><span>الموظف:</span><b>${shift.full_name} (@${shift.username})</b></div>
+  <div class="row"><span>الموظف:</span><b>${sanitize(shift.full_name)} (@${shift.username})</b></div>
   <div class="row"><span>تاريخ الوردية:</span><span>${shift.date}</span></div>
   <div class="row"><span>بداية الوردية:</span><span>${new Date(shift.start_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="row"><span>نهاية الوردية:</span><span>${shift.end_time?new Date(shift.end_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'مفتوحة'}</span></div>
@@ -9358,7 +9358,7 @@ function printShiftReport(shiftId) {
     💡 الكاش المتوقع في الدرج: <span style="color:#15803d;font-size:18px;">${Number(shift.sales_cash||0).toFixed(2)}</span>
   </div>
   ${invs.length>0?`<table><thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الوقت</th><th>الإجمالي</th><th>الدفع</th></tr></thead>
-  <tbody>${invs.map(i=>`<tr><td>${i.invoice_no}</td><td>${i.customer_name}</td>
+  <tbody>${invs.map(i=>`<tr><td>${i.invoice_no}</td><td>${sanitize(i.customer_name)}</td>
     <td>${new Date(i.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
     <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
     <td>${i.payment_method}</td></tr>`).join('')}</tbody></table>`:''}
@@ -9926,9 +9926,9 @@ function exportReportPDF(title, htmlContent) {
   </style></head><body>
   <div class="report-header">
     <div>
-      <div class="company-name">${s.company_name||'يقظ'}</div>
-      ${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${s.vat_number}</div>`:''}
-      <div style="font-size:11px;color:#64748b;">${s.address||''}</div>
+      <div class="company-name">${sanitize(s.company_name)||'يقظ'}</div>
+      ${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
+      <div style="font-size:11px;color:#64748b;">${sanitize(s.address)}</div>
     </div>
     <div>
       <div class="report-title">${title}</div>
@@ -10030,7 +10030,7 @@ function renderActivity(c) {
           ${icon('user',16)}
           <select class="select" onchange="actFilter.username=this.value;renderActivity(_activityContainer||el('page-content'))">
             <option value="">${lang==='ar'?'كل المستخدمين':'All Users'}</option>
-            ${allUsers.map(u=>`<option value="${u.username}" ${actFilter.username===u.username?'selected':''}>${u.full_name} (@${u.username})</option>`).join('')}
+            ${allUsers.map(u=>`<option value="${u.username}" ${actFilter.username===u.username?'selected':''}>${sanitize(u.full_name)} (@${u.username})</option>`).join('')}
           </select>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -10071,7 +10071,7 @@ function renderActivity(c) {
 
             <!-- Info -->
             <div style="flex:1;min-width:0;">
-              <div style="font-weight:800;font-size:14px;">${u.full_name}</div>
+              <div style="font-weight:800;font-size:14px;">${sanitize(u.full_name)}</div>
               <div style="font-size:12px;color:var(--text-muted);">@${u.username} • ${lang==='ar'?t(u.role):u.role}</div>
             </div>
 
@@ -10166,7 +10166,7 @@ function renderActivity(c) {
                 </tr></thead>
                 <tbody>${shiftInvoices.map(i=>`<tr>
                   <td><b>${i.invoice_no}</b></td>
-                  <td>${i.customer_name}</td>
+                  <td>${sanitize(i.customer_name)}</td>
                   <td>${new Date(i.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
                   <td style="font-weight:800;color:var(--primary);">${fmtMoney(i.grand_total)}</td>
                   <td><span class="badge badge-blue">${i.payment_method}</span></td>
@@ -10186,8 +10186,8 @@ function renderActivity(c) {
                 ${userActs.map(a=>`
                 <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;">
                   <span style="color:var(--text-muted);flex-shrink:0;">${new Date(a.timestamp).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
-                  <span class="badge badge-blue" style="font-size:10px;flex-shrink:0;">${a.category}</span>
-                  <span>${a.details}</span>
+                  <span class="badge badge-blue" style="font-size:10px;flex-shrink:0;">${sanitize(a.category)}</span>
+                  <span>${sanitize(a.details)}</span>
                 </div>`).join('')}
               </div>
             </div>`:''}
@@ -10272,7 +10272,7 @@ async function renderAdminSessionsTab(mc) {
       return `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
         <div style="width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${isRevoke?'#22c55e':'#f97316'};"></div>
         <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;">${r.description||'—'}</div>
+          <div style="font-size:13px;font-weight:700;">${sanitize(r.description)||'—'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${fmtDate(r.created_at)}</div>
         </div>
       </div>`;
@@ -10307,8 +10307,8 @@ function renderPricingPolicies(c) {
       : `<span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.15);color:#fbbf24;border-radius:5px;cursor:pointer;" onclick="showProductModal(${p.id})">تحديث سعر البيع → ${computed} ر.س</span>`;
     return `<div style="display:grid;grid-template-columns:1fr 90px 90px 90px auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div>
-        <div style="font-size:13px;font-weight:700;">${p.name}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${p.category||''}</div>
+        <div style="font-size:13px;font-weight:700;">${sanitize(p.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${sanitize(p.category)}</div>
       </div>
       <div style="font-size:12px;color:var(--text-muted);">شراء: <strong style="color:var(--text-main)">${buy} ر.س</strong></div>
       <div style="font-size:12px;color:var(--text-muted);">بيع: <strong style="color:#60a5fa">${sell} ر.س</strong></div>
@@ -10344,7 +10344,7 @@ function renderPricingPolicies(c) {
     <div class="card" style="margin-top:12px;"><div class="card-pad">
       <div style="font-size:13px;font-weight:800;margin-bottom:12px;color:var(--text-muted);">🔴 منتجات بدون سياسة تسعير (${noPolicy.length})</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${noPolicy.map(p=>`<span onclick="showProductModal(${p.id})" style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;">${p.name}</span>`).join('')}
+        ${noPolicy.map(p=>`<span onclick="showProductModal(${p.id})" style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;">${sanitize(p.name)}</span>`).join('')}
       </div>
     </div></div>` : ''}
   </div>`;
@@ -10407,9 +10407,9 @@ function renderSettingsGeneral(c) {
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'السجل التجاري':'CR Number'}</label><input class="input" id="s-cr" value="${s.cr_number||''}" /></div>
-        <div><label class="form-label">${t('phone')}</label><input class="input" id="s-phone" value="${s.phone||''}" /></div>
+        <div><label class="form-label">${t('phone')}</label><input class="input" id="s-phone" value="${sanitize(s.phone)}" /></div>
       </div>
-      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'العنوان':'Address'}</label><input class="input" id="s-addr" value="${s.address||''}" /></div>
+      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'العنوان':'Address'}</label><input class="input" id="s-addr" value="${sanitize(s.address)}" /></div>
     </div></div>
     ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" onclick="saveSettings()">${t('save')}</button>`:''}
 
@@ -10443,7 +10443,7 @@ function renderSettingsGeneral(c) {
         const pct = target>0?Math.min(100,Math.round(todaySales/target*100)):0;
         return `<div style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div style="font-weight:700;">${u.full_name||u.username} <span style="font-size:11px;color:var(--text-muted);">@${u.username} · ${u.role}</span></div>
+            <div style="font-weight:700;">${sanitize(u.full_name||u.username)} <span style="font-size:11px;color:var(--text-muted);">@${u.username} · ${u.role}</span></div>
             <div style="display:flex;align-items:center;gap:8px;">
               <input class="input" type="number" min="0" style="width:130px;" value="${target||''}" id="tgt-${u.username}" placeholder="${lang==='ar'?'الهدف اليومي ر.س':'Daily target SAR'}" />
               <button class="btn btn-sm btn-primary" onclick="saveTarget('${u.username}')">${lang==='ar'?'حفظ':'Save'}</button>
@@ -10616,7 +10616,7 @@ function doGlobalSearch(q) {
     html += invs.slice(0,4).map(i => `
       <div class="search-item" onclick="closeSearch();goTo('sales')">
         <div class="search-item-icon">${icon('file-text',16)}</div>
-        <div><div class="search-item-name">${i.invoice_no}</div><div class="search-item-sub">${i.customer_name} • ${fmtMoney(i.grand_total)}</div></div>
+        <div><div class="search-item-name">${i.invoice_no}</div><div class="search-item-sub">${sanitize(i.customer_name)} • ${fmtMoney(i.grand_total)}</div></div>
       </div>`).join('');
   }
   const custs = db.customers.filter(c => c.name.toLowerCase().includes(ql)||(c.phone||'').includes(ql));
@@ -10625,7 +10625,7 @@ function doGlobalSearch(q) {
     html += custs.slice(0,3).map(c => `
       <div class="search-item" onclick="closeSearch();goTo('customers')">
         <div class="search-item-icon">${icon('user',16)}</div>
-        <div><div class="search-item-name">${c.name}</div><div class="search-item-sub">${c.phone||''}</div></div>
+        <div><div class="search-item-name">${sanitize(c.name)}</div><div class="search-item-sub">${sanitize(c.phone)}</div></div>
       </div>`).join('');
   }
   const sups = db.suppliers.filter(s => s.name.toLowerCase().includes(ql)||(s.phone||'').includes(ql));
@@ -10634,7 +10634,7 @@ function doGlobalSearch(q) {
     html += sups.slice(0,3).map(s => `
       <div class="search-item" onclick="closeSearch();goTo('customers')">
         <div class="search-item-icon">${icon('truck',16)}</div>
-        <div><div class="search-item-name">${s.name}</div><div class="search-item-sub">${s.phone||''}</div></div>
+        <div><div class="search-item-name">${sanitize(s.name)}</div><div class="search-item-sub">${sanitize(s.phone)}</div></div>
       </div>`).join('');
   }
   const prods = db.products.filter(p => p.name.toLowerCase().includes(ql)||p.code?.toLowerCase().includes(ql));
@@ -10643,7 +10643,7 @@ function doGlobalSearch(q) {
     html += prods.slice(0,4).map(p => `
       <div class="search-item" onclick="closeSearch();goTo('inventory')">
         <div class="search-item-icon">${icon('box',16)}</div>
-        <div><div class="search-item-name">${p.name}</div><div class="search-item-sub">${p.code} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div></div>
+        <div><div class="search-item-name">${sanitize(p.name)}</div><div class="search-item-sub">${p.code} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div></div>
       </div>`).join('');
   }
   const purs = db.purchases.filter(p => p.vendor.toLowerCase().includes(ql)||p.description.toLowerCase().includes(ql));
@@ -10652,7 +10652,7 @@ function doGlobalSearch(q) {
     html += purs.slice(0,3).map(p => `
       <div class="search-item" onclick="closeSearch();goTo('purchases')">
         <div class="search-item-icon">${icon('package',16)}</div>
-        <div><div class="search-item-name">${p.vendor}</div><div class="search-item-sub">${p.description} • ${fmtMoney(p.total)}</div></div>
+        <div><div class="search-item-name">${sanitize(p.vendor)}</div><div class="search-item-sub">${sanitize(p.description)} • ${fmtMoney(p.total)}</div></div>
       </div>`).join('');
   }
   if (!html) html = `<div class="search-empty">🔍 ${lang==='ar'?'لا توجد نتائج':'No results found'}</div>`;
@@ -10699,7 +10699,7 @@ function quickReceipt(invoiceId) {
         <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
       </div>
       <div style="background:var(--primary-soft);padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>${lang==='ar'?'العميل:':'Customer:'}</span><b>${inv.customer_name}</b></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>${lang==='ar'?'العميل:':'Customer:'}</span><b>${sanitize(inv.customer_name)}</b></div>
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>${lang==='ar'?'إجمالي الفاتورة:':'Invoice Total:'}</span><b>${fmtMoney(inv.grand_total)}</b></div>
         <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المتبقي:':'Remaining:'}</span><b style="color:var(--danger);">${fmtMoney(remaining)}</b></div>
       </div>
@@ -10810,7 +10810,7 @@ function quickPayPurchase(purchaseId) {
         <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
       </div>
       <div style="background:var(--primary-soft);padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:5px;">
-        <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المورد:':'Supplier:'}</span><b>${p.vendor}</b></div>
+        <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المورد:':'Supplier:'}</span><b>${sanitize(p.vendor)}</b></div>
         <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'إجمالي الفاتورة:':'Total:'}</span><b>${fmtMoney(p.total)}</b></div>
         <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المسدد:':'Paid:'}</span><b style="color:var(--success);">${fmtMoney(paid)}</b></div>
         <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المتبقي:':'Remaining:'}</span><b style="color:var(--danger);">${fmtMoney(remaining)}</b></div>
@@ -10975,7 +10975,7 @@ function showBarcodeGenerator() {
       <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
         <select class="select" id="bc-product" style="flex:1;">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
-          ${db.products.map(p=>`<option value="${p.id}">${p.name} — ${p.code}</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}">${sanitize(p.name)} — ${p.code}</option>`).join('')}
         </select>
         <input class="input" type="number" id="bc-count" value="1" min="1" max="50" style="width:80px;" placeholder="${lang==='ar'?'عدد':'Count'}" />
         <button class="btn btn-primary" onclick="generateBarcodePrint()">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
@@ -10997,8 +10997,8 @@ function generateBarcodePrint() {
   const win=window.open('','_blank','width=800,height=600');
   const labels=Array(count).fill('').map(()=>`
     <div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;width:140px;display:inline-block;margin:4px;font-family:Tajawal,sans-serif;">
-      <div style="font-size:10px;font-weight:800;margin-bottom:4px;">${s.company_name||'يقظ'}</div>
-      <div style="font-size:12px;font-weight:900;">${prod.name}</div>
+      <div style="font-size:10px;font-weight:800;margin-bottom:4px;">${sanitize(s.company_name)||'يقظ'}</div>
+      <div style="font-size:12px;font-weight:900;">${sanitize(prod.name)}</div>
       <div id="bc-${Math.random().toString(36).slice(2)}" data-code="${prod.code}" style="margin:6px 0;"></div>
       <div style="font-size:11px;font-weight:700;color:#1e40af;">${fmtMoney(prod.sell_price)}</div>
       <div style="font-size:10px;color:#64748b;">${prod.code}</div>
@@ -11070,6 +11070,18 @@ function sanitize(str) {
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#x27;')
     .replace(/\//g,'&#x2F;');
+}
+
+// Escape a value for safe embedding inside a single-quoted JS string literal
+// within an inline HTML event-handler attribute, e.g. onclick="fn('${escJsAttr(x)}')"
+function escJsAttr(str) {
+  if(!str) return '';
+  return String(str)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
 }
 
 // Login attempt rate limiting
@@ -11218,12 +11230,12 @@ function exportVATReportPDF() {
   const period = periodLabels[reportPeriod]||'';
 
   const invRows = d.invs.map(i=>`<tr>
-    <td>${i.invoice_no}</td><td>${fmtDate(i.created_at)}</td><td>${i.customer_name}</td>
+    <td>${i.invoice_no}</td><td>${fmtDate(i.created_at)}</td><td>${sanitize(i.customer_name)}</td>
     <td>${Number(i.subtotal).toFixed(2)}</td><td style="color:#16a34a;">${Number(i.vat_total).toFixed(2)}</td>
     <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
   </tr>`).join('');
   const purRows = d.purchs.filter(p=>p.deductible!==false).map(p=>`<tr>
-    <td>${p.vendor}</td><td>${fmtDate(p.created_at)}</td><td>${p.description||p.category}</td>
+    <td>${sanitize(p.vendor)}</td><td>${fmtDate(p.created_at)}</td><td>${sanitize(p.description||p.category)}</td>
     <td>${Number(p.amount).toFixed(2)}</td><td style="color:#dc2626;">${Number(p.vat).toFixed(2)}</td>
   </tr>`).join('');
 
@@ -11231,7 +11243,7 @@ function exportVATReportPDF() {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>تقرير الضريبة</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
     <div><div class="rpt-title">تقرير ضريبة القيمة المضافة</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
@@ -11278,7 +11290,7 @@ function exportIncomeStatementPDF() {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>قائمة الدخل</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
     <div><div class="rpt-title">قائمة الدخل — بيان الأرباح والخسائر</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <table><thead><tr><th>البند</th><th style="text-align:end;">المبلغ (ر.س)</th></tr></thead>
@@ -11299,7 +11311,7 @@ function exportPayrollPDF() {
   const month = now.toLocaleDateString('ar-SA-u-nu-latn',{month:'long',year:'numeric'});
   const totalSalaries = emps.filter(e=>e.status==='active').reduce((s,e)=>s+e.salary,0);
   const rows = emps.filter(e=>e.status==='active').map((e,i)=>`<tr>
-    <td>${i+1}</td><td style="font-weight:700;">${e.name}</td><td>${e.position}</td>
+    <td>${i+1}</td><td style="font-weight:700;">${sanitize(e.name)}</td><td>${sanitize(e.position)}</td>
     <td>${fmtDate(e.start_date)}</td>
     <td style="font-weight:900;color:#1e40af;">${Number(e.salary).toFixed(2)}</td>
     <td style="color:#64748b;font-size:11px;">_________________</td>
@@ -11308,7 +11320,7 @@ function exportPayrollPDF() {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف الرواتب</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">السجل التجاري: ${s.cr_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">السجل التجاري: ${s.cr_number||'-'}</div></div>
     <div><div class="rpt-title">كشف الرواتب</div><div class="rpt-date">شهر: ${month}</div></div>
   </div>
   <table>
@@ -11457,10 +11469,10 @@ function renderPartyStatementList(c, kind) {
     <thead><tr><th>${lang==='ar'?'الاسم':'Name'}</th><th>${lang==='ar'?'الجوال':'Phone'}</th><th>${lang==='ar'?'الرصيد الحالي':'Current Balance'}</th><th></th></tr></thead>
     <tbody>${list.length===0?`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا يوجد':'None'}</td></tr>`:
       list.map(p=>`<tr>
-        <td style="font-weight:700;">${p.name}</td>
-        <td>${p.phone||'-'}</td>
+        <td style="font-weight:700;">${sanitize(p.name)}</td>
+        <td>${sanitize(p.phone)||'-'}</td>
         <td style="font-weight:700;color:${(p.balance||0)>0?'var(--danger)':'var(--success)'};">${fmtMoney(p.balance||0)}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty='${p.name.replace(/'/g,"\\'")}';renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
+        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty='${escJsAttr(p.name)}';renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
       </tr>`).join('')}
     </tbody>
   </table></div></div>`;
@@ -11478,8 +11490,8 @@ function renderPartyStatementDetail(c, partyName, kind) {
     <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="stmtSelectedParty=null;renderStmtContent()">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
     <div class="card" style="margin-bottom:14px;"><div class="card-pad">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-        <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${partyName}</div></div>
-        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF(getDB().customers.find(c=>c.name===\''+partyName.replace(/'/g,"\\'")+'\').id)':'exportSupplierStatementPDF(\''+partyName.replace(/'/g,"\\'")+'\')'}">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
+        <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${sanitize(partyName)}</div></div>
+        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF(getDB().customers.find(c=>c.name===\''+escJsAttr(partyName)+'\').id)':'exportSupplierStatementPDF(\''+escJsAttr(partyName)+'\')'}">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
       </div>
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
         <div class="stat-card"><div class="stat-label">${lang==='ar'?'عدد الفواتير':'Invoice Count'}</div><div class="stat-value">${st.txCount}</div></div>
@@ -11493,9 +11505,9 @@ function renderPartyStatementDetail(c, partyName, kind) {
       <tbody>${st.events.length===0?`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد معاملات':'No transactions'}</td></tr>`:
         st.events.map(e=>`<tr>
           <td style="font-size:12px;">${fmtDate(e.date)}</td>
-          <td>${e.desc}</td>
-          <td>${e.type}</td>
-          <td>${e.method?`<span class="badge badge-blue">${e.method}</span>`:'-'}</td>
+          <td>${sanitize(e.desc)}</td>
+          <td>${sanitize(e.type)}</td>
+          <td>${e.method?`<span class="badge badge-blue">${sanitize(e.method)}</span>`:'-'}</td>
           <td style="color:var(--danger);font-weight:700;">${e.debit?fmtMoney(e.debit):''}</td>
           <td style="color:var(--success);font-weight:700;">${e.credit?fmtMoney(e.credit):''}</td>
           <td style="font-weight:800;">${fmtMoney(e.balance)}</td>
@@ -11548,7 +11560,7 @@ function renderBankStatementView(c) {
         <tbody>${st.shifts.length===0?`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد ورديات مغلقة بهذي الفترة':'No closed shifts in this period'}</td></tr>`:
           st.shifts.map(s=>`<tr>
             <td>${fmtDate(s.date)}</td>
-            <td>${s.full_name||s.username}</td>
+            <td>${sanitize(s.full_name||s.username)}</td>
             <td style="font-size:12px;">${new Date(s.start_time).toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})} → ${new Date(s.end_time).toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})}</td>
             <td style="font-weight:800;color:var(--primary);">${fmtMoney(s.sales_card||0)}</td>
           </tr>`).join('')}
@@ -11563,8 +11575,8 @@ function renderBankStatementView(c) {
         <tbody>${st.rows.length===0?`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد حركات':'No movements'}</td></tr>`:
           st.rows.map(r=>`<tr>
             <td style="font-size:12px;">${fmtDate(r.date)}</td>
-            <td>${r.description||''}</td>
-            <td><span class="badge badge-blue">${r.method}</span></td>
+            <td>${sanitize(r.description)}</td>
+            <td><span class="badge badge-blue">${sanitize(r.method)}</span></td>
             <td style="font-weight:700;color:${r.type==='in'?'var(--success)':'var(--danger)'};">${r.type==='in'?'+':'-'}${fmtMoney(r.amount)}</td>
             <td style="font-weight:800;">${fmtMoney(r.balance)}</td>
           </tr>`).join('')}
@@ -11581,7 +11593,7 @@ function exportCustomerStatementPDF(customerId) {
   if(!customer) { showToast('العميل غير موجود','error'); return; }
   const now = new Date();
   const st = computePartyStatement(customer.name, 'customer');
-  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.ref||''}</td><td>${e.desc}</td><td>${e.method||'-'}</td>
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${sanitize(e.ref)}</td><td>${sanitize(e.desc)}</td><td>${sanitize(e.method)||'-'}</td>
     <td style="color:#dc2626;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
   const finalBalance = st.finalBalance;
@@ -11590,11 +11602,11 @@ function exportCustomerStatementPDF(customerId) {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف حساب</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${sanitize(s.vat_number)||'-'}</div></div>
     <div><div class="rpt-title">كشف حساب عميل</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
-    <div><div style="font-weight:900;font-size:16px;">${customer.name}</div><div style="font-size:12px;color:#64748b;">${customer.phone||''}</div>${customer.vat_num?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${customer.vat_num}</div>`:''}</div>
+    <div><div style="font-weight:900;font-size:16px;">${sanitize(customer.name)}</div><div style="font-size:12px;color:#64748b;">${sanitize(customer.phone)}</div>${customer.vat_num?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(customer.vat_num)}</div>`:''}</div>
     <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">الرصيد المستحق</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>
@@ -11613,7 +11625,7 @@ function exportSupplierStatementPDF(supplierName) {
   if(!supplier) { showToast('المورد غير موجود','error'); return; }
   const now = new Date();
   const st = computePartyStatement(supplierName, 'supplier');
-  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${e.desc}</td><td>${e.type}</td><td>${e.method||'-'}</td>
+  const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${sanitize(e.desc)}</td><td>${sanitize(e.type)}</td><td>${sanitize(e.method)||'-'}</td>
     <td style="color:#dc2626;font-weight:700;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
   const finalBalance = st.finalBalance;
@@ -11621,11 +11633,11 @@ function exportSupplierStatementPDF(supplierName) {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>كشف مورد</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${s.company_name||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${sanitize(s.vat_number)||'-'}</div></div>
     <div><div class="rpt-title">كشف حساب مورد</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px;">
-    <div><div style="font-weight:900;font-size:16px;">${supplier.name}</div><div style="font-size:12px;color:#64748b;">${supplier.phone||''}</div></div>
+    <div><div style="font-weight:900;font-size:16px;">${sanitize(supplier.name)}</div><div style="font-size:12px;color:#64748b;">${sanitize(supplier.phone)}</div></div>
     <div style="text-align:end;"><div style="font-size:12px;color:#64748b;">المستحق للمورد</div><div style="font-size:22px;font-weight:900;color:${finalBalance>0?'#dc2626':'#16a34a'};">${Number(finalBalance).toFixed(2)}</div></div>
   </div>
   <table>

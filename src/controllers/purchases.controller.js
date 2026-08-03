@@ -73,6 +73,14 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'المبلغ أو البنود مطلوبة' });
     }
 
+    if (supplier_id) {
+      const { rows: [supRow] } = await client.query(
+        `SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`,
+        [supplier_id, company_id]
+      );
+      if (!supRow) return res.status(404).json({ success: false, message: 'المورد غير موجود' });
+    }
+
     const baseAmount = parseFloat(amount || 0);
     const vatAmount  = parseFloat(vat_amount || baseAmount * 0.15);
     const total      = baseAmount + vatAmount;
@@ -266,8 +274,10 @@ exports.addPayment = async (req, res, next) => {
 
     if (account_id) {
       const { rows: [acct] } = await client.query(
-        `SELECT balance FROM treasury_accounts WHERE id = $1 FOR UPDATE`, [account_id]
+        `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+        [account_id, req.user.company_id]
       );
+      if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
       const newBal = parseFloat(acct.balance) - paying;
       await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, account_id]);
       await client.query(`

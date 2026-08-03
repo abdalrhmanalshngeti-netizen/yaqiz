@@ -232,7 +232,8 @@ exports.createVoucher = async (req, res, next) => {
 
     // تحديث رصيد الخزينة
     const { rows: [acct] } = await client.query(
-      `SELECT balance FROM treasury_accounts WHERE id = $1 FOR UPDATE`, [account_id]
+      `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+      [account_id, req.user.company_id]
     );
     if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
 
@@ -263,9 +264,15 @@ exports.createVoucher = async (req, res, next) => {
 
     // تحديث رصيد الطرف
     if (party_id && party_type === 'customer' && type === 'receipt') {
-      await client.query(`UPDATE customers SET balance = balance - $1 WHERE id = $2`, [amount, party_id]);
+      await client.query(
+        `UPDATE customers SET balance = balance - $1 WHERE id = $2 AND company_id = $3`,
+        [amount, party_id, req.user.company_id]
+      );
     } else if (party_id && party_type === 'supplier' && type === 'payment') {
-      await client.query(`UPDATE suppliers SET balance = balance - $1 WHERE id = $2`, [amount, party_id]);
+      await client.query(
+        `UPDATE suppliers SET balance = balance - $1 WHERE id = $2 AND company_id = $3`,
+        [amount, party_id, req.user.company_id]
+      );
     }
 
     await client.query('COMMIT');
