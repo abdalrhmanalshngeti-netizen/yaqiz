@@ -109,6 +109,8 @@ exports.companies = async (req, res, next) => {
       SELECT
         c.id, c.name, c.vat_number, c.status, c.plan,
         c.contact_email, c.contact_phone, c.city, c.created_at,
+        c.subscription_expires_at,
+        EXISTS(SELECT 1 FROM subscriptions s WHERE s.company_id = c.id) AS has_paid,
         COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
         COUNT(DISTINCT i.id)::int  AS invoice_count,
         COALESCE(SUM(i.grand_total), 0)::numeric AS total_revenue,
@@ -188,6 +190,9 @@ exports.costAnalysis = async (req, res, next) => {
     const { rows } = await db.query(`
       SELECT
         c.id, c.name, c.status, c.plan, c.created_at,
+        c.contact_email, c.contact_phone, c.vat_number, c.city,
+        c.subscription_expires_at,
+        EXISTS(SELECT 1 FROM subscriptions s WHERE s.company_id = c.id) AS has_paid,
         COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
         COUNT(DISTINCT i.id)::int AS invoice_count,
         COALESCE(SUM(i.grand_total), 0)::numeric AS total_revenue
@@ -291,9 +296,9 @@ exports.getPlans = async (req, res, next) => {
       ORDER BY c.created_at DESC
     `);
 
-    const plans = { trial: [], basic: [], growth: [], pro: [] };
+    const plans = { basic: [], growth: [], pro: [] };
     rows.forEach(r => {
-      const key = r.plan || 'trial';
+      const key = r.plan || 'basic';
       (plans[key] || (plans[key] = [])).push(r);
     });
 
@@ -305,7 +310,7 @@ exports.getPlans = async (req, res, next) => {
 exports.setCompanyPlan = async (req, res, next) => {
   try {
     const { plan, expires_at } = req.body;
-    const validPlans = ['trial', 'basic', 'growth', 'pro'];
+    const validPlans = ['basic', 'growth', 'pro'];
     if (!validPlans.includes(plan)) {
       return res.status(400).json({ success: false, message: 'باقة غير صالحة' });
     }

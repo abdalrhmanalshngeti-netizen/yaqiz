@@ -53,11 +53,10 @@ exports.register = async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'اسم المستخدم مستخدم مسبقاً' });
     }
 
-    // 1. إنشاء الشركة
-    // basic plan never expires — only paid plans get a 30-day trial window
+    // 1. إنشاء الشركة — كل الباقات (أساسية/نمو/احترافية) تبدأ بتجربة 30 يوم
     const { rows: [company] } = await client.query(`
       INSERT INTO companies (name, vat_number, cr_number, address, city, contact_email, contact_phone, status, plan, subscription_expires_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8::varchar, CASE WHEN $8::varchar = 'basic' THEN NULL ELSE NOW() + INTERVAL '30 days' END)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8::varchar, NOW() + INTERVAL '30 days')
       RETURNING *
     `, [company_name, vat_number||null, cr_number||null, address||null, city||null,
         contact_email||null, contact_phone||null, plan]);

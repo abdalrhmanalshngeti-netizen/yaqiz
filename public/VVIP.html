@@ -955,16 +955,18 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  basic:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
-  growth: ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
-  pro:    ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
+  basic:   ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
+  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
+  expired: ['settings'],
 };
 
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
-  basic:  [],
-  growth: ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant'],
-  pro:    ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
+  basic:   [],
+  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant'],
+  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
+  expired: [],
 };
 
 function getCurrentPlan() {
@@ -972,9 +974,9 @@ function getCurrentPlan() {
   let plan = db.settings?.plan || 'basic';
   // normalize legacy plan names
   if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
-  // if subscription expired on a paid plan → drop to basic
+  // if the trial/subscription period ended on any plan (including basic) → locked until renewed
   const exp = db.settings?.plan_expires_at;
-  if (plan !== 'basic' && exp && new Date(exp) < new Date()) plan = 'basic';
+  if (exp && new Date(exp) < new Date()) plan = 'expired';
   return plan;
 }
 
@@ -986,7 +988,27 @@ function getTrialDaysLeft() {
 }
 
 function hasPlanPage(pageId) {
-  return (PLAN_PAGES[getCurrentPlan()] || PLAN_PAGES.basic).includes(pageId);
+  const plan = getCurrentPlan();
+  // إذا انتهت الفترة المجانية: المالك يُحوَّل لصفحة الاشتراك فقط، أما بقية المستخدمين
+  // فيستمرون بتصفح صفحاتهم المعتادة (بدون تعديل — التعديل ممنوع من السيرفر والدوال المحلية)
+  if (plan === 'expired' && currentUser?.role !== 'owner') {
+    let storedPlan = getDB().settings?.plan || 'basic';
+    if (storedPlan === 'trial' || storedPlan === 'free' || storedPlan === 'starter') storedPlan = 'basic';
+    return (PLAN_PAGES[storedPlan] || PLAN_PAGES.basic).includes(pageId);
+  }
+  return (PLAN_PAGES[plan] || PLAN_PAGES.basic).includes(pageId);
+}
+
+// يمنع أي عملية حفظ/تعديل محلية عندما تنتهي الفترة المجانية لغير المالك
+// (المالك يُحوَّل تلقائياً لصفحة الاشتراك ولا يصل لهذه النماذج أصلاً)
+function blockedByExpiredSubscription() {
+  if (currentUser?.role === 'owner') return false;
+  if (getCurrentPlan() !== 'expired') return false;
+  showToast(lang==='ar'
+    ? '⚠️ انتهت الفترة المجانية للشركة — تواصل مع مالك الحساب لتفعيل الاشتراك. لا يمكن حفظ أي تغييرات حالياً.'
+    : '⚠️ Company trial has ended — contact the account owner to subscribe. Changes cannot be saved right now.',
+    'error');
+  return true;
 }
 
 function hasPlanFeature(feat) {
@@ -1087,15 +1109,17 @@ function renderShell() {
       </header>
       ${(()=>{
         const _dl = getTrialDaysLeft();
-        if(_dl===null || getCurrentPlan()==='basic') return '';
+        if(_dl===null || !!getDB().settings?.has_paid_subscription) return '';
         if(_dl > 0 && _dl <= 30) return `<div style="background:${_dl<=7?'#fef2f2':'#fffbeb'};border-bottom:1.5px solid ${_dl<=7?'#ef4444':'#f59e0b'};padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:${_dl<=7?'#dc2626':'#d97706'};">
           <span>${_dl<=7?'🔴':'⏳'}</span>
-          <span>${lang==='ar'?`تجربتك تنتهي خلال ${_dl} يوم${_dl>1?'':'ًا'} — تواصل مع فريق قيمة لتفعيل اشتراكك`:`Your trial expires in ${_dl} day${_dl>1?'s':''} — contact Qeema team to activate`}</span>
+          <span>${lang==='ar'?`تجربتك تنتهي خلال ${_dl} يوم${_dl>1?'':'ًا'} — اشترك الآن لتفعيل اشتراكك`:`Your trial expires in ${_dl} day${_dl>1?'s':''} — subscribe now to activate`}</span>
         </div>`;
-        if(_dl <= 0) return `<div style="background:#fef2f2;border-bottom:1.5px solid #ef4444;padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#dc2626;">
+        if(_dl <= 0) { const _isOwner = currentUser?.role==='owner'; return `<div style="background:#fef2f2;border-bottom:1.5px solid #ef4444;padding:7px 20px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#dc2626;">
           <span>⚠️</span>
-          <span>${lang==='ar'?'انتهت فترة التجربة — تواصل مع فريق قيمة لتفعيل اشتراكك':'Trial expired — contact Qeema team to activate your subscription'}</span>
-        </div>`;
+          <span>${lang==='ar'
+            ? (_isOwner ? 'انتهت فترة التجربة — اشترك الآن للمتابعة' : 'انتهت الفترة المجانية للشركة — تواصل مع مالك الحساب لتفعيل الاشتراك. لن يتم حفظ أي تغييرات حتى ذلك الحين.')
+            : (_isOwner ? 'Trial expired — subscribe now to continue' : "Company's trial has ended — contact the account owner to subscribe. Changes won't be saved until then.")}</span>
+        </div>`; }
         return '';
       })()}
       <main class="content" id="page-content"></main>
@@ -1910,7 +1934,7 @@ function renderPage() {
   const c = el('page-content');
   if(!c) return;
   // منع الوصول لصفحات خارج الباقة
-  if(!hasPlanPage(currentPage)) { currentPage='dashboard'; }
+  if(!hasPlanPage(currentPage)) { currentPage = (getCurrentPlan()==='expired' && currentUser?.role==='owner') ? 'settings' : 'dashboard'; }
   switch(currentPage) {
     case 'pos': renderPOSPage(c); break;
     case 'dashboard': renderDashboard(c); break;
@@ -2455,6 +2479,7 @@ function updatePOSTotals() {
 }
 
 function doCheckout() {
+  if (blockedByExpiredSubscription()) return;
   if(cart.length===0){showToast(lang==='ar'?'السلة فارغة':'Cart empty','error');return;}
   const db=getDB();
   const subtotal=cart.reduce((s,i)=>s+i.qty*i.price,0);
@@ -3117,6 +3142,7 @@ function quickAddCustomerFromInvoice() {
 }
 
 function saveQuickCustomer() {
+  if (blockedByExpiredSubscription()) return;
   const name = el('qc-name')?.value?.trim();
   if(!name){showToast(lang==='ar'?'الاسم مطلوب':'Name required','error');return;}
   const db=getDB();
@@ -3159,6 +3185,7 @@ function quickAddProductFromInvoice(prefill) {
 }
 
 function saveQuickProduct() {
+  if (blockedByExpiredSubscription()) return;
   const name = el('qp-name')?.value?.trim();
   const sell = parseFloat(el('qp-sell')?.value||0);
   if(!name||!sell){showToast(lang==='ar'?'الاسم وسعر البيع مطلوبان':'Name and price required','error');return;}
@@ -3309,6 +3336,7 @@ function calcNewInvTotals(){
 }
 
 function saveNewInvoice(printAfter=false) {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   if(!el('ni-customer')?.value){showToast(lang==='ar'?'العميل مطلوب':'Customer required','error');return;}
   if(newInvItems.length===0){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
@@ -3987,6 +4015,7 @@ function updateGPRemaining() {
 }
 
 function saveGoodsPurchase() {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   if(!el('gp-vendor')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
   if(!_goodsItems.length){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
@@ -4234,6 +4263,7 @@ function calcPurchVat() {
 }
 
 function savePurchase(purchase_type) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const amount = Number(el('p-amount').value||0);
   if(!el('p-vendor').value){showToast(lang==='ar'?'أدخل اسم الجهة':'Enter payee name','error');return;}
@@ -4548,6 +4578,7 @@ function startBarcodeScan() {
 }
 
 function saveProduct(id) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
 
   const autoOn = el('pr-auto')?.checked || false;
@@ -4753,6 +4784,7 @@ function showAddEntity(type) {
 }
 
 function saveEntity(type) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const isCustomer = type==='customer';
   const data = { id:nextId(db,type), name:el('ent-name').value, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
@@ -4837,6 +4869,7 @@ function showTreasuryMove(type) {
 }
 
 function saveTreasuryMove(type) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
@@ -5059,6 +5092,7 @@ function selectAccMainType(key) {
 }
 
 function saveAccount() {
+  if (blockedByExpiredSubscription()) return;
   const db      = getDB();
   const code    = (el('ac-code')?.value||'').trim();
   const name    = (el('ac-name')?.value||'').trim();
@@ -6053,6 +6087,7 @@ function setBankReconPeriod() {
 }
 
 function saveBankBalance() {
+  if (blockedByExpiredSubscription()) return;
   const val=Number(el('bank-bal-input')?.value||0);
   const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
   saved.bankNetworkTotal=val; localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
@@ -6083,6 +6118,7 @@ function addBankAdjustment() {
 }
 
 function saveBankAdj() {
+  if (blockedByExpiredSubscription()) return;
   const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
   const desc=el('ba-desc')?.value; const amount=Number(el('ba-amount')?.value||0);
   const date=el('ba-date')?.value || new Date().toISOString().slice(0,10);
@@ -6335,6 +6371,7 @@ function updatePermCount() {
 }
 
 function saveUser(id) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const username = (el('u-username')?.value||'').trim();
   const password = el('u-password')?.value||'';
@@ -6562,6 +6599,7 @@ function showEmployeeModal(id) {
 }
 
 function saveEmployee(id) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const data = { name:el('em-name').value, position:el('em-pos').value, salary:Number(el('em-salary').value||0), phone:el('em-phone').value, start_date:el('em-start').value, status:el('em-status').value };
   if (!data.name || !data.position) { showToast(lang==='ar'?'الاسم والمسمى مطلوبان':'Name and position required','error'); return; }
@@ -6721,6 +6759,7 @@ function showObligationModal(id) {
 }
 
 function saveObligation(id) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const data = { name:el('ob-name').value, vendor:el('ob-vendor').value, amount:Number(el('ob-amount').value||0), frequency:el('ob-freq').value, category:el('ob-cat').value, next_due:new Date(el('ob-due').value).toISOString(), status:el('ob-status').value };
   if(!data.name){showToast(lang==='ar'?'اسم الالتزام مطلوب':'Name required','error');return;}
@@ -7103,6 +7142,7 @@ function onInvoiceLinkChange() {
 
 
 function saveVoucher(type, printAfter=true) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const amount = Number(el('v-amount').value||0);
   if(!el('v-party').value||!amount){showToast(lang==='ar'?'الاسم والمبلغ مطلوبان':'Party and amount required','error');return;}
@@ -7593,6 +7633,7 @@ function calcReturnVat() {
 
 
 function saveReturn(type) {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   const amount=Number(el('rt-amount').value||0);
   if(!el('rt-party').value||!amount){showToast(lang==='ar'?'البيانات مطلوبة':'Required fields missing','error');return;}
@@ -8057,6 +8098,7 @@ function renderQuoteItems(){
 }
 
 function saveQuote(printAfter=true) {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   if(!el('q-customer').value){showToast(lang==='ar'?'اسم العميل مطلوب':'Customer required','error');return;}
   if(c_quoteItems.length===0){showToast(lang==='ar'?'أضف منتجاً واحداً على الأقل':'Add at least one item','error');return;}
@@ -8350,6 +8392,7 @@ function showStockMoveModal(){
 }
 
 function saveStockMove(){
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   const sel=el('sm-product'); if(!sel?.value){showToast(lang==='ar'?'اختر منتجاً':'Select product','error');return;}
   const opt=sel.options[sel.selectedIndex];
@@ -8850,6 +8893,7 @@ function renderPOItems() {
 }
 
 function savePO() {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   if(!el('po-supplier')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
   if(!window._poItems?.length){showToast(lang==='ar'?'أضف صنفاً':'Add items','error');return;}
@@ -9172,6 +9216,7 @@ function renderJEBalance() {
 }
 
 function saveJournalEntry() {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB();
   if(!el('je-desc')?.value){showToast(lang==='ar'?'البيان مطلوب':'Description required','error');return;}
   const debits=window._jEntries.filter(e=>e.side==='debit').reduce((s,e)=>s+e.amount,0);
@@ -9300,6 +9345,7 @@ function showAddPointsModal() {
 }
 
 function saveManualPoints() {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB(); const cust=el('ap-cust')?.value; const pts=Number(el('ap-pts')?.value||0);
   if(!cust||!pts){showToast(lang==='ar'?'أدخل العميل والنقاط':'Enter customer and points','error');return;}
   if(!db.loyalty_points)db.loyalty_points={};
@@ -10364,12 +10410,14 @@ function renderSettingsGeneral(c) {
         pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499 ريال/شهر'},
       };
       const cur = getCurrentPlan();
-      const p = planMeta[cur] || planMeta.basic;
+      let storedPlan = db.settings?.plan || 'basic';
+      if (storedPlan === 'trial' || storedPlan === 'free' || storedPlan === 'starter') storedPlan = 'basic';
+      const p = planMeta[storedPlan] || planMeta.basic;
       const hasPaid   = !!db.settings?.has_paid_subscription;
-      const daysLeft  = cur === 'basic' ? null : getTrialDaysLeft();
-      const isExpired = daysLeft !== null && daysLeft <= 0;
-      const isTrial   = daysLeft !== null && daysLeft > 0 && !hasPaid;
-      const isPaidActive = daysLeft !== null && daysLeft > 0 && hasPaid;
+      const daysLeft  = getTrialDaysLeft();
+      const isExpired = cur === 'expired';
+      const isTrial   = !isExpired && daysLeft !== null && daysLeft > 0 && !hasPaid;
+      const isPaidActive = !isExpired && daysLeft !== null && daysLeft > 0 && hasPaid;
       const expDate = db.settings?.plan_expires_at ? fmtDate(db.settings.plan_expires_at) : '';
       const expStr = isTrial
         ? ` · ${lang==='ar'?`تجربة مجانية — ${daysLeft} يوم متبقٍ`:`Free trial — ${daysLeft} days left`}`
@@ -10383,16 +10431,16 @@ function renderSettingsGeneral(c) {
             <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:2px;">${lang==='ar'?'باقتك الحالية':'Current Plan'}</div>
             <div style="font-size:20px;font-weight:900;color:${p.color};">${p.label}${isTrial?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">${lang==='ar'?'تجربة':'Trial'}</span>`:''}${isPaidActive?` <span style="font-size:12px;background:${p.color}20;color:${p.color};padding:2px 10px;border-radius:99px;font-weight:700;">✅ ${lang==='ar'?'مشترك':'Subscribed'}</span>`:''}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.desc}${expStr}</div>
-            ${isExpired?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⚠️ ${lang==='ar'?'انتهى اشتراكك — رقّي أو جدّد الآن للمتابعة':'Subscription ended — upgrade or renew to continue'}</div>`:''}
+            ${isExpired?`<div style="color:#dc2626;font-size:13px;font-weight:800;margin-top:6px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">⚠️ ${lang==='ar'?'انتهت فترتك المجانية — يجب الاشتراك الآن لمتابعة استخدام النظام. جميع الصفحات الأخرى مقفلة حتى الاشتراك.':'Your free period has ended — you must subscribe now to keep using the system. All other pages are locked until you subscribe.'}</div>`:''}
             ${isTrial&&daysLeft<=7?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⏳ ${lang==='ar'?`تجربتك تنتهي خلال ${daysLeft} أيام!`:`Trial ends in ${daysLeft} days!`}</div>`:''}
             <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="showSubscriptionModal()">🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</button>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${Object.entries(planMeta).map(([k,v])=>`
               <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
-                <span style="color:${k===cur?v.color:'var(--text-muted)'};">${v.icon}</span>
-                <span style="font-weight:${k===cur?'800':'400'};color:${k===cur?v.color:'var(--text-muted)'};">${v.label}</span>
-                ${k===cur?`<span style="background:${v.color};color:#fff;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">✓</span>`:''}
+                <span style="color:${k===storedPlan?v.color:'var(--text-muted)'};">${v.icon}</span>
+                <span style="font-weight:${k===storedPlan?'800':'400'};color:${k===storedPlan?v.color:'var(--text-muted)'};">${v.label}</span>
+                ${k===storedPlan?`<span style="background:${v.color};color:#fff;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">✓</span>`:''}
               </div>`).join('')}
           </div>
         </div>
@@ -10569,6 +10617,7 @@ async function paySubscription() {
 }
 
 function saveSettings() {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const company_name = el('s-name')?.value||'';
   const vat_number   = el('s-vat')?.value||'';
@@ -10726,6 +10775,7 @@ function quickReceipt(invoiceId) {
 }
 
 function saveQuickReceipt(invoiceId, printAfter=true) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const inv = db.invoices.find(i=>i.id===invoiceId);
   if(!inv) return;
@@ -10840,6 +10890,7 @@ function quickPayPurchase(purchaseId) {
 }
 
 function saveQuickPayPurchase(purchaseId) {
+  if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const p = db.purchases.find(x=>x.id===purchaseId);
   if(!p) return;
