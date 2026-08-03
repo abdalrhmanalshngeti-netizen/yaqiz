@@ -1,5 +1,25 @@
 const db = require('../config/db');
 
+// طرق الدفع التي تُقيَّد على الحساب البنكي بدل الصندوق النقدي
+const BANK_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
+
+// يختار حساب الخزينة المناسب (كاش/بنك) حسب طريقة الدفع، مع رجوع آمن للحساب الافتراضي
+async function resolveTreasuryAccount(client, companyId, paymentMethod) {
+  const wantsBank = paymentMethod && BANK_METHODS.includes(String(paymentMethod).trim());
+  if (wantsBank) {
+    const { rows: [bankAcct] } = await client.query(
+      `SELECT * FROM treasury_accounts WHERE company_id = $1 AND type = 'bank' AND is_active = true ORDER BY id LIMIT 1`,
+      [companyId]
+    );
+    if (bankAcct) return bankAcct;
+  }
+  const { rows: [defaultAcct] } = await client.query(
+    `SELECT * FROM treasury_accounts WHERE company_id = $1 AND is_default = true LIMIT 1`,
+    [companyId]
+  );
+  return defaultAcct;
+}
+
 // ── ACCOUNTS ──────────────────────────────────────────────────
 
 exports.listAccounts = async (req, res, next) => {
@@ -121,10 +141,7 @@ exports.addMove = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
     }
 
-    const { rows: [acct] } = await client.query(
-      `SELECT * FROM treasury_accounts WHERE company_id = $1 AND is_default = true LIMIT 1`,
-      [req.user.company_id]
-    );
+    const acct = await resolveTreasuryAccount(client, req.user.company_id, payment_method);
     if (!acct) return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' });
 
     const newBal = type === 'in'

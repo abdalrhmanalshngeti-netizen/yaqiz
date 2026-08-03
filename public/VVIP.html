@@ -964,8 +964,8 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   [],
-  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant'],
-  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant'],
+  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant','bank_statement'],
+  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement'],
   expired: [],
 };
 
@@ -4813,6 +4813,24 @@ function deleteCustomerEntity(id, name) {
 }
 
 // ============ TREASURY ============
+// طرق الدفع التي تُحسب على الحساب البنكي بدل الصندوق النقدي
+const BANK_TREASURY_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
+function isBankTreasuryMethod(method) {
+  return !!method && BANK_TREASURY_METHODS.includes(String(method).trim());
+}
+// يحسب رصيد الصندوق النقدي ورصيد البنك من حركات الخزينة حسب طريقة الدفع
+// (الحركات القديمة بدون طريقة دفع محفوظة تُحتسب على الصندوق النقدي افتراضياً)
+function computeCashBankSplit() {
+  const db = getDB();
+  const moves = db.treasury?.moves || [];
+  let cash = 0, bank = 0;
+  for (const m of moves) {
+    const amt = m.type === 'in' ? m.amount : -m.amount;
+    if (isBankTreasuryMethod(m.method)) bank += amt; else cash += amt;
+  }
+  return { cash: Math.round(cash*100)/100, bank: Math.round(bank*100)/100 };
+}
+
 function renderTreasury(c) {
   const db = getDB();
   c.innerHTML = `
@@ -4824,11 +4842,14 @@ function renderTreasury(c) {
         <button class="btn btn-danger" onclick="showTreasuryMove('out')">${icon('arrow-up',16)} ${t('withdraw')}</button>
       </div>`:''}
     </div>
+    ${(()=>{ const split = computeCashBankSplit(); return `
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(db.treasury.balance)}</div></div>
+      <div class="stat-card"><div class="stat-icon">${icon('banknote',22)}</div><div class="stat-label">${lang==='ar'?'الصندوق النقدي':'Cash'}</div><div class="stat-value">${fmtMoney(split.cash)}</div></div>
+      <div class="stat-card"><div class="stat-icon blue">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'الحساب البنكي':'Bank'}</div><div class="stat-value">${fmtMoney(split.bank)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الوارد':'Total In'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0))}</div></div>
       <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الصادر':'Total Out'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0))}</div></div>
-    </div>
+    </div>`; })()}
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('date')}</th><th>${t('type')}</th><th>${t('description')}</th><th>${t('reference')}</th><th>${t('amount')}</th></tr></thead>
       <tbody>${[...db.treasury.moves].map(m=>`<tr>
@@ -6789,8 +6810,16 @@ function payObligation(id) {
           <div style="color:var(--text-muted);font-size:12px;margin-top:3px;">${sanitize(o.vendor||o.category)} • ${sanitize(o.frequency)}</div>
           <div style="font-size:22px;font-weight:900;color:var(--primary);margin-top:6px;">${fmtMoney(o.amount)}</div>
         </div>
+        <div><label class="form-label">${lang==='ar'?'طريقة الدفع':'Payment Method'}</label>
+          <select class="select" id="ob-pay-method">
+            <option value="نقدي">${lang==='ar'?'نقدي':'Cash'}</option>
+            <option value="شبكة">${lang==='ar'?'شبكة':'Card'}</option>
+            <option value="تحويل بنكي">${lang==='ar'?'تحويل بنكي':'Bank Transfer'}</option>
+            <option value="شيك">${lang==='ar'?'شيك':'Cheque'}</option>
+          </select>
+        </div>
         <button class="btn btn-primary btn-full" style="padding:16px;font-size:15px;gap:10px;"
-          onclick="confirmObligationPayment(${id},'full',${o.amount})">
+          onclick="confirmObligationPayment(${id},'full',${o.amount},el('ob-pay-method').value)">
           ✅ ${lang==='ar'?'سداد كامل':'Full Payment'} — ${fmtMoney(o.amount)}
         </button>
         <div style="border:1px solid var(--border);border-radius:12px;padding:14px;">
@@ -6799,7 +6828,7 @@ function payObligation(id) {
             <input class="input" type="number" id="ob-partial-amt" min="1" max="${o.amount}"
               placeholder="${lang==='ar'?'المبلغ المسدَّد':'Amount paid'}" style="flex:1;" />
             <button class="btn btn-outline" style="white-space:nowrap;"
-              onclick="confirmObligationPayment(${id},'partial',Number(el('ob-partial-amt').value||0))">
+              onclick="confirmObligationPayment(${id},'partial',Number(el('ob-partial-amt').value||0),el('ob-pay-method').value)">
               ${lang==='ar'?'تأكيد':'Confirm'}
             </button>
           </div>
@@ -6810,8 +6839,9 @@ function payObligation(id) {
   refreshIcons();
 }
 
-function confirmObligationPayment(id, type, amount) {
+function confirmObligationPayment(id, type, amount, method) {
   amount = Math.round(parseFloat(amount)*100)/100;
+  method = method || 'نقدي';
   if(!amount||amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter valid amount','error');return;}
   const db=getDB(); const o=db.obligations.find(x=>x.id===id); if(!o)return;
 
@@ -6822,7 +6852,7 @@ function confirmObligationPayment(id, type, amount) {
   db.treasury.moves.unshift({
     id:nextId(db,'treasury'),type:'out',amount,
     description:`${lang==='ar'?'سداد التزام':'Obligation payment'} ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}: ${o.name}`,
-    reference:`OBL-${id}`,date:new Date().toISOString()
+    reference:`OBL-${id}`,date:new Date().toISOString(),method
   });
 
   // ── تسجيل مصروف OPEX ─────────────────────────────────────
@@ -6834,7 +6864,7 @@ function confirmObligationPayment(id, type, amount) {
     category:o.category, purchase_type:'opex',
     amount:Math.round(amount/1.15*100)/100,
     vat:Math.round((amount-amount/1.15)*100)/100,
-    total:amount, payment_method:'نقدي', paid_amount:amount,
+    total:amount, payment_method:method, paid_amount:amount,
     supplier_ref:`OBL-${id}`, notes:'',
     created_at:new Date().toISOString(), items:[]
   });
@@ -8917,6 +8947,7 @@ function convertPOtoPurchase(id) {
   const vat=po.total*0.15;
   const p={id:nextId(db,'purchase'),vendor:po.supplier,description:`${lang==='ar'?'استلام':'Received'} ${po.po_no}`,
     category:'بضاعة',purchase_type:'goods',amount:po.total,vat,total:po.total+vat,
+    payment_method:'نقدي',paid_amount:po.total+vat,
     po_ref:po.po_no,created_at:new Date().toISOString()};
   db.purchases.push(p);
   // Update stock for each item
@@ -8934,7 +8965,7 @@ function convertPOtoPurchase(id) {
   // Treasury
   db.treasury.balance-=(po.total+vat);
   db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:po.total+vat,
-    description:`مشتريات: ${po.supplier} — ${po.po_no}`,reference:po.po_no,date:new Date().toISOString()});
+    description:`مشتريات: ${po.supplier} — ${po.po_no}`,reference:po.po_no,date:new Date().toISOString(),method:'نقدي'});
   po.status='مكتمل'; po.received_at=new Date().toISOString();
   saveDB(db);
   logActivity('أوامر شراء',`استلام ${po.po_no} — ${po.supplier}`);
@@ -11493,11 +11524,12 @@ function setStmtMainTab(tab) {
 }
 
 function renderStatements(c) {
+  if (stmtMainTab==='bank' && !hasPlanFeature('bank_statement')) stmtMainTab = 'customers';
   c.innerHTML = `<div>
     <div class="tabs" style="margin-bottom:14px;">
       <button class="tab-btn ${stmtMainTab==='customers'?'active':''}" onclick="setStmtMainTab('customers')">👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>
       <button class="tab-btn ${stmtMainTab==='suppliers'?'active':''}" onclick="setStmtMainTab('suppliers')">🏭 ${lang==='ar'?'كشوفات الموردين':'Supplier Statements'}</button>
-      <button class="tab-btn ${stmtMainTab==='bank'?'active':''}" onclick="setStmtMainTab('bank')">🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>
+      ${hasPlanFeature('bank_statement')?`<button class="tab-btn ${stmtMainTab==='bank'?'active':''}" onclick="setStmtMainTab('bank')">🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>`:''}
     </div>
     <div id="stmt-content"></div>
   </div>`;
@@ -11506,7 +11538,10 @@ function renderStatements(c) {
 
 function renderStmtContent() {
   const mc = el('stmt-content'); if(!mc) return;
-  if (stmtMainTab==='bank') { renderBankStatementView(mc); return; }
+  if (stmtMainTab==='bank') {
+    if (!hasPlanFeature('bank_statement')) { stmtMainTab='customers'; renderStatements(el('report-main-content')); return; }
+    renderBankStatementView(mc); return;
+  }
   if (stmtSelectedParty) { renderPartyStatementDetail(mc, stmtSelectedParty, stmtMainTab==='customers'?'customer':'supplier'); return; }
   renderPartyStatementList(mc, stmtMainTab==='customers'?'customer':'supplier');
   refreshIcons();
@@ -12891,7 +12926,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/suppliers?active=all'),
         apiFetch('GET', '/api/invoices?limit=500'),
         apiFetch('GET', '/api/purchases?limit=500'),
-        apiFetch('GET', '/api/employees'),
+        apiFetch('GET', '/api/employees').catch(() => null),
         apiFetch('GET', '/api/treasury/accounts'),
         apiFetch('GET', '/api/quotes?limit=500'),
         apiFetch('GET', '/api/users').catch(() => null),
@@ -12914,7 +12949,8 @@ async function runAISearchQuery(q) {
         const defaultAcc = treas.data.find(a => a.is_default) || treas.data[0];
         db.treasury = db.treasury || {};
         db.treasury._defaultAccountId = defaultAcc.id;
-        const _srvBal = parseFloat(defaultAcc.balance) || 0;
+        // الرصيد الإجمالي = مجموع كل حسابات الخزينة (الصندوق النقدي + الحساب البنكي...)
+        const _srvBal = treas.data.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
         const _locBal = parseFloat(db.treasury.balance) || 0;
         // استخدم رصيد السيرفر فقط لو أكبر من المحلي (يعني تم تسجيل حركات من جهاز آخر)
         // أو لو الرصيد المحلي صفر (بداية جديدة)

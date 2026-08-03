@@ -80,10 +80,14 @@ exports.register = async (req, res, next) => {
       ON CONFLICT (company_id, key) DO NOTHING
     `, [company.id, company_name]);
 
-    // 4. حساب الصندوق الرئيسي
+    // 4. حساب الصندوق الرئيسي (كاش) + الحساب البنكي — لفصل تحصيلات الشبكة/التحويل عن النقد تلقائياً
     await client.query(`
       INSERT INTO treasury_accounts (company_id, name, type, balance, is_default)
       VALUES ($1,'الصندوق الرئيسي','cash',0,true)
+    `, [company.id]);
+    await client.query(`
+      INSERT INTO treasury_accounts (company_id, name, type, balance, is_default)
+      VALUES ($1,'الحساب البنكي','bank',0,false)
     `, [company.id]);
 
     // 5. تسجيل الحدث في platform_log

@@ -4,6 +4,9 @@ const db     = require('../config/db');
 const SAFE_FIELDS = `id, username, full_name, email, phone, role,
   permissions, pos_access, shift_enabled, active, last_login, created_at`;
 
+// أقصى عدد مستخدمين (الحساب الرئيسي + التابعين) لكل باقة — null يعني بلا حد
+const PLAN_USER_LIMITS = { basic: 4, growth: null, pro: null };
+
 exports.list = async (req, res, next) => {
   try {
     const { rows } = await db.query(
@@ -38,6 +41,22 @@ exports.create = async (req, res, next) => {
     }
     if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير بالإنجليزية' });
+    }
+
+    const { rows: [co] } = await db.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
+    const limit = PLAN_USER_LIMITS[co?.plan];
+    if (limit) {
+      const { rows: [{ count }] } = await db.query(
+        `SELECT COUNT(*)::int AS count FROM users WHERE company_id = $1`,
+        [req.user.company_id]
+      );
+      if (count >= limit) {
+        return res.status(403).json({
+          success: false,
+          code: 'USER_LIMIT_REACHED',
+          message: `باقتك الحالية تسمح بـ ${limit} مستخدمين كحد أقصى (شامل المالك). يرجى الترقية لإضافة المزيد.`
+        });
+      }
     }
 
     const hash = await bcrypt.hash(password, 12);
