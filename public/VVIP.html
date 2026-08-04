@@ -3833,8 +3833,9 @@ let _goodsItems = [];
 let _pendingInventoryItems = [];
 let _pendingMissingProducts = [];
 let _pendingPurchaseId = null;
+let _pendingPOId = null;
 function showAddGoodsPurchase(keepItems) {
-  if (!keepItems) _goodsItems = [];
+  if (!keepItems) { _goodsItems = []; _pendingPOId = null; }
   const db = getDB();
   const goodsCats = ['بضاعة','مواد خام','بضاعة جاهزة','مواد تغليف'];
   const mc = el('modal-container');
@@ -4053,6 +4054,13 @@ function saveGoodsPurchase() {
     created_at:new Date(el('gp-date').value).toISOString()
   };
   db.purchases.push(p);
+
+  // إذا الفاتورة جاية من استلام أمر شراء → اربطها به وعلّمه مكتمل
+  if (_pendingPOId) {
+    const po = (db.purchase_orders||[]).find(x=>x.id===_pendingPOId);
+    if (po) { p.po_ref = po.po_no; po.status = 'مكتمل'; po.received_at = new Date().toISOString(); }
+    _pendingPOId = null;
+  }
 
   // Treasury: deduct only paid amount
   if(paidNow>0){
@@ -8899,7 +8907,7 @@ function renderPurchaseOrders(c) {
             <td><b>${fmtMoney(po.total)}</b></td>
             <td><span class="badge ${po.status==='مكتمل'?'badge-green':po.status==='ملغي'?'badge-red':'badge-amber'}">${po.status}</span></td>
             <td style="display:flex;gap:4px;">
-              ${po.status==='معلق'?`<button class="btn btn-sm btn-primary" onclick="convertPOtoPurchase(${po.id})">${icon('check',13)} ${lang==='ar'?'استلام':'Receive'}</button>`:''}
+              ${po.status==='معلق'?`<button class="btn btn-sm btn-primary" onclick="startPOReceive(${po.id})">${icon('check',13)} ${lang==='ar'?'استلام':'Receive'}</button>`:''}
               ${po.status==='معلق'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="updatePOStatus(${po.id},'ملغي')">${icon('x',13)}</button>`:''}
             </td>
           </tr>`).join('')}
@@ -8986,38 +8994,24 @@ function savePO() {
   showToast(`✅ ${po.po_no}`);closeModal();renderPage();
 }
 
-function convertPOtoPurchase(id) {
+// استلام أمر الشراء: يفتح فورم فاتورة شراء بضاعة الكامل معبّى ببيانات الأمر
+// (بدل تسجيل الفاتورة مباشرة بدون مراجعة، بدون قيد محاسبي، وبدون سعر بيع للأصناف الجديدة)
+function startPOReceive(id) {
   const db=getDB();
   const po=(db.purchase_orders||[]).find(p=>p.id===id); if(!po)return;
-  if(!confirm(lang==='ar'?`تأكيد استلام ${po.po_no} وتحويله لمشتريات؟`:`Confirm receiving ${po.po_no}?`))return;
-  // Create purchase entry
-  const vat=po.total*0.15;
-  const p={id:nextId(db,'purchase'),vendor:po.supplier,description:`${lang==='ar'?'استلام':'Received'} ${po.po_no}`,
-    category:'بضاعة',purchase_type:'goods',amount:po.total,vat,total:po.total+vat,
-    payment_method:'نقدي',paid_amount:po.total+vat,
-    po_ref:po.po_no,created_at:new Date().toISOString()};
-  db.purchases.push(p);
-  // Update stock for each item
-  po.items.forEach(item=>{
-    const prod=db.products.find(x=>x.name===item.name);
-    if(prod){
-      if(!db.stock_moves)db.stock_moves=[];
-      const old=prod.qty; prod.qty+=item.qty;
-      db.stock_moves.push({id:db.nextId.stock_move||1,product_id:prod.id,product_name:prod.name,product_code:prod.code,
-        type:'in',qty:item.qty,balance_before:old,balance_after:prod.qty,
-        reason:`استلام ${po.po_no}`,reference:po.po_no,date:new Date().toISOString()});
-      db.nextId.stock_move=(db.nextId.stock_move||1)+1;
-    }
+
+  _goodsItems = po.items.map(item=>{
+    const prod = db.products.find(x=>x.name.trim().toLowerCase()===item.name.trim().toLowerCase());
+    const price = item.price!=null ? item.price : (item.qty ? item.total/item.qty : 0);
+    const lineTotal = Math.round(item.qty*price*100)/100;
+    return { name:item.name, qty:item.qty, price, line_total:lineTotal,
+      vat:Math.round(lineTotal*0.15*100)/100, product_id: prod?.id||null };
   });
-  // Treasury
-  db.treasury.balance-=(po.total+vat);
-  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:po.total+vat,
-    description:`مشتريات: ${po.supplier} — ${po.po_no}`,reference:po.po_no,date:new Date().toISOString(),method:'نقدي'});
-  po.status='مكتمل'; po.received_at=new Date().toISOString();
-  saveDB(db);
-  logActivity('أوامر شراء',`استلام ${po.po_no} — ${po.supplier}`);
-  showToast(`✅ ${lang==='ar'?'تم الاستلام وتحديث المخزون':'Received & stock updated'}`);
-  renderPage();
+  _pendingPOId = po.id;
+  showAddGoodsPurchase(true);
+  if(el('gp-vendor')) el('gp-vendor').value = po.supplier;
+  if(el('gp-ref'))    el('gp-ref').value    = po.po_no;
+  updateGPTotals();
 }
 
 function updatePOStatus(id,status) {
@@ -9026,53 +9020,67 @@ function updatePOStatus(id,status) {
 }
 
 // ============ BALANCE SHEET ============
+// يُبنى بالكامل من دفتر اليومية (db.journal) — نفس الأصل الذي يبني منه ميزان
+// المراجعة قيوده — بدل حسابات حيّة متفرقة كانت تتجاهل أي رصيد افتتاحي لأصول
+// ثابتة/رأس مال/أرصدة عملاء وموردين غير مرتبطة بفاتورة. أي كود حساب (حتى لو
+// جديد لم يكن معروفاً مسبقاً) يظهر تلقائياً ضمن فئته بحسب أول رقم بالكود
+// (1=أصول، 2=خصوم، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات).
+function journalAccountBalances(db) {
+  const bal = {};
+  (db.journal||[]).forEach(entry=>{
+    (entry.entries||[]).forEach(line=>{
+      const code = line.account_code; if(!code) return;
+      if(!bal[code]) bal[code] = {debit:0, credit:0, name:line.account};
+      bal[code][line.side] = (bal[code][line.side]||0) + (parseFloat(line.amount)||0);
+    });
+  });
+  return bal;
+}
+
 function renderBalanceSheet(c) {
-  const db = getDB();
+  const db  = getDB();
+  const bal = journalAccountBalances(db);
+  const get = code => bal[code] || {debit:0,credit:0};
+  const debitNormal  = code => get(code).debit  - get(code).credit; // أصول/مصروفات
+  const creditNormal = code => get(code).credit - get(code).debit;  // خصوم/حقوق ملكية/إيرادات
+  const codesStarting = d => Object.keys(bal).filter(cd=>cd.startsWith(d));
 
   // ── الأصول ──────────────────────────────────────────────────
-  const cash = parseFloat(db.treasury?.balance||0);
+  const cash        = debitNormal('1100');
+  const receivables = debitNormal('1200');
+  const inventoryVal = debitNormal('1300');
+  const fixedAssets  = debitNormal('1500');
+  // ضريبة القيمة المضافة: لو المدخلات أكثر من المخرجات، الفرق مسترد (أصل)
+  // مو التزام — كان الكود القديم يتجاهله بالكامل (Math.max(0,...) بدون طرف مقابل)
+  const outputVAT  = creditNormal('2200');
+  const inputVAT   = debitNormal('2210');
+  const vatNet      = outputVAT - inputVAT; // موجب = مستحق علينا (التزام)، سالب = مستحق لنا (أصل)
+  const vatPayable   = Math.max(0, vatNet);
+  const vatReceivable = Math.max(0, -vatNet);
 
-  // الذمم المدينة: من الفواتير غير المسددة بالكامل
-  const receivables = db.invoices
-    .filter(i=>['آجل','جزئي'].includes(i.status))
-    .reduce((s,i)=>s+Math.max(0,parseFloat(i.grand_total||0)-parseFloat(i.paid_amount||0)),0);
-
-  // قيمة المخزون بسعر الشراء
-  const inventoryVal = db.products.reduce((s,p)=>s+(parseFloat(p.qty||0)*parseFloat(p.buy_price||0)),0);
-
-  const totalAssets = cash + receivables + inventoryVal;
+  const knownAssetCodes = ['1100','1200','1300','1500'];
+  const otherAssets = codesStarting('1').filter(cd=>!knownAssetCodes.includes(cd)).reduce((s,cd)=>s+debitNormal(cd),0);
+  const totalAssets = cash + receivables + inventoryVal + fixedAssets + vatReceivable + otherAssets;
 
   // ── الخصوم ──────────────────────────────────────────────────
-  // الذمم الدائنة: من المشتريات غير المسددة — نفس منطق الذمم المدينة
-  const accountsPayable = db.purchases
-    .filter(p=>(p.status==='آجل'||p.status==='جزئي'||(parseFloat(p.remaining_amount||0)>0)))
-    .reduce((s,p)=>{
-      const rem = p.remaining_amount!=null
-        ? parseFloat(p.remaining_amount||0)
-        : Math.max(0,parseFloat(p.total||0)-parseFloat(p.paid_amount||0));
-      return s+Math.max(0,rem);
-    },0);
+  const accountsPayable = creditNormal('2100');
+  const obligationsAccrued = creditNormal('2300');
+  const knownLiabCodes = ['2100','2200','2210','2300'];
+  const otherLiab = codesStarting('2').filter(cd=>!knownLiabCodes.includes(cd)).reduce((s,cd)=>s+creditNormal(cd),0);
+  const totalLiab = accountsPayable + vatPayable + obligationsAccrued + otherLiab;
 
-  // ضريبة القيمة المضافة الصافية المستحقة
-  const outputVAT = db.invoices.reduce((s,i)=>s+parseFloat(i.vat_total||0),0);
-  const inputVAT  = db.purchases.reduce((s,p)=>s+parseFloat(p.vat||0),0);
-  const vatPayable = Math.max(0, outputVAT - inputVAT);
-
-  const totalLiab = accountsPayable + vatPayable;
-
-  // ── نتيجة الأعمال (لحساب حقوق الملكية) ──────────────────
-  const salesReturns = (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.base_amount||0),0);
-  const netRevenue = db.invoices.reduce((s,i)=>s+parseFloat(i.subtotal||0),0) - salesReturns;
-  const netCOGS    = db.invoices.reduce((s,i)=>s+parseFloat(i.cogs_total||0),0)
-                       - (db.returns||[]).filter(r=>r.type==='sales').reduce((s,r)=>s+parseFloat(r.cogs_reversal||0),0);
-  const netOPEX    = db.purchases.filter(p=>p.purchase_type==='opex'||(p.category&&p.category!=='بضاعة'&&p.purchase_type!=='goods'))
-                       .reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  // ── نتيجة الأعمال (كل حسابات الإيرادات 4xxx والمصروفات 5xxx) ──
+  const netRevenue = codesStarting('4').reduce((s,cd)=>s+creditNormal(cd),0);
+  const netCOGS    = debitNormal('5100');
+  const netOPEX    = codesStarting('5').filter(cd=>cd!=='5100').reduce((s,cd)=>s+debitNormal(cd),0);
   const grossProfit = netRevenue - netCOGS;
   const netProfit   = grossProfit - netOPEX;
   const isProfit    = netProfit >= 0;
 
-  // حقوق الملكية = أصول − خصوم
-  const equity = totalAssets - totalLiab;
+  // ── حقوق الملكية = رأس المال (وأي حساب حقوق ملكية آخر) + صافي الربح المتراكم ──
+  const capital = creditNormal('3000');
+  const otherEquity = codesStarting('3').filter(cd=>cd!=='3000').reduce((s,cd)=>s+creditNormal(cd),0);
+  const equity = capital + otherEquity + netProfit;
 
   // ── مساعد بناء البطاقات ──────────────────────────────────
   const section = (title, color, items, total, footerHtml='') => `
@@ -9133,6 +9141,9 @@ function renderBalanceSheet(c) {
           {label:lang==='ar'?'النقدية والخزينة':'Cash & Treasury', val:cash, color:'#16a34a'},
           {label:lang==='ar'?'الذمم المدينة (مبالغ لك على العملاء)':'Accounts Receivable', val:receivables, color:receivables>0?'#b45309':'inherit'},
           {label:lang==='ar'?'قيمة المخزون (بسعر التكلفة)':'Inventory at Cost', val:inventoryVal, color:'#1e40af'},
+          ...(fixedAssets ? [{label:lang==='ar'?'الأصول الثابتة':'Fixed Assets', val:fixedAssets, color:'#7c3aed'}] : []),
+          ...(vatReceivable ? [{label:lang==='ar'?'ضريبة قيمة مضافة مستردة':'VAT Receivable', val:vatReceivable, color:'#1e40af'}] : []),
+          ...(otherAssets ? [{label:lang==='ar'?'أصول أخرى':'Other Assets', val:otherAssets, color:'#64748b'}] : []),
         ],totalAssets)}
       </div>
 
@@ -9142,6 +9153,8 @@ function renderBalanceSheet(c) {
         ${section(lang==='ar'?'💳 الخصوم (ما عليك)':'💳 Liabilities','#dc2626',[
           {label:lang==='ar'?'الذمم الدائنة (مستحق للموردين)':'Accounts Payable to Suppliers', val:accountsPayable, color:accountsPayable>0?'#dc2626':'inherit'},
           {label:lang==='ar'?'ضريبة القيمة المضافة المستحقة':'VAT Payable (Net)', val:vatPayable, color:vatPayable>0?'#dc2626':'inherit'},
+          ...(obligationsAccrued ? [{label:lang==='ar'?'التزامات مستحقة':'Accrued Obligations', val:obligationsAccrued, color:'#dc2626'}] : []),
+          ...(otherLiab ? [{label:lang==='ar'?'خصوم أخرى':'Other Liabilities', val:otherLiab, color:'#dc2626'}] : []),
         ],totalLiab)}
 
         <!-- حقوق الملكية + نتيجة الأعمال -->
@@ -9151,6 +9164,11 @@ function renderBalanceSheet(c) {
             <b style="color:#1e40af;font-size:15px;">${fmtMoney(equity)}</b>
           </div>
           <div class="card-pad" style="padding-top:6px;">
+            ${(capital||otherEquity) ? `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+              <span style="color:var(--text-muted);">${lang==='ar'?'رأس المال':'Capital'}</span>
+              <span style="font-weight:700;">${fmtMoney(capital+otherEquity)}</span>
+            </div>` : ''}
             <!-- نتيجة الأعمال -->
             <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">${lang==='ar'?'نتيجة الأعمال:':'Business Result:'}</div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">

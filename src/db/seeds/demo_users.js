@@ -7,7 +7,7 @@ async function seedDemoUsers() {
     const hash = await bcrypt.hash('1234', 12);
 
     const { rows } = await db.query(
-      `SELECT id FROM companies WHERE name LIKE '%قيمة%' LIMIT 1`
+      `SELECT id FROM companies WHERE name LIKE '%يقظ%' LIMIT 1`
     );
     if (!rows.length) { console.error('❌ Company not found'); return; }
     const cid = rows[0].id;

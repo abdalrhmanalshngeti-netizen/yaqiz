@@ -1,15 +1,15 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════
-# إعداد سيرفر Ubuntu للـ Qeema Backend
+# إعداد سيرفر Ubuntu للـ Yaqiz Backend
 # نفّذ كـ root: bash setup-server.sh
 # ═══════════════════════════════════════════════════════════════════
 set -e
 
 DOMAIN="yourdomain.com"
-DB_USER="qeema_user"
+DB_USER="yaqiz_user"
 DB_PASS="CHANGE_ME_STRONG_PASSWORD"
-DB_NAME="qeema_db"
-APP_DIR="/var/www/qeema"
+DB_NAME="yaqiz_db"
+APP_DIR="/var/www/yaqiz"
 
 echo "📦 تحديث الحزم..."
 apt-get update -qq && apt-get upgrade -y -qq
@@ -35,14 +35,14 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 
 echo "📁 إنشاء مجلد التطبيق..."
 mkdir -p $APP_DIR/logs
-mkdir -p /var/www/qeema/public
+mkdir -p /var/www/yaqiz/public
 
 echo ""
 echo "✅ اكتملت متطلبات السيرفر. الخطوات التالية:"
 echo ""
 echo "1. ارفع الملفات:"
-echo "   rsync -avz ./qeema-backend/ root@$DOMAIN:$APP_DIR/"
-echo "   scp ./VVIP.html root@$DOMAIN:/var/www/qeema/public/"
+echo "   rsync -avz ./yaqiz-backend/ root@$DOMAIN:$APP_DIR/"
+echo "   scp ./VVIP.html root@$DOMAIN:/var/www/yaqiz/public/"
 echo ""
 echo "2. على السيرفر:"
 echo "   cd $APP_DIR"
@@ -54,9 +54,9 @@ echo "   pm2 start ecosystem.config.js --env production"
 echo "   pm2 save && pm2 startup"
 echo ""
 echo "3. Nginx:"
-echo "   cp deploy/nginx.conf /etc/nginx/sites-available/qeema"
+echo "   cp deploy/nginx.conf /etc/nginx/sites-available/yaqiz"
 echo "   # عدّل yourdomain.com في الملف"
-echo "   ln -s /etc/nginx/sites-available/qeema /etc/nginx/sites-enabled/"
+echo "   ln -s /etc/nginx/sites-available/yaqiz /etc/nginx/sites-enabled/"
 echo "   nginx -t && systemctl reload nginx"
 echo ""
 echo "4. SSL:"
