@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 const db     = require('../config/db');
 
-const ADMIN_PERMISSIONS = ['tickets', 'customers', 'impersonate'];
+const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate'];
 
 // ── تسجيل دخول المدير العام ─────────────────────────────
 exports.login = async (req, res, next) => {
@@ -188,9 +188,9 @@ exports.setCompanyStatus = async (req, res, next) => {
     await db.query(`UPDATE companies SET status = $1 WHERE id = $2`, [status, req.params.id]);
 
     await db.query(`
-      INSERT INTO platform_log (event_type, company_id, description)
-      VALUES ('status_changed', $1, $2)
-    `, [req.params.id, `تغيير الحالة إلى: ${status}`]);
+      INSERT INTO platform_log (event_type, company_id, description, admin_id)
+      VALUES ('status_changed', $1, $2, $3)
+    `, [req.params.id, `تغيير الحالة إلى: ${status} بواسطة ${req.admin.name || req.admin.email}`, req.admin.sub]);
 
     res.json({ success: true, message: `تم تغيير الحالة إلى ${status}` });
   } catch (err) { next(err); }
@@ -291,9 +291,9 @@ exports.impersonate = async (req, res, next) => {
     `, [code, user.company_id, user.id, user.company_name, actorName, reason]);
 
     await db.query(`
-      INSERT INTO platform_log (event_type, company_id, description)
-      VALUES ('impersonation', $1, $2)
-    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${actorName} — ملاحظة المعاينة: ${reason}`]);
+      INSERT INTO platform_log (event_type, company_id, description, admin_id)
+      VALUES ('impersonation', $1, $2, $3)
+    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${actorName} — ملاحظة المعاينة: ${reason}`, req.admin.sub]);
 
     res.json({ success: true, code, company_name: user.company_name });
   } catch (err) { next(err); }
@@ -351,9 +351,9 @@ exports.setCompanyPlan = async (req, res, next) => {
     }
 
     await db.query(`
-      INSERT INTO platform_log (event_type, company_id, description)
-      VALUES ('plan_changed', $1, $2)
-    `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.email || req.admin.name}`]);
+      INSERT INTO platform_log (event_type, company_id, description, admin_id)
+      VALUES ('plan_changed', $1, $2, $3)
+    `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.email || req.admin.name}`, req.admin.sub]);
 
     res.json({ success: true, message: `تم تغيير الباقة إلى ${plan}` });
   } catch (err) { next(err); }
@@ -538,16 +538,28 @@ exports.updateTicketStatus = async (req, res, next) => {
 exports.listEmployees = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
-      SELECT id, email, full_name, role, permissions, active, last_login, created_at
-      FROM platform_admins ORDER BY created_at
+      SELECT a.id, a.email, a.full_name, a.role, a.permissions, a.active, a.last_login, a.created_at,
+             a.manager_id, m.full_name AS manager_name
+      FROM platform_admins a
+      LEFT JOIN platform_admins m ON m.id = a.manager_id
+      ORDER BY a.created_at
     `);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 };
 
+// يتحقق إن manager_id (لو موجود) يشير لموظف حقيقي نشط، ومو نفس الشخص
+async function resolveManagerId(managerId, selfId) {
+  if (managerId == null || managerId === '') return null;
+  const id = Number(managerId);
+  if (!id || id === selfId) return null;
+  const { rows: [m] } = await db.query(`SELECT id FROM platform_admins WHERE id = $1 AND active = true`, [id]);
+  return m ? id : null;
+}
+
 exports.createEmployee = async (req, res, next) => {
   try {
-    const { email, password, full_name, permissions = [] } = req.body;
+    const { email, password, full_name, permissions = [], manager_id } = req.body;
     if (!email || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'البريد وكلمة المرور والاسم مطلوبة' });
     }
@@ -555,15 +567,15 @@ exports.createEmployee = async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, 12);
     const { rows: [emp] } = await db.query(`
-      INSERT INTO platform_admins (email, password_hash, full_name, role, permissions, created_by)
-      VALUES ($1, $2, $3, 'staff', $4, $5)
-      RETURNING id, email, full_name, role, permissions, active, created_at
-    `, [email.toLowerCase().trim(), hash, full_name, validPerms, req.admin.sub]);
+      INSERT INTO platform_admins (email, password_hash, full_name, role, permissions, created_by, manager_id)
+      VALUES ($1, $2, $3, 'staff', $4, $5, $6)
+      RETURNING id, email, full_name, role, permissions, active, created_at, manager_id
+    `, [email.toLowerCase().trim(), hash, full_name, validPerms, req.admin.sub, await resolveManagerId(manager_id, null)]);
 
     await db.query(`
-      INSERT INTO platform_log (event_type, description)
-      VALUES ('admin_employee_added', $1)
-    `, [`إضافة موظف لوحة إدارة: ${full_name} (${email}) بواسطة ${req.admin.name || req.admin.email}`]);
+      INSERT INTO platform_log (event_type, description, admin_id)
+      VALUES ('admin_employee_added', $1, $2)
+    `, [`إضافة موظف لوحة إدارة: ${full_name} (${email}) بواسطة ${req.admin.name || req.admin.email}`, req.admin.sub]);
 
     res.status(201).json({ success: true, data: emp });
   } catch (err) {
@@ -580,25 +592,136 @@ exports.updateEmployee = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'لا يمكن تعديل حساب المالك' });
     }
 
-    const { full_name, permissions, active } = req.body;
+    const { full_name, permissions, active, manager_id } = req.body;
     const validPerms = Array.isArray(permissions) ? permissions.filter(p => ADMIN_PERMISSIONS.includes(p)) : null;
+    const managerIdResolved = manager_id !== undefined ? await resolveManagerId(manager_id, Number(req.params.id)) : undefined;
 
     const { rows: [emp] } = await db.query(`
       UPDATE platform_admins SET
         full_name  = COALESCE($1, full_name),
         permissions = COALESCE($2, permissions),
         active      = COALESCE($3, active),
+        manager_id  = CASE WHEN $5 THEN $4 ELSE manager_id END,
         revoke_sessions_before = NOW()
-      WHERE id = $4
-      RETURNING id, email, full_name, role, permissions, active, created_at
-    `, [full_name || null, validPerms, typeof active === 'boolean' ? active : null, req.params.id]);
+      WHERE id = $6
+      RETURNING id, email, full_name, role, permissions, active, created_at, manager_id
+    `, [full_name || null, validPerms, typeof active === 'boolean' ? active : null,
+        managerIdResolved ?? null, manager_id !== undefined, req.params.id]);
 
     await db.query(`
-      INSERT INTO platform_log (event_type, description)
-      VALUES ('admin_employee_updated', $1)
-    `, [`تعديل صلاحيات/حالة الموظف #${req.params.id} بواسطة ${req.admin.name || req.admin.email}`]);
+      INSERT INTO platform_log (event_type, description, admin_id)
+      VALUES ('admin_employee_updated', $1, $2)
+    `, [`تعديل صلاحيات/حالة الموظف #${req.params.id} بواسطة ${req.admin.name || req.admin.email}`, req.admin.sub]);
 
     res.json({ success: true, data: emp });
+  } catch (err) { next(err); }
+};
+
+// ── إعادة تعيين كلمة مرور موظف (مالك فقط، بدون الحاجة لكلمة المرور القديمة) ──
+exports.resetEmployeePassword = async (req, res, next) => {
+  try {
+    const { new_password } = req.body;
+    if (!new_password || new_password.length < 6) {
+      return res.status(400).json({ success: false, message: 'كلمة مرور جديدة مطلوبة (6 أحرف على الأقل)' });
+    }
+    const { rows: [target] } = await db.query(`SELECT role FROM platform_admins WHERE id = $1`, [req.params.id]);
+    if (!target) return res.status(404).json({ success: false, message: 'الموظف غير موجود' });
+    if (target.role === 'owner') {
+      return res.status(403).json({ success: false, message: 'لا يمكن تعديل حساب المالك من هنا — استخدم "حسابي"' });
+    }
+
+    const hash = await bcrypt.hash(new_password, 12);
+    await db.query(
+      `UPDATE platform_admins SET password_hash = $1, revoke_sessions_before = NOW() WHERE id = $2`,
+      [hash, req.params.id]
+    );
+    await db.query(`
+      INSERT INTO platform_log (event_type, description, admin_id)
+      VALUES ('admin_password_reset', $1, $2)
+    `, [`إعادة تعيين كلمة مرور الموظف #${req.params.id} بواسطة ${req.admin.name || req.admin.email}`, req.admin.sub]);
+
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// ── حساب الموظف نفسه: يعدّل اسمه/إيميله/كلمة مروره بنفسه ──
+// تغيير الإيميل أو كلمة المرور يتطلب تأكيد كلمة المرور الحالية
+exports.updateMyAccount = async (req, res, next) => {
+  try {
+    const { full_name, email, current_password, new_password } = req.body;
+    const changingSensitive = !!(email || new_password);
+
+    const { rows: [me] } = await db.query(`SELECT password_hash FROM platform_admins WHERE id = $1`, [req.admin.sub]);
+    if (!me) return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
+
+    if (changingSensitive) {
+      if (!current_password || !(await bcrypt.compare(current_password, me.password_hash))) {
+        return res.status(401).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
+      }
+    }
+
+    const newHash = new_password ? await bcrypt.hash(new_password, 12) : null;
+    const { rows: [updated] } = await db.query(`
+      UPDATE platform_admins SET
+        full_name     = COALESCE($1, full_name),
+        email         = COALESCE($2, email),
+        password_hash = COALESCE($3, password_hash)
+      WHERE id = $4
+      RETURNING id, email, full_name, role, permissions
+    `, [full_name || null, email ? email.toLowerCase().trim() : null, newHash, req.admin.sub]);
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ success: false, message: 'البريد الإلكتروني مستخدم بالفعل' });
+    next(err);
+  }
+};
+
+// ── فريقي: الموظفون اللي أنا مديرهم المباشر ──────────────
+exports.listMyTeam = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT id, full_name, email, permissions, active, last_login, created_at
+      FROM platform_admins WHERE manager_id = $1 ORDER BY full_name
+    `, [req.admin.sub]);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+// ── نشاط أحد أعضاء فريقي (أو أي موظف لو كنت المالك) ──────
+exports.getTeamMemberActivity = async (req, res, next) => {
+  try {
+    const memberId = Number(req.params.id);
+    const { rows: [member] } = await db.query(
+      `SELECT id, full_name, email, manager_id FROM platform_admins WHERE id = $1`, [memberId]
+    );
+    if (!member) return res.status(404).json({ success: false, message: 'الموظف غير موجود' });
+    if (req.admin.role !== 'owner' && member.manager_id !== req.admin.sub) {
+      return res.status(403).json({ success: false, message: 'ما تقدر تشوف نشاط هذا الموظف' });
+    }
+
+    const [logRes, ticketsRes, repliesRes] = await Promise.all([
+      db.query(`
+        SELECT event_type, description, created_at, company_id
+        FROM platform_log WHERE admin_id = $1 ORDER BY created_at DESC LIMIT 100
+      `, [memberId]),
+      db.query(`
+        SELECT id, company_name, status, department, sub_dept, created_at
+        FROM support_tickets WHERE assigned_to = $1 ORDER BY created_at DESC LIMIT 50
+      `, [memberId]),
+      db.query(`
+        SELECT ticket_id, message, created_at
+        FROM ticket_replies WHERE admin_id = $1 ORDER BY created_at DESC LIMIT 50
+      `, [memberId]),
+    ]);
+
+    res.json({
+      success: true,
+      data: { member: { id: member.id, full_name: member.full_name, email: member.email } },
+      log: logRes.rows,
+      tickets: ticketsRes.rows,
+      replies: repliesRes.rows,
+    });
   } catch (err) { next(err); }
 };
 

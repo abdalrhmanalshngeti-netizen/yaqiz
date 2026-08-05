@@ -13,22 +13,33 @@ router.use(superAdmin);
 // هوية الموظف الحالي — متاحة لأي موظف بغض النظر عن صلاحياته (لفحص الجلسة)
 router.get('/me', ctrl.me);
 
-// المالك الأصلي فقط — لا تُمنح لأي موظف مهما كانت صلاحياته
+// حساب الموظف نفسه — أي موظف يقدر يعدّل اسمه/إيميله/كلمة مروره بنفسه
+router.put('/my-account', ctrl.updateMyAccount);
+
+// فريقي — أي موظف مُعيَّن "مدير" على غيره يقدر يشوف تقرير نشاطهم
+router.get('/my-team',              ctrl.listMyTeam);
+router.get('/my-team/:id/activity', ctrl.getTeamMemberActivity);
+
+// المالك الأصلي فقط — إدارة الموظفين نفسها لا تُوكَّل لأي موظف إطلاقاً
+// (لو قدر موظف يدير صلاحيات غيره، يقدر يمنح نفسه أي صلاحية يبيها)
 const ownerOnly = (req, res, next) => {
   if (req.admin?.role !== 'owner') {
     return res.status(403).json({ success: false, message: 'هذه الصفحة للمالك فقط' });
   }
   next();
 };
-router.get('/stats',                    ownerOnly, ctrl.stats);
-router.get('/cost-analysis',            ownerOnly, ctrl.costAnalysis);
-router.get('/log',                      ownerOnly, ctrl.platformLog);
-router.get('/plans',                    ownerOnly, ctrl.getPlans);
-router.put('/companies/:id/status',     ownerOnly, ctrl.setCompanyStatus);
-router.put('/companies/:id/plan',       ownerOnly, ctrl.setCompanyPlan);
-router.get('/employees',                ownerOnly, ctrl.listEmployees);
-router.post('/employees',               ownerOnly, ctrl.createEmployee);
-router.put('/employees/:id',            ownerOnly, ctrl.updateEmployee);
+router.get('/employees',                     ownerOnly, ctrl.listEmployees);
+router.post('/employees',                    ownerOnly, ctrl.createEmployee);
+router.put('/employees/:id',                 ownerOnly, ctrl.updateEmployee);
+router.put('/employees/:id/reset-password',  ownerOnly, ctrl.resetEmployeePassword);
+
+// كل قسم بلوحة الإدارة صار صلاحية مستقلة يقدر المالك يوكّلها لأي موظف
+router.get('/stats',                    canAdmin('dashboard'),     ctrl.stats);
+router.get('/cost-analysis',            canAdmin('cost_analysis'), ctrl.costAnalysis);
+router.get('/log',                      canAdmin('activity_log'),  ctrl.platformLog);
+router.get('/plans',                    canAdmin('plans'),         ctrl.getPlans);
+router.put('/companies/:id/status',     canAdmin('companies_manage'), ctrl.setCompanyStatus);
+router.put('/companies/:id/plan',       canAdmin('companies_manage'), ctrl.setCompanyPlan);
 
 // صلاحية "عرض بيانات العملاء والشركات"
 router.get('/companies',                canAdmin('customers'), ctrl.companies);
