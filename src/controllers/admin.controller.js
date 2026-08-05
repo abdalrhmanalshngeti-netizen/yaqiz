@@ -2,6 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 const db     = require('../config/db');
 
+const ADMIN_PERMISSIONS = ['tickets', 'customers', 'impersonate'];
+
 // ── تسجيل دخول المدير العام ─────────────────────────────
 exports.login = async (req, res, next) => {
   try {
@@ -29,7 +31,17 @@ exports.login = async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
-    res.json({ success: true, token, email: admin.email, name: admin.full_name });
+    res.json({
+      success: true, token, email: admin.email, name: admin.full_name,
+      role: admin.role, permissions: admin.permissions || [],
+    });
+  } catch (err) { next(err); }
+};
+
+// ── هوية الموظف الحالي (لأي موظف، بدون قيد صلاحية) ────────
+exports.me = async (req, res, next) => {
+  try {
+    res.json({ success: true, data: { email: req.admin.email, name: req.admin.name, role: req.admin.role, permissions: req.admin.permissions } });
   } catch (err) { next(err); }
 };
 
@@ -247,6 +259,11 @@ exports.listUsers = async (req, res, next) => {
 // ── تصفح بصلاحيات مستخدم (Impersonation) ─────────────────
 exports.impersonate = async (req, res, next) => {
   try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) {
+      return res.status(400).json({ success: false, message: 'ملاحظة المعاينة مطلوبة قبل الدخول بحساب أي شركة' });
+    }
+
     const { rows } = await db.query(`
       SELECT u.*, c.name AS company_name
       FROM users u
@@ -260,6 +277,7 @@ exports.impersonate = async (req, res, next) => {
 
     const crypto = require('crypto');
     const code = crypto.randomBytes(32).toString('hex');
+    const actorName = req.admin.name || req.admin.email || 'المدير العام';
 
     // حذف الأكواد القديمة المنتهية أو المستخدمة لهذه الشركة
     await db.query(
@@ -268,14 +286,14 @@ exports.impersonate = async (req, res, next) => {
     );
 
     await db.query(`
-      INSERT INTO impersonation_codes (code, company_id, user_id, company_name, created_by)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [code, user.company_id, user.id, user.company_name, req.admin.name || req.admin.email || 'المدير العام']);
+      INSERT INTO impersonation_codes (code, company_id, user_id, company_name, created_by, reason)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [code, user.company_id, user.id, user.company_name, actorName, reason]);
 
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description)
       VALUES ('impersonation', $1, $2)
-    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${req.admin.name || req.admin.email || 'المدير العام'}`]);
+    `, [user.company_id, `طلب دخول إداري: ${user.company_name} بواسطة ${actorName} — ملاحظة المعاينة: ${reason}`]);
 
     res.json({ success: true, code, company_name: user.company_name });
   } catch (err) { next(err); }
@@ -369,30 +387,41 @@ exports.listTickets = async (req, res, next) => {
     const conditions = [];
     if (status && status !== 'all') {
       params.push(status);
-      conditions.push(`status = $${params.length}`);
+      conditions.push(`t.status = $${params.length}`);
     }
     if (company_id) {
       params.push(company_id);
-      conditions.push(`company_id = $${params.length}`);
+      conditions.push(`t.company_id = $${params.length}`);
     }
     const where = conditions.length ? conditions.join(' AND ') : '1=1';
     const { rows } = await db.query(`
-      SELECT * FROM support_tickets
+      SELECT t.*, a.full_name AS assigned_name
+      FROM support_tickets t
+      LEFT JOIN platform_admins a ON a.id = t.assigned_to
       WHERE ${where}
-      ORDER BY created_at DESC
+      ORDER BY t.created_at DESC
       LIMIT 200
     `, params);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 };
 
-// ── تذكرة واحدة — تفاصيل + سجل الشركة ──────────────────
+// ── تذكرة واحدة — تفاصيل + سجل الشركة + الردود ──────────
 exports.getTicket = async (req, res, next) => {
   try {
-    const { rows: [ticket] } = await db.query(
-      `SELECT * FROM support_tickets WHERE id = $1`, [req.params.id]
-    );
+    const { rows: [ticket] } = await db.query(`
+      SELECT t.*, a.full_name AS assigned_name
+      FROM support_tickets t
+      LEFT JOIN platform_admins a ON a.id = t.assigned_to
+      WHERE t.id = $1
+    `, [req.params.id]);
     if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+
+    const { rows: replies } = await db.query(
+      `SELECT id, author_type, author_name, message, created_at
+       FROM ticket_replies WHERE ticket_id = $1 ORDER BY created_at`,
+      [req.params.id]
+    );
 
     let history = [];
     if (ticket.company_id) {
@@ -403,7 +432,78 @@ exports.getTicket = async (req, res, next) => {
       history = rows;
     }
 
-    res.json({ success: true, data: ticket, history });
+    res.json({ success: true, data: ticket, replies, history });
+  } catch (err) { next(err); }
+};
+
+// ── استلام التذكرة ────────────────────────────────────────
+exports.claimTicket = async (req, res, next) => {
+  try {
+    const actor = req.admin.name || req.admin.email;
+    const actionEntry = JSON.stringify([{
+      status: null, label: `استلام بواسطة ${actor}`, actor, at: new Date().toISOString()
+    }]);
+    const { rows: [ticket] } = await db.query(`
+      UPDATE support_tickets
+      SET assigned_to = $1,
+          status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
+          actions = COALESCE(actions, '[]'::jsonb) || $2::jsonb
+      WHERE id = $3
+      RETURNING *
+    `, [req.admin.sub, actionEntry, req.params.id]);
+    if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+    res.json({ success: true, data: ticket });
+  } catch (err) { next(err); }
+};
+
+// ── رد الموظف على العميل ──────────────────────────────────
+exports.replyTicket = async (req, res, next) => {
+  try {
+    const message = (req.body?.message || '').trim();
+    if (!message) return res.status(400).json({ success: false, message: 'نص الرد مطلوب' });
+
+    const { rows: [ticket] } = await db.query(
+      `SELECT * FROM support_tickets WHERE id = $1`, [req.params.id]
+    );
+    if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+
+    const actor = req.admin.name || req.admin.email;
+    const { rows: [reply] } = await db.query(`
+      INSERT INTO ticket_replies (ticket_id, author_type, author_name, admin_id, message)
+      VALUES ($1, 'admin', $2, $3, $4)
+      RETURNING *
+    `, [ticket.id, actor, req.admin.sub, message]);
+
+    // لو التذكرة لسا مفتوحة، الرد يعني بدأنا نشتغل عليها
+    if (ticket.status === 'open') {
+      await db.query(`UPDATE support_tickets SET status = 'in_progress' WHERE id = $1`, [ticket.id]);
+    }
+
+    // إشعار العميل داخل التطبيق (لو التذكرة مرتبطة بشركة حقيقية، مو تذكرة ضيف)
+    if (ticket.company_id) {
+      await db.query(`
+        INSERT INTO notifications (company_id, title, message, type)
+        VALUES ($1, $2, $3, 'support_reply')
+      `, [ticket.company_id, `رد على تذكرتك #${ticket.id}`, message]).catch(() => {});
+
+      const { rows: [co] } = await db.query(`SELECT contact_email FROM companies WHERE id = $1`, [ticket.company_id]);
+      if (co?.contact_email) {
+        const { sendMail } = require('../services/email.service');
+        sendMail({
+          to: co.contact_email,
+          subject: `رد على تذكرة الدعم #${ticket.id} — يقظ`,
+          html: `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;background:#f1f5f9;padding:20px;">
+            <div style="max-width:500px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1);">
+              <div style="background:#0f172a;padding:20px 28px;color:#fff;font-weight:700;">رد على تذكرة الدعم #${ticket.id}</div>
+              <div style="padding:24px 28px;color:#1e293b;line-height:1.8;white-space:pre-wrap;">${message}</div>
+              <div style="padding:14px 28px;color:#94a3b8;font-size:.8rem;border-top:1px solid #f1f5f9;">يقظ — yaqiz.me</div>
+            </div>
+          </body></html>`
+        }).catch(e => console.warn('[ticket-reply] Email failed:', e.message));
+      }
+    }
+
+    res.status(201).json({ success: true, data: reply });
   } catch (err) { next(err); }
 };
 
@@ -429,6 +529,107 @@ exports.updateTicketStatus = async (req, res, next) => {
     `, [status, resolved_at, actionEntry, req.params.id]);
 
     if (!rowCount) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// ── إدارة موظفي لوحة الإدارة (خاص بالمالك فقط) ───────────
+
+exports.listEmployees = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT id, email, full_name, role, permissions, active, last_login, created_at
+      FROM platform_admins ORDER BY created_at
+    `);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+exports.createEmployee = async (req, res, next) => {
+  try {
+    const { email, password, full_name, permissions = [] } = req.body;
+    if (!email || !password || !full_name) {
+      return res.status(400).json({ success: false, message: 'البريد وكلمة المرور والاسم مطلوبة' });
+    }
+    const validPerms = permissions.filter(p => ADMIN_PERMISSIONS.includes(p));
+
+    const hash = await bcrypt.hash(password, 12);
+    const { rows: [emp] } = await db.query(`
+      INSERT INTO platform_admins (email, password_hash, full_name, role, permissions, created_by)
+      VALUES ($1, $2, $3, 'staff', $4, $5)
+      RETURNING id, email, full_name, role, permissions, active, created_at
+    `, [email.toLowerCase().trim(), hash, full_name, validPerms, req.admin.sub]);
+
+    await db.query(`
+      INSERT INTO platform_log (event_type, description)
+      VALUES ('admin_employee_added', $1)
+    `, [`إضافة موظف لوحة إدارة: ${full_name} (${email}) بواسطة ${req.admin.name || req.admin.email}`]);
+
+    res.status(201).json({ success: true, data: emp });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ success: false, message: 'البريد الإلكتروني مستخدم بالفعل' });
+    next(err);
+  }
+};
+
+exports.updateEmployee = async (req, res, next) => {
+  try {
+    const { rows: [target] } = await db.query(`SELECT role FROM platform_admins WHERE id = $1`, [req.params.id]);
+    if (!target) return res.status(404).json({ success: false, message: 'الموظف غير موجود' });
+    if (target.role === 'owner') {
+      return res.status(403).json({ success: false, message: 'لا يمكن تعديل حساب المالك' });
+    }
+
+    const { full_name, permissions, active } = req.body;
+    const validPerms = Array.isArray(permissions) ? permissions.filter(p => ADMIN_PERMISSIONS.includes(p)) : null;
+
+    const { rows: [emp] } = await db.query(`
+      UPDATE platform_admins SET
+        full_name  = COALESCE($1, full_name),
+        permissions = COALESCE($2, permissions),
+        active      = COALESCE($3, active),
+        revoke_sessions_before = NOW()
+      WHERE id = $4
+      RETURNING id, email, full_name, role, permissions, active, created_at
+    `, [full_name || null, validPerms, typeof active === 'boolean' ? active : null, req.params.id]);
+
+    await db.query(`
+      INSERT INTO platform_log (event_type, description)
+      VALUES ('admin_employee_updated', $1)
+    `, [`تعديل صلاحيات/حالة الموظف #${req.params.id} بواسطة ${req.admin.name || req.admin.email}`]);
+
+    res.json({ success: true, data: emp });
+  } catch (err) { next(err); }
+};
+
+// ── إشعارات لوحة الإدارة (لكل موظف منصة صلاحياته الخاصة) ──
+
+exports.listNotifications = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT * FROM admin_notifications WHERE admin_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [req.admin.sub]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+exports.unreadNotifCount = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS count FROM admin_notifications WHERE admin_id = $1 AND is_read = false`,
+      [req.admin.sub]
+    );
+    res.json({ success: true, count: rows[0].count });
+  } catch (err) { next(err); }
+};
+
+exports.markAllNotifRead = async (req, res, next) => {
+  try {
+    await db.query(
+      `UPDATE admin_notifications SET is_read = true WHERE admin_id = $1 AND is_read = false`,
+      [req.admin.sub]
+    );
     res.json({ success: true });
   } catch (err) { next(err); }
 };
