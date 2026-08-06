@@ -620,7 +620,13 @@ function _getDbKey() {
 function getDB() {
   try {
     const d = JSON.parse(localStorage.getItem(_getDbKey()));
-    if (d) return d;
+    if (d) {
+      // ترقية دفاتر قديمة: إضافة حساب "بضاعة بالطريق" إذا كان مفقوداً (أُضيف لاحقاً)
+      if (Array.isArray(d.accounts) && !d.accounts.some(a=>a.code==='1350')) {
+        d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'1350', name:'بضاعة بالطريق', name_en:'Goods in Transit', type:'أصول', is_group:false, parent:1 });
+      }
+      return d;
+    }
   } catch(e) {}
   return initDB();
 }
@@ -654,6 +660,7 @@ function initDB() {
       { id:2,  code:'1100', name:'النقدية والبنوك',       name_en:'Cash & Banks',          type:'أصول',          is_group:false, parent:1 },
       { id:3,  code:'1200', name:'الذمم المدينة',         name_en:'Accounts Receivable',   type:'أصول',          is_group:false, parent:1 },
       { id:4,  code:'1300', name:'المخزون',               name_en:'Inventory',             type:'أصول',          is_group:false, parent:1 },
+      { id:14, code:'1350', name:'بضاعة بالطريق',         name_en:'Goods in Transit',      type:'أصول',          is_group:false, parent:1 },
       { id:5,  code:'2000', name:'الالتزامات',            name_en:'Liabilities',           type:'التزامات',      is_group:true,  parent:null },
       { id:6,  code:'2100', name:'الذمم الدائنة',         name_en:'Accounts Payable',      type:'التزامات',      is_group:false, parent:5 },
       { id:7,  code:'2200', name:'ضريبة القيمة المضافة',  name_en:'VAT Payable',           type:'التزامات',      is_group:false, parent:5 },
@@ -3777,8 +3784,15 @@ function renderPurchContent() {
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
           <td><b>${fmtMoney(p.total)}</b></td>
           ${isGoods?`
-          <td style="color:var(--text-muted);font-size:12px;">${p.payment_method||'—'}</td>
-          <td><button class="icon-btn" style="width:28px;height:28px;" onclick="printPurchaseInvoice(${p.id})" title="${lang==='ar'?'عرض PDF':'View PDF'}">${icon('file-text',14)}</button></td>`:''}
+          <td style="color:var(--text-muted);font-size:12px;">${p.payment_method||'—'}
+            ${p.items?.some(i=>!i.stocked)?`<div style="margin-top:4px;"><span class="badge badge-amber" style="font-size:10px;" title="${lang==='ar'?'بعض الأصناف لم تُدرج بالمخزون بعد — مسجّلة كبضاعة بالطريق':'Some items not yet added to inventory — recorded as goods in transit'}">📦 ${lang==='ar'?'بضاعة بالطريق':'In transit'}</span></div>`:''}
+          </td>
+          <td>
+            <div style="display:flex;gap:4px;">
+              <button class="icon-btn" style="width:28px;height:28px;" onclick="printPurchaseInvoice(${p.id})" title="${lang==='ar'?'عرض PDF':'View PDF'}">${icon('file-text',14)}</button>
+              ${p.items?.some(i=>!i.stocked)?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="retryInventoryAdd(${p.id})" title="${lang==='ar'?'استكمال الإدراج بالمخزون':'Complete inventory add'}">${icon('package-plus',14)}</button>`:''}
+            </div>
+          </td>`:''}
         </tr>`;}).join('')}
       </tbody>
       ${rows.length>0?`<tfoot>
@@ -4077,7 +4091,7 @@ function saveGoodsPurchase() {
     supplier_id: _vendorRec?.id || null,
     description: _goodsItems.map(i=>i.name).join('، ') || (lang==='ar'?'فاتورة بضاعة':'Goods Invoice'),
     category:'بضاعة', purchase_type:'goods',
-    items:[..._goodsItems],
+    items:[..._goodsItems].map(i=>({...i, stocked:false})),
     amount:sub, vat, total,
     payment_method:payment,
     paid_amount:paidNow,
@@ -4103,14 +4117,17 @@ function saveGoodsPurchase() {
       description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment});
   }
 
-  // Journal entry
+  // Journal entry — يُدين "بضاعة بالطريق" مؤقتاً وليس "المخزون" مباشرة، لأن الكمية لم
+  // تُدرج فعلياً في المخزون بعد (المستخدم قد يتخطّى خطوة التأكيد التالية). يُرحَّل المبلغ
+  // إلى حساب المخزون الفعلي فقط عند تأكيد إدراج كل صنف (doInventoryUpdate/saveMissingProducts)
+  // — هذا يمنع تضخيم قيمة المخزون بالدفاتر عن الكمية الفعلية الموجودة.
   if(!db.journal)db.journal=[];
   if(!db.nextId.journal)db.nextId.journal=1;
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`فاتورة شراء بضاعة - ${p.vendor}`,
     entries:[
-      {account:lang==='ar'?'المخزون':'Inventory',account_code:'1300',side:'debit',amount:sub},
+      {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit',account_code:'1350',side:'debit',amount:sub},
       {account:lang==='ar'?'ضريبة المدخلات':'Input VAT',account_code:'2210',side:'debit',amount:vat},
       ...(paidNow>0?[{account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount:paidNow}]:[]),
       ...(remaining>0?[{account:lang==='ar'?'الذمم الدائنة':'Accounts Payable',account_code:'2100',side:'credit',amount:remaining}]:[]),
@@ -4159,6 +4176,19 @@ function showInventoryAddDialog() {
   refreshIcons();
 }
 
+// يعيد فتح خطوة "إدراج بالمخزون" لفاتورة شراء سابقة تخطّى المستخدم تأكيدها،
+// أو أكمل جزءاً منها فقط (بعض الأصناف مؤجّلة). يعرض الأصناف المعلّقة فقط.
+function retryInventoryAdd(purchaseId) {
+  const db = getDB();
+  const p = db.purchases.find(x=>x.id===purchaseId);
+  if(!p || !p.items){ showToast(lang==='ar'?'الفاتورة غير موجودة':'Purchase not found','error'); return; }
+  const outstanding = p.items.filter(i=>!i.stocked);
+  if(!outstanding.length){ showToast(lang==='ar'?'لا توجد أصناف معلّقة بهذه الفاتورة':'No pending items on this purchase','error'); return; }
+  _pendingInventoryItems = outstanding;
+  _pendingPurchaseId = purchaseId;
+  showInventoryAddDialog();
+}
+
 // ── FIFO: يخصم من أقدم الدُفعات أولاً ويُعيد تكلفة المبيعات ──
 function fifoDeduct(product, qtyToDeduct) {
   if (!product.lots || !product.lots.length) {
@@ -4186,6 +4216,7 @@ function doInventoryUpdate() {
   if(!db.stock_moves) db.stock_moves = [];
   if(!db.nextId.stock_move) db.nextId.stock_move = 1;
   const missing = [];
+  let transferredValue = 0;
   _pendingInventoryItems.forEach(item => {
     const prod = db.products.find(x =>
       x.name.trim().toLowerCase() === item.name.trim().toLowerCase() ||
@@ -4215,10 +4246,29 @@ function doInventoryUpdate() {
         reference: `PUR-${_pendingPurchaseId}`,
         date: new Date().toISOString()
       });
+      transferredValue += (item.qty||0) * (item.price || prod.buy_price || 0);
+      // علّم الصنف كـ"أُدرج بالمخزون" على فاتورة الشراء نفسها — يتيح لاحقاً معرفة أي فاتورة لسه فيها أصناف معلّقة
+      const purch = db.purchases.find(x=>x.id===_pendingPurchaseId);
+      const purchItem = purch?.items?.find(x=>x.name.trim().toLowerCase()===item.name.trim().toLowerCase());
+      if (purchItem) purchItem.stocked = true;
     } else {
       missing.push(item);
     }
   });
+  // رحّل قيمة الأصناف اللي فعلاً دخلت المخزون من "بضاعة بالطريق" إلى "المخزون"
+  if (transferredValue > 0) {
+    if(!db.journal) db.journal=[];
+    if(!db.nextId.journal) db.nextId.journal=1;
+    db.journal.push({
+      id: db.nextId.journal++, date: new Date().toISOString(),
+      description: `ترحيل بضاعة بالطريق إلى المخزون — فاتورة شراء #${_pendingPurchaseId}`,
+      entries: [
+        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:Math.round(transferredValue*100)/100},
+        {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit', account_code:'1350', side:'credit', amount:Math.round(transferredValue*100)/100},
+      ],
+      ref:`PUR-${_pendingPurchaseId}-IN`
+    });
+  }
   saveDB(db);
   if (missing.length === 0) {
     showToast(lang==='ar'?'✅ تم تحديث المخزون':'✅ Inventory updated');
@@ -4272,6 +4322,7 @@ function saveMissingProducts() {
   if(!db.nextId.product) db.nextId.product = 1;
   if(!db.stock_moves) db.stock_moves = [];
   if(!db.nextId.stock_move) db.nextId.stock_move = 1;
+  let transferredValue = 0;
   for (let i = 0; i < _pendingMissingProducts.length; i++) {
     const item = _pendingMissingProducts[i];
     const code = (el(`mp-code-${i}`)?.value || '').trim();
@@ -4297,6 +4348,24 @@ function saveMissingProducts() {
       reason: `فاتورة شراء #${_pendingPurchaseId}`,
       reference: `PUR-${_pendingPurchaseId}`,
       date: new Date().toISOString()
+    });
+    transferredValue += (item.qty||0) * (item.price || 0);
+    const purch = db.purchases.find(x=>x.id===_pendingPurchaseId);
+    const purchItem = purch?.items?.find(x=>x.name.trim().toLowerCase()===item.name.trim().toLowerCase());
+    if (purchItem) purchItem.stocked = true;
+  }
+  // رحّل قيمة الأصناف الجديدة من "بضاعة بالطريق" إلى "المخزون"
+  if (transferredValue > 0) {
+    if(!db.journal) db.journal=[];
+    if(!db.nextId.journal) db.nextId.journal=1;
+    db.journal.push({
+      id: db.nextId.journal++, date: new Date().toISOString(),
+      description: `ترحيل بضاعة بالطريق إلى المخزون — فاتورة شراء #${_pendingPurchaseId}`,
+      entries: [
+        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:Math.round(transferredValue*100)/100},
+        {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit', account_code:'1350', side:'credit', amount:Math.round(transferredValue*100)/100},
+      ],
+      ref:`PUR-${_pendingPurchaseId}-INMISS`
     });
   }
   saveDB(db);
