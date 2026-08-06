@@ -617,6 +617,69 @@ function _getDbKey() {
   } catch(e) {}
   return DB_KEY; // وضع محلي بدون JWT
 }
+// ═══════ إقفال الفترات المحاسبية ═══════
+function _periodKey(dateStr, type) {
+  const d = new Date(dateStr); if(isNaN(d)) return null;
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0');
+  return type==='month' ? `${y}-${m}` : `${y}`;
+}
+function isPeriodClosed(dateStr) {
+  const db = getDB();
+  const list = db.closed_periods||[];
+  if(!list.length) return false;
+  const mk = _periodKey(dateStr,'month'), yk = _periodKey(dateStr,'year');
+  return list.some(cp => (cp.period_type==='month'&&cp.period_key===mk) || (cp.period_type==='year'&&cp.period_key===yk));
+}
+// dateStr: تاريخ العملية المطلوب فحصها. onProceed: تُستدعى فقط لو التاريخ حر أو تم تجاوز الإقفال بنجاح بكلمة مرور التجاوز المخصصة (منفصلة عن كلمة مرور دخول المالك).
+function guardClosedPeriod(dateStr, onProceed) {
+  if (!isPeriodClosed(dateStr)) { onProceed(); return; }
+  // نبني هذا كطبقة (overlay) منفصلة فوق النموذج الأصلي بدل الكتابة فوق
+  // #modal-container — لو استبدلنا محتواه، تُفقَد كل قيم حقول النموذج
+  // الأصلي (المبلغ، التاريخ، الوصف...) قبل ما تصل onProceed لقراءتها.
+  const ov = document.createElement('div');
+  ov.id = 'cp-override-overlay';
+  ov.className = 'modal-bg';
+  ov.style.zIndex = '99999';
+  ov.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>🔒 ${lang==='ar'?'فترة محاسبية مُقفلة':'Closed Accounting Period'}</h3>
+        <button class="icon-btn" id="cp-override-close">${icon('x',18)}</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">
+        ${lang==='ar'?`تاريخ هذه العملية (${fmtDate(dateStr)}) يقع ضمن فترة مُقفلة محاسبياً. لإتمامها استثناءً، أدخل كلمة مرور تجاوز الإقفال:`:`This operation's date (${fmtDate(dateStr)}) falls within a closed accounting period. To proceed anyway, enter the period-closing override password:`}
+      </p>
+      <input class="input" type="password" id="cp-override-pass" placeholder="${lang==='ar'?'كلمة مرور التجاوز':'Override password'}" style="margin-bottom:10px;" />
+      <div id="cp-override-err" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" id="cp-override-btn">${lang==='ar'?'تأكيد وإتمام العملية':'Confirm & Proceed'}</button>
+        <button class="btn btn-outline" id="cp-override-cancel">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  refreshIcons();
+  const closeOverlay = () => ov.remove();
+  ov.addEventListener('click', closeOverlay);
+  ov.querySelector('#cp-override-close').onclick = closeOverlay;
+  ov.querySelector('#cp-override-cancel').onclick = closeOverlay;
+  ov.querySelector('#cp-override-btn').onclick = async () => {
+    const pass = ov.querySelector('#cp-override-pass')?.value;
+    const errEl = ov.querySelector('#cp-override-err');
+    const btn = ov.querySelector('#cp-override-btn');
+    if(!pass){ errEl.textContent=lang==='ar'?'أدخل كلمة المرور':'Enter password'; errEl.style.display='block'; return; }
+    btn.disabled=true; btn.textContent=lang==='ar'?'جارٍ التحقق...':'Verifying...';
+    try {
+      const res = await window._cloudApiFetch('POST', '/api/closed-periods/verify-override', { password: pass });
+      if (res?.success) { ov.remove(); onProceed(); }
+      else { throw new Error(); }
+    } catch(e) {
+      errEl.textContent = e?.message || (lang==='ar'?'كلمة المرور غير صحيحة':'Incorrect password');
+      errEl.style.display='block';
+      btn.disabled=false; btn.textContent=lang==='ar'?'تأكيد وإتمام العملية':'Confirm & Proceed';
+    }
+  };
+}
+
 function getDB() {
   try {
     const d = JSON.parse(localStorage.getItem(_getDbKey()));
@@ -2556,7 +2619,8 @@ function doCheckout() {
   cart=[];posDiscount=0;posCustomer='';posPayment='نقدي';
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
   showInvoiceModal(inv);
-  renderPOS(el('sales-content'));
+  if (currentPage === 'pos') renderPOSPage(el('page-content'));
+  else renderPOS(el('sales-content'));
 }
 
 function showInvoiceModal(inv) {
@@ -3391,9 +3455,12 @@ function calcNewInvTotals(){
 
 function saveNewInvoice(printAfter=false) {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB();
   if(!el('ni-customer')?.value){showToast(lang==='ar'?'العميل مطلوب':'Customer required','error');return;}
   if(newInvItems.length===0){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
+  guardClosedPeriod(el('ni-date').value, () => _saveNewInvoiceActual(printAfter));
+}
+function _saveNewInvoiceActual(printAfter) {
+  const db=getDB();
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
   const afterDisc=Math.max(0,sub-discVal);
@@ -4091,9 +4158,12 @@ function updateGPRemaining() {
 
 function saveGoodsPurchase() {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB();
   if(!el('gp-vendor')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
   if(!_goodsItems.length){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
+  guardClosedPeriod(el('gp-date')?.value||new Date().toISOString().slice(0,10), () => _saveGoodsPurchaseActual());
+}
+function _saveGoodsPurchaseActual() {
+  const db=getDB();
   const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
   const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
   const total=sub+vat;
@@ -5106,6 +5176,155 @@ const _ACC_SUBTYPES = {
   ],
 };
 
+function renderPeriodClosing(c) {
+  const db = getDB();
+  const closed = (db.closed_periods||[]).slice().sort((a,b)=>b.period_key.localeCompare(a.period_key));
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisYearKey  = `${now.getFullYear()}`;
+  const monthNames = lang==='ar'
+    ? ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
+    : ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  c.innerHTML = `
+  <div style="margin-top:16px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:18px;font-weight:900;">🔒 ${lang==='ar'?'إقفال الفترات المحاسبية':'Accounting Period Closing'}</div>
+      <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إقفال فترة يمنع تسجيل أو تعديل أي عملية بتاريخ يقع ضمنها إلا بكلمة مرور تجاوز مخصصة (منفصلة عن كلمة مرور تسجيل الدخول).':"Closing a period blocks any new/edited transaction dated within it, unless overridden with a dedicated override password (separate from the login password)."}</div>
+    </div>
+
+    ${currentUser?.role==='owner'?`
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-head"><h3>🔑 ${lang==='ar'?'كلمة مرور تجاوز الإقفال':'Period-Closing Override Password'}</h3></div>
+      <div class="card-pad">
+        <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">${lang==='ar'?'كلمة مرور منفصلة تمامًا عن كلمة مرور تسجيل دخولك — هي وحدها اللي تفتح فترة مُقفلة أو تتجاوزها، حتى لو غيّرت كلمة مرور دخولك لاحقًا.':"Completely separate from your login password — only this unlocks or bypasses a closed period, even if your login password changes later."}</p>
+        <div id="pc-override-status" style="font-size:13px;font-weight:700;margin-bottom:10px;">${lang==='ar'?'جارٍ التحقق...':'Checking...'}</div>
+        <button class="btn btn-outline" onclick="showSetOverridePasswordModal()">${lang==='ar'?'تعيين / تغيير كلمة مرور التجاوز':'Set / Change Override Password'}</button>
+      </div>
+    </div>`:''}
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-head"><h3>${lang==='ar'?'إقفال فترة جديدة':'Close a New Period'}</h3></div>
+      <div class="card-pad">
+        <div class="form-row">
+          <div>
+            <label class="form-label">${lang==='ar'?'إقفال شهري':'Close a Month'}</label>
+            <select class="select" id="pc-month-select" style="margin-bottom:8px;">
+              ${Array.from({length:12},(_,i)=>{
+                const key=`${now.getFullYear()}-${String(i+1).padStart(2,'0')}`;
+                return `<option value="${key}" ${key===thisMonthKey?'selected':''}>${monthNames[i]} ${now.getFullYear()}</option>`;
+              }).join('')}
+            </select>
+            <button class="btn btn-outline btn-full" onclick="closePeriod('month', el('pc-month-select').value)">${lang==='ar'?'إقفال هذا الشهر':'Close this month'}</button>
+          </div>
+          <div>
+            <label class="form-label">${lang==='ar'?'إقفال سنوي':'Close a Year'}</label>
+            <select class="select" id="pc-year-select" style="margin-bottom:8px;">
+              ${[now.getFullYear(), now.getFullYear()-1].map(y=>`<option value="${y}" ${String(y)===thisYearKey?'selected':''}>${y}</option>`).join('')}
+            </select>
+            <button class="btn btn-outline btn-full" onclick="closePeriod('year', el('pc-year-select').value)">${lang==='ar'?'إقفال هذه السنة':'Close this year'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>${lang==='ar'?'الفترات المُقفلة':'Closed Periods'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr>
+          <th>${lang==='ar'?'الفترة':'Period'}</th>
+          <th>${lang==='ar'?'النوع':'Type'}</th>
+          <th>${lang==='ar'?'أُقفلت بواسطة':'Closed By'}</th>
+          <th>${lang==='ar'?'تاريخ الإقفال':'Closed On'}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${closed.length===0
+            ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد فترات مُقفلة':'No closed periods'}</td></tr>`
+            :closed.map(cp=>`<tr>
+              <td style="font-weight:800;">${sanitize(cp.period_key)}</td>
+              <td><span class="badge ${cp.period_type==='year'?'badge-blue':'badge-amber'}">${cp.period_type==='year'?(lang==='ar'?'سنوي':'Year'):(lang==='ar'?'شهري':'Month')}</span></td>
+              <td>${sanitize(cp.closed_by_name)||'-'}</td>
+              <td>${fmtDate(cp.created_at)}</td>
+              <td><button class="btn btn-sm btn-outline" onclick="reopenPeriod('${cp.id}')">${lang==='ar'?'🔓 فتح':'🔓 Reopen'}</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function closePeriod(type, key) {
+  if(!key) return;
+  const label = type==='year' ? key : key;
+  if(!confirm(lang==='ar'?`تأكيد إقفال ${type==='year'?'سنة':'شهر'} ${label}؟ لن يقدر أي أحد يسجّل أو يعدّل عملية بتاريخ ضمن هذه الفترة إلا بكلمة مرور التجاوز المخصصة.`:`Confirm closing ${label}? No one will be able to record/edit a transaction dated in this period without the override password.`)) return;
+  const db=getDB();
+  if(!db.closed_periods) db.closed_periods=[];
+  if(db.closed_periods.some(cp=>cp.period_type===type && cp.period_key===key)){
+    showToast(lang==='ar'?'هذه الفترة مُقفلة مسبقاً':'This period is already closed','error'); return;
+  }
+  db.closed_periods.push({
+    id: 'local-'+Date.now(), period_type: type, period_key: key,
+    closed_by_name: currentUser?.full_name||currentUser?.username||'', created_at: new Date().toISOString()
+  });
+  saveDB(db);
+  logActivity('المحاسبة', `إقفال ${type==='year'?'سنة':'شهر'} ${key}`);
+  showToast(`✅ ${lang==='ar'?`تم إقفال ${key}`:`${key} closed`}`);
+  renderPage();
+}
+
+function reopenPeriod(id) {
+  const db=getDB();
+  const cp=(db.closed_periods||[]).find(x=>String(x.id)===String(id));
+  if(!cp) return;
+  const ov = document.createElement('div');
+  ov.className = 'modal-bg'; ov.style.zIndex='99999';
+  ov.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+      <div class="modal-head">
+        <h3>🔓 ${lang==='ar'?'فتح فترة':'Reopen Period'}: ${sanitize(cp.period_key)}</h3>
+        <button class="icon-btn" id="rp-close">${icon('x',18)}</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${lang==='ar'?'أدخل كلمة مرور تجاوز الإقفال لتأكيد فتح هذه الفترة:':'Enter the period-closing override password to confirm reopening this period:'}</p>
+      <input class="input" type="password" id="rp-pass" placeholder="${lang==='ar'?'كلمة مرور التجاوز':'Override password'}" style="margin-bottom:10px;" />
+      <div id="rp-err" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" id="rp-confirm">${lang==='ar'?'تأكيد الفتح':'Confirm Reopen'}</button>
+        <button class="btn btn-outline" id="rp-cancel">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  refreshIcons();
+  const close=()=>ov.remove();
+  ov.addEventListener('click', close);
+  ov.querySelector('#rp-close').onclick=close;
+  ov.querySelector('#rp-cancel').onclick=close;
+  ov.querySelector('#rp-confirm').onclick=async()=>{
+    const pass=ov.querySelector('#rp-pass')?.value;
+    const errEl=ov.querySelector('#rp-err');
+    const btn=ov.querySelector('#rp-confirm');
+    if(!pass){errEl.textContent=lang==='ar'?'أدخل كلمة المرور':'Enter password';errEl.style.display='block';return;}
+    btn.disabled=true; btn.textContent=lang==='ar'?'جارٍ التحقق...':'Verifying...';
+    try{
+      const res=await window._cloudApiFetch('POST','/api/closed-periods/verify-override',{password:pass});
+      if(res?.success){
+        ov.remove();
+        const dbNow=getDB();
+        dbNow.closed_periods=(dbNow.closed_periods||[]).filter(x=>String(x.id)!==String(id));
+        saveDB(dbNow);
+        logActivity('المحاسبة', `فتح فترة ${cp.period_key}`);
+        showToast(`✅ ${lang==='ar'?'تم فتح الفترة':'Period reopened'}`);
+        renderPage();
+      } else { throw new Error(); }
+    }catch(e){
+      errEl.textContent=e?.message || (lang==='ar'?'كلمة المرور غير صحيحة':'Incorrect password');
+      errEl.style.display='block';
+      btn.disabled=false; btn.textContent=lang==='ar'?'تأكيد الفتح':'Confirm Reopen';
+    }
+  };
+}
+
 function renderAccounts(c) {
   const db = getDB();
   window._lastAccContainer = c;
@@ -5223,6 +5442,11 @@ function showAddAccount(catKey) {
         <div style="margin-bottom:16px"><label class="form-label">${lang==='ar'?'الاسم بالإنجليزية (اختياري)':'English Name (optional)'}</label>
           <input class="input" id="ac-name-en" />
         </div>
+        <div style="margin-bottom:16px">
+          <label class="form-label">${lang==='ar'?'رصيد افتتاحي (اختياري)':'Opening Balance (optional)'}</label>
+          <input class="input" type="number" id="ac-opening-balance" value="0" placeholder="0.00" />
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lang==='ar'?'يُسجَّل تلقائيًا كقيد محاسبي مقابل «رأس المال» — اتركه صفراً إن لم يكن للحساب رصيد سابق.':'Automatically posted as a journal entry against "Capital" — leave at 0 if this account has no prior balance.'}</div>
+        </div>
         <input type="hidden" id="ac-main-key" value="${catKey ?? ''}" />
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary btn-full" onclick="saveAccount()">${t('save')}</button>
@@ -5288,6 +5512,31 @@ function saveAccount() {
     parent: parent?.id ?? null,
   });
 
+  // رصيد افتتاحي (اختياري) — قيد محاسبي مقابل رأس المال، حسب الطبيعة الدائنة/المدينة للحساب
+  const openingBalance = parseFloat(el('ac-opening-balance')?.value) || 0;
+  if (openingBalance !== 0) {
+    if(!db.journal) db.journal=[];
+    if(!db.nextId.journal) db.nextId.journal=1;
+    const amt = Math.abs(openingBalance);
+    const debitNormal = ['أصول','مصروفات'].includes(cat.type);
+    const positive = openingBalance > 0;
+    const entries = debitNormal
+      ? [
+          {account:name, account_code:code, side: positive?'debit':'credit', amount:amt},
+          {account:lang==='ar'?'رأس المال':'Capital', account_code:'3000', side: positive?'credit':'debit', amount:amt},
+        ]
+      : [
+          {account:name, account_code:code, side: positive?'credit':'debit', amount:amt},
+          {account:lang==='ar'?'رأس المال':'Capital', account_code:'3000', side: positive?'debit':'credit', amount:amt},
+        ];
+    db.journal.push({
+      id: db.nextId.journal++, date: new Date().toISOString(),
+      description: `رصيد افتتاحي: ${name}`,
+      entries,
+      ref: `OB-ACC-${code}`
+    });
+  }
+
   saveDB(db);
   showToast(`✅ ${t('save')}`);
   closeModal();
@@ -5314,6 +5563,7 @@ function renderReports(c) {
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='balance'?'active':''}" onclick="setReportMainTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
       ${hasPlanFeature('journal')?`<button class="tab-btn ${reportMainTab==='journal'?'active':''}" onclick="setReportMainTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='accounts'?'active':''}" onclick="setReportMainTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
+      ${(currentUser?.role==='owner'||has('accounts.close_period'))?`<button class="tab-btn ${reportMainTab==='period_close'?'active':''}" onclick="setReportMainTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>`:''}
       <button class="tab-btn ${reportMainTab==='zakat'?'active':''}" onclick="setReportMainTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
       <button class="tab-btn ${reportMainTab==='statements'?'active':''}" onclick="setReportMainTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
@@ -5337,6 +5587,7 @@ function renderReportMainContent() {
   else if(reportMainTab==='overdue')  renderOverdueReport(mc);
   else if(reportMainTab==='zakat')    renderZakatReport(mc);
   else if(reportMainTab==='statements') renderStatements(mc);
+  else if(reportMainTab==='period_close') renderPeriodClosing(mc);
   else renderAccounts(mc);
 }
 
@@ -5349,7 +5600,6 @@ function renderTrialBalance(c) {
   // (رفعًا وسحبًا)، فصار الاعتماد عليه مباشرة موثوقًا ومطابقًا لدفتر اليومية
   // نفسه ولميزان المراجعة عمليًا، بنفس أسلوب الميزانية العمومية.
   const bal = journalAccountBalances(db);
-  const debitNormalTypes = ['أصول','مصروفات'];
   // نوع الحساب يُستدل عليه من بادئة الرمز المحاسبي (١=أصول، ٢=التزامات، ٣=حقوق ملكية، ٤=إيرادات، ٥=مصروفات)
   const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
 
@@ -5357,10 +5607,10 @@ function renderTrialBalance(c) {
     const entry = bal[code];
     const type = typeFromCode(code);
     const net = (entry.debit||0) - (entry.credit||0);
-    const isDebitNormal = debitNormalTypes.includes(type);
-    // نعرض الرصيد الصافي بالخانة المناسبة لطبيعة الحساب — إن انعكس (رصيد غير معتاد) نعرضه بالخانة المقابلة
-    const debit  = isDebitNormal ? Math.max(0, net)  : Math.max(0, -net);
-    const credit = isDebitNormal ? Math.max(0, -net) : Math.max(0, net);
+    // صافي موجب = رصيد مدين حقيقي (يُعرض بخانة مدين)، صافي سالب = رصيد دائن حقيقي (يُعرض بخانة دائن) —
+    // بصرف النظر عن طبيعة الحساب، وإلا ينعكس عرض حسابات الإيرادات/الالتزامات/حقوق الملكية عند رصيدها الطبيعي
+    const debit  = Math.max(0, net);
+    const credit = Math.max(0, -net);
     return { code, name: entry.name, type, debit, credit };
   }).filter(r=>r.debit>0.004||r.credit>0.004);
 
@@ -6331,6 +6581,7 @@ function renderUsers(c) {
     'suppliers.manage':lang==='ar'?'إدارة الموردين':'Manage Suppliers','treasury.view':lang==='ar'?'عرض الخزينة':'View Treasury',
     'treasury.manage':lang==='ar'?'إدارة الخزينة':'Manage Treasury','reports.view':lang==='ar'?'عرض التقارير':'View Reports',
     'accounts.view':lang==='ar'?'عرض الحسابات':'View Accounts','accounts.manage':lang==='ar'?'إدارة الحسابات':'Manage Accounts',
+    'accounts.close_period':lang==='ar'?'إقفال الفترات المحاسبية':'Close Accounting Periods',
     'users.view':lang==='ar'?'عرض المستخدمين':'View Users','users.manage':lang==='ar'?'إدارة المستخدمين':'Manage Users',
     'settings.view':lang==='ar'?'عرض الإعدادات':'View Settings','settings.manage':lang==='ar'?'إدارة الإعدادات':'Manage Settings',
     'activity.view':lang==='ar'?'عرض النشاطات':'View Activity',
@@ -6401,6 +6652,7 @@ function showUserModal(id) {
     'reports.view':lang==='ar'?'عرض التقارير':'View Reports',
     'accounts.view':lang==='ar'?'عرض الحسابات':'View Accounts',
     'accounts.manage':lang==='ar'?'إدارة الحسابات':'Manage Accounts',
+    'accounts.close_period':lang==='ar'?'إقفال الفترات المحاسبية':'Close Accounting Periods',
     'users.view':lang==='ar'?'عرض المستخدمين':'View Users',
     'users.manage':lang==='ar'?'إدارة المستخدمين':'Manage Users',
     'settings.view':lang==='ar'?'عرض الإعدادات':'View Settings',
@@ -6830,9 +7082,13 @@ function showPaySalaryModal(id) {
 
 function paySalary(id) {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB(); const e=db.employees.find(x=>x.id===id); if(!e) return;
   const amount=Number(el('ps-amount').value||0);
   if(amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter a valid amount','error');return;}
+  guardClosedPeriod(el('ps-date')?.value||new Date().toISOString().slice(0,10), () => _paySalaryActual(id));
+}
+function _paySalaryActual(id) {
+  const db=getDB(); const e=db.employees.find(x=>x.id===id); if(!e) return;
+  const amount=Number(el('ps-amount').value||0);
   const date=el('ps-date').value||new Date().toISOString().slice(0,10);
   const notes=el('ps-notes')?.value||'';
 
@@ -7456,6 +7712,10 @@ function saveVoucher(type, printAfter=true) {
     }
   }
 
+  guardClosedPeriod(el('v-date')?.value||new Date().toISOString().slice(0,10), () => _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount));
+}
+function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount) {
+  const db = getDB();
   const voucher = {
     id: num, type,
     voucher_no: `${isReceipt?'RCV':'PAY'}-${String(num).padStart(4,'0')}`,
@@ -7956,11 +8216,8 @@ function calcReturnVat() {
 
 function saveReturn(type) {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB();
   const amount=Number(el('rt-amount').value||0);
   if(!el('rt-party').value||!amount){showToast(lang==='ar'?'البيانات مطلوبة':'Required fields missing','error');return;}
-  const isSales=type==='sales';
-  const num=db.nextId.return_||1; db.nextId.return_=num+1;
 
   // linked invoice/purchase
   const linkSel=el('rt-link');
@@ -7974,6 +8231,13 @@ function saveReturn(type) {
       : `This return isn't linked to any invoice — the full amount (${fmtMoney(amount)}) will be pulled from treasury as cash with no further check. Continue?`;
     if(!confirm(confirmMsg)) return;
   }
+
+  guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), () => _saveReturnActual(type, amount, linkedId));
+}
+function _saveReturnActual(type, amount, linkedId) {
+  const db=getDB();
+  const isSales=type==='sales';
+  const num=db.nextId.return_||1; db.nextId.return_=num+1;
 
   // product link
   const prodSel=el('rt-product');
@@ -13356,6 +13620,10 @@ async function runAISearchQuery(q) {
     };
   }
 
+  function closedPeriodToAPI(cp) {
+    return { period_type: cp.period_type, period_key: cp.period_key, closed_by_name: cp.closed_by_name || '' };
+  }
+
   function voucherToAPI(v) {
     return {
       voucher_no: v.voucher_no, type: v.type, party_type: v.party_type || null,
@@ -13371,7 +13639,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -13391,6 +13659,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/employees/shifts/list').catch(() => null),
         apiFetch('GET', '/api/products/stock-moves/list').catch(() => null),
         apiFetch('GET', '/api/vouchers').catch(() => null),
+        apiFetch('GET', '/api/closed-periods').catch(() => null),
       ]);
 
       const db = getDB();
@@ -13480,6 +13749,15 @@ async function runAISearchQuery(q) {
           db.returns = [..._rFromServer, ...db.returns]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
+      }
+
+      // ── إقفال الفترات المحاسبية: قائمة موحّدة على مستوى الشركة كاملة (وليست
+      //    إضافية لكل جهاز) — نستبدل بها القائمة المحلية مباشرة بثقة كاملة بالسيرفر
+      if (closedPeriodsRes?.data) {
+        db.closed_periods = closedPeriodsRes.data.map(row => ({
+          id: 'srv-' + row.id, period_type: row.period_type, period_key: row.period_key,
+          closed_by_name: row.closed_by_name || '', created_at: row.created_at, _serverId: row.id,
+        }));
       }
 
       // ── سندات القبض والصرف: اسحب أي سند سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
@@ -13865,6 +14143,22 @@ async function runAISearchQuery(q) {
         if (!(newDB.quotes || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: delete quote', old.quote_no);
           await apiFetch('DELETE', `/api/quotes/${old.id}`).catch(() => {});
+        }
+      }
+
+      // ── إقفال الفترات المحاسبية: create / delete (فتح فترة) ──
+      for (const cp of newDB.closed_periods || []) {
+        const old = (prev.closed_periods || []).find(o => o.id === cp.id);
+        if (!old) {
+          if (SYNC_LOG) console.log('→ API: close period', cp.period_key);
+          const res = await apiFetch('POST', '/api/closed-periods', closedPeriodToAPI(cp)).catch(e => { console.warn('closed period sync:', e.message); return null; });
+          if (res?.data?.id && res.data.id !== cp.id) _replaceLocalId('closed_periods', cp.id, res.data.id);
+        }
+      }
+      for (const old of prev.closed_periods || []) {
+        if (!(newDB.closed_periods || []).find(cp => cp.id === old.id)) {
+          if (SYNC_LOG) console.log('→ API: reopen period', old.period_key);
+          await apiFetch('DELETE', `/api/closed-periods/${old.id}`).catch(e => console.warn('closed period delete sync:', e.message));
         }
       }
 

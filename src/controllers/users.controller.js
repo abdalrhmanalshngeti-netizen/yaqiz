@@ -128,7 +128,7 @@ exports.changePassword = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير' });
     }
 
-    const isSelf = String(req.params.id) === String(req.user.id);
+    const isSelf = String(req.params.id) === String(req.user.sub);
     const isOwner = req.user.role === 'owner';
 
     // المستخدم يغير كلمة مروره بنفسه → يجب إدخال القديمة
