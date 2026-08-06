@@ -7669,10 +7669,10 @@ function showReturnModal(type) {
       <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;">
         <div style="font-weight:800;margin-bottom:6px;">📌 ${lang==='ar'?'التأثير التلقائي:':'Automatic effect:'}</div>
         ${isSales
-          ?`<div>✅ ${lang==='ar'?'الخزينة: ستنقص بمبلغ المرتجع':'Treasury: will decrease'}</div>
+          ?`<div>✅ ${lang==='ar'?'الخزينة و/أو رصيد العميل: يُقسَّم الأثر بينهما حسب ما تم سداده فعليًا من الفاتورة المرتبطة (إن وُجدت)':'Treasury and/or customer balance: split based on how much of the linked invoice was actually paid'}</div>
             <div>✅ ${lang==='ar'?'المخزون: سيزيد بالكمية المرتجعة (إن حددت منتج)':'Inventory: will increase if product selected'}</div>
             <div>✅ ${lang==='ar'?'ضريبة المخرجات: ستنقص':'Output VAT: will decrease'}</div>`
-          :`<div>✅ ${lang==='ar'?'الخزينة: ستزيد باسترداد المبلغ':'Treasury: will increase (refund)'}</div>
+          :`<div>✅ ${lang==='ar'?'الخزينة و/أو رصيد المورد: يُقسَّم الأثر بينهما حسب ما تم سداده فعليًا من فاتورة الشراء المرتبطة (إن وُجدت)':'Treasury and/or supplier balance: split based on how much of the linked purchase was actually paid'}</div>
             <div>✅ ${lang==='ar'?'المخزون: سينقص بالكمية المرتجعة (إن حددت منتج)':'Inventory: will decrease if product selected'}</div>
             <div>✅ ${lang==='ar'?'ضريبة المدخلات: ستنقص':'Input VAT: will decrease'}</div>`}
       </div>
@@ -7742,14 +7742,40 @@ function saveReturn(type) {
   if(!db.returns) db.returns=[];
   db.returns.push(ret);
 
-  // 1. Treasury effect
+  // 1. تقسيم أثر المرتجع بين الخزينة (الجزء المسدّد فعليًا) ورصيد العميل/المورد (الجزء الآجل)
+  //    بحسب حالة سداد الفاتورة/فاتورة الشراء المرتبطة — يغطي نقدي/آجل/جزئي بنفس المعادلة:
+  //    الفاتورة المدفوعة بالكامل → كل المرتجع نقدي. غير المسددة إطلاقًا → كل المرتجع يخصم من الرصيد.
+  //    المسددة جزئيًا → يُقسَّم المرتجع بنفس نسبة ما تم سداده من الفاتورة الأصلية.
+  let cashPortion = amount, creditPortion = 0;
+  if (linkedRec) {
+    const grandTotal = isSales ? (linkedRec.grand_total||0) : (linkedRec.total||0);
+    const paidAmount = linkedRec.paid_amount||0;
+    const paidFraction = grandTotal>0 ? Math.min(1, Math.max(0, paidAmount/grandTotal)) : (paidAmount>0?1:0);
+    cashPortion = Math.round(amount*paidFraction*100)/100;
+    creditPortion = Math.round((amount-cashPortion)*100)/100;
+  }
+
+  // 1أ. أثر الخزينة — فقط على الجزء اللي فعلاً تحرّك نقديًا
   const tType=isSales?'out':'in';
-  db.treasury.balance+=isSales?-amount:amount;
-  db.treasury.moves.unshift({
-    id:nextId(db,'treasury'), type:tType, amount,
-    description:`مرتجع ${isSales?'مبيعات':'مشتريات'} ${ret.return_no}: ${ret.party}`,
-    reference:ret.return_no, date:new Date().toISOString(), method:retMethod
-  });
+  if (cashPortion>0) {
+    db.treasury.balance+=isSales?-cashPortion:cashPortion;
+    db.treasury.moves.unshift({
+      id:nextId(db,'treasury'), type:tType, amount:cashPortion,
+      description:`مرتجع ${isSales?'مبيعات':'مشتريات'} ${ret.return_no}: ${ret.party}`,
+      reference:ret.return_no, date:new Date().toISOString(), method:retMethod
+    });
+  }
+
+  // 1ب. أثر رصيد العميل/المورد — فقط على الجزء الآجل غير المسدد (يقلل ما هو مديون/مستحق له فيه)
+  if (creditPortion>0) {
+    if (isSales) {
+      const cust=db.customers.find(c=>c.name===ret.party);
+      if (cust) cust.balance=Math.round((Math.max(0,(cust.balance||0)-creditPortion))*100)/100;
+    } else {
+      const sup=db.suppliers.find(s=>s.name===ret.party);
+      if (sup) sup.balance=Math.round((Math.max(0,(sup.balance||0)-creditPortion))*100)/100;
+    }
+  }
 
   // 2. Stock effect: sales return → stock IN (تُعاد للمخزون بتكلفتها الحالية)
   //    purchase return → stock OUT (تخرج من المخزون بأسلوب FIFO)
@@ -7786,12 +7812,13 @@ function saveReturn(type) {
   if(!db.journal) db.journal=[];
   if(!db.nextId.journal) db.nextId.journal=1;
   if(isSales) {
-    // Dr. Sales Returns & Dr. VAT Payable / Cr. Cash
+    // Dr. Sales Returns & Dr. VAT Payable / Cr. Cash (الجزء المسدد) و/أو Cr. الذمم المدينة (الجزء الآجل)
     const salesRetEntries = [
       {account:lang==='ar'?'مرتجعات المبيعات':'Sales Returns', account_code:'4200', side:'debit', amount:base},
       {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'debit', amount:vat},
-      {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount}
     ];
+    if(cashPortion>0) salesRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:cashPortion});
+    if(creditPortion>0) salesRetEntries.push({account:lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side:'credit', amount:creditPortion});
     if(returnCogsReversal>0) {
       // البضاعة رجعت للمخزون → نعكس جزء من تكلفة البضاعة المباعة الأصلية
       salesRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:returnCogsReversal});
@@ -7813,15 +7840,16 @@ function saveReturn(type) {
       }
     }
   } else {
-    // Purchase return: Dr. Cash / Cr. Purchase Returns & Cr. Input VAT
+    // Purchase return: Dr. Cash (الجزء المسدد) و/أو Dr. الذمم الدائنة (الجزء الآجل) / Cr. Purchase Returns & Cr. Input VAT
+    const purRetEntries = [];
+    if(cashPortion>0) purRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
+    if(creditPortion>0) purRetEntries.push({account:lang==='ar'?'الذمم الدائنة':'Accounts Payable', account_code:'2100', side:'debit', amount:creditPortion});
+    purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
+    purRetEntries.push({account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'credit', amount:vat});
     db.journal.push({
       id:db.nextId.journal++, date:new Date().toISOString(),
       description:`مرتجع مشتريات ${ret.return_no} — ${ret.party}`,
-      entries:[
-        {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount},
-        {account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base},
-        {account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'credit', amount:vat}
-      ],
+      entries:purRetEntries,
       ref:ret.return_no
     });
     // Update linked purchase if exists
@@ -7836,7 +7864,12 @@ function saveReturn(type) {
 
   saveDB(db);
   logActivity('مرتجعات',`${isSales?'مرتجع مبيعات':'مرتجع مشتريات'} ${ret.return_no} — ${ret.party} — ${fmtMoney(amount)}`);
-  showToast(`✅ ${lang==='ar'?`تم: ${ret.return_no} — الخزينة والمخزون والضريبة تحدثت`:`Done: ${ret.return_no} — Treasury, inventory & VAT updated`}`);
+  const splitMsg = creditPortion>0
+    ? (cashPortion>0
+        ? (lang==='ar'?`— قُسّم بين الخزينة (${fmtMoney(cashPortion)}) ورصيد الحساب (${fmtMoney(creditPortion)})`:` — split between treasury (${fmtMoney(cashPortion)}) and account balance (${fmtMoney(creditPortion)})`)
+        : (lang==='ar'?'— خُصم بالكامل من رصيد الحساب (لم يكن هناك سداد نقدي)':' — fully applied to account balance (no cash was collected)'))
+    : (lang==='ar'?'— الخزينة والمخزون والضريبة تحدثت':' — treasury, inventory & VAT updated');
+  showToast(`✅ ${lang==='ar'?`تم: ${ret.return_no}`:`Done: ${ret.return_no}`} ${splitMsg}`);
   closeModal(); renderPage();
 }
 
