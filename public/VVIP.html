@@ -3951,6 +3951,7 @@ function showAddGoodsPurchase(keepItems) {
             <option value="نقدي">${lang==='ar'?'نقدي (سداد كامل)':'Cash (Full)'}</option>
             <option value="جزئي">${lang==='ar'?'جزئي':'Partial'}</option>
           </select>
+          <div id="gp-payment-badge" style="margin-bottom:8px;"></div>
           <div id="gp-partial-field" style="display:none;">
             <label class="form-label">${lang==='ar'?'المبلغ المدفوع الآن:':'Amount Paid Now:'}</label>
             <input class="input" type="number" id="gp-paid" value="0" oninput="updateGPRemaining()" />
@@ -3966,6 +3967,7 @@ function showAddGoodsPurchase(keepItems) {
     </div>
   </div>`;
   renderGPItems();
+  toggleGPPayment();
   refreshIcons();
 }
 
@@ -4065,6 +4067,17 @@ function toggleGPPayment() {
   if(pf) pf.style.display=method==='جزئي'?'block':'none';
   if(method==='نقدي'||method==='آجل') { if(el('gp-paid')) el('gp-paid').value=0; }
   updateGPRemaining();
+
+  // شارة تمييز بصري واضحة لطريقة السداد — آجل يعني التزام دَين على المنشأة تجاه المورد
+  const badge=el('gp-payment-badge');
+  if(badge) {
+    const styles={
+      'آجل':   {bg:'#fef3c7', color:'#92400e', text:lang==='ar'?'⚠️ سيُسجَّل كدين على المنشأة تجاه المورد (لم يُدفع شيء الآن)':'⚠️ Will be recorded as a debt owed to the supplier (nothing paid now)'},
+      'نقدي':  {bg:'#dcfce7', color:'#166534', text:lang==='ar'?'✅ سيُخصم كامل المبلغ من الخزينة الآن':'✅ Full amount will be deducted from treasury now'},
+      'جزئي':  {bg:'#dbeafe', color:'#1e40af', text:lang==='ar'?'ℹ️ جزء يُخصم من الخزينة الآن، والباقي يبقى ديناً على المورد':'ℹ️ Part deducted now, remainder stays owed to the supplier'},
+    }[method] || null;
+    badge.innerHTML = styles ? `<div style="background:${styles.bg};color:${styles.color};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;">${styles.text}</div>` : '';
+  }
 }
 
 function updateGPRemaining() {
@@ -7412,6 +7425,37 @@ function saveVoucher(type, printAfter=true) {
   // party: prefer select if filled, else text input
   const partyVal = (el('v-party-select')?.value||'') || el('v-party').value;
 
+  // معاينة إجبارية قبل التطبيق التلقائي على أقدم فاتورة/فاتورة شراء غير مسددة —
+  // بدون هذا التأكيد، مبلغ السند قد يُطبَّق على فاتورة غير اللي يقصدها العميل
+  if(isReceipt && !linkedInvoiceId) {
+    const preview = db.invoices
+      .filter(i=>i.customer_name===partyVal && (i.status==='آجل'||i.status==='جزئي'))
+      .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    if(preview.length) {
+      let left=amount;
+      const lines=[];
+      for(const inv of preview){ if(left<=0) break; const rem=Math.max(0,inv.grand_total-(inv.paid_amount||0)); const applying=Math.min(left,rem); if(applying>0) lines.push(`• ${inv.invoice_no}: ${fmtMoney(applying)}`); left=Math.round((left-applying)*100)/100; }
+      const msg=(lang==='ar'
+        ?`لم تحدد فاتورة معينة — سيُطبَّق المبلغ تلقائيًا على أقدم فاتورة/فواتير غير مسددة لهذا العميل بالترتيب التالي:\n\n${lines.join('\n')}${left>0?`\n\n(متبقٍ بلا تخصيص: ${fmtMoney(left)})`:''}\n\nإذا كنت تقصد فاتورة محددة، ألغِ واخترها من قائمة «ربط بفاتورة» أولاً.`
+        :`No specific invoice selected — this amount will auto-apply to the oldest unpaid invoice(s) for this customer, in this order:\n\n${lines.join('\n')}${left>0?`\n\n(Left unapplied: ${fmtMoney(left)})`:''}\n\nIf you meant a specific invoice, cancel and pick it from "Link to invoice" first.`);
+      if(!confirm(msg)) return;
+    }
+  }
+  if(!isReceipt && !linkedPurchaseId) {
+    const preview = db.purchases
+      .filter(p=>p.vendor===partyVal && (p.status==='آجل'||p.status==='جزئي'||(p.remaining_amount||0)>0))
+      .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    if(preview.length) {
+      let left=amount;
+      const lines=[];
+      for(const pur of preview){ if(left<=0) break; const rem=Math.max(0,pur.remaining_amount!=null?pur.remaining_amount:pur.total-(pur.paid_amount||0)); const applying=Math.min(left,rem); if(applying>0) lines.push(`• ${pur.vendor} (#${pur.id}): ${fmtMoney(applying)}`); left=Math.round((left-applying)*100)/100; }
+      const msg=(lang==='ar'
+        ?`لم تحدد فاتورة شراء معينة — سيُطبَّق المبلغ تلقائيًا على أقدم فاتورة/فواتير شراء غير مسددة لهذا المورد بالترتيب التالي:\n\n${lines.join('\n')}${left>0?`\n\n(متبقٍ بلا تخصيص: ${fmtMoney(left)})`:''}\n\nإذا كنت تقصد فاتورة محددة، ألغِ واخترها من قائمة «ربط بفاتورة شراء» أولاً.`
+        :`No specific purchase selected — this amount will auto-apply to the oldest unpaid purchase(s) for this supplier, in this order:\n\n${lines.join('\n')}${left>0?`\n\n(Left unapplied: ${fmtMoney(left)})`:''}\n\nIf you meant a specific purchase, cancel and pick it from "Link to purchase" first.`);
+      if(!confirm(msg)) return;
+    }
+  }
+
   const voucher = {
     id: num, type,
     voucher_no: `${isReceipt?'RCV':'PAY'}-${String(num).padStart(4,'0')}`,
@@ -7921,6 +7965,15 @@ function saveReturn(type) {
   // linked invoice/purchase
   const linkSel=el('rt-link');
   const linkedId = linkSel?Number(linkSel.value)||null:null;
+
+  // مرتجع بدون ربط بفاتورة = استرداد نقدي كامل تلقائي بلا أي أثر رقابي آخر —
+  // تأكيد إضافي صريح يوضح هذا قبل سحب المبلغ من الخزينة فعلاً
+  if(!linkedId) {
+    const confirmMsg = lang==='ar'
+      ? `هذا المرتجع غير مرتبط بأي فاتورة — سيُسحَب كامل المبلغ (${fmtMoney(amount)}) نقدًا من الخزينة مباشرة دون أي تحقق آخر. متأكد؟`
+      : `This return isn't linked to any invoice — the full amount (${fmtMoney(amount)}) will be pulled from treasury as cash with no further check. Continue?`;
+    if(!confirm(confirmMsg)) return;
+  }
 
   // product link
   const prodSel=el('rt-product');
