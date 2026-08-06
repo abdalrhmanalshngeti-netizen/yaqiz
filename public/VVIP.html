@@ -13035,8 +13035,11 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   // 2. TRANSFORMATIONS (API ↔ Frontend)
   // ═══════════════════════════════════════════════════════
-  const STATUS_TO_API  = { 'مسددة':'paid','آجل':'issued','مدفوع جزئياً':'partial','ملغاة':'cancelled','paid':'paid','issued':'issued' };
-  const STATUS_TO_FE   = { 'paid':'مسددة','issued':'آجل','partial':'مدفوع جزئياً','cancelled':'ملغاة','draft':'مسودة' };
+  // 'جزئي' هو النص الوحيد المستخدم محلياً في كل الكود (٣٨ موضع) لحالة الدفع الجزئي —
+  // 'مدفوع جزئياً' لم يكن يطابق أي منها، فكانت الفاتورة "تختفي" من شاشات الجزئي بعد
+  // إعادة تحميلها من السيرفر (invToFE يستخدم STATUS_TO_FE لتحويل حالة السيرفر).
+  const STATUS_TO_API  = { 'مسددة':'paid','آجل':'issued','جزئي':'partial','ملغاة':'cancelled','paid':'paid','issued':'issued' };
+  const STATUS_TO_FE   = { 'paid':'مسددة','issued':'آجل','partial':'جزئي','cancelled':'ملغاة','draft':'مسودة' };
 
   function invToAPI(inv) {
     const _liveDB = getDB();
