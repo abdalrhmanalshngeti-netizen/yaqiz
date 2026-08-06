@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-title يقظ - تشغيل لوحة المالك
+title يقظ - تشغيل لوحة الإدارة
 
 echo جارٍ التحقق من الخادم...
 curl -s http://localhost:3000/health > nul 2>&1
@@ -13,5 +13,5 @@ if %errorlevel% == 0 (
     timeout /t 2 /nobreak > nul
 )
 
-echo فتح لوحة المالك...
+echo فتح لوحة الإدارة...
 start "" "http://localhost:3000/admin"
