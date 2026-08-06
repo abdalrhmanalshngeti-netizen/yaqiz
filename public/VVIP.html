@@ -621,9 +621,14 @@ function getDB() {
   try {
     const d = JSON.parse(localStorage.getItem(_getDbKey()));
     if (d) {
-      // ترقية دفاتر قديمة: إضافة حساب "بضاعة بالطريق" إذا كان مفقوداً (أُضيف لاحقاً)
-      if (Array.isArray(d.accounts) && !d.accounts.some(a=>a.code==='1350')) {
-        d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'1350', name:'بضاعة بالطريق', name_en:'Goods in Transit', type:'أصول', is_group:false, parent:1 });
+      // ترقية دفاتر قديمة: إضافة حسابات أُضيفت لاحقاً إذا كانت مفقودة
+      if (Array.isArray(d.accounts)) {
+        if (!d.accounts.some(a=>a.code==='1350')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'1350', name:'بضاعة بالطريق', name_en:'Goods in Transit', type:'أصول', is_group:false, parent:1 });
+        }
+        if (!d.accounts.some(a=>a.code==='5150')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5150', name:'رواتب وأجور', name_en:'Salaries & Wages', type:'مصروفات', is_group:false, parent:11 });
+        }
       }
       return d;
     }
@@ -661,6 +666,7 @@ function initDB() {
       { id:3,  code:'1200', name:'الذمم المدينة',         name_en:'Accounts Receivable',   type:'أصول',          is_group:false, parent:1 },
       { id:4,  code:'1300', name:'المخزون',               name_en:'Inventory',             type:'أصول',          is_group:false, parent:1 },
       { id:14, code:'1350', name:'بضاعة بالطريق',         name_en:'Goods in Transit',      type:'أصول',          is_group:false, parent:1 },
+      { id:15, code:'5150', name:'رواتب وأجور',           name_en:'Salaries & Wages',      type:'مصروفات',       is_group:false, parent:11 },
       { id:5,  code:'2000', name:'الالتزامات',            name_en:'Liabilities',           type:'التزامات',      is_group:true,  parent:null },
       { id:6,  code:'2100', name:'الذمم الدائنة',         name_en:'Accounts Payable',      type:'التزامات',      is_group:false, parent:5 },
       { id:7,  code:'2200', name:'ضريبة القيمة المضافة',  name_en:'VAT Payable',           type:'التزامات',      is_group:false, parent:5 },
@@ -5325,63 +5331,70 @@ function renderTrialBalance(c) {
   const db  = getDB();
   const fmt = v => fmtMoney(Math.abs(v));
 
-  // ميزان مراجعة مبني على معادلة المحاسبة الأساسية (الأصول = الالتزامات + حقوق الملكية)
-  // بالاعتماد على نفس البيانات المُزامَنة مع السيرفر والمستخدمة في قائمة الدخل
-  // (calcReportData) — بدل دفتر اليومية المحلي البحت (غير متزامن مع السيرفر إطلاقاً
-  // وبالتالي يكون فارغاً بعد أي تسجيل دخول جديد). هذا يضمن توازن دائم بين
-  // المدين والدائن ويطابق أرقام قائمة الدخل دائماً.
-  const rpt = calcReportData(db, null);
-  const treasury    = db.treasury?.balance || 0;
-  const receivables = (db.customers||[]).reduce((s,cu)=>s+Math.max(0,cu.balance||0),0);
-  const payables    = (db.suppliers||[]).reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
-  const invValue    = (db.products||[]).reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
-  const netProfit   = rpt.netProfit;
-  const vatNet      = rpt.vatNet; // موجب = مستحق علينا لهيئة الزكاة والضريبة (التزام) — سالب = له (أصل)
+  // ميزان مراجعة حقيقي: كل حساب فعليًا استُخدم بدفتر اليومية، برصيده الصافي —
+  // بدل ٦ بنود إجمالية مبسّطة. دفتر اليومية أصبح متزامنًا بالكامل مع السيرفر
+  // (رفعًا وسحبًا)، فصار الاعتماد عليه مباشرة موثوقًا ومطابقًا لدفتر اليومية
+  // نفسه ولميزان المراجعة عمليًا، بنفس أسلوب الميزانية العمومية.
+  const bal = journalAccountBalances(db);
+  const debitNormalTypes = ['أصول','مصروفات'];
+  // نوع الحساب يُستدل عليه من بادئة الرمز المحاسبي (١=أصول، ٢=التزامات، ٣=حقوق ملكية، ٤=إيرادات، ٥=مصروفات)
+  const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
 
-  const rows = [
-    { name: lang==='ar'?'النقدية والخزينة':'Cash & Treasury',       debit: treasury,                    credit: 0,                           type:'asset' },
-    { name: lang==='ar'?'ذمم مدينة — عملاء':'Accounts Receivable', debit: receivables,                 credit: 0,                           type:'asset' },
-    { name: lang==='ar'?'قيمة المخزون':'Inventory Value',          debit: invValue,                    credit: 0,                           type:'asset' },
-    { name: lang==='ar'?'ذمم دائنة — موردون':'Accounts Payable',   debit: 0,                           credit: payables,                    type:'liability' },
-    { name: lang==='ar'?'ضريبة القيمة المضافة المستحقة':'VAT Payable (Net)', debit: vatNet<0?-vatNet:0, credit: vatNet>0?vatNet:0,           type: vatNet<0?'asset':'liability' },
-    { name: lang==='ar'?'صافي الربح المتراكم':'Accumulated Net Profit', debit: netProfit<0?-netProfit:0, credit: netProfit>0?netProfit:0, type:'equity' },
-  ];
+  const rows = Object.keys(bal).sort().map(code=>{
+    const entry = bal[code];
+    const type = typeFromCode(code);
+    const net = (entry.debit||0) - (entry.credit||0);
+    const isDebitNormal = debitNormalTypes.includes(type);
+    // نعرض الرصيد الصافي بالخانة المناسبة لطبيعة الحساب — إن انعكس (رصيد غير معتاد) نعرضه بالخانة المقابلة
+    const debit  = isDebitNormal ? Math.max(0, net)  : Math.max(0, -net);
+    const credit = isDebitNormal ? Math.max(0, -net) : Math.max(0, net);
+    return { code, name: entry.name, type, debit, credit };
+  }).filter(r=>r.debit>0.004||r.credit>0.004);
+
   const totDebit  = rows.reduce((s,r)=>s+r.debit,0);
   const totCredit = rows.reduce((s,r)=>s+r.credit,0);
+  const balanced  = Math.abs(totDebit-totCredit) < 1;
 
-  const typeColor = {asset:'#3b82f6',income:'#10b981',expense:'#ef4444',liability:'#f59e0b',equity:'#8b5cf6'};
-  const typeBadge = {asset:'أصل',income:'إيراد',expense:'مصروف',liability:'التزام',equity:'حقوق ملكية'};
+  const typeColor = {'أصول':'#3b82f6','إيرادات':'#10b981','مصروفات':'#ef4444','التزامات':'#f59e0b','حقوق ملكية':'#8b5cf6','أخرى':'#64748b'};
+  const typeColorEn = {'أصول':'#3b82f6','إيرادات':'#10b981','مصروفات':'#ef4444','التزامات':'#f59e0b','حقوق ملكية':'#8b5cf6','أخرى':'#64748b'};
+  const typeLabel = {'أصول':lang==='ar'?'أصل':'Asset','إيرادات':lang==='ar'?'إيراد':'Revenue','مصروفات':lang==='ar'?'مصروف':'Expense','التزامات':lang==='ar'?'التزام':'Liability','حقوق ملكية':lang==='ar'?'حقوق ملكية':'Equity','أخرى':lang==='ar'?'أخرى':'Other'};
 
   c.innerHTML = `
   <div style="margin-top:16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="font-size:18px;font-weight:900;">${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</div>
-        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إجمالي تراكمي حتى اليوم':'Cumulative totals to date'}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'كل حساب استُخدم بدفتر اليومية، من إنشاء الحساب حتى اليوم':'Every account used in the journal, since inception'}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <div style="padding:8px 16px;background:rgba(59,130,246,.1);border-radius:10px;font-size:12px;font-weight:700;color:#3b82f6;">📊 ${lang==='ar'?`صافي الربح: ${fmtMoney(netProfit)}`:`Net Profit: ${fmtMoney(netProfit)}`}</div>
+        <div style="padding:8px 16px;background:${balanced?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};border-radius:10px;font-size:12px;font-weight:700;color:${balanced?'#16a34a':'#dc2626'};">
+          ${balanced?'✅':'⚠️'} ${balanced?(lang==='ar'?'متوازن':'Balanced'):(lang==='ar'?`فرق: ${fmtMoney(Math.abs(totDebit-totCredit))}`:`Diff: ${fmtMoney(Math.abs(totDebit-totCredit))}`)}
+        </div>
       </div>
     </div>
     <div class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
+          <th>${lang==='ar'?'الرمز':'Code'}</th>
           <th>${lang==='ar'?'الحساب':'Account'}</th>
           <th>${lang==='ar'?'النوع':'Type'}</th>
           <th style="text-align:end;">${lang==='ar'?'مدين':'Debit'}</th>
           <th style="text-align:end;">${lang==='ar'?'دائن':'Credit'}</th>
         </tr></thead>
         <tbody>
-          ${rows.map(r=>`<tr>
+          ${rows.length===0
+            ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد قيود بدفتر اليومية بعد':'No journal entries yet'}</td></tr>`
+            :rows.map(r=>`<tr>
+            <td><code>${r.code}</code></td>
             <td style="font-weight:700;">${sanitize(r.name)}</td>
-            <td><span style="background:${typeColor[r.type]}18;color:${typeColor[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeBadge[r.type]||r.type}</span></td>
+            <td><span style="background:${typeColor[r.type]}18;color:${typeColorEn[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeLabel[r.type]}</span></td>
             <td style="text-align:end;font-weight:700;color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmt(r.debit):'—'}</td>
             <td style="text-align:end;font-weight:700;color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmt(r.credit):'—'}</td>
           </tr>`).join('')}
         </tbody>
         <tfoot>
           <tr style="background:var(--primary-soft);font-weight:900;">
-            <td colspan="2" style="padding:12px 14px;">${lang==='ar'?'الإجمالي':'Total'}</td>
+            <td colspan="3" style="padding:12px 14px;">${lang==='ar'?'الإجمالي':'Total'}</td>
             <td style="padding:12px 14px;text-align:end;color:var(--primary);">${fmt(totDebit)}</td>
             <td style="padding:12px 14px;text-align:end;color:var(--primary);">${fmt(totCredit)}</td>
           </tr>
@@ -5389,7 +5402,7 @@ function renderTrialBalance(c) {
       </table></div>
     </div>
     <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px;">
-      * ${lang==='ar'?'ميزان مراجعة مبسّط يعتمد على البيانات المتاحة في النظام.':'Simplified trial balance based on available system data.'}
+      * ${lang==='ar'?'يعرض هذا التقرير الرصيد الصافي لكل حساب من واقع القيود الفعلية بدفتر اليومية — للتفاصيل الكاملة لكل قيد راجع دفتر اليومية.':'Shows the net balance of every account as posted in the journal — for full entry-level detail see the Journal report.'}
     </div>
   </div>`;
 }
@@ -6699,10 +6712,13 @@ function renderEmployees(c) {
           <td><span class="badge badge-blue">${sanitize(e.position)}</span></td>
           <td>${sanitize(e.phone)||'-'}</td>
           <td>${fmtDate(e.start_date)}</td>
-          <td style="font-weight:800;color:var(--primary);">${fmtMoney(e.salary)}</td>
+          <td style="font-weight:800;color:var(--primary);">${fmtMoney(e.salary)}
+            ${e.last_paid_date?`<div style="font-size:10px;font-weight:400;color:var(--text-muted);">${lang==='ar'?'آخر دفعة:':'Last paid:'} ${fmtDate(e.last_paid_date)}</div>`:''}
+          </td>
           <td><span class="badge ${e.status==='active'?'badge-green':'badge-red'}">${e.status==='active'?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'موقوف':'Inactive')}</span></td>
           ${has('employees.manage')?`<td>
-            <button class="icon-btn" style="width:28px;height:28px;" onclick="showEmployeeModal(${e.id})">${icon('edit',13)}</button>
+            ${e.status==='active'?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="showPaySalaryModal(${e.id})" title="${lang==='ar'?'دفع الراتب':'Pay Salary'}">${icon('banknote',13)}</button>`:''}
+            <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" onclick="showEmployeeModal(${e.id})">${icon('edit',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" onclick="deleteEmployee(${e.id})">${icon('trash-2',13)}</button>
           </td>`:''}
         </tr>`).join('')}</tbody>
@@ -6769,6 +6785,77 @@ function saveEmployee(id) {
 function deleteEmployee(id) {
   if(!confirm(lang==='ar'?'تأكيد حذف الموظف؟':'Confirm delete employee?')) return;
   const db=getDB(); db.employees=db.employees.filter(e=>e.id!==id); saveDB(db); renderPage();
+}
+
+// ── دفع الراتب: معاملة محاسبية فعلية (خزينة + قيد) وليست مجرد سجل بيانات ──
+function showPaySalaryModal(id) {
+  const db=getDB(); const e=db.employees.find(x=>x.id===id); if(!e) return;
+  const mc=el('modal-container');
+  mc.innerHTML=`
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <h3>💵 ${lang==='ar'?'دفع راتب':'Pay Salary'}: ${sanitize(e.name)}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">
+        ${lang==='ar'?'يُسجَّل الدفع كمصروف نقدي فوري (خزينة + قيد محاسبي) — مطابق لسلوك المصاريف الإدارية الأخرى.':'Recorded as an instant cash expense (treasury + journal entry) — same as other administrative expenses.'}
+      </p>
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'المبلغ':'Amount'} *</label><input class="input" type="number" id="ps-amount" value="${e.salary}" /></div>
+        <div><label class="form-label">${lang==='ar'?'تاريخ الدفع':'Payment Date'}</label><input class="input" type="date" id="ps-date" value="${new Date().toISOString().slice(0,10)}" /></div>
+      </div>
+      <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'ملاحظات':'Notes'}</label><input class="input" id="ps-notes" placeholder="${lang==='ar'?'مثال: راتب شهر...':'e.g. Salary for month of...'}" /></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" onclick="paySalary(${id})">${lang==='ar'?'تأكيد الدفع':'Confirm Payment'}</button>
+        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function paySalary(id) {
+  if (blockedByExpiredSubscription()) return;
+  const db=getDB(); const e=db.employees.find(x=>x.id===id); if(!e) return;
+  const amount=Number(el('ps-amount').value||0);
+  if(amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter a valid amount','error');return;}
+  const date=el('ps-date').value||new Date().toISOString().slice(0,10);
+  const notes=el('ps-notes')?.value||'';
+
+  // 1. الخزينة — دفع نقدي فوري
+  if(!db.treasury) db.treasury={balance:0,moves:[]};
+  if(!db.treasury.moves) db.treasury.moves=[];
+  db.treasury.balance=Math.round((db.treasury.balance-amount)*100)/100;
+  db.treasury.moves.unshift({
+    id:nextId(db,'treasury'), type:'out', amount,
+    description:`راتب: ${e.name}${notes?' — '+notes:''}`,
+    reference:`SAL-${e.id}-${date}`, date:new Date(date).toISOString(), method:'نقدي'
+  });
+
+  // 2. القيد المحاسبي — لا ضريبة على الرواتب (الأجور خارج نطاق ضريبة القيمة المضافة)
+  if(!db.journal) db.journal=[];
+  if(!db.nextId.journal) db.nextId.journal=1;
+  db.journal.push({
+    id:db.nextId.journal++, date:new Date(date).toISOString(),
+    description:`راتب موظف: ${e.name}${notes?' — '+notes:''}`,
+    entries:[
+      {account:lang==='ar'?'رواتب وأجور':'Salaries & Wages', account_code:'5150', side:'debit', amount},
+      {account:lang==='ar'?'النقدية والخزينة':'Cash & Treasury', account_code:'1100', side:'credit', amount},
+    ],
+    ref:`SAL-${e.id}-${date}`
+  });
+
+  // 3. سجل الدفعات على الموظف نفسه — لعرض "آخر دفعة" وتاريخ الرواتب
+  if(!e.payments) e.payments=[];
+  e.payments.push({date:new Date(date).toISOString(), amount, notes});
+  e.last_paid_date=new Date(date).toISOString();
+  e.last_paid_amount=amount;
+
+  saveDB(db);
+  logActivity('الموظفون', `دفع راتب ${e.name} — ${fmtMoney(amount)}`);
+  showToast(`✅ ${lang==='ar'?`تم دفع راتب ${e.name} — ${fmtMoney(amount)}`:`Paid ${e.name} — ${fmtMoney(amount)}`}`);
+  closeModal(); renderPage();
 }
 
 // ============ OBLIGATIONS ============
