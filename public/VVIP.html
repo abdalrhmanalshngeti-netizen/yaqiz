@@ -1719,7 +1719,7 @@ async function sendAIMsg() {
     const thisMonth    = now.toISOString().slice(0, 7);
     const lastMonth    = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
 
-    const invList  = db.invoices    || [];
+    const invList  = (db.invoices    || []).filter(i=>i.status!=='ملغاة');
     const purList  = db.purchases   || [];
     const custList = db.customers   || [];
     const suppList = db.suppliers   || [];
@@ -1972,7 +1972,7 @@ function renderDashboard(c) {
   const lastMonth = month === 0 ? 11 : month - 1;
   const lastMonthYear = month === 0 ? year - 1 : year;
 
-  const todaySales  = db.invoices.filter(i=>new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
+  const todaySales  = db.invoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
   const monthSales  = db.invoices.filter(i=>new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
   const lastMSales  = db.invoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
   const monthPurch  = db.purchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
@@ -2800,7 +2800,7 @@ function renderInvoicesList(sc) {
     return matchQ&&matchS&&matchT;
   });
 
-  const totalAll=db.invoices.reduce((s,i)=>s+i.grand_total,0);
+  const totalAll=db.invoices.filter(i=>i.status!=='ملغاة').reduce((s,i)=>s+i.grand_total,0);
   const totalPaid=db.invoices.filter(i=>i.status==='مسددة').reduce((s,i)=>s+i.grand_total,0);
   const totalPending=db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+(i.grand_total-(i.paid_amount||0)),0);
 
@@ -2882,13 +2882,13 @@ function renderInvoicesList(sc) {
                 </td>
                 <td style="color:${remaining>0?'var(--danger)':'var(--success)'};font-weight:700;">${remaining>0?fmtMoney(remaining):'✓ مسدد'}</td>
                 <td>
-                  <span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':'badge-red'}">${i.status}</span>
+                  <span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':i.status==='ملغاة'?'badge-gray':'badge-red'}">${i.status}</span>
                 </td>
                 <td>
                   <div style="display:flex;gap:4px;">
                     <button class="icon-btn" style="width:28px;height:28px;" onclick="printSalesInvoice(${i.id})" title="${lang==='ar'?'طباعة':'Print'}">${icon('printer',13)}</button>
-                    ${i.status==='آجل'||i.status==='جزئي'?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="quickReceipt(${i.id})" title="${lang==='ar'?'تحصيل':'Collect'}">${icon('dollar-sign',13)}</button>`:''}
-                    ${has('sales.create')?`<button class="icon-btn" style="width:28px;height:28px;" onclick="deleteInvoice(${i.id})" title="${lang==='ar'?'حذف':'Delete'}">${icon('trash-2',13)}</button>`:''}
+                    ${i.status!=='ملغاة'&&(i.status==='آجل'||i.status==='جزئي')?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="quickReceipt(${i.id})" title="${lang==='ar'?'تحصيل':'Collect'}">${icon('dollar-sign',13)}</button>`:''}
+                    ${has('sales.create')&&i.status!=='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="cancelInvoice(${i.id})" title="${lang==='ar'?'إلغاء الفاتورة':'Cancel invoice'}">${icon('ban',13)}</button>`:''}
                   </div>
                 </td>
               </tr>`;
@@ -2900,48 +2900,82 @@ function renderInvoicesList(sc) {
   refreshIcons();
 }
 
-function deleteInvoice(id) {
-  if(!confirm(lang==='ar'?'حذف الفاتورة نهائياً؟ سيتم عكس جميع القيود المحاسبية والمخزون.':'Delete invoice? All accounting entries will be reversed.'))return;
+// ملاحظة: هذه الدالة تُلغي الفاتورة (لا تحذفها) — متطلب هيئة الزكاة والضريبة والجمارك
+// يمنع حذف الفواتير المُصدرة نهائياً؛ يبقى رقم الفاتورة والسجل والقيد الأصلي محفوظين
+// للأبد ويُضاف قيد عكسي جديد بدلاً من حذف القيد الأصلي — يحافظ على أثر التدقيق الكامل.
+function cancelInvoice(id) {
   const db=getDB();
   const inv=db.invoices.find(i=>i.id===id);
-  if(!inv){db.invoices=db.invoices.filter(i=>i.id!==id);saveDB(db);renderPage();return;}
+  if(!inv){showToast(lang==='ar'?'الفاتورة غير موجودة':'Invoice not found','error');return;}
+  if(inv.status==='ملغاة'){showToast(lang==='ar'?'الفاتورة ملغاة مسبقاً':'Invoice already cancelled','error');return;}
+  if(!confirm(lang==='ar'?`إلغاء الفاتورة ${inv.invoice_no}؟ سيتم عكس أثرها المحاسبي والمخزني بقيد ومخزون عكسي، وتبقى الفاتورة محفوظة برقمها كـ"ملغاة" لأغراض التدقيق.`:`Cancel invoice ${inv.invoice_no}? Its accounting/stock effect will be reversed and it will remain saved as "cancelled" for audit purposes.`))return;
 
-  // 1. عكس القيد اليومي — حذف القيد المرتبط بالفاتورة
-  if(db.journal) db.journal=db.journal.filter(j=>j.ref!==inv.invoice_no);
+  // 1. عكس القيد اليومي — بإضافة قيد عكسي جديد (وليس حذف القيد الأصلي)
+  const origEntry=(db.journal||[]).find(j=>j.ref===inv.invoice_no);
+  if(origEntry){
+    if(!db.journal) db.journal=[];
+    if(!db.nextId.journal) db.nextId.journal=1;
+    db.journal.push({
+      id:db.nextId.journal++, date:new Date().toISOString(),
+      description:`إلغاء فاتورة ${inv.invoice_no} — عكس القيد الأصلي`,
+      entries:origEntry.entries.map(e=>({...e, side:e.side==='debit'?'credit':'debit'})),
+      ref:`CANCEL-${inv.invoice_no}`
+    });
+  }
 
-  // 2. عكس المخزون — استرجاع الكميات المُبَاعة + إعادة دفعة FIFO
+  // 2. عكس المخزون — استرجاع الكميات المُبَاعة بحركة مخزون عكسية موثّقة
   //    (بتكلفة الشراء الحالية كتقدير — نفس الأسلوب المستخدم في تقييم المخزون
   //    بالميزانية العمومية وميزان المراجعة، لأن التكلفة الدقيقة لكل صنف وقت
   //    البيع غير محفوظة على مستوى البند بالفاتورة)
-  if(db.stock_moves && inv.items){
+  if(inv.items){
+    if(!db.stock_moves) db.stock_moves=[];
+    if(!db.nextId.stock_move) db.nextId.stock_move=1;
     inv.items.forEach(item=>{
       const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
       if(prod){
+        const oldQty=prod.qty;
         prod.qty=Math.min(999999, (prod.qty||0)+item.qty);
         if(!prod.lots) prod.lots=[];
-        prod.lots.push({ qty:item.qty, cost:prod.buy_price||0, date:new Date().toISOString(), ref:'del-'+inv.invoice_no });
+        prod.lots.push({ qty:item.qty, cost:prod.buy_price||0, date:new Date().toISOString(), ref:'cancel-'+inv.invoice_no });
+        db.stock_moves.push({
+          id:db.nextId.stock_move++, product_id:prod.id, product_name:prod.name, product_code:prod.code,
+          type:'in', qty:item.qty, balance_before:oldQty, balance_after:prod.qty,
+          reason:`إلغاء فاتورة ${inv.invoice_no}`, reference:'CANCEL-'+inv.invoice_no, date:new Date().toISOString()
+        });
       }
     });
-    db.stock_moves=db.stock_moves.filter(m=>m.reference!==inv.invoice_no);
   }
 
-  // 3. عكس الخزينة — خصم المبلغ المسدد فعلاً
+  // 3. عكس الخزينة — إرجاع المبلغ المسدد فعلاً بحركة عكسية موثّقة (لا حذف)
   const paidAmt=parseFloat(inv.paid_amount||0);
   if(paidAmt>0){
     db.treasury.balance=Math.round((db.treasury.balance-paidAmt)*100)/100;
-    db.treasury.moves=db.treasury.moves.filter(m=>m.reference!==inv.invoice_no);
+    db.treasury.moves.unshift({
+      id:nextId(db,'treasury'), type:'out', amount:paidAmt,
+      description:`إلغاء فاتورة ${inv.invoice_no} — استرداد للعميل`,
+      reference:'CANCEL-'+inv.invoice_no, date:new Date().toISOString(), method:inv.payment_method
+    });
   }
 
-  // 4. عكس رصيد العميل — خصم المبلغ المتبقي
+  // 4. عكس رصيد العميل — خصم المبلغ المتبقي غير المسدد
   const remaining=Math.max(0,(parseFloat(inv.grand_total||0))-(paidAmt));
   if(remaining>0 && inv.customer_name){
     const cust=db.customers.find(c=>c.name===inv.customer_name);
     if(cust) cust.balance=Math.round((Math.max(0,(cust.balance||0)-remaining))*100)/100;
   }
 
-  db.invoices=db.invoices.filter(i=>i.id!==id);
-  saveDB(db); renderPage();
+  // 5. الفاتورة تبقى في السجل بحالة "ملغاة" — لا حذف نهائي، رقمها لا يُعاد استخدامه أبداً
+  inv.status='ملغاة';
+  inv.cancelled_at=new Date().toISOString();
+  inv.cancelled_by=currentUser?.full_name||currentUser?.username||'';
+
+  saveDB(db);
+  logActivity('فواتير', `إلغاء فاتورة ${inv.invoice_no} — ${fmtMoney(inv.grand_total)} — بواسطة ${inv.cancelled_by}`);
+  showToast(`✅ ${lang==='ar'?`تم إلغاء الفاتورة ${inv.invoice_no}`:`Invoice ${inv.invoice_no} cancelled`}`);
+  renderPage();
 }
+// اسم قديم متوافق مع أي استدعاء متبقٍّ — يوجّه لنفس دالة الإلغاء
+function deleteInvoice(id){ cancelInvoice(id); }
 
 // ─────────────────────────────────────────────
 // NEW INVOICE MODAL — إنشاء فاتورة جديدة
@@ -4621,7 +4655,16 @@ function saveProduct(id) {
     data.profit_policy_value = polVal;
   }
 
-  if(id) { const p=db.products.find(x=>x.id===id); if(p) Object.assign(p,data); }
+  if(id) {
+    const p=db.products.find(x=>x.id===id);
+    if(p) {
+      const oldBuy=p.buy_price, oldSell=p.sell_price, oldName=p.name;
+      Object.assign(p,data);
+      if(Number(oldBuy)!==Number(data.buy_price)||Number(oldSell)!==Number(data.sell_price)) {
+        logActivity('المخزون', `تعديل سعر «${oldName}»: الشراء ${fmtMoney(oldBuy)}←${fmtMoney(data.buy_price)}، البيع ${fmtMoney(oldSell)}←${fmtMoney(data.sell_price)} — بواسطة ${currentUser?.full_name||currentUser?.username||''}`);
+      }
+    }
+  }
   else { db.products.push({id:nextId(db,'product'), created_at:new Date().toISOString(), ...data}); }
   saveDB(db);
   showToast(autoOn && polVal > 0 ? `✅ تم الحفظ — سعر البيع الجديد: ${sellPrice} ر.س` : `✅ ${t('save')}`);
@@ -4642,7 +4685,12 @@ function saveProduct(id) {
 
 function deleteProduct(id) {
   if(!confirm(t('confirm'))) return;
-  const db=getDB(); db.products=db.products.filter(p=>p.id!==id); saveDB(db); renderPage();
+  const db=getDB();
+  const prod=db.products.find(p=>p.id===id);
+  db.products=db.products.filter(p=>p.id!==id);
+  saveDB(db);
+  if(prod) logActivity('المخزون', `حذف منتج «${prod.name}» — بواسطة ${currentUser?.full_name||currentUser?.username||''}`);
+  renderPage();
 }
 
 // ============ CUSTOMERS ============
@@ -5625,7 +5673,9 @@ ${section==='all'?`
 
 function calcReportData(db, filterFn) {
   // filterFn(item) returns true if item is in selected period
-  const invs = filterFn ? db.invoices.filter(filterFn) : db.invoices;
+  // الفواتير الملغاة تُستبعد دائماً — عُكس أثرها بالكامل بقيد ومخزون عكسي عند الإلغاء
+  const activeInvoices = db.invoices.filter(i=>i.status!=='ملغاة');
+  const invs = filterFn ? activeInvoices.filter(filterFn) : activeInvoices;
   const purchs = filterFn ? db.purchases.filter(filterFn) : db.purchases;
   const rets = filterFn ? (db.returns||[]).filter(filterFn) : (db.returns||[]);
 
@@ -10224,7 +10274,7 @@ function renderActivity(c) {
       ${usersToShow.map(u=>{
         const userShifts = dayShifts.filter(s=>s.username===u.username);
         const userActs = dayActivity.filter(a=>a.username===u.username);
-        const userInvoices = db.invoices.filter(i=>i.created_at.slice(0,10)===today);
+        const userInvoices = db.invoices.filter(i=>i.status!=='ملغاة'&&i.created_at.slice(0,10)===today);
         // get invoices from shifts
         const shiftInvoiceIds = userShifts.flatMap(s=>s.invoice_ids||[]);
         const shiftInvoices = userInvoices.filter(i=>shiftInvoiceIds.includes(i.id));
@@ -10655,7 +10705,7 @@ function renderSettingsGeneral(c) {
       ${db.users.filter(u=>u.active!==false).map(u=>{
         const target = (db.sales_targets||[]).find(t=>t.username===u.username)?.daily||0;
         const todayStr = new Date().toISOString().slice(0,10);
-        const todaySales = db.invoices.filter(i=>i.created_at.slice(0,10)===todayStr).reduce((s,inv)=>s+(inv.grand_total||0),0);
+        const todaySales = db.invoices.filter(i=>i.status!=='ملغاة'&&i.created_at.slice(0,10)===todayStr).reduce((s,inv)=>s+(inv.grand_total||0),0);
         const pct = target>0?Math.min(100,Math.round(todaySales/target*100)):0;
         return `<div style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -11140,7 +11190,7 @@ function getCashierTargetHTML() {
   const target=(db.sales_targets||[]).find(t=>t.username===currentUser.username)?.daily||0;
   if(!target) return '';
   const today=new Date().toISOString().slice(0,10);
-  const todaySales=db.invoices.filter(i=>i.created_at.slice(0,10)===today).reduce((s,i)=>s+(i.grand_total||0),0);
+  const todaySales=db.invoices.filter(i=>i.status!=='ملغاة'&&i.created_at.slice(0,10)===today).reduce((s,i)=>s+(i.grand_total||0),0);
   const pct=Math.min(100,Math.round(todaySales/target*100));
   return `<div style="display:flex;align-items:center;gap:8px;background:var(--bg);padding:6px 12px;border-radius:10px;border:1px solid var(--border);">
     <div style="font-size:11px;font-weight:700;">🎯 ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>
