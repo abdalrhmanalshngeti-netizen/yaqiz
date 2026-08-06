@@ -5253,6 +5253,79 @@ function renderPeriodClosing(c) {
     </div>
   </div>`;
   refreshIcons();
+  if (currentUser?.role==='owner') loadOverridePasswordStatus();
+}
+
+async function loadOverridePasswordStatus() {
+  const el_ = el('pc-override-status');
+  if (!el_) return;
+  try {
+    const res = await window._cloudApiFetch('GET', '/api/closed-periods/override-password/status');
+    if (res?.is_set) {
+      el_.style.color = '#16a34a';
+      el_.textContent = `✅ ${lang==='ar'?'مُعيّنة':'Configured'}`;
+    } else {
+      el_.style.color = '#dc2626';
+      el_.textContent = `⚠️ ${lang==='ar'?'لم تُعيَّن بعد — إقفال الفترات لن يُفعَّل فعليًا حتى تعيّنها':'Not set yet — period closing will not be enforced until you set it'}`;
+    }
+  } catch (e) {
+    el_.style.color = '#dc2626';
+    el_.textContent = `⚠️ ${lang==='ar'?'تعذّر التحقق من الحالة':'Could not check status'}`;
+  }
+}
+
+function showSetOverridePasswordModal() {
+  const ov = document.createElement('div');
+  ov.className = 'modal-bg'; ov.style.zIndex = '99999';
+  ov.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>🔑 ${lang==='ar'?'تعيين / تغيير كلمة مرور التجاوز':'Set / Change Override Password'}</h3>
+        <button class="icon-btn" id="sop-close">${icon('x',18)}</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">${lang==='ar'?'هذه الكلمة منفصلة تمامًا عن كلمة مرور دخولك، وتُستخدم فقط لتجاوز إقفال فترة محاسبية أو فتحها. لتأكيد هويتك، أدخل كلمة مرور دخولك الحالية أولاً.':"This password is completely separate from your login password, and is used only to override or reopen a closed accounting period. To confirm it's you, enter your current login password first."}</p>
+      <label class="form-label">${lang==='ar'?'كلمة مرور دخولك الحالية':'Your current login password'}</label>
+      <input class="input" type="password" id="sop-login-pass" style="margin-bottom:10px;" autocomplete="off" />
+      <label class="form-label">${lang==='ar'?'كلمة مرور التجاوز الجديدة (٦ أحرف على الأقل)':'New override password (6+ characters)'}</label>
+      <input class="input" type="password" id="sop-new-pass" style="margin-bottom:10px;" autocomplete="off" />
+      <label class="form-label">${lang==='ar'?'تأكيد كلمة مرور التجاوز الجديدة':'Confirm new override password'}</label>
+      <input class="input" type="password" id="sop-new-pass2" style="margin-bottom:10px;" autocomplete="off" />
+      <div id="sop-err" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" id="sop-save">${lang==='ar'?'حفظ':'Save'}</button>
+        <button class="btn btn-outline" id="sop-cancel">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  refreshIcons();
+  const close = () => ov.remove();
+  ov.addEventListener('click', close);
+  ov.querySelector('#sop-close').onclick = close;
+  ov.querySelector('#sop-cancel').onclick = close;
+  ov.querySelector('#sop-save').onclick = async () => {
+    const loginPass = ov.querySelector('#sop-login-pass').value;
+    const newPass   = ov.querySelector('#sop-new-pass').value;
+    const newPass2  = ov.querySelector('#sop-new-pass2').value;
+    const errEl = ov.querySelector('#sop-err');
+    const btn   = ov.querySelector('#sop-save');
+    const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+    if (!loginPass || !newPass || !newPass2) { showErr(lang==='ar'?'كل الحقول مطلوبة':'All fields are required'); return; }
+    if (newPass.length < 6) { showErr(lang==='ar'?'كلمة مرور التجاوز يجب أن تكون 6 أحرف على الأقل':'Override password must be at least 6 characters'); return; }
+    if (newPass !== newPass2) { showErr(lang==='ar'?'كلمتا مرور التجاوز غير متطابقتين':'Override passwords do not match'); return; }
+    btn.disabled = true; btn.textContent = lang==='ar'?'جارٍ الحفظ...':'Saving...';
+    try {
+      await window._cloudApiFetch('PUT', '/api/closed-periods/override-password', {
+        current_login_password: loginPass, new_override_password: newPass
+      });
+      ov.remove();
+      showToast(`✅ ${lang==='ar'?'تم حفظ كلمة مرور التجاوز':'Override password saved'}`);
+      logActivity(lang==='ar'?'المحاسبة':'Accounting', lang==='ar'?'تعيين/تغيير كلمة مرور تجاوز الإقفال':'Set/changed period-closing override password');
+      loadOverridePasswordStatus();
+    } catch (e) {
+      showErr(e?.message || (lang==='ar'?'تعذّر الحفظ':'Save failed'));
+      btn.disabled = false; btn.textContent = lang==='ar'?'حفظ':'Save';
+    }
+  };
 }
 
 function closePeriod(type, key) {
@@ -13947,9 +14020,19 @@ async function runAISearchQuery(q) {
 
   function _schedulSync(newDB) {
     if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); return; }
+    setTimeout(() => _attemptSync(), 100);
+  }
+
+  // بدل تجميد الفرق فورًا عند الجدولة، ننتظر لحظة التنفيذ الفعلية —
+  // فلو كانت مزامنة سابقة ما زالت شغّالة (_syncBusy)، ما نسقط هذه الدفعة
+  // بصمت (كان يحصل قبل)، بل نعيد المحاولة كل فترة حتى تتفرّغ، ونأخذ
+  // عندها أحدث نسخة من البيانات فعليًا — فما يضيع أي تغيير بين الحفظتين
+  function _attemptSync() {
+    if (_syncBusy) { setTimeout(_attemptSync, 150); return; }
+    const latestDB = getDB();
     const prev = _snap;
-    _snap = JSON.parse(JSON.stringify(newDB));
-    setTimeout(() => _diffAndPush(newDB, prev), 100);
+    _snap = JSON.parse(JSON.stringify(latestDB));
+    _diffAndPush(latestDB, prev);
   }
 
   async function _diffAndPush(newDB, prev) {
