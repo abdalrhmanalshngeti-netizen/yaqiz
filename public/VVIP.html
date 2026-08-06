@@ -8401,17 +8401,57 @@ function convertQuoteToInvoice(id) {
     id:nextId(db,'invoice'),
     invoice_no:`INV-${new Date().getFullYear()}-${String(db.nextId.invoice-1).padStart(3,'0')}`,
     customer_name:q.customer_name,customer_vat:'',
-    items:q.items,subtotal:q.subtotal,discount:0,
+    items:(q.items||[]).map(i=>({...i})), // نسخة مستقلة — لا تشارك نفس مصفوفة عرض السعر
+    subtotal:q.subtotal,discount:0,
     vat_total:q.vat_total,grand_total:q.grand_total,
     payment_method:'آجل',status:'آجل',
     invoice_type:'simplified',zatca_status:false,
     paid_amount:0,quote_ref:q.quote_no,
     created_at:new Date().toISOString()
   };
+
+  // مخزون (FIFO) — بأسلوب "قدر الإمكان": عناصر عرض السعر مجرد اسم/كمية/سعر بدون
+  // ربط بمنتج فعلي، فبعضها قد يكون خدمة لا تقابلها سلعة بالمخزون أصلاً
+  if(!db.stock_moves) db.stock_moves=[];
+  if(!db.nextId.stock_move) db.nextId.stock_move=1;
+  let cogsTotal=0;
+  inv.items.forEach(item=>{
+    const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
+    if(prod){
+      const oldQty=prod.qty;
+      cogsTotal+=fifoDeduct(prod, item.qty);
+      prod.qty=Math.max(0,prod.qty-item.qty);
+      db.stock_moves.push({id:db.nextId.stock_move++,product_id:prod.id,product_name:prod.name,product_code:prod.code||'',
+        type:'out',qty:item.qty,balance_before:oldQty,balance_after:prod.qty,
+        reason:'تحويل عرض سعر لفاتورة',reference:inv.invoice_no,date:new Date().toISOString()});
+    }
+  });
+  inv.cogs_total = Math.round(cogsTotal*100)/100;
+
+  // قيد محاسبي — دائمًا آجل (نفس سلوك تحويل عروض الأسعار المعروف)
+  if(!db.journal) db.journal=[];
+  if(!db.nextId.journal) db.nextId.journal=1;
+  const jEntries=[
+    {account:lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side:'debit', amount:inv.grand_total},
+    {account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue', account_code:'4100', side:'credit', amount:inv.subtotal},
+  ];
+  if(inv.vat_total>0) jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT', account_code:'2200', side:'credit', amount:inv.vat_total});
+  if(inv.cogs_total>0) {
+    jEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount:inv.cogs_total});
+    jEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:inv.cogs_total});
+  }
+  db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(),
+    description:`فاتورة من تحويل عرض سعر: ${inv.invoice_no} — ${inv.customer_name}`,
+    entries:jEntries, ref:inv.invoice_no});
+
+  // رصيد العميل — يرتفع بكامل قيمة الفاتورة لأنها آجل بالكامل ولا شيء مسدد
+  const cust=db.customers.find(c=>c.name===inv.customer_name);
+  if(cust) cust.balance=Math.round(((cust.balance||0)+inv.grand_total)*100)/100;
+
   db.invoices.push(inv);
   q.status='مقبول'; q.converted_to=inv.invoice_no;
   saveDB(db);
-  logActivity('عروض أسعار',`تحويل ${q.quote_no} إلى فاتورة ${inv.invoice_no}`);
+  logActivity('عروض أسعار',`تحويل ${q.quote_no} إلى فاتورة ${inv.invoice_no} — ${fmtMoney(inv.grand_total)}`);
   showToast(`✅ ${lang==='ar'?`تم التحويل إلى فاتورة ${inv.invoice_no}`:`Converted to invoice ${inv.invoice_no}`}`);
   renderPage();
 }
@@ -13173,12 +13213,22 @@ async function runAISearchQuery(q) {
     };
   }
 
+  function voucherToAPI(v) {
+    return {
+      voucher_no: v.voucher_no, type: v.type, party_type: v.party_type || null,
+      party_name: v.party || '', amount: parseFloat(v.amount) || 0,
+      payment_method: v.method || null, description: v.description || '',
+      reference: v.ref || '', linked_invoice_id: v.linked_invoice_id || null,
+      linked_purchase_id: v.linked_purchase_id || null,
+      date: (v.date || v.created_at || new Date().toISOString()).slice(0, 10)
+    };
+  }
   // ═══════════════════════════════════════════════════════
   // 3. LOAD ALL DATA FROM API
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all'),
         apiFetch('GET', '/api/customers?active=all'),
         apiFetch('GET', '/api/suppliers?active=all'),
@@ -13197,6 +13247,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/purchase-orders').catch(() => null),
         apiFetch('GET', '/api/employees/shifts/list').catch(() => null),
         apiFetch('GET', '/api/products/stock-moves/list').catch(() => null),
+        apiFetch('GET', '/api/vouchers').catch(() => null),
       ]);
 
       const db = getDB();
@@ -13284,6 +13335,28 @@ async function runAISearchQuery(q) {
           }));
         if (_rFromServer.length) {
           db.returns = [..._rFromServer, ...db.returns]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        }
+      }
+
+      // ── سندات القبض والصرف: اسحب أي سند سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
+      if (vouchersRes?.data?.length) {
+        db.receipts = db.receipts || [];
+        const _knownVIds = new Set(db.receipts.map(v => v._serverId).filter(Boolean));
+        const _vFromServer = vouchersRes.data
+          .filter(row => !_knownVIds.has(row.id))
+          .map(row => ({
+            id: 'srv-' + row.id, type: row.type, voucher_no: row.voucher_no,
+            party: row.party_name || '', party_type: row.party_type || null,
+            amount: parseFloat(row.amount) || 0, description: row.description || '',
+            method: row.payment_method || '', ref: row.reference || '',
+            linked_invoice_id: row.linked_invoice_id || null,
+            linked_purchase_id: row.linked_purchase_id || null,
+            date: row.date, created_at: row.created_at,
+            _serverId: row.id,
+          }));
+        if (_vFromServer.length) {
+          db.receipts = [..._vFromServer, ...db.receipts]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
       }
@@ -13649,6 +13722,22 @@ async function runAISearchQuery(q) {
         if (!(newDB.quotes || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: delete quote', old.quote_no);
           await apiFetch('DELETE', `/api/quotes/${old.id}`).catch(() => {});
+        }
+      }
+
+      // ── Vouchers (سندات القبض والصرف): create / delete ──
+      for (const v of newDB.receipts || []) {
+        const old = (prev.receipts || []).find(o => o.id === v.id);
+        if (!old) {
+          if (SYNC_LOG) console.log('→ API: create voucher', v.voucher_no);
+          const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v)).catch(e => { console.warn('voucher sync:', e.message); return null; });
+          if (res?.data?.id && res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id);
+        }
+      }
+      for (const old of prev.receipts || []) {
+        if (!(newDB.receipts || []).find(v => v.id === old.id)) {
+          if (SYNC_LOG) console.log('→ API: delete voucher', old.voucher_no);
+          await apiFetch('DELETE', `/api/vouchers/${old.id}`).catch(e => console.warn('voucher delete sync:', e.message));
         }
       }
 
