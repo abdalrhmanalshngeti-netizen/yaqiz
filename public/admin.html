@@ -167,7 +167,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 <!-- ═══ LOGIN ═══ -->
 <div id="login-screen">
-  <div class="login-wrap">
+  <div class="login-wrap" id="login-wrap">
     <div class="login-logo" id="adm-login-logo"></div>
     <div class="login-title">لوحة الإدارة</div>
     <div class="login-sub">منصة يقظ للمحاسبة — دخول المالك والموظفين المصرَّح لهم</div>
@@ -181,6 +181,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
     </div>
     <button class="btn-login" onclick="doAdminLogin()">دخول</button>
+    <div class="back" style="text-align:center;margin-top:14px;">
+      <a href="#" onclick="event.preventDefault();toggleForgotForm()" style="color:var(--muted);font-size:13px;text-decoration:none;">نسيت كلمة المرور؟</a>
+    </div>
+    <div id="forgot-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border2);">
+      <div class="field">
+        <label>البريد الإلكتروني</label>
+        <input type="email" id="forgot-email" placeholder="admin@example.com">
+      </div>
+      <button class="btn-login" id="btn-forgot-admin" onclick="sendAdminForgotPassword()">إرسال رابط الاسترجاع</button>
+      <div id="forgot-msg" style="font-size:12px;text-align:center;margin-top:10px;display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -572,17 +583,76 @@ async function doAdminLogin() {
     const res  = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     const data = await res.json();
     if(!data.success){ errEl.textContent=data.message||'بيانات غير صحيحة، حاول مجدداً'; errEl.style.display='block'; btn.disabled=false; btn.textContent='دخول'; return; }
-    localStorage.setItem(TOKEN_KEY,data.token);
-    myRole = data.role || 'owner'; myPerms = data.permissions || [];
-    showApp(data.name||data.email);
-    applyPermissionGating();
-    loadAll();
-    setInterval(loadTicketsBadge, 60000);
-    setInterval(loadAdminNotifBadge, 30000);
-    loadAdminNotifBadge();
+    btn.disabled=false; btn.textContent='دخول';
+    if(data.requires_2fa){ show2FALoginForm(data.temp_token); return; }
+    finishAdminLogin(data);
   } catch { errEl.textContent='تعذر الاتصال بالخادم'; errEl.style.display='block'; btn.disabled=false; btn.textContent='دخول'; }
 }
-function doLogout(){localStorage.removeItem(TOKEN_KEY);location.reload();}
+function finishAdminLogin(data){
+  localStorage.setItem(TOKEN_KEY,data.token);
+  myRole = data.role || 'owner'; myPerms = data.permissions || [];
+  showApp(data.name||data.email);
+  applyPermissionGating();
+  loadAll();
+  setInterval(loadTicketsBadge, 60000);
+  setInterval(loadAdminNotifBadge, 30000);
+  loadAdminNotifBadge();
+}
+function show2FALoginForm(tempToken){
+  $('login-wrap').innerHTML = `
+    <div class="login-logo" id="adm-login-logo-2fa"></div>
+    <div class="login-title">رمز التحقق</div>
+    <div class="login-sub">افتح تطبيق المصادقة وأدخل الرمز المكوّن من 6 أرقام</div>
+    <div class="err-msg" id="tfa-err">رمز غير صحيح</div>
+    <div class="field">
+      <label>رمز التحقق (أو رمز احتياطي)</label>
+      <input type="text" id="tfa-code" placeholder="123456" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')confirmTwoFactorLogin('${tempToken}')">
+    </div>
+    <button class="btn-login" onclick="confirmTwoFactorLogin('${tempToken}')">تحقق</button>
+    <div class="back" style="text-align:center;margin-top:14px;"><a href="#" onclick="event.preventDefault();location.reload()" style="color:var(--muted);font-size:13px;text-decoration:none;">← رجوع لتسجيل الدخول</a></div>`;
+  document.getElementById('adm-login-logo-2fa').innerHTML = LOGO_SVG;
+  document.getElementById('tfa-code').focus();
+}
+async function confirmTwoFactorLogin(tempToken){
+  const code = $('tfa-code')?.value?.trim();
+  const errEl = $('tfa-err');
+  errEl.style.display='none';
+  if(!code){ errEl.textContent='أدخل رمز التحقق'; errEl.style.display='block'; return; }
+  try{
+    const res = await fetch('/api/admin/2fa/login-verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({temp_token:tempToken,code})});
+    const data = await res.json();
+    if(!data.success){ errEl.textContent=data.message||'رمز غير صحيح'; errEl.style.display='block'; return; }
+    finishAdminLogin(data);
+  }catch{ errEl.textContent='تعذر الاتصال بالخادم'; errEl.style.display='block'; }
+}
+function doLogout(){
+  apiFetch('/api/admin/logout',{method:'POST'}).catch(()=>{});
+  localStorage.removeItem(TOKEN_KEY);
+  location.reload();
+}
+function toggleForgotForm(){
+  const f=$('forgot-form');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+}
+async function sendAdminForgotPassword(){
+  const email=$('forgot-email')?.value?.trim();
+  const msgEl=$('forgot-msg');
+  const btn=$('btn-forgot-admin');
+  msgEl.style.display='none';
+  if(!email){ msgEl.textContent='أدخل البريد الإلكتروني'; msgEl.style.color='#f87171'; msgEl.style.display='block'; return; }
+  btn.disabled=true; btn.textContent='جارٍ الإرسال...';
+  try{
+    const res=await fetch('/api/admin/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const data=await res.json();
+    msgEl.textContent=data.message||'تم الإرسال';
+    msgEl.style.color=data.success?'#34d399':'#f87171';
+    msgEl.style.display='block';
+  }catch{
+    msgEl.textContent='تعذر الاتصال بالخادم'; msgEl.style.color='#f87171'; msgEl.style.display='block';
+  }finally{
+    btn.disabled=false; btn.textContent='إرسال رابط الاسترجاع';
+  }
+}
 function showApp(username){
   $('admin-name').textContent=username||'المالك';
   $('login-screen').style.display='none';
@@ -1313,12 +1383,126 @@ function showMyAccountModal(){
       <button onclick="saveMyAccount()" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
       <button onclick="closeMyAccountModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #1a2942;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">🔒 المصادقة الثنائية (2FA)</div>
+      <div id="myacc-2fa"><div style="text-align:center;padding:10px;color:var(--muted);font-size:12px;">جاري التحميل...</div></div>
+    </div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #1a2942;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">💻 الأجهزة النشطة</div>
+      <div id="myacc-sessions"><div style="text-align:center;padding:10px;color:var(--muted);font-size:12px;">جاري التحميل...</div></div>
+    </div>
   </div>`;
   ov.onclick=closeMyAccountModal;
   document.body.appendChild(ov);
   const toggle=()=>{ const sensitive=$('myacc-email').value.trim()||$('myacc-newpass').value; $('myacc-current-wrap').style.display=sensitive?'block':'none'; };
   $('myacc-email').addEventListener('input',toggle);
   $('myacc-newpass').addEventListener('input',toggle);
+  loadMySessions();
+  loadMy2FAStatus();
+}
+async function loadMy2FAStatus(){
+  const box=$('myacc-2fa'); if(!box)return;
+  try{
+    const res=await apiFetch('/api/admin/me');
+    const enabled=res?.data?.totp_enabled;
+    box.innerHTML = enabled
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:8px;">
+          <span style="font-size:12px;font-weight:700;color:#34d399;">✅ مفعّلة</span>
+          <button onclick="showDisable2FAModal()" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تعطيل</button>
+        </div>`
+      : `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#0d1629;border-radius:8px;">
+          <span style="font-size:12px;color:var(--muted);">غير مفعّلة</span>
+          <button onclick="start2FASetup()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تفعيل</button>
+        </div>`;
+  }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">خطأ في التحميل</div>';}
+}
+async function start2FASetup(){
+  const box=$('myacc-2fa');
+  box.innerHTML='<div style="text-align:center;padding:10px;color:var(--muted);font-size:12px;">جاري التوليد...</div>';
+  try{
+    const res=await apiFetch('/api/admin/2fa/setup',{method:'POST'});
+    box.innerHTML=`
+      <div style="text-align:center;background:#fff;border-radius:10px;padding:12px;margin-bottom:10px;">
+        <img src="${res.qr_code}" style="width:160px;height:160px;">
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">امسح الرمز بتطبيق المصادقة (Google Authenticator/Authy)، أو أدخل السر يدوياً: <code style="color:#93c5fd;">${res.secret}</code></div>
+      <input id="tfa-setup-code" placeholder="أدخل الرمز المكوّن من 6 أرقام" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
+      <button onclick="confirm2FASetupUI()" style="width:100%;padding:9px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
+  }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">فشل التوليد</div>';}
+}
+async function confirm2FASetupUI(){
+  const code=$('tfa-setup-code')?.value?.trim();
+  if(!code){toast('أدخل رمز التحقق','#f87171');return;}
+  try{
+    const res=await apiFetch('/api/admin/2fa/confirm',{method:'POST',body:JSON.stringify({code})});
+    const box=$('myacc-2fa');
+    box.innerHTML=`
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:12px;">
+        <div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:8px;">✅ تم التفعيل! احفظ أكواد الاحتياط هذي بمكان آمن — كل وحد يُستخدم مرة وحدة لو ضاع جهاز المصادقة:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:monospace;font-size:12px;">
+          ${res.backup_codes.map(c=>`<div style="background:#0d1629;padding:5px 8px;border-radius:6px;text-align:center;">${c}</div>`).join('')}
+        </div>
+      </div>`;
+    toast('✅ تم تفعيل المصادقة الثنائية','#34d399');
+  }catch{toast('❌ رمز غير صحيح','#f87171');}
+}
+function closeDisable2FAModal(){const m=document.getElementById('disable-2fa-overlay');if(m)m.remove();}
+function showDisable2FAModal(){
+  closeDisable2FAModal();
+  const ov=document.createElement('div');
+  ov.id='disable-2fa-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:380px;width:100%;">
+    <div style="font-size:15px;font-weight:900;margin-bottom:10px;">تعطيل المصادقة الثنائية</div>
+    <input id="disable-2fa-pass" type="password" placeholder="كلمة المرور الحالية" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button onclick="confirmDisable2FA()" style="flex:1;padding:11px;background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">تعطيل</button>
+      <button onclick="closeDisable2FAModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+    </div>
+  </div>`;
+  ov.onclick=closeDisable2FAModal;
+  document.body.appendChild(ov);
+}
+async function confirmDisable2FA(){
+  const current_password=$('disable-2fa-pass')?.value;
+  if(!current_password){toast('أدخل كلمة المرور','#f87171');return;}
+  try{
+    await apiFetch('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({current_password})});
+    toast('✅ تم تعطيل المصادقة الثنائية','#34d399');
+    closeDisable2FAModal();
+    loadMy2FAStatus();
+  }catch{toast('❌ كلمة مرور غير صحيحة','#f87171');}
+}
+function parseUA(ua){
+  if(!ua) return 'جهاز غير معروف';
+  if(/Mobile|Android|iPhone/i.test(ua)) return '📱 جهاز جوال';
+  if(/Windows/i.test(ua)) return '🖥️ ويندوز';
+  if(/Macintosh|Mac OS/i.test(ua)) return '🖥️ ماك';
+  if(/Linux/i.test(ua)) return '🖥️ لينكس';
+  return '💻 متصفح';
+}
+async function loadMySessions(){
+  const box=$('myacc-sessions'); if(!box)return;
+  try{
+    const res=await apiFetch('/api/admin/sessions');
+    const sessions=res.data||[];
+    if(!sessions.length){box.innerHTML='<div style="color:var(--muted);font-size:12px;">لا توجد جلسات نشطة</div>';return;}
+    box.innerHTML=sessions.map(s=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#0d1629;border-radius:8px;margin-bottom:6px;">
+        <div>
+          <div style="font-size:12px;font-weight:700;">${parseUA(s.user_agent)} ${s.id===res.current_session_id?'<span class="badge green" style="margin-right:6px;">هذا الجهاز</span>':''}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">${escHtml(s.ip_address||'')} · ${fmtD(s.created_at)}</div>
+        </div>
+        ${s.id!==res.current_session_id?`<button onclick="revokeMySession(${s.id})" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 10px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">إنهاء</button>`:''}
+      </div>`).join('');
+  }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">خطأ في التحميل</div>';}
+}
+async function revokeMySession(id){
+  try{
+    await apiFetch(`/api/admin/sessions/${id}`,{method:'DELETE'});
+    toast('✅ تم إنهاء الجلسة','#34d399');
+    loadMySessions();
+  }catch{toast('❌ فشل الإنهاء','#f87171');}
 }
 async function saveMyAccount(){
   const full_name=$('myacc-name')?.value?.trim();

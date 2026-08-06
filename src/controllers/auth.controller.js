@@ -1,21 +1,26 @@
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
+const crypto = require('crypto');
 const db     = require('../config/db');
 
 const ACCESS_TTL  = '8h';
 const REFRESH_TTL = '30d';
 
-function signAccess(user) {
+// sess = معرّف صف user_sessions — يُتحقق منه بكل طلب (middleware/auth.js) عشان
+// إلغاء جلسة محددة من "أجهزتي" يسري فوراً، مو ينتظر انتهاء صلاحية التوكن (8 ساعات)
+function signAccess(user, sessionId) {
   return jwt.sign(
-    { sub: user.id, company_id: user.company_id, role: user.role, perms: user.permissions || [] },
+    { sub: user.id, company_id: user.company_id, role: user.role, perms: user.permissions || [], sess: sessionId },
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TTL }
   );
 }
 
 function signRefresh(userId) {
+  // jti عشوائي — بدونه توكنين لنفس المستخدم بنفس الثانية يطلعوا متطابقين حرفياً
+  // (payload + iat بدقة ثانية) ويصطدمون بقيد UNIQUE على token_hash
   return jwt.sign(
-    { sub: userId },
+    { sub: userId, jti: crypto.randomBytes(8).toString('hex') },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: REFRESH_TTL }
   );
@@ -70,14 +75,16 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
 
-    const accessToken  = signAccess(user);
     const refreshToken = signRefresh(user.id);
 
-    // حفظ الجلسة
-    await db.query(`
+    // حفظ الجلسة أولاً عشان نضمّن معرّفها بالتوكن (للإبطال الفوري لجلسة محددة)
+    const { rows: [session] } = await db.query(`
       INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at)
       VALUES ($1,$2,$3,$4, NOW() + INTERVAL '30 days')
+      RETURNING id
     `, [user.id, refreshToken, ip, req.headers['user-agent']]);
+
+    const accessToken = signAccess(user, session.id);
 
     // تحديث آخر دخول
     await db.query(`UPDATE users SET last_login = NOW() WHERE id = $1`, [user.id]);
@@ -125,6 +132,29 @@ exports.logout = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── أجهزتي: قائمة الجلسات النشطة + إمكانية إنهاء أي جلسة فوراً ──
+exports.listSessions = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT id, ip_address, user_agent, created_at, expires_at
+      FROM user_sessions WHERE user_id = $1 AND expires_at > NOW()
+      ORDER BY created_at DESC
+    `, [req.user.sub]);
+    res.json({ success: true, data: rows, current_session_id: req.user.sess || null });
+  } catch (err) { next(err); }
+};
+
+exports.revokeSession = async (req, res, next) => {
+  try {
+    const { rowCount } = await db.query(
+      `DELETE FROM user_sessions WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.sub]
+    );
+    if (!rowCount) return res.status(404).json({ success: false, message: 'الجلسة غير موجودة' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
 exports.refreshToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
@@ -140,7 +170,7 @@ exports.refreshToken = async (req, res, next) => {
     }
 
     const { rows } = await db.query(`
-      SELECT u.* FROM user_sessions s
+      SELECT u.*, s.id AS session_id FROM user_sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.active = true
     `, [refreshToken]);
@@ -149,7 +179,7 @@ exports.refreshToken = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'جلسة منتهية، سجّل الدخول مجدداً' });
     }
 
-    const newAccessToken = signAccess(rows[0]);
+    const newAccessToken = signAccess(rows[0], rows[0].session_id);
     res.json({ success: true, accessToken: newAccessToken });
 
   } catch (err) { next(err); }

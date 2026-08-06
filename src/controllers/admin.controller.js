@@ -1,8 +1,34 @@
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
+const crypto = require('crypto');
+const { authenticator } = require('otplib');
+const QRCode = require('qrcode');
 const db     = require('../config/db');
+const { sendMail, resetPasswordTemplate } = require('../services/email.service');
 
 const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate'];
+
+// ينشئ جلسة كاملة (سطر admin_sessions + توكن نهائي) — يُستدعى من تسجيل الدخول
+// المباشر (بدون 2FA) ومن تأكيد رمز 2FA على حد سواء
+async function issueFullSession(admin, req) {
+  await db.query(`UPDATE platform_admins SET last_login = NOW() WHERE id = $1`, [admin.id]);
+
+  const { rows: [session] } = await db.query(`
+    INSERT INTO admin_sessions (admin_id, ip_address, user_agent, expires_at)
+    VALUES ($1, $2, $3, NOW() + INTERVAL '12 hours')
+    RETURNING id
+  `, [admin.id, req.ip, req.headers['user-agent']]);
+
+  const token = jwt.sign(
+    { sub: admin.id, is_super_admin: true, email: admin.email, name: admin.full_name, sess: session.id },
+    process.env.JWT_SECRET,
+    { expiresIn: '12h' }
+  );
+  return {
+    success: true, token, email: admin.email, name: admin.full_name,
+    role: admin.role, permissions: admin.permissions || [],
+  };
+}
 
 // ── تسجيل دخول المدير العام ─────────────────────────────
 exports.login = async (req, res, next) => {
@@ -21,27 +47,239 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'بيانات غير صحيحة' });
     }
 
-    await db.query(
-      `UPDATE platform_admins SET last_login = NOW() WHERE id = $1`,
-      [admin.id]
+    // لو مفعّل عنده 2FA، ما نصدر توكن دخول كامل إلا بعد التحقق من الرمز —
+    // بدلها نعطيه توكن مؤقت صالح 5 دقائق وغرضه الوحيد التحقق من رمز 2FA
+    if (admin.totp_enabled) {
+      const tempToken = jwt.sign(
+        { sub: admin.id, purpose: '2fa_pending' },
+        process.env.JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+      return res.json({ success: true, requires_2fa: true, temp_token: tempToken });
+    }
+
+    const session = await issueFullSession(admin, req);
+    res.json(session);
+  } catch (err) { next(err); }
+};
+
+// ── تأكيد رمز 2FA أثناء تسجيل الدخول ──────────────────────
+exports.verify2FALogin = async (req, res, next) => {
+  try {
+    const { temp_token, code } = req.body;
+    if (!temp_token || !code) {
+      return res.status(400).json({ success: false, message: 'الرمز المؤقت ورمز التحقق مطلوبان' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(temp_token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ success: false, message: 'انتهت صلاحية الجلسة المؤقتة، سجّل الدخول مجدداً' });
+    }
+    if (payload.purpose !== '2fa_pending') {
+      return res.status(401).json({ success: false, message: 'توكن غير صالح' });
+    }
+
+    const { rows: [admin] } = await db.query(
+      `SELECT * FROM platform_admins WHERE id = $1 AND active = true`, [payload.sub]
+    );
+    if (!admin || !admin.totp_enabled) {
+      return res.status(401).json({ success: false, message: 'الحساب غير موجود أو 2FA غير مفعّل' });
+    }
+
+    const validTotp = authenticator.verify({ token: code.trim(), secret: admin.totp_secret });
+    if (validTotp) {
+      const session = await issueFullSession(admin, req);
+      return res.json(session);
+    }
+
+    // جرّب كرمز احتياطي (backup code) — يُستهلك مرة وحدة
+    const normalizedCode = code.trim().toUpperCase();
+    for (const hashedBackup of admin.totp_backup_codes) {
+      if (await bcrypt.compare(normalizedCode, hashedBackup)) {
+        await db.query(
+          `UPDATE platform_admins SET totp_backup_codes = array_remove(totp_backup_codes, $1) WHERE id = $2`,
+          [hashedBackup, admin.id]
+        );
+        const session = await issueFullSession(admin, req);
+        return res.json(session);
+      }
+    }
+
+    res.status(401).json({ success: false, message: 'رمز التحقق غير صحيح' });
+  } catch (err) { next(err); }
+};
+
+// ── تفعيل 2FA: خطوة 1 — توليد سر جديد وQR (لسا مو مفعّل) ──
+exports.setup2FA = async (req, res, next) => {
+  try {
+    const secret = authenticator.generateSecret();
+    await db.query(`UPDATE platform_admins SET totp_pending_secret = $1 WHERE id = $2`, [secret, req.admin.sub]);
+
+    const otpauth = authenticator.keyuri(req.admin.email, 'يقظ - لوحة الإدارة', secret);
+    const qrDataUrl = await QRCode.toDataURL(otpauth);
+
+    res.json({ success: true, secret, qr_code: qrDataUrl });
+  } catch (err) { next(err); }
+};
+
+// ── تفعيل 2FA: خطوة 2 — تأكيد أول رمز وتفعيله فعلياً ────
+exports.confirm2FASetup = async (req, res, next) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ success: false, message: 'رمز التحقق مطلوب' });
+
+    const { rows: [admin] } = await db.query(
+      `SELECT totp_pending_secret FROM platform_admins WHERE id = $1`, [req.admin.sub]
+    );
+    if (!admin?.totp_pending_secret) {
+      return res.status(400).json({ success: false, message: 'ابدأ إعداد 2FA أولاً' });
+    }
+    const valid = authenticator.verify({ token: code.trim(), secret: admin.totp_pending_secret });
+    if (!valid) return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح' });
+
+    // أكواد احتياطية — تُعرض مرة وحدة، تُخزَّن مشفّرة
+    const backupCodes = Array.from({ length: 8 }, () => crypto.randomBytes(4).toString('hex').toUpperCase());
+    const hashedBackupCodes = await Promise.all(backupCodes.map(c => bcrypt.hash(c, 10)));
+
+    await db.query(`
+      UPDATE platform_admins SET
+        totp_secret = totp_pending_secret, totp_pending_secret = NULL,
+        totp_enabled = true, totp_backup_codes = $1
+      WHERE id = $2
+    `, [hashedBackupCodes, req.admin.sub]);
+
+    res.json({ success: true, backup_codes: backupCodes });
+  } catch (err) { next(err); }
+};
+
+// ── تعطيل 2FA — يتطلب تأكيد كلمة المرور الحالية ──────────
+exports.disable2FA = async (req, res, next) => {
+  try {
+    const { current_password } = req.body;
+    const { rows: [admin] } = await db.query(`SELECT password_hash FROM platform_admins WHERE id = $1`, [req.admin.sub]);
+    if (!current_password || !(await bcrypt.compare(current_password, admin.password_hash))) {
+      return res.status(401).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
+    }
+    await db.query(`
+      UPDATE platform_admins SET totp_secret = NULL, totp_pending_secret = NULL,
+        totp_enabled = false, totp_backup_codes = '{}' WHERE id = $1
+    `, [req.admin.sub]);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// ── تسجيل خروج — إنهاء الجلسة الحالية فوراً على السيرفر ──
+exports.logout = async (req, res, next) => {
+  try {
+    if (req.admin?.sess) {
+      await db.query(`DELETE FROM admin_sessions WHERE id = $1`, [req.admin.sess]);
+    }
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// ── أجهزتي: قائمة الجلسات النشطة + إمكانية إنهاء أي جلسة فوراً ──
+exports.listSessions = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT id, ip_address, user_agent, created_at, expires_at
+      FROM admin_sessions WHERE admin_id = $1 AND expires_at > NOW()
+      ORDER BY created_at DESC
+    `, [req.admin.sub]);
+    res.json({ success: true, data: rows, current_session_id: req.admin.sess || null });
+  } catch (err) { next(err); }
+};
+
+exports.revokeSession = async (req, res, next) => {
+  try {
+    const { rowCount } = await db.query(
+      `DELETE FROM admin_sessions WHERE id = $1 AND admin_id = $2`,
+      [req.params.id, req.admin.sub]
+    );
+    if (!rowCount) return res.status(404).json({ success: false, message: 'الجلسة غير موجودة' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// ── نسيت كلمة المرور (لوحة الإدارة) — استرجاع ذاتي بدل الحاجة لدخول مباشر لقاعدة البيانات ──
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'البريد الإلكتروني مطلوب' });
+
+    const { rows: [admin] } = await db.query(
+      `SELECT id, email, full_name FROM platform_admins WHERE email = $1 AND active = true LIMIT 1`,
+      [email.toLowerCase().trim()]
     );
 
-    const token = jwt.sign(
-      { sub: admin.id, is_super_admin: true, email: admin.email, name: admin.full_name },
-      process.env.JWT_SECRET,
-      { expiresIn: '12h' }
+    // نُرجع نجاح دائماً حتى لا نكشف وجود البريد من عدمه
+    if (!admin) {
+      return res.json({ success: true, message: 'إذا كان البريد مسجلاً، ستصلك رسالة خلال دقائق' });
+    }
+
+    await db.query(`DELETE FROM admin_password_reset_tokens WHERE admin_id = $1`, [admin.id]);
+
+    const token     = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // ساعة واحدة
+
+    await db.query(`
+      INSERT INTO admin_password_reset_tokens (admin_id, token, expires_at)
+      VALUES ($1,$2,$3)
+    `, [admin.id, token, expiresAt]);
+
+    const appUrl   = process.env.APP_URL || 'https://yaqiz.me';
+    const resetUrl = `${appUrl}/reset-password?token=${token}&type=admin`;
+
+    // فشل إرسال الإيميل ما يكسر الاستجابة ولا يسرّب تفاصيل SMTP للعميل
+    sendMail({
+      to:      admin.email,
+      subject: 'إعادة تعيين كلمة مرور لوحة الإدارة — يقظ',
+      html:    resetPasswordTemplate(admin.full_name, resetUrl),
+    }).catch(e => console.error('[admin-forgot-password] Email send failed:', e.message));
+
+    res.json({ success: true, message: 'إذا كان البريد مسجلاً، ستصلك رسالة خلال دقائق' });
+  } catch (err) { next(err); }
+};
+
+exports.resetPasswordViaToken = async (req, res, next) => {
+  try {
+    const { token, new_password } = req.body;
+    if (!token || !new_password) {
+      return res.status(400).json({ success: false, message: 'الرمز وكلمة المرور الجديدة مطلوبان' });
+    }
+    if (new_password.length < 8 || !/[a-z]/.test(new_password) || !/[A-Z]/.test(new_password)) {
+      return res.status(400).json({
+        success: false,
+        message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير'
+      });
+    }
+
+    const { rows: [rec] } = await db.query(`
+      SELECT id, admin_id FROM admin_password_reset_tokens
+      WHERE token = $1 AND expires_at > NOW() AND used = FALSE
+    `, [token]);
+
+    if (!rec) {
+      return res.status(400).json({ success: false, message: 'الرابط منتهي الصلاحية أو مستخدم مسبقاً' });
+    }
+
+    const hash = await bcrypt.hash(new_password, 12);
+    await db.query(
+      `UPDATE platform_admins SET password_hash = $1, revoke_sessions_before = NOW() WHERE id = $2`,
+      [hash, rec.admin_id]
     );
-    res.json({
-      success: true, token, email: admin.email, name: admin.full_name,
-      role: admin.role, permissions: admin.permissions || [],
-    });
+    await db.query(`UPDATE admin_password_reset_tokens SET used = TRUE WHERE id = $1`, [rec.id]);
+
+    res.json({ success: true, message: 'تم تحديث كلمة المرور بنجاح، يمكنك تسجيل الدخول الآن' });
   } catch (err) { next(err); }
 };
 
 // ── هوية الموظف الحالي (لأي موظف، بدون قيد صلاحية) ────────
 exports.me = async (req, res, next) => {
   try {
-    res.json({ success: true, data: { email: req.admin.email, name: req.admin.name, role: req.admin.role, permissions: req.admin.permissions } });
+    res.json({ success: true, data: { email: req.admin.email, name: req.admin.name, role: req.admin.role, permissions: req.admin.permissions, totp_enabled: req.admin.totp_enabled } });
   } catch (err) { next(err); }
 };
 

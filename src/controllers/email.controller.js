@@ -32,11 +32,13 @@ exports.forgotPassword = async (req, res, next) => {
     const appUrl   = process.env.APP_URL || 'https://yaqiz.me';
     const resetUrl = `${appUrl}/reset-password?token=${token}`;
 
-    await sendMail({
+    // فشل إرسال الإيميل ما يكسر الاستجابة ولا يسرّب تفاصيل SMTP للعميل —
+    // الرمز محفوظ بقاعدة البيانات بغض النظر، ونسجّل الخطأ بسجلات السيرفر فقط
+    sendMail({
       to:      user.email,
       subject: 'إعادة تعيين كلمة المرور — يقظ',
       html:    resetPasswordTemplate(user.username, resetUrl),
-    });
+    }).catch(e => console.error('[forgot-password] Email send failed:', e.message));
 
     res.json({ success: true, message: 'إذا كان البريد مسجلاً، ستصلك رسالة خلال دقائق' });
   } catch (err) { next(err); }

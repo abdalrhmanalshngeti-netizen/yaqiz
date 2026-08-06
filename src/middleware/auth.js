@@ -15,6 +15,15 @@ module.exports = async function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
+    // فحص إبطال جلسة محددة من "أجهزتي" — يسري فوراً بدل انتظار انتهاء التوكن
+    // (لا ينطبق على توكنات الانتحال، عندها آلية إبطال منفصلة أعلى بهذا الملف)
+    if (payload.sess && !payload.impersonated) {
+      const { rows } = await db.query(`SELECT 1 FROM user_sessions WHERE id = $1`, [payload.sess]);
+      if (!rows.length) {
+        return res.status(401).json({ success: false, code: 'SESSION_REVOKED', message: 'تم إنهاء هذه الجلسة من جهاز آخر' });
+      }
+    }
+
     // فحص إلغاء جلسات الأدمن
     if (payload.impersonated && payload.company_id) {
       const { rows } = await db.query(

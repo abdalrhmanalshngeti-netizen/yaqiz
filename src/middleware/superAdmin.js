@@ -20,7 +20,7 @@ module.exports = async function superAdminAuth(req, res, next) {
     }
 
     const { rows: [admin] } = await db.query(
-      `SELECT id, email, full_name, role, permissions, active, revoke_sessions_before
+      `SELECT id, email, full_name, role, permissions, active, revoke_sessions_before, totp_enabled
        FROM platform_admins WHERE id = $1`,
       [payload.sub]
     );
@@ -30,11 +30,18 @@ module.exports = async function superAdminAuth(req, res, next) {
     if (admin.revoke_sessions_before && payload.iat < new Date(admin.revoke_sessions_before).getTime() / 1000) {
       return res.status(401).json({ success: false, code: 'SESSION_REVOKED', message: 'تم إبطال هذه الجلسة، يرجى تسجيل الدخول مجدداً' });
     }
+    // إنهاء جلسة محددة من "أجهزتي" يسري فوراً بدل انتظار انتهاء التوكن
+    if (payload.sess) {
+      const { rows: sessRows } = await db.query(`SELECT 1 FROM admin_sessions WHERE id = $1`, [payload.sess]);
+      if (!sessRows.length) {
+        return res.status(401).json({ success: false, code: 'SESSION_REVOKED', message: 'تم إنهاء هذه الجلسة من جهاز آخر' });
+      }
+    }
 
     req.admin = {
       sub: admin.id, email: admin.email, name: admin.full_name,
       role: admin.role, permissions: admin.permissions || [],
-      is_super_admin: true,
+      is_super_admin: true, sess: payload.sess || null, totp_enabled: admin.totp_enabled,
     };
     next();
   } catch (err) {

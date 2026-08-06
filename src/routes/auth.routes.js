@@ -15,4 +15,8 @@ router.post('/redeem-imp',           registerLimiter, ctrl.redeemImpersonation);
 router.get ('/admin-accesses',       auth, ctrl.getAdminAccesses);
 router.post('/revoke-admin-sessions',auth, ctrl.revokeAdminSessions);
 
+// أجهزتي — عرض الجلسات النشطة وإنهاء أي جلسة فوراً
+router.get   ('/sessions',           auth, ctrl.listSessions);
+router.delete('/sessions/:id',       auth, ctrl.revokeSession);
+
 module.exports = router;

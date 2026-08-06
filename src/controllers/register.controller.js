@@ -1,5 +1,6 @@
 const bcrypt           = require('bcrypt');
 const jwt              = require('jsonwebtoken');
+const crypto           = require('crypto');
 const db               = require('../config/db');
 const { sendMail }     = require('../services/email.service');
 
@@ -129,18 +130,23 @@ exports.register = async (req, res, next) => {
     `, [company.id, user.id, `تسجيل شركة جديدة: ${company_name}`, req.ip]);
 
     // إصدار tokens داخل الـ transaction لضمان الاتساق
-    const accessToken = jwt.sign(
-      { sub: user.id, company_id: company.id, role: 'owner', perms: [] },
-      process.env.JWT_SECRET, { expiresIn: ACCESS_TTL }
-    );
+    // jti عشوائي بالـ refresh يمنع تصادم UNIQUE لو صار تسجيل مزدوج بنفس الثانية
     const refreshToken = jwt.sign(
-      { sub: user.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_TTL }
+      { sub: user.id, jti: crypto.randomBytes(8).toString('hex') },
+      process.env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_TTL }
     );
 
-    await client.query(`
+    // نسجّل الجلسة أولاً عشان نضمّن معرّفها بالتوكن (لدعم "أجهزتي" وإبطال جلسة محددة فوراً)
+    const { rows: [session] } = await client.query(`
       INSERT INTO user_sessions (user_id, token_hash, ip_address, user_agent, expires_at)
       VALUES ($1,$2,$3,$4, NOW() + INTERVAL '30 days')
+      RETURNING id
     `, [user.id, refreshToken, req.ip, req.headers['user-agent']]);
+
+    const accessToken = jwt.sign(
+      { sub: user.id, company_id: company.id, role: 'owner', perms: [], sess: session.id },
+      process.env.JWT_SECRET, { expiresIn: ACCESS_TTL }
+    );
 
     await client.query('COMMIT');
 
