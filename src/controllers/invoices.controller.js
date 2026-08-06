@@ -1,5 +1,6 @@
 const db    = require('../config/db');
 const stock = require('../services/stock.service');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -162,6 +163,13 @@ exports.create = async (req, res, next) => {
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: { ...invoice, items: processedItems } });
 
+    logAudit({
+      companyId: company_id, userId: user_id, action: 'invoice_create',
+      entityType: 'invoice', entityId: invoice.id, ip: req.ip,
+      newValues: { invoice_no, grand_total: grand, status: 'issued' },
+      details: `إنشاء فاتورة ${invoice_no} — ${Number(grand).toFixed(2)} ر.س`
+    });
+
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -293,6 +301,13 @@ exports.cancel = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'invoice_cancel',
+      entityType: 'invoice', entityId: inv.id, ip: req.ip,
+      oldValues: { status: inv.status }, newValues: { status: 'cancelled' },
+      details: `إلغاء فاتورة ${inv.invoice_no} — ${Number(inv.grand_total).toFixed(2)} ر.س`
+    });
 
   } catch (err) {
     await client.query('ROLLBACK');

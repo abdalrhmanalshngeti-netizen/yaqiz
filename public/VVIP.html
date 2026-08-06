@@ -2966,6 +2966,7 @@ function renderInvoicesList(sc) {
                     <button class="icon-btn" style="width:28px;height:28px;" onclick="printSalesInvoice(${i.id})" title="${lang==='ar'?'طباعة':'Print'}">${icon('printer',13)}</button>
                     ${i.status!=='ملغاة'&&(i.status==='آجل'||i.status==='جزئي')?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="quickReceipt(${i.id})" title="${lang==='ar'?'تحصيل':'Collect'}">${icon('dollar-sign',13)}</button>`:''}
                     ${has('sales.create')&&i.status!=='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="cancelInvoice(${i.id})" title="${lang==='ar'?'إلغاء الفاتورة':'Cancel invoice'}">${icon('ban',13)}</button>`:''}
+                    ${i.status==='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="showEntityAuditLog('invoice',${i.id},'${lang==='ar'?`سجل إلغاء ${i.invoice_no}`:`Cancellation log — ${i.invoice_no}`}')" title="${lang==='ar'?'من ألغاها ومتى؟':'Who cancelled it & when?'}">${icon('history',13)}</button>`:''}
                   </div>
                 </td>
               </tr>`;
@@ -4620,11 +4621,11 @@ function showProductModal(id) {
         <div><label class="form-label">${t('buyPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(سعر الشراء / التكلفة)</span></label><input class="input" type="number" id="pr-buy" value="${p?.buy_price||0}" oninput="updatePricingPreview()" /></div>
         <div><label class="form-label">${t('sellPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(قبل الضريبة)</span></label><input class="input" type="number" id="pr-sell" value="${p?.sell_price||0}" /></div>
       </div>
+      ${id?`<div style="margin-bottom:12px;"><button type="button" class="btn btn-outline btn-sm" onclick="showPriceHistory(${id})">📋 ${lang==='ar'?'سجل تغييرات السعر':'Price change history'}</button></div>`:''}
       ${has('pricing.manage')?`
       <div style="margin-top:12px;padding:14px 16px;background:rgba(59,130,246,.06);border:1.5px solid rgba(59,130,246,.3);border-radius:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div style="font-size:13px;font-weight:900;color:#60a5fa;">⚡ التسعير الديناميكي</div>
-          ${id?`<button type="button" class="btn btn-outline" style="font-size:11px;padding:3px 10px;" onclick="showPriceHistory(${id})">📋 سجل التغييرات</button>`:''}
         </div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;padding:10px 12px;background:rgba(59,130,246,.08);border-radius:8px;">
           <input type="checkbox" id="pr-auto" ${p?.auto_price_update?'checked':''} onchange="togglePrPolicyFields()" style="width:16px;height:16px;accent-color:#3b82f6;" />
@@ -4749,12 +4750,41 @@ async function showPriceHistory(productId) {
         <td>${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</td>
         <td>${r.old_buy_price||'-'} ← <strong>${r.new_buy_price}</strong></td>
         <td style="color:#34d399">${r.old_sell_price||'-'} ← <strong>${r.new_sell_price}</strong></td>
-        <td style="font-size:11px;color:var(--text-muted)">${r.purchase_no||r.reason||'-'}</td>
+        <td style="font-size:11px;color:var(--text-muted)">
+          ${r.changed_by_name?`👤 ${sanitize(r.changed_by_name)}<br>`:''}
+          ${r.purchase_no?(lang==='ar'?`فاتورة شراء ${r.purchase_no}`:`Purchase ${r.purchase_no}`):r.reason==='manual_edit'?(lang==='ar'?'تعديل يدوي':'Manual edit'):(r.reason||'-')}
+        </td>
       </tr>`).join('')}
       </tbody></table></div>`}
     </div></div>`;
     refreshIcons();
   } catch(e) { showToast(lang==='ar'?'تعذر تحميل السجل':'Failed to load history','error'); }
+}
+
+// سجل تدقيق عام — يقرأ من activity_log بالسيرفر لأي كيان (فاتورة، منتج...الخ).
+// عكس سجل النشاط المحلي القديم (متصفح واحد فقط)، هذا يجيب نفس النتيجة من
+// أي جهاز لأنه مبني على جدول بالسيرفر لا localStorage
+async function showEntityAuditLog(entityType, entityId, title) {
+  if (!window._cloudApiFetch) { showToast(lang==='ar'?'يجب الاتصال بالإنترنت':'Internet required','error'); return; }
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/activity-log?entity_type=${entityType}&entity_id=${entityId}`);
+    const rows = res?.data || [];
+    const mc = el('modal-container');
+    mc.innerHTML = `<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:480px;">
+      <div class="modal-head"><h3>📜 ${sanitize(title)}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+      ${rows.length===0?`<div class="empty"><div class="empty-icon">📜</div>${lang==='ar'?'لا يوجد سجل بعد':'No log entries yet'}</div>`:`
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${rows.map(r=>`<div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
+            <span>👤 <b style="color:var(--text-main);">${sanitize(r.username||'-')}</b></span>
+            <span>${new Date(r.created_at).toLocaleString('ar-SA-u-nu-latn')}</span>
+          </div>
+          <div style="font-size:13px;">${sanitize(r.details||r.action)}</div>
+        </div>`).join('')}
+      </div>`}
+    </div></div>`;
+    refreshIcons();
+  } catch(e) { showToast(lang==='ar'?'تعذر تحميل السجل':'Failed to load log','error'); }
 }
 
 function startBarcodeScan() {
@@ -4872,6 +4902,7 @@ function setCusTab(tab) {
   $qa('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===(['customers','loyalty'].indexOf(tab))));
   renderCusContent();
 }
+let cusShowInactive = false;
 function renderCusContent() {
   const cc = el('cus-content'); if(!cc) return;
   const db = getDB();
@@ -4879,14 +4910,16 @@ function renderCusContent() {
   if(cusTab==='suppliers') cusTab='customers';
   if(cusTab==='loyalty') { renderLoyalty(cc); return; }
   if(cusTab==='customers'||true) {
-    const custRows = db.customers.map(c=>{
+    const activeCustomers = db.customers.filter(c=>c.is_active!==false);
+    const inactiveCustomers = db.customers.filter(c=>c.is_active===false);
+    const custRows = activeCustomers.map(c=>{
       const custInvs = db.invoices.filter(i=>i.customer_name===c.name);
       const totalTx  = custInvs.reduce((s,i)=>s+(i.grand_total||0),0);
       const invCount = custInvs.length;
       const outstanding = Math.max(0, Math.round((c.balance||0)*100)/100);
       return {c, totalTx, invCount, outstanding};
     });
-    const custWithBal = db.customers.filter(c=>(c.balance||0)>0);
+    const custWithBal = activeCustomers.filter(c=>(c.balance||0)>0);
     const cusBanner = custWithBal.length > 0 ? `
       <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
         <span style="font-size:20px;">🔴</span>
@@ -4897,7 +4930,10 @@ function renderCusContent() {
       </div>` : '';
     cc.innerHTML = `
     ${cusBanner}
-    ${has('customers.manage')?`<div style="margin-bottom:12px;"><button class="btn btn-primary" onclick="showAddEntity('customer')">${icon('plus',16)} ${t('add')}</button></div>`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      ${has('customers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('customer')">${icon('plus',16)} ${t('add')}</button>`:'<div></div>'}
+      ${inactiveCustomers.length>0?`<button class="btn btn-outline btn-sm" onclick="cusShowInactive=!cusShowInactive;renderCusContent();">${cusShowInactive?'▲':'▼'} ${lang==='ar'?`العملاء غير النشطين (${inactiveCustomers.length})`:`Inactive customers (${inactiveCustomers.length})`}</button>`:''}
+    </div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
         <th>${t('name')}</th>
@@ -4920,25 +4956,41 @@ function renderCusContent() {
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(c.name)}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${escJsAttr(c.name)}')">${icon('printer',13)} PDF</button>
-          ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${escJsAttr(c.name)}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
+          ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${escJsAttr(c.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
-    </table>${db.customers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد عملاء':'No customers'}</div>`:''}</div></div>`;
+    </table>${activeCustomers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد عملاء':'No customers'}</div>`:''}</div></div>
+    ${cusShowInactive && inactiveCustomers.length>0?`
+    <div class="card" style="margin-top:12px;opacity:.85;">
+      <div class="card-head"><h3>${lang==='ar'?'العملاء غير النشطين':'Inactive Customers'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${t('name')}</th><th>${t('phone')}</th><th style="color:var(--danger);">${lang==='ar'?'الرصيد':'Balance'}</th><th></th></tr></thead>
+        <tbody>${inactiveCustomers.map(c=>`<tr>
+          <td>${sanitize(c.name)}</td>
+          <td>${sanitize(c.phone)||'-'}</td>
+          <td>${fmtMoney(c.balance||0)}</td>
+          <td>${has('customers.manage')?`<button class="btn btn-sm btn-outline" onclick="reactivateCustomerEntity(${c.id},'${escJsAttr(c.name)}')">${icon('rotate-ccw',13)} ${lang==='ar'?'إعادة تفعيل':'Reactivate'}</button>`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`:''}`;
   }
   refreshIcons();
 }
 
 // ============ SUPPLIERS ============
+let suppShowInactive = false;
 function renderSuppliers(c) {
   const db = getDB();
-  const suppRows = db.suppliers.map(s=>{
+  const activeSuppliers = db.suppliers.filter(s=>s.is_active!==false);
+  const inactiveSuppliers = db.suppliers.filter(s=>s.is_active===false);
+  const suppRows = activeSuppliers.map(s=>{
     const suppPurchs = db.purchases.filter(p=>p.vendor===s.name);
     const totalTx   = suppPurchs.reduce((sum,p)=>sum+(p.total||0),0);
     const purCount  = suppPurchs.length;
     const outstanding = Math.max(0, Math.round((s.balance||0)*100)/100);
     return {s, totalTx, purCount, outstanding};
   });
-  const suppWithBal = db.suppliers.filter(s=>(s.balance||0)>0);
+  const suppWithBal = activeSuppliers.filter(s=>(s.balance||0)>0);
   const suppBanner = suppWithBal.length > 0 ? `
     <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
       <span style="font-size:20px;">🔴</span>
@@ -4952,7 +5004,10 @@ function renderSuppliers(c) {
     ${suppBanner}
     <div class="page-header">
       <div class="page-title-lg">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</div>
-      ${has('suppliers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
+      <div style="display:flex;gap:8px;">
+        ${inactiveSuppliers.length>0?`<button class="btn btn-outline btn-sm" onclick="suppShowInactive=!suppShowInactive;renderSuppliers(el('page-content'));">${suppShowInactive?'▲':'▼'} ${lang==='ar'?`الموردون غير النشطين (${inactiveSuppliers.length})`:`Inactive suppliers (${inactiveSuppliers.length})`}</button>`:''}
+        ${has('suppliers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
+      </div>
     </div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
@@ -4976,10 +5031,23 @@ function renderSuppliers(c) {
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(s.name)}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${escJsAttr(s.name)}')">${icon('printer',13)} PDF</button>
-          ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${escJsAttr(s.name)}')"><span style="font-size:11px;">${icon('trash-2',11)} ${lang==='ar'?'حذف':'Delete'}</span></button>`:''}
+          ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${escJsAttr(s.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
-    </table>${db.suppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>
+    </table>${activeSuppliers.length===0?`<div class="empty">${lang==='ar'?'لا يوجد موردون':'No suppliers'}</div>`:''}</div></div>
+    ${suppShowInactive && inactiveSuppliers.length>0?`
+    <div class="card" style="margin-top:12px;opacity:.85;">
+      <div class="card-head"><h3>${lang==='ar'?'الموردون غير النشطين':'Inactive Suppliers'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${t('name')}</th><th>${t('phone')}</th><th style="color:var(--danger);">${lang==='ar'?'الرصيد':'Balance'}</th><th></th></tr></thead>
+        <tbody>${inactiveSuppliers.map(s=>`<tr>
+          <td>${sanitize(s.name)}</td>
+          <td>${sanitize(s.phone)||'-'}</td>
+          <td>${fmtMoney(s.balance||0)}</td>
+          <td>${has('suppliers.manage')?`<button class="btn btn-sm btn-outline" onclick="reactivateSupplierEntity(${s.id},'${escJsAttr(s.name)}')">${icon('rotate-ccw',13)} ${lang==='ar'?'إعادة تفعيل':'Reactivate'}</button>`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`:''}
   </div>`;
   refreshIcons();
 }
@@ -5012,24 +5080,51 @@ function saveEntity(type) {
   if(isCustomer) db.customers.push(data); else db.suppliers.push(data);
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
   if(isCustomer) renderCusContent();
-  else { const _mc=el('main-content'); if(_mc) renderSuppliers(_mc); }
+  else { const _mc=el('page-content'); if(_mc) renderSuppliers(_mc); }
 }
 
+// الحذف هنا دائمًا تعطيل (is_active=false) وليس حذفًا نهائيًا — يحافظ على
+// السجل المحاسبي لأي عميل/مورد له حركات أو رصيد سابق، ويبقيه قابلاً للاسترجاع
+// من قسم «غير النشطين»، بدل فقدانه نهائيًا كما كان يحصل سابقًا
 function deleteSupplierEntity(id, name) {
-  if(!confirm(lang==='ar'?`تأكيد حذف المورد: ${name}؟`:`Delete supplier: ${name}?`)) return;
+  if(!confirm(lang==='ar'?`تعطيل المورد "${name}"؟ سيختفي من القائمة النشطة لكن تبقى كل حركاته المحاسبية محفوظة، وتقدر تعيد تفعيله لاحقًا من قسم «غير النشطين».`:`Deactivate supplier "${name}"? It will disappear from the active list but all its accounting history stays intact, and you can reactivate it later from the "Inactive" section.`)) return;
   const db = getDB();
-  db.suppliers = db.suppliers.filter(s=>s.id!==id);
+  const s = db.suppliers.find(x=>x.id===id); if(!s) return;
+  s.is_active = false;
   saveDB(db);
-  showToast(lang==='ar'?`✅ تم حذف ${name}`:`✅ Deleted ${name}`);
-  const _mc = el('main-content'); if(_mc) renderSuppliers(_mc);
+  logActivity(lang==='ar'?'الموردون':'Suppliers', lang==='ar'?`تعطيل المورد: ${name}`:`Deactivated supplier: ${name}`);
+  showToast(lang==='ar'?`✅ تم تعطيل ${name}`:`✅ Deactivated ${name}`);
+  const _mc = el('page-content'); if(_mc) renderSuppliers(_mc);
+}
+
+function reactivateSupplierEntity(id, name) {
+  const db = getDB();
+  const s = db.suppliers.find(x=>x.id===id); if(!s) return;
+  s.is_active = true;
+  saveDB(db);
+  logActivity(lang==='ar'?'الموردون':'Suppliers', lang==='ar'?`إعادة تفعيل المورد: ${name}`:`Reactivated supplier: ${name}`);
+  showToast(lang==='ar'?`✅ تم تفعيل ${name}`:`✅ Reactivated ${name}`);
+  const _mc = el('page-content'); if(_mc) renderSuppliers(_mc);
 }
 
 function deleteCustomerEntity(id, name) {
-  if(!confirm(lang==='ar'?`تأكيد حذف العميل: ${name}؟`:`Delete customer: ${name}?`)) return;
+  if(!confirm(lang==='ar'?`تعطيل العميل "${name}"؟ سيختفي من القائمة النشطة لكن تبقى كل حركاته المحاسبية محفوظة، وتقدر تعيد تفعيله لاحقًا من قسم «غير النشطين».`:`Deactivate customer "${name}"? It will disappear from the active list but all its accounting history stays intact, and you can reactivate it later from the "Inactive" section.`)) return;
   const db = getDB();
-  db.customers = db.customers.filter(c=>c.id!==id);
+  const c = db.customers.find(x=>x.id===id); if(!c) return;
+  c.is_active = false;
   saveDB(db);
-  showToast(lang==='ar'?`✅ تم حذف ${name}`:`✅ Deleted ${name}`);
+  logActivity(lang==='ar'?'العملاء':'Customers', lang==='ar'?`تعطيل العميل: ${name}`:`Deactivated customer: ${name}`);
+  showToast(lang==='ar'?`✅ تم تعطيل ${name}`:`✅ Deactivated ${name}`);
+  renderCusContent();
+}
+
+function reactivateCustomerEntity(id, name) {
+  const db = getDB();
+  const c = db.customers.find(x=>x.id===id); if(!c) return;
+  c.is_active = true;
+  saveDB(db);
+  logActivity(lang==='ar'?'العملاء':'Customers', lang==='ar'?`إعادة تفعيل العميل: ${name}`:`Reactivated customer: ${name}`);
+  showToast(lang==='ar'?`✅ تم تفعيل ${name}`:`✅ Reactivated ${name}`);
   renderCusContent();
 }
 
@@ -13738,8 +13833,10 @@ async function runAISearchQuery(q) {
       const db = getDB();
 
       if (prods?.data)    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
-      if (custs?.data)    db.customers  = custs.data.filter(c=>c.is_active!==false).map(customerToFE);
-      if (supps?.data)    db.suppliers  = supps.data.filter(s=>s.is_active!==false).map(supplierToFE);
+      // العملاء/الموردون غير النشطين (معطّلون، مو محذوفون فعليًا) يبقون
+      // محمَّلين محليًا عمدًا — عشان تقدر تشوفهم وتعيد تفعيلهم من الواجهة
+      if (custs?.data)    db.customers  = custs.data.map(customerToFE);
+      if (supps?.data)    db.suppliers  = supps.data.map(supplierToFE);
       if (invRes?.data)   db.invoices   = invRes.data.map(invToFE);
       if (purRes?.data)   db.purchases  = purRes.data.map(purchaseToFE);
       if (empRes?.data)   db.employees  = empRes.data.map(employeeToFE);
@@ -14064,7 +14161,7 @@ async function runAISearchQuery(q) {
         const old = (prev.customers || []).find(o => o.id === c.id);
         const body = { name: c.name, phone: c.phone, email: c.email, address: c.address,
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
-                       balance: c.balance || 0 };
+                       balance: c.balance || 0, is_active: c.is_active !== false };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
@@ -14086,7 +14183,7 @@ async function runAISearchQuery(q) {
         const old = (prev.suppliers || []).find(o => o.id === s.id);
         const body = { name: s.name, phone: s.phone, email: s.email,
                        address: s.address, vat_number: s.vat_num,
-                       balance: s.balance || 0 };
+                       balance: s.balance || 0, is_active: s.is_active !== false };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });

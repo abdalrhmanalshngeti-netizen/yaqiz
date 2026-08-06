@@ -1,5 +1,6 @@
 const db    = require('../config/db');
 const stock = require('../services/stock.service');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -64,6 +65,12 @@ exports.update = async (req, res, next) => {
     const { code, barcode, name, name_en, category_id, unit_id,
             buy_price, sell_price, min_qty, max_qty, tax_rate, notes, is_active } = req.body;
 
+    const { rows: [before] } = await db.query(
+      `SELECT name, buy_price, sell_price FROM products WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!before) return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+
     const { rows } = await db.query(`
       UPDATE products SET
         code        = COALESCE($1,  code),
@@ -88,6 +95,21 @@ exports.update = async (req, res, next) => {
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
     res.json({ success: true, data: rows[0] });
+
+    // نسجّل التعديل اليدوي على السعر بنفس جدول سجل التغييرات المستخدم أصلاً
+    // للتسعير التلقائي — عشان تظهر كل تعديلات السعر (يدوية أو تلقائية) بنفس
+    // شاشة «سجل التغييرات» الموجودة بالفعل بواجهة المنتج، بدون آلية موازية
+    const buyChanged  = buy_price  != null && parseFloat(buy_price)  !== parseFloat(before.buy_price);
+    const sellChanged = sell_price != null && parseFloat(sell_price) !== parseFloat(before.sell_price);
+    if (buyChanged || sellChanged) {
+      await db.query(`
+        INSERT INTO product_price_history
+          (company_id, product_id, old_buy_price, new_buy_price,
+           old_sell_price, new_sell_price, changed_by, reason)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'manual_edit')
+      `, [req.user.company_id, rows[0].id, before.buy_price, rows[0].buy_price,
+          before.sell_price, rows[0].sell_price, req.user.sub]);
+    }
   } catch (err) { next(err); }
 };
 
@@ -193,6 +215,13 @@ exports.manualMove = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true, data: move });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'stock_manual_adjust',
+      entityType: 'product', entityId: req.params.id, ip: req.ip,
+      oldValues: { qty: move.balance_before }, newValues: { qty: move.balance_after },
+      details: `تسوية مخزون يدوية (${type==='in'?'إضافة':'خصم'} ${qty}) — السبب: ${reason||'-'}`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
