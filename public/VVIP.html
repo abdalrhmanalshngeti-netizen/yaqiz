@@ -1386,13 +1386,13 @@ function renderCSBody(db, myTickets) {
       const statusLabel = e.status==='open'?'⏳ قيد المعالجة':'✅ تم الحل';
       return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <div style="font-weight:800;font-size:13px;">📌 ${e.path}</div>
+          <div style="font-weight:800;font-size:13px;">📌 ${sanitize(e.path)}</div>
           <span style="font-size:11px;font-weight:700;color:${statusColor};">${statusLabel}</span>
         </div>
-        ${e.note?`<div style="font-size:12px;color:var(--text-muted);background:var(--bg);padding:8px;border-radius:8px;margin-bottom:6px;">"${e.note}"</div>`:''}
+        ${e.note?`<div style="font-size:12px;color:var(--text-muted);background:var(--bg);padding:8px;border-radius:8px;margin-bottom:6px;">"${sanitize(e.note)}"</div>`:''}
         <div style="font-size:11px;color:var(--text-muted);">${fmtDate(e.created_at)}</div>
         ${e.reply?`<div style="margin-top:8px;padding:8px;background:var(--primary-soft);border-radius:8px;font-size:12px;border-right:3px solid var(--primary);">
-          <b>رد الإدارة:</b> ${e.reply}
+          <b>رد الإدارة:</b> ${sanitize(e.reply)}
         </div>`:''}
       </div>`;
     }).join('');
@@ -1405,11 +1405,11 @@ function renderCSBody(db, myTickets) {
     return open.map(e=>`
     <div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <div style="font-weight:800;font-size:13px;">👤 ${e.user}</div>
+        <div style="font-weight:800;font-size:13px;">👤 ${sanitize(e.user)}</div>
         <div style="font-size:11px;color:var(--text-muted);">${fmtDate(e.created_at)}</div>
       </div>
-      <div style="font-size:12px;color:var(--primary);font-weight:700;margin-bottom:6px;">📌 ${e.path}</div>
-      ${e.note?`<div style="font-size:12px;color:var(--text-muted);background:var(--bg);padding:8px;border-radius:8px;margin-bottom:8px;">"${e.note}"</div>`:''}
+      <div style="font-size:12px;color:var(--primary);font-weight:700;margin-bottom:6px;">📌 ${sanitize(e.path)}</div>
+      ${e.note?`<div style="font-size:12px;color:var(--text-muted);background:var(--bg);padding:8px;border-radius:8px;margin-bottom:8px;">"${sanitize(e.note)}"</div>`:''}
       <input id="cs-reply-${e.id}" class="input" placeholder="رد على المستخدم (اختياري)..." style="font-size:12px;margin-bottom:8px;" />
       <button onclick="csCloseEscalation(${e.id})" style="width:100%;padding:8px;background:#22c55e;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;">
         ✓ تم المعالجة
@@ -8233,8 +8233,8 @@ function renderReturnContent() {
           <td><b>${r.return_no}</b></td>
           <td>${fmtDate(r.date)}</td>
           <td><b>${sanitize(r.party)}</b></td>
-          <td style="font-size:12px;">${r.item}</td>
-          <td><span class="badge badge-amber">${r.reason}</span></td>
+          <td style="font-size:12px;">${sanitize(r.item)}</td>
+          <td><span class="badge badge-amber">${sanitize(r.reason)}</span></td>
           <td style="font-weight:800;color:var(--danger);">${fmtMoney(r.amount)}</td>
           ${has('returns.manage')?`<td><button class="icon-btn" style="width:28px;height:28px;" onclick="deleteReturn(${r.id})">${icon('trash-2',13)}</button></td>`:''}
         </tr>`).join('')}
@@ -9113,9 +9113,9 @@ function renderStockMoves(c){
               <td style="font-weight:800;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${m.qty}</td>
               <td><span class="badge ${m.balance_after<=0?'badge-red':m.balance_after<=5?'badge-amber':'badge-green'}">${m.balance_after}</span></td>
               <td style="font-size:12px;">
-                <div style="font-weight:700;">${m.reason||'-'}</div>
-                ${m.source?`<div style="font-size:10px;color:var(--text-muted);">📦 ${m.source}</div>`:''}
-                ${m.note?`<div style="font-size:10px;color:var(--text-muted);">${m.note}</div>`:''}
+                <div style="font-weight:700;">${sanitize(m.reason)||'-'}</div>
+                ${m.source?`<div style="font-size:10px;color:var(--text-muted);">📦 ${sanitize(m.source)}</div>`:''}
+                ${m.note?`<div style="font-size:10px;color:var(--text-muted);">${sanitize(m.note)}</div>`:''}
               </td>
               <td style="font-size:11px;"><code>${sanitize(m.reference)||'-'}</code></td>
             </tr>`).join('')}
@@ -9165,7 +9165,7 @@ function filterStockMoves(){
       <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
       <td style="font-weight:800;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${m.qty}</td>
       <td><span class="badge ${m.balance_after<=0?'badge-red':m.balance_after<=5?'badge-amber':'badge-green'}">${m.balance_after}</span></td>
-      <td style="font-size:12px;"><div style="font-weight:700;">${m.reason||'-'}</div>${m.note?`<div style="font-size:10px;color:var(--text-muted);">${m.note}</div>`:''}</td>
+      <td style="font-size:12px;"><div style="font-weight:700;">${sanitize(m.reason)||'-'}</div>${m.note?`<div style="font-size:10px;color:var(--text-muted);">${sanitize(m.note)}</div>`:''}</td>
       <td style="font-size:11px;"><code>${sanitize(m.reference)||'-'}</code></td>
     </tr>`).join('');
 }
@@ -9428,7 +9428,7 @@ async function showNotifications(){
             <div style="width:36px;height:36px;border-radius:8px;background:${n.is_read?'#334155':'#3b82f6'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">💰</div>
             <div style="flex:1;">
               <div style="font-weight:800;font-size:13px;color:${n.is_read?'var(--text-main)':'#93c5fd'}">${n.title||'تحديث سعر'}</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${n.message}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${sanitize(n.message)}</div>
               <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
             </div>
             ${!n.is_read?`<span style="width:8px;height:8px;background:#3b82f6;border-radius:50%;flex-shrink:0;margin-top:4px;"></span>`:''}
