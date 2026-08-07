@@ -221,14 +221,16 @@ exports.markPayrollPaid = async (req, res, next) => {
 exports.listShifts = async (req, res, next) => {
   try {
     const { from, to } = req.query;
+    const canSeeAll = req.user.role === 'owner' || (req.user.perms||[]).includes('settings.view');
     let where  = [`s.company_id = $1`];
     let params = [req.user.company_id];
     let idx    = 2;
+    if (!canSeeAll) { where.push(`s.user_id = $${idx++}`); params.push(req.user.sub); }
     if (from) { where.push(`s.start_time >= $${idx++}`); params.push(from); }
     if (to)   { where.push(`s.start_time <= $${idx++}`); params.push(to); }
 
     const { rows } = await db.query(`
-      SELECT s.*, u.full_name FROM shifts s
+      SELECT s.*, u.full_name, u.username FROM shifts s
       JOIN users u ON u.id = s.user_id
       WHERE ${where.join(' AND ')}
       ORDER BY s.start_time DESC
@@ -257,7 +259,7 @@ exports.openShift = async (req, res, next) => {
 
 exports.closeShift = async (req, res, next) => {
   try {
-    const { closing_cash } = req.body;
+    const { closing_cash, closing_card, closing_transfer } = req.body;
     const { rows: [shift] } = await db.query(
       `SELECT * FROM shifts WHERE id = $1 AND company_id = $2 AND status = 'open'`,
       [req.params.id, req.user.company_id]
@@ -278,11 +280,12 @@ exports.closeShift = async (req, res, next) => {
 
     await db.query(`
       UPDATE shifts SET
-        status = 'closed', end_time = NOW(), closing_cash = $1,
-        sales_cash = $2, sales_card = $3, sales_transfer = $4,
-        sales_credit = $5, invoices_count = $6
-      WHERE id = $7
-    `, [closing_cash || 0,
+        status = 'closed', end_time = NOW(),
+        closing_cash = $1, closing_card = $2, closing_transfer = $3,
+        sales_cash = $4, sales_card = $5, sales_transfer = $6,
+        sales_credit = $7, invoices_count = $8
+      WHERE id = $9
+    `, [closing_cash || 0, closing_card || 0, closing_transfer || 0,
         sales.cash, sales.card, sales.transfer, sales.credit, sales.cnt,
         shift.id]);
 

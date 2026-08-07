@@ -970,22 +970,32 @@ function doLogin() {
   currentUser = u;
   localStorage.setItem('yaqiz_user', JSON.stringify(u));
   resetSessionTimer();
-  if (u.shift_enabled) startShift(u);
-  logActivity('نظام', `تسجيل دخول: ${u.full_name}`);
-  renderApp();
+  const _hasOpenShift = (db.shifts||[]).some(s=>s.username===u.username&&!s.end_time);
+  if (u.shift_enabled && !_hasOpenShift) {
+    showShiftOpenScreen(u, (openingCash) => {
+      startShift(u, openingCash);
+      logActivity('نظام', `تسجيل دخول: ${u.full_name}`);
+      renderApp();
+    });
+  } else {
+    logActivity('نظام', `تسجيل دخول: ${u.full_name}`);
+    renderApp();
+  }
 }
 
 function doLogout() {
   if (currentUser?.shift_enabled) {
-    showShiftSummary(() => {
-      endShift(currentUser);
+    showShiftSummary((cash, card, transfer) => {
+      endShift(currentUser, cash, card, transfer);
       currentUser = null;
       localStorage.removeItem('yaqiz_user');
+      window._finalizeLogoutCleanup?.();
       renderApp();
     });
   } else {
     currentUser = null;
     localStorage.removeItem('yaqiz_user');
+    window._finalizeLogoutCleanup?.();
     renderApp();
   }
 }
@@ -2056,6 +2066,13 @@ function renderDashboard(c) {
   const receivables = db.customers.reduce((s,c)=>s+Math.max(0,c.balance||0),0);
   const payables    = db.suppliers.reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
   const lowStock    = db.products.filter(p=>p.qty<=p.min_qty);
+  // بضاعة بالطريق متأخرة — فواتير شراء عليها أصناف لم تُدرج بالمخزون بعد
+  // لأكثر من أسبوع، حتى لا تتراكم بصمت وتُنسى (ملاحظة تشغيلية من مراجعة المحاسبين)
+  const GOODS_IN_TRANSIT_ALERT_DAYS = 7;
+  const agingGoodsInTransit = db.purchases.filter(p=>
+    p.items?.some(i=>!i.stocked) &&
+    (Date.now() - new Date(p.created_at).getTime()) / 86400000 >= GOODS_IN_TRANSIT_ALERT_DAYS
+  );
 
   const pctChange = (cur,prev) => {
     if(!prev) return null;
@@ -2114,6 +2131,21 @@ function renderDashboard(c) {
         </div>
       </div>
     </div>
+
+    ${agingGoodsInTransit.length>0?`
+    <div class="card" style="margin-top:16px;">
+      <div class="card-head"><h3>📦 ${lang==='ar'?`بضاعة بالطريق معلّقة (${agingGoodsInTransit.length})`:`Aging Goods in Transit (${agingGoodsInTransit.length})`}</h3></div>
+      <div style="padding:12px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">${lang==='ar'?`فواتير شراء عليها أصناف لم تُدرج بالمخزون منذ ${GOODS_IN_TRANSIT_ALERT_DAYS} أيام أو أكثر — استكمل إدراجها أو راجعها.`:`Purchases with items not yet added to inventory for ${GOODS_IN_TRANSIT_ALERT_DAYS}+ days — complete the add or review them.`}</div>
+        ${agingGoodsInTransit.map(p=>{
+          const daysAgo = Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="goTo('purchases')">
+            <div><div style="font-weight:700;font-size:13px;">${sanitize(p.vendor)}</div><div style="font-size:11px;color:var(--text-muted);">${fmtMoney(p.total)}</div></div>
+            <span class="badge ${daysAgo>=30?'badge-red':'badge-amber'}">${lang==='ar'?`منذ ${daysAgo} يوم`:`${daysAgo}d ago`}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
       <div class="card">
@@ -3859,7 +3891,11 @@ function renderPurchContent() {
           <td><b>${fmtMoney(p.total)}</b></td>
           ${isGoods?`
           <td style="color:var(--text-muted);font-size:12px;">${p.payment_method||'—'}
-            ${p.items?.some(i=>!i.stocked)?`<div style="margin-top:4px;"><span class="badge badge-amber" style="font-size:10px;" title="${lang==='ar'?'بعض الأصناف لم تُدرج بالمخزون بعد — مسجّلة كبضاعة بالطريق':'Some items not yet added to inventory — recorded as goods in transit'}">📦 ${lang==='ar'?'بضاعة بالطريق':'In transit'}</span></div>`:''}
+            ${p.items?.some(i=>!i.stocked)?(()=>{
+              const daysAgo = Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000);
+              const aging = daysAgo>=7;
+              return `<div style="margin-top:4px;"><span class="badge ${aging?'badge-red':'badge-amber'}" style="font-size:10px;" title="${lang==='ar'?'بعض الأصناف لم تُدرج بالمخزون بعد — مسجّلة كبضاعة بالطريق':'Some items not yet added to inventory — recorded as goods in transit'}">📦 ${lang==='ar'?'بضاعة بالطريق':'In transit'}${daysAgo>0?` · ${lang==='ar'?`${daysAgo} يوم`:`${daysAgo}d`}`:''}</span></div>`;
+            })():''}
           </td>
           <td>
             <div style="display:flex;gap:4px;">
@@ -7029,6 +7065,10 @@ function saveUser(id) {
 
   if (!valid) return;
 
+  // نظام الوردية مرتبط مباشرة بصلاحية الوصول لنقطة البيع — بلا علاقة بالمسمى
+  // الوظيفي: أي موظف يُمنح الوصول لنقطة البيع يدخل تلقائيًا تحت نظام الوردية
+  const shiftEnabled = posAccess;
+
   if (id) {
     const u = db.users.find(x=>x.id===id);
     if (u) {
@@ -7036,6 +7076,7 @@ function saveUser(id) {
       u.role          = role;
       u.permissions   = perms;
       u.pos_access    = posAccess;
+      u.shift_enabled = shiftEnabled;
       if (password) u.password = password;
     }
   } else {
@@ -7047,6 +7088,7 @@ function saveUser(id) {
       role,
       permissions:    perms,
       pos_access:     posAccess,
+      shift_enabled:  shiftEnabled,
       active:         true
     });
   }
@@ -7064,7 +7106,7 @@ function saveUser(id) {
           // تعديل مستخدم موجود
           await window._cloudApiFetch('PUT', `/api/users/${id}`, {
             full_name: fullname, role, permissions: perms,
-            pos_access: posAccess, active: true
+            pos_access: posAccess, shift_enabled: shiftEnabled, active: true
           });
           if (password) {
             await window._cloudApiFetch('PUT', `/api/users/${id}/password`, { new_password: password });
@@ -7073,7 +7115,7 @@ function saveUser(id) {
           // إنشاء مستخدم جديد
           const res = await window._cloudApiFetch('POST', '/api/users', {
             username, password, full_name: fullname, role,
-            permissions: perms, pos_access: posAccess, shift_enabled: false
+            permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled
           });
           if (res?.data?.id) {
             // تحديث الـ ID المحلي بـ ID من قاعدة البيانات
@@ -9482,7 +9524,44 @@ async function _updateNotifBadge() {
 
 // ============ SHIFT SYSTEM ============
 
-function startShift(user) {
+// شاشة إجبارية تظهر بعد تسجيل الدخول مباشرة (قبل أي صفحة أخرى) لأي موظف
+// عنده وصول لنقطة البيع — يسجّل فيها المبلغ الموجود بالدرج فعليًا عند بداية
+// وردیته، بالضبط زي ما تُسجَّل نهاية الوردية. لا يوجد زر تخطٍّ أو إلغاء.
+function showShiftOpenScreen(user, onProceed) {
+  document.documentElement.lang = 'en';
+  document.documentElement.dir = lang==='ar'?'rtl':'ltr';
+  el('app').innerHTML = `
+  <div class="login-bg">
+    <div class="login-card">
+      <div class="login-logo">${LOGO_SVG}</div>
+      <div class="login-title">${lang==='ar'?'بدء الوردية':'Start Shift'}</div>
+      <div class="login-sub">${lang==='ar'?`أهلًا ${user.full_name} — سجّل المبلغ الموجود بالدرج الآن قبل بدء العمل`:`Welcome ${user.full_name} — record what's in the drawer now before starting`}</div>
+      <div style="text-align:center;margin:12px 0 18px;font-size:13px;color:var(--text-muted);">
+        🕐 ${new Date().toLocaleString(lang==='ar'?'ar-SA-u-nu-latn':'en-US',{dateStyle:'medium',timeStyle:'short'})}
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="form-label">💵 ${lang==='ar'?'المبلغ الموجود في الدرج الآن':'Amount currently in the drawer'}</label>
+        <input id="so-cash" class="input" type="number" placeholder="0.00" autofocus />
+      </div>
+      <div id="so-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
+      <button class="btn btn-primary btn-full" id="so-start-btn" style="padding:12px;font-size:14px;">
+        ${icon('play',18)} ${lang==='ar'?'بدء الوردية':'Start Shift'}
+      </button>
+    </div>
+  </div>`;
+  refreshIcons();
+  el('so-start-btn').onclick = () => {
+    const cashEl = el('so-cash'), errEl = el('so-err');
+    if (cashEl.value === '') {
+      errEl.textContent = lang==='ar'?'أدخل المبلغ الموجود بالدرج (حتى لو صفر)':'Enter the drawer amount (even zero)';
+      errEl.style.display = 'block';
+      return;
+    }
+    onProceed(Number(cashEl.value));
+  };
+}
+
+function startShift(user, openingCash) {
   const db = getDB();
   // close any open shift for this user first
   const open = (db.shifts||[]).find(s=>s.username===user.username&&!s.end_time);
@@ -9494,6 +9573,8 @@ function startShift(user) {
     start_time: new Date().toISOString(),
     end_time: null,
     date: new Date().toISOString().slice(0,10),
+    opening_cash: Number(openingCash)||0,
+    closing_cash: 0, closing_card: 0, closing_transfer: 0,
     sales_cash: 0, sales_card: 0, sales_transfer: 0, sales_credit: 0,
     invoices_count: 0, invoice_ids: []
   };
@@ -9504,7 +9585,7 @@ function startShift(user) {
   localStorage.setItem('yaqiz_shift_id', shift.id);
 
   // مزامنة مع السيرفر (بدون انتظار حتى ما نأخر تسجيل الدخول)
-  window._cloudApiFetch?.('POST', '/api/employees/shifts/open', { opening_cash: 0 })
+  window._cloudApiFetch?.('POST', '/api/employees/shifts/open', { opening_cash: Number(openingCash)||0 })
     .then(res => {
       if (!res?.data?.id) return;
       const _db = getDB();
@@ -9513,15 +9594,20 @@ function startShift(user) {
     }).catch(()=>{});
 }
 
-function endShift(user) {
+function endShift(user, closingCash, closingCard, closingTransfer) {
   const db = getDB();
   const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
   const shift = (db.shifts||[]).find(s=>s.id===shiftId||(!s.end_time&&s.username===user.username));
   if(shift) {
     shift.end_time = new Date().toISOString();
+    shift.closing_cash = Number(closingCash)||0;
+    shift.closing_card = Number(closingCard)||0;
+    shift.closing_transfer = Number(closingTransfer)||0;
     saveDB(db);
     if (shift._serverId) {
-      window._cloudApiFetch?.('PUT', `/api/employees/shifts/${shift._serverId}/close`, { closing_cash: 0 }).catch(()=>{});
+      window._cloudApiFetch?.('PUT', `/api/employees/shifts/${shift._serverId}/close`, {
+        closing_cash: shift.closing_cash, closing_card: shift.closing_card, closing_transfer: shift.closing_transfer
+      }).catch(()=>{});
     }
   }
   localStorage.removeItem('yaqiz_shift_id');
@@ -9605,14 +9691,26 @@ function showShiftSummary(onConfirm) {
         </div>
       </div>
 
-      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;">
-        💡 <b>${lang==='ar'?'المبلغ المتوقع في الدرج النقدي:':'Expected cash in drawer:'}</b>
-        <span style="font-size:16px;font-weight:900;color:var(--success);margin-${lang==='ar'?'right':'left'}:8px;">${fmtMoney(shift.sales_cash||0)}</span>
+      <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:16px;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:10px;">🧮 ${lang==='ar'?'عدّ المبلغ الفعلي الآن وسجّله لكل طريقة:':'Count the actual amount now and record it for each method:'}</div>
+        <div style="margin-bottom:10px;">
+          <label class="form-label">💵 ${lang==='ar'?'الكاش الفعلي في الدرج':'Actual cash in drawer'}</label>
+          <input class="input" type="number" id="ss-cash" placeholder="0.00" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="form-label">💳 ${lang==='ar'?'إجمالي الشبكة الفعلي':'Actual network total'}</label>
+          <input class="input" type="number" id="ss-card" placeholder="0.00" />
+        </div>
+        <div>
+          <label class="form-label">🏦 ${lang==='ar'?'إجمالي التحويل البنكي الفعلي':'Actual bank transfer total'}</label>
+          <input class="input" type="number" id="ss-transfer" placeholder="0.00" />
+        </div>
+        <div id="ss-err" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;"></div>
       </div>
 
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-danger btn-full" onclick="document.getElementById('modal-container').innerHTML='';(${onConfirm.toString()})()">
-          ${icon('log-out',16)} ${lang==='ar'?'تأكيد الخروج':'Confirm Logout'}
+        <button class="btn btn-danger btn-full" id="ss-confirm-btn">
+          ${icon('log-out',16)} ${lang==='ar'?'حفظ وتأكيد الخروج':'Save & Confirm Logout'}
         </button>
         <button class="btn btn-outline" onclick="closeModal()">
           ${lang==='ar'?'رجوع':'Back'}
@@ -9621,6 +9719,18 @@ function showShiftSummary(onConfirm) {
     </div>
   </div>`;
   refreshIcons();
+  el('ss-confirm-btn').onclick = () => {
+    const cashEl = el('ss-cash'), cardEl = el('ss-card'), transferEl = el('ss-transfer');
+    const errEl = el('ss-err');
+    if (cashEl.value===''||cardEl.value===''||transferEl.value==='') {
+      errEl.textContent = lang==='ar'?'عبّي المبالغ الثلاثة (حتى لو صفر) قبل تأكيد الخروج':'Fill in all three amounts (even zero) before confirming logout';
+      errEl.style.display = 'block';
+      return;
+    }
+    const cash = Number(cashEl.value), card = Number(cardEl.value), transfer = Number(transferEl.value);
+    el('modal-container').innerHTML = '';
+    onConfirm(cash, card, transfer);
+  };
 }
 
 function checkLongShifts() {
@@ -11048,10 +11158,30 @@ function renderActivity(c) {
                       <div style="font-weight:800;color:var(--danger);font-size:13px;">${fmtMoney(s.sales_credit||0)}</div>
                     </div>
                   </div>
-                  ${shiftTotal>0?`<div style="margin-top:8px;display:flex;justify-content:space-between;font-weight:900;font-size:14px;color:var(--primary);border-top:1px solid var(--border);padding-top:8px;">
-                    <span>${lang==='ar'?'💡 الكاش المتوقع في الدرج:':'💡 Expected cash in drawer:'}</span>
-                    <span style="color:var(--success);">${fmtMoney(s.sales_cash||0)}</span>
-                  </div>`:''}
+                  <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:8px;">
+                    <span>💰 ${lang==='ar'?'بداية الوردية (الدرج):':'Shift opening (drawer):'}</span>
+                    <span style="font-weight:800;color:var(--text-main);">${fmtMoney(s.opening_cash||0)}</span>
+                  </div>
+                  ${s.end_time?(()=>{
+                    const rows = [
+                      { label: lang==='ar'?'كاش':'Cash',     declared: s.closing_cash||0,     expected: (s.opening_cash||0)+(s.sales_cash||0) },
+                      { label: lang==='ar'?'شبكة':'Network', declared: s.closing_card||0,     expected: s.sales_card||0 },
+                      { label: lang==='ar'?'تحويل':'Transfer', declared: s.closing_transfer||0, expected: s.sales_transfer||0 },
+                    ];
+                    return `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+                      <div style="font-weight:800;font-size:12px;margin-bottom:6px;">🧮 ${lang==='ar'?'الإقفال — المُعلن مقابل المتوقع:':'Closing — declared vs expected:'}</div>
+                      ${rows.map(r=>{
+                        const diff = Math.round((r.declared-r.expected)*100)/100;
+                        const diffColor = diff===0?'var(--text-muted)':diff<0?'var(--danger)':'var(--success)';
+                        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12px;">
+                          <span style="color:var(--text-muted);">${r.label}</span>
+                          <span>${lang==='ar'?'مُعلن':'declared'} ${fmtMoney(r.declared)} <span style="color:var(--text-muted);">/ ${lang==='ar'?'متوقع':'exp.'} ${fmtMoney(r.expected)}</span>
+                            <b style="color:${diffColor};margin-inline-start:6px;">${diff===0?'✓':(diff>0?'+':'')+fmtMoney(diff)}</b>
+                          </span>
+                        </div>`;
+                      }).join('')}
+                    </div>`;
+                  })():`<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">⏳ ${lang==='ar'?'الوردية ما زالت مفتوحة':'Shift still open'}</div>`}
                 </div>`;
               }).join('')}
             </div>`:''}
@@ -13808,14 +13938,14 @@ async function runAISearchQuery(q) {
   async function loadAllFromAPI() {
     try {
       const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes] = await Promise.all([
-        apiFetch('GET', '/api/products?active=all'),
-        apiFetch('GET', '/api/customers?active=all'),
-        apiFetch('GET', '/api/suppliers?active=all'),
-        apiFetch('GET', '/api/invoices?limit=500'),
-        apiFetch('GET', '/api/purchases?limit=500'),
+        apiFetch('GET', '/api/products?active=all').catch(() => null),
+        apiFetch('GET', '/api/customers?active=all').catch(() => null),
+        apiFetch('GET', '/api/suppliers?active=all').catch(() => null),
+        apiFetch('GET', '/api/invoices?limit=500').catch(() => null),
+        apiFetch('GET', '/api/purchases?limit=500').catch(() => null),
         apiFetch('GET', '/api/employees').catch(() => null),
-        apiFetch('GET', '/api/treasury/accounts'),
-        apiFetch('GET', '/api/quotes?limit=500'),
+        apiFetch('GET', '/api/treasury/accounts').catch(() => null),
+        apiFetch('GET', '/api/quotes?limit=500').catch(() => null),
         apiFetch('GET', '/api/users').catch(() => null),
         apiFetch('GET', '/api/auth/me').catch(() => null),
         apiFetch('GET', '/api/obligations').catch(() => null),
@@ -13982,15 +14112,18 @@ async function runAISearchQuery(q) {
             local.end_time = row.end_time; local.sales_cash = parseFloat(row.sales_cash)||0;
             local.sales_card = parseFloat(row.sales_card)||0; local.sales_transfer = parseFloat(row.sales_transfer)||0;
             local.sales_credit = parseFloat(row.sales_credit)||0; local.invoices_count = row.invoices_count||0;
+            local.opening_cash = parseFloat(row.opening_cash)||0; local.closing_cash = parseFloat(row.closing_cash)||0;
+            local.closing_card = parseFloat(row.closing_card)||0; local.closing_transfer = parseFloat(row.closing_transfer)||0;
           } else if (!_knownShiftServerIds.has(row.id)) {
             db.shifts.unshift({
-              id: 'srv-' + row.id, username: '', full_name: row.full_name || '',
+              id: 'srv-' + row.id, _serverId: row.id, username: row.username || '', full_name: row.full_name || '',
               start_time: row.start_time, end_time: row.end_time,
               date: (row.start_time||'').slice(0,10),
+              opening_cash: parseFloat(row.opening_cash)||0, closing_cash: parseFloat(row.closing_cash)||0,
+              closing_card: parseFloat(row.closing_card)||0, closing_transfer: parseFloat(row.closing_transfer)||0,
               sales_cash: parseFloat(row.sales_cash)||0, sales_card: parseFloat(row.sales_card)||0,
               sales_transfer: parseFloat(row.sales_transfer)||0, sales_credit: parseFloat(row.sales_credit)||0,
               invoices_count: row.invoices_count||0, invoice_ids: [],
-              _serverId: row.id,
             });
           }
         });
@@ -14614,9 +14747,17 @@ async function runAISearchQuery(q) {
       await loadAllFromAPI();
       _hideSyncBar();
 
-      if (u.shift_enabled) window.startShift?.(u);
-      window.logActivity?.('نظام', `تسجيل دخول (API): ${u.full_name}`);
-      window.renderApp?.();
+      const _hasOpenShift2 = (getDB().shifts||[]).some(s=>s.username===u.username&&!s.end_time);
+      if (u.shift_enabled && !_hasOpenShift2) {
+        window.showShiftOpenScreen?.(u, (openingCash) => {
+          window.startShift?.(u, openingCash);
+          window.logActivity?.('نظام', `تسجيل دخول (API): ${u.full_name}`);
+          window.renderApp?.();
+        });
+      } else {
+        window.logActivity?.('نظام', `تسجيل دخول (API): ${u.full_name}`);
+        window.renderApp?.();
+      }
 
     } catch (err) {
       console.warn('API login failed, falling back to local:', err.message);
@@ -14624,8 +14765,11 @@ async function runAISearchQuery(q) {
     }
   };
 
-  const _origDoLogout = window.doLogout;
-  window.doLogout = function() {
+  // ملاحظة مهمة: تنظيف التوكنات لازم يصير بعد اكتمال منطق تسجيل الخروج فعليًا
+  // (بما فيه شاشة إقفال الوردية وحفظها بالسيرفر) لا قبله — getDB() تعتمد على
+  // التوكن الحالي لتحديد مفتاح تخزين بيانات الشركة الصحيح؛ حذفه مبكرًا كان
+  // يخلي شاشة إقفال الوردية تقرأ بيانات فارغة وتتخطى نفسها بصمت
+  window._finalizeLogoutCleanup = function() {
     const rt = localStorage.getItem(REFRESH_KEY);
     if (rt) {
       fetch(`${API_BASE}/api/auth/logout`, {
@@ -14636,7 +14780,6 @@ async function runAISearchQuery(q) {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     _snap = null;
-    _origDoLogout();
   };
 
   // ═══════════════════════════════════════════════════════

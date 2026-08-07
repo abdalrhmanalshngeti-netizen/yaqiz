@@ -7,7 +7,9 @@ const ctrl       = require('../controllers/employees.controller');
 router.use(auth);
 
 // Shifts — متاحة لكل الباقات (مو ميزة employees)، لازم تُعرَّف قبل planGuard
-router.get ('/shifts/list',       can('settings.view'),  ctrl.listShifts);
+// كل موظف يقدر يجيب وردياته هو نفسه (يحتاجها عند الدخول ليعرف إن كانت له
+// وردية مفتوحة أصلاً)؛ رؤية ورديات كل الموظفين تبقى محصورة بصلاحية settings.view
+router.get ('/shifts/list',       ctrl.listShifts);
 router.post('/shifts/open',       ctrl.openShift);
 router.put ('/shifts/:id/close',  ctrl.closeShift);
 
