@@ -77,6 +77,29 @@ exports.create = async (req, res, next) => {
       if (!custRow) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     }
 
+    // ── التحقق من كفاية المخزون قبل إنشاء أي شيء — نرفض الفاتورة كاملة بدل
+    // إنشائها وتجاهل خصم المخزون بصمت لو الكمية غير كافية (كان يسبب تضاربًا
+    // بين الدفاتر والمخزون الفعلي). القفل (FOR UPDATE) يمنع تضارب السباق مع
+    // عملية بيع أخرى متزامنة على نفس الصنف.
+    const stockShortages = [];
+    for (const item of items) {
+      if (!item.product_id) continue;
+      const { rows: [prod] } = await client.query(
+        `SELECT name, qty FROM products WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+        [item.product_id, company_id]
+      );
+      if (!prod) continue;
+      if (parseFloat(prod.qty) < parseFloat(item.qty)) {
+        stockShortages.push(`${prod.name} (المتوفر: ${prod.qty}، المطلوب: ${item.qty})`);
+      }
+    }
+    if (stockShortages.length) {
+      return res.status(400).json({
+        success: false,
+        message: `الكمية غير كافية بالمخزون: ${stockShortages.join('، ')}`
+      });
+    }
+
     // ── حساب المبالغ ──────────────────────────
     let subtotal = 0;
     const processedItems = items.map(item => {

@@ -155,11 +155,35 @@ exports.analyze = async (req, res, next) => {
   }
 };
 
+// نطاق السياق المسموح لكل صلاحية — لا نثق بأي شيء يرسله المتصفح بخصوص ما
+// يحق للمستخدم رؤيته؛ نُسقط أي حقل لا تغطيه صلاحياته الفعلية قبل ما يوصل
+// للنموذج الذكي، حتى لو كان الطلب معدَّلًا مباشرة (تجاوزًا للواجهة)
+const AI_CONTEXT_PERMISSION_MAP = {
+  invoice_count: 'sales.view', recent_invoices: 'sales.view', this_month_revenue: 'sales.view',
+  customer_count: 'customers.view', top_customers: 'customers.view',
+  supplier_count: 'suppliers.view', top_suppliers: 'suppliers.view',
+  product_count: 'inventory.view',
+  this_month_expenses: 'purchases.view',
+  treasury: 'treasury.view',
+};
+function scopeAIContext(rawContext, user) {
+  const ctx = rawContext && typeof rawContext === 'object' ? rawContext : {};
+  if (user.role === 'owner') return ctx;
+  const perms = user.perms || [];
+  const scoped = {};
+  for (const [key, value] of Object.entries(ctx)) {
+    const neededPerm = AI_CONTEXT_PERMISSION_MAP[key];
+    if (!neededPerm || perms.includes(neededPerm)) scoped[key] = value;
+  }
+  return scoped;
+}
+
 // POST /api/ai/assistant
 exports.assistant = async (req, res, next) => {
   try {
     const { company_id } = req.user;
-    const { question, context, history } = req.body;
+    const { question, history } = req.body;
+    const context = scopeAIContext(req.body.context, req.user);
     if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
 
     const plan  = await getPlan(company_id);

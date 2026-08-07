@@ -1137,11 +1137,33 @@ function _getNavBadges() {
     return b;
   } catch(e) { return {}; }
 }
+// يحدّث نقاط التنبيه الحمراء بالقائمة الجانبية فقط (بدون إعادة رسم الصفحة
+// كاملة) — يُستدعى من السحب الدوري للبيانات حتى يلاحظ المالك تغييرًا جديدًا
+// (مثلاً وردية انقفلت بجهاز ثاني) بدون خطر مسح أي نموذج مفتوح قيد التعبئة
+function refreshNavBadges() {
+  const badges = _getNavBadges();
+  $qa('.nav-item').forEach(el_ => {
+    const m = (el_.getAttribute('onclick')||'').match(/goTo\('(\w+)'\)/);
+    if (!m) return;
+    const id = m[1];
+    const shouldShow = !!badges[id] && currentPage !== id;
+    let dotEl = el_.querySelector(':scope > span[data-nav-dot]');
+    if (shouldShow && !dotEl) {
+      dotEl = document.createElement('span');
+      dotEl.setAttribute('data-nav-dot', '1');
+      dotEl.style.cssText = 'width:7px;height:7px;background:#ef4444;border-radius:50%;flex-shrink:0;margin-inline-start:auto;';
+      el_.appendChild(dotEl);
+    } else if (!shouldShow && dotEl) {
+      dotEl.remove();
+    }
+  });
+}
+
 function renderShell() {
   const navItems = allNavItems.filter(n => has(n.perm) && hasPlanPage(n.id));
   if (!navItems.find(n=>n.id===currentPage)) currentPage = navItems[0]?.id||'dashboard';
   const badges = _getNavBadges();
-  const dot = '<span style="width:7px;height:7px;background:#ef4444;border-radius:50%;flex-shrink:0;margin-inline-start:auto;"></span>';
+  const dot = '<span data-nav-dot="1" style="width:7px;height:7px;background:#ef4444;border-radius:50%;flex-shrink:0;margin-inline-start:auto;"></span>';
   const navHtml = navItems.map(n => `
     <div class="nav-item ${currentPage===n.id?'active':''}" onclick="goTo('${n.id}')">
       ${icon(n.icon,18)}
@@ -2021,6 +2043,12 @@ function renderPage() {
   if(!c) return;
   // منع الوصول لصفحات خارج الباقة
   if(!hasPlanPage(currentPage)) { currentPage = (getCurrentPlan()==='expired' && currentUser?.role==='owner') ? 'settings' : 'dashboard'; }
+  // شريط البحث (اسأل يقظ) والإشعارات غير موجودين بشاشة نقطة البيع — الكاشير
+  // يحتاج تركيزًا كاملًا على البيع بدون عناصر إضافية بالشريط العلوي
+  const _isPosPage = currentPage === 'pos';
+  const _searchWrap = el('search-wrap'), _notifBtn = el('notif-bell-btn');
+  if (_searchWrap) _searchWrap.style.display = _isPosPage ? 'none' : '';
+  if (_notifBtn)   _notifBtn.style.display   = _isPosPage ? 'none' : '';
   switch(currentPage) {
     case 'pos': renderPOSPage(c); break;
     case 'dashboard': renderDashboard(c); break;
@@ -2073,6 +2101,10 @@ function renderDashboard(c) {
     p.items?.some(i=>!i.stocked) &&
     (Date.now() - new Date(p.created_at).getTime()) / 86400000 >= GOODS_IN_TRANSIT_ALERT_DAYS
   );
+  // ورديات اليوم — للمالك فقط، وصول سريع لتفاصيل أي وردية بدل التنقّل يدويًا
+  const todayShiftsClosed = currentUser?.role==='owner'
+    ? (db.shifts||[]).filter(s=>s.end_time && s.date===new Date().toISOString().slice(0,10)).sort((a,b)=>new Date(b.end_time)-new Date(a.end_time))
+    : [];
 
   const pctChange = (cur,prev) => {
     if(!prev) return null;
@@ -2142,6 +2174,21 @@ function renderDashboard(c) {
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="goTo('purchases')">
             <div><div style="font-weight:700;font-size:13px;">${sanitize(p.vendor)}</div><div style="font-size:11px;color:var(--text-muted);">${fmtMoney(p.total)}</div></div>
             <span class="badge ${daysAgo>=30?'badge-red':'badge-amber'}">${lang==='ar'?`منذ ${daysAgo} يوم`:`${daysAgo}d ago`}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
+
+    ${todayShiftsClosed.length>0?`
+    <div class="card" style="margin-top:16px;">
+      <div class="card-head"><h3>⏱️ ${lang==='ar'?`ورديات أُغلقت اليوم (${todayShiftsClosed.length})`:`Shifts Closed Today (${todayShiftsClosed.length})`}</h3></div>
+      <div style="padding:12px;">
+        ${todayShiftsClosed.slice(0,5).map(s=>{
+          const totalSales = (s.sales_cash||0)+(s.sales_card||0)+(s.sales_transfer||0)+(s.sales_credit||0);
+          const cashDiff = Math.round(((s.closing_cash||0)-((s.opening_cash||0)+(s.sales_cash||0)))*100)/100;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="goToShiftDetail('${escJsAttr(s.username)}','${s.date}')">
+            <div><div style="font-weight:700;font-size:13px;">${sanitize(s.full_name||s.username)}</div><div style="font-size:11px;color:var(--text-muted);">${new Date(s.end_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} • ${lang==='ar'?'مبيعات':'sales'} ${fmtMoney(totalSales)}</div></div>
+            <span class="badge ${cashDiff===0?'badge-green':cashDiff<0?'badge-red':'badge-amber'}">${cashDiff===0?'✓':(cashDiff>0?'+':'')+fmtMoney(cashDiff)}</span>
           </div>`;
         }).join('')}
       </div>
@@ -9733,6 +9780,16 @@ function showShiftSummary(onConfirm) {
   };
 }
 
+// قفزة مباشرة لتفاصيل وردية موظف معيّن بتاريخ معيّن — يُستخدم من تنبيه
+// لوحة التحكم حتى يوصل المسؤول لتفاصيل الوردية (دخول/خروج/مبيعات) بضغطة
+// واحدة بدل التنقّل يدويًا بين الإعدادات ← النشاط ثم اختيار الموظف والتاريخ
+function goToShiftDetail(username, dateStr) {
+  actFilter = { username, date: dateStr };
+  expandedUsers[username] = true;
+  goTo('settings');
+  setSettingsTab('activity');
+}
+
 function checkLongShifts() {
   const db = getDB();
   const now = new Date();
@@ -11688,7 +11745,7 @@ function doGlobalSearch(q) {
   const ql = q.toLowerCase();
   let html = '';
 
-  const invs = db.invoices.filter(i => i.invoice_no.toLowerCase().includes(ql) || i.customer_name.toLowerCase().includes(ql));
+  const invs = has('sales.view') ? db.invoices.filter(i => i.invoice_no.toLowerCase().includes(ql) || i.customer_name.toLowerCase().includes(ql)) : [];
   if (invs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'الفواتير':'Invoices'}</div>`;
     html += invs.slice(0,4).map(i => `
@@ -11697,7 +11754,7 @@ function doGlobalSearch(q) {
         <div><div class="search-item-name">${i.invoice_no}</div><div class="search-item-sub">${sanitize(i.customer_name)} • ${fmtMoney(i.grand_total)}</div></div>
       </div>`).join('');
   }
-  const custs = db.customers.filter(c => c.name.toLowerCase().includes(ql)||(c.phone||'').includes(ql));
+  const custs = has('customers.view') ? db.customers.filter(c => c.name.toLowerCase().includes(ql)||(c.phone||'').includes(ql)) : [];
   if (custs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'العملاء':'Customers'}</div>`;
     html += custs.slice(0,3).map(c => `
@@ -11706,7 +11763,7 @@ function doGlobalSearch(q) {
         <div><div class="search-item-name">${sanitize(c.name)}</div><div class="search-item-sub">${sanitize(c.phone)}</div></div>
       </div>`).join('');
   }
-  const sups = db.suppliers.filter(s => s.name.toLowerCase().includes(ql)||(s.phone||'').includes(ql));
+  const sups = has('suppliers.view') ? db.suppliers.filter(s => s.name.toLowerCase().includes(ql)||(s.phone||'').includes(ql)) : [];
   if (sups.length) {
     html += `<div class="search-section-title">${lang==='ar'?'الموردون':'Suppliers'}</div>`;
     html += sups.slice(0,3).map(s => `
@@ -11715,7 +11772,7 @@ function doGlobalSearch(q) {
         <div><div class="search-item-name">${sanitize(s.name)}</div><div class="search-item-sub">${sanitize(s.phone)}</div></div>
       </div>`).join('');
   }
-  const prods = db.products.filter(p => p.name.toLowerCase().includes(ql)||p.code?.toLowerCase().includes(ql));
+  const prods = has('inventory.view') ? db.products.filter(p => p.name.toLowerCase().includes(ql)||p.code?.toLowerCase().includes(ql)) : [];
   if (prods.length) {
     html += `<div class="search-section-title">${lang==='ar'?'المنتجات':'Products'}</div>`;
     html += prods.slice(0,4).map(p => `
@@ -11724,7 +11781,7 @@ function doGlobalSearch(q) {
         <div><div class="search-item-name">${sanitize(p.name)}</div><div class="search-item-sub">${p.code} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div></div>
       </div>`).join('');
   }
-  const purs = db.purchases.filter(p => p.vendor.toLowerCase().includes(ql)||p.description.toLowerCase().includes(ql));
+  const purs = has('purchases.view') ? db.purchases.filter(p => p.vendor.toLowerCase().includes(ql)||p.description.toLowerCase().includes(ql)) : [];
   if (purs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'المشتريات':'Purchases'}</div>`;
     html += purs.slice(0,3).map(p => `
@@ -13562,19 +13619,26 @@ async function runAISearchQuery(q) {
     const db = getDB();
     const now = new Date();
     const thisMonth = now.toISOString().slice(0,7);
-    const ctx = {
-      company: db.settings?.company_name,
-      invoice_count: (db.invoices||[]).length,
-      customer_count: (db.customers||[]).length,
-      supplier_count: (db.suppliers||[]).length,
-      product_count: (db.products||[]).length,
-      treasury: (db.treasury_entries||[]).reduce((s,e)=>s+(e.type==='in'?e.amount:-e.amount),0),
-      this_month_revenue: (db.invoices||[]).filter(i=>(i.date||'').startsWith(thisMonth)).reduce((s,i)=>s+(i.grand_total||0),0),
-      this_month_expenses: (db.purchases||[]).filter(p=>(p.date||'').startsWith(thisMonth)).reduce((s,p)=>s+(p.total||0),0),
-      recent_invoices: (db.invoices||[]).slice(-5).map(i=>({no:i.invoice_no,customer:i.customer_name,total:i.grand_total,status:i.status,date:i.date})),
-      top_customers: (db.customers||[]).slice(0,5).map(c=>({name:c.name,phone:c.phone})),
-      top_suppliers: (db.suppliers||[]).slice(0,5).map(s=>({name:s.name})),
-    };
+    // نبني السياق حسب صلاحيات المستخدم الحالي فقط — حتى لا يجاوب يقظ الذكي
+    // بمعلومات (إيرادات، أرقام جوال عملاء...) لا تخصه أصلًا. السيرفر يطبّق
+    // نفس التقييد بشكل مستقل بغض النظر عمّا نرسله من هنا
+    const ctx = { company: db.settings?.company_name };
+    if (has('sales.view')) {
+      ctx.invoice_count = (db.invoices||[]).length;
+      ctx.this_month_revenue = (db.invoices||[]).filter(i=>(i.date||'').startsWith(thisMonth)).reduce((s,i)=>s+(i.grand_total||0),0);
+      ctx.recent_invoices = (db.invoices||[]).slice(-5).map(i=>({no:i.invoice_no,customer:i.customer_name,total:i.grand_total,status:i.status,date:i.date}));
+    }
+    if (has('customers.view')) {
+      ctx.customer_count = (db.customers||[]).length;
+      ctx.top_customers = (db.customers||[]).slice(0,5).map(c=>({name:c.name,phone:c.phone}));
+    }
+    if (has('suppliers.view')) {
+      ctx.supplier_count = (db.suppliers||[]).length;
+      ctx.top_suppliers = (db.suppliers||[]).slice(0,5).map(s=>({name:s.name}));
+    }
+    if (has('inventory.view')) ctx.product_count = (db.products||[]).length;
+    if (has('purchases.view')) ctx.this_month_expenses = (db.purchases||[]).filter(p=>(p.date||'').startsWith(thisMonth)).reduce((s,p)=>s+(p.total||0),0);
+    if (has('treasury.view')) ctx.treasury = (db.treasury_entries||[]).reduce((s,e)=>s+(e.type==='in'?e.amount:-e.amount),0);
     const token = localStorage.getItem('yaqiz_access_token');
     if (!token) throw new Error(lang==='ar'?'يجب تسجيل الدخول عبر الخادم':'Server login required');
     const base = (window._YAQIZ_API || '').replace(/\/$/, '');
@@ -13675,6 +13739,23 @@ async function runAISearchQuery(q) {
   }
   // تشغيل كل 5 دقائق
   setInterval(syncPlanFromAPI, 5 * 60 * 1000);
+
+  // ── سحب دوري للبيانات من السيرفر ──────────────────────────
+  // بدون هذا، أي تغيير من موظف/جهاز ثاني (مثل إقفال وردية أو بيع) ما كان
+  // يظهر عند المالك إطلاقًا إلا لو سجّل خروج ودخول من جديد يدويًا — النظام
+  // كان يسحب البيانات مرة واحدة فقط عند تسجيل الدخول. الآن يتحدّث تلقائيًا
+  // كل دقيقة، ويعيد رسم الصفحة الحالية فقط لو كانت آمنة لإعادة العرض بدون
+  // مخاطرة فقدان إدخال قيد الكتابة بنموذج مفتوح
+  const _SAFE_AUTOREFRESH_PAGES = ['dashboard'];
+  async function _periodicDataPull() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || !_apiReachable || !currentUser) return;
+    const modalOpen = !!(document.getElementById('modal-container')?.innerHTML?.trim());
+    try { await loadAllFromAPI(); } catch(e) { return; }
+    if (!modalOpen && _SAFE_AUTOREFRESH_PAGES.includes(currentPage)) window.renderPage?.();
+    window.refreshNavBadges?.();
+  }
+  setInterval(_periodicDataPull, 60 * 1000);
 
   // ═══════════════════════════════════════════════════════
   // 1. HTTP CLIENT
