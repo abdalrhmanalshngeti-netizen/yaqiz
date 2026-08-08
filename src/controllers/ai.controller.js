@@ -157,14 +157,46 @@ exports.analyze = async (req, res, next) => {
 
 // نطاق السياق المسموح لكل صلاحية — لا نثق بأي شيء يرسله المتصفح بخصوص ما
 // يحق للمستخدم رؤيته؛ نُسقط أي حقل لا تغطيه صلاحياته الفعلية قبل ما يوصل
-// للنموذج الذكي، حتى لو كان الطلب معدَّلًا مباشرة (تجاوزًا للواجهة)
+// للنموذج الذكي، حتى لو كان الطلب معدَّلًا مباشرة (تجاوزًا للواجهة).
+// افتراضيًا "ممنوع" — أي حقل غير مُدرج صراحة هنا أو في SAFE_KEYS يُسقَط
+// تلقائيًا، حتى لو نسينا نضيفه لاحقًا (fail closed، مو fail open).
+const AI_CONTEXT_SAFE_KEYS = new Set([
+  'today', 'yesterday', 'this_month', 'last_month',
+  'company', 'vat_number', 'address', 'platform',
+]);
 const AI_CONTEXT_PERMISSION_MAP = {
+  // ── الخزينة ──
+  treasury: 'treasury.view', treasury_balance: 'treasury.view',
+  // ── المبيعات/الفواتير ──
   invoice_count: 'sales.view', recent_invoices: 'sales.view', this_month_revenue: 'sales.view',
+  today_invoices_count: 'sales.view', today_revenue: 'sales.view', today_invoices: 'sales.view',
+  yesterday_invoices_count: 'sales.view', yesterday_revenue: 'sales.view', yesterday_invoices: 'sales.view',
+  this_month_invoices_count: 'sales.view', last_month_revenue: 'sales.view', last_month_invoices: 'sales.view',
+  invoices_total_count: 'sales.view', invoices_paid_count: 'sales.view', invoices_pending_count: 'sales.view',
+  invoices_partial_count: 'sales.view', invoices_total_revenue: 'sales.view', invoices_total_collected: 'sales.view',
+  invoices_total_remaining: 'sales.view', all_invoices: 'sales.view',
+  this_month_net: ['sales.view', 'purchases.view'],
+  // ── المشتريات ──
+  this_month_expenses: 'purchases.view', today_expenses: 'purchases.view', yesterday_expenses: 'purchases.view',
+  purchases_total_count: 'purchases.view', purchases_grand_total: 'purchases.view', recent_purchases: 'purchases.view',
+  // ── العملاء ──
   customer_count: 'customers.view', top_customers: 'customers.view',
+  customers_count: 'customers.view', customers_with_balance: 'customers.view',
+  customers_total_balances: 'customers.view', customers: 'customers.view',
+  // ── الموردون ──
   supplier_count: 'suppliers.view', top_suppliers: 'suppliers.view',
-  product_count: 'inventory.view',
-  this_month_expenses: 'purchases.view',
-  treasury: 'treasury.view',
+  suppliers_count: 'suppliers.view', suppliers_total_balance: 'suppliers.view', suppliers: 'suppliers.view',
+  // ── المخزون ──
+  product_count: 'inventory.view', products_count: 'inventory.view',
+  low_stock_count: 'inventory.view', low_stock: 'inventory.view', products: 'inventory.view',
+  // ── الموظفون والرواتب ──
+  employees_count: 'employees.view', monthly_payroll: 'employees.view', employees: 'employees.view',
+  // ── الالتزامات ──
+  obligations_count: 'obligations.view', obligations_active_count: 'obligations.view',
+  obligations_total_amount: 'obligations.view', obligations_monthly_equiv: 'obligations.view',
+  obligations_due_soon: 'obligations.view', obligations: 'obligations.view',
+  // ── عروض الأسعار ──
+  quotes_count: 'quotes.view', quotes_pending: 'quotes.view', quotes_total: 'quotes.view',
 };
 function scopeAIContext(rawContext, user) {
   const ctx = rawContext && typeof rawContext === 'object' ? rawContext : {};
@@ -172,8 +204,11 @@ function scopeAIContext(rawContext, user) {
   const perms = user.perms || [];
   const scoped = {};
   for (const [key, value] of Object.entries(ctx)) {
-    const neededPerm = AI_CONTEXT_PERMISSION_MAP[key];
-    if (!neededPerm || perms.includes(neededPerm)) scoped[key] = value;
+    if (AI_CONTEXT_SAFE_KEYS.has(key)) { scoped[key] = value; continue; }
+    const needed = AI_CONTEXT_PERMISSION_MAP[key];
+    if (!needed) continue; // حقل غير معروف → يُسقط دائمًا، ما نثق فيه افتراضيًا
+    const neededArr = Array.isArray(needed) ? needed : [needed];
+    if (neededArr.every(p => perms.includes(p))) scoped[key] = value;
   }
   return scoped;
 }
@@ -208,6 +243,30 @@ exports.assistant = async (req, res, next) => {
         limit: daily,
       });
     }
+
+    // معلومات الباقة وحدود الاستخدام تُحسب من السيرفر مباشرة (مو من العميل)
+    // عشان تكون موثوقة دائمًا، وهي آمنة تُعرض لأي موظف بغض النظر عن صلاحياته
+    // لأنها معلومة على مستوى الشركة ككل وليست بيانات مالية لعميل/مورد معيّن
+    const { rows: [coRow] } = await db.query(
+      `SELECT subscription_expires_at FROM companies WHERE id=$1`, [company_id]
+    );
+    const [extractUsed, analyzeUsed] = await Promise.all([
+      getMonthlyUsage(company_id, 'extract'),
+      getMonthlyUsage(company_id, 'analyze'),
+    ]);
+    const daysLeft = coRow?.subscription_expires_at
+      ? Math.ceil((new Date(coRow.subscription_expires_at) - new Date()) / 864e5)
+      : null;
+    context.platform = {
+      plan,
+      subscription_expires_at: coRow?.subscription_expires_at || null,
+      days_until_subscription_expires: daysLeft,
+      ai_usage: {
+        extract:   { used: extractUsed, limit: EXTRACT_LIMITS[plan] ?? 0 },
+        analyze:   { used: analyzeUsed, limit: ANALYZE_LIMITS[plan] ?? 0 },
+        assistant: { used_today: usedToday, limit_daily: daily },
+      },
+    };
 
     const result = await ai.askAssistant(question, context || {}, Array.isArray(history) ? history : []);
     await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out, req.user.sub, question);
