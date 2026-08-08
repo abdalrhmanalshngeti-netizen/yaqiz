@@ -1035,15 +1035,16 @@ const allNavItems = [
   { id:'receipts',         icon:'receipt',          perm:'receipts.view'   },
   { id:'quotes',           icon:'file-plus',        perm:'quotes.view'     },
   { id:'obligations',      icon:'repeat',           perm:'obligations.view'},
+  { id:'accountingReports',icon:'calculator',       perm:'reports.view'    },
   { id:'reports',          icon:'bar-chart-2',      perm:'reports.view'    },
   { id:'settings',         icon:'settings',         perm:'settings.view'   },
 ];
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  basic:   ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','reports','settings'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
-  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','reports','settings'],
+  basic:   ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','accountingReports','reports','settings'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
+  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
   expired: ['settings'],
 };
 
@@ -1114,6 +1115,7 @@ const navLabels = {
   receipts:{ar:'سندات القبض والصرف',en:'Receipts & Payments'},
   quotes:{ar:'عروض الأسعار',en:'Quotations'},
   reports:{ar:'التقارير',en:'Reports'},
+  accountingReports:{ar:'التقارير المحاسبية',en:'Accounting Reports'},
   obligations:{ar:'الالتزامات الدورية',en:'Recurring Obligations'},
   settings:{ar:'الإعدادات',en:'Settings'},
 };
@@ -2060,6 +2062,7 @@ function renderPage() {
     case 'treasury': renderTreasury(c); break;
     case 'accounts': renderAccounts(c); break;
     case 'reports': renderReports(c); break;
+    case 'accountingReports': renderAccountingReports(c); break;
     case 'balance_sheet': renderReports(c); break;
     case 'journal': renderReports(c); break;
     case 'accounts': renderReports(c); break;
@@ -5810,14 +5813,7 @@ function renderReports(c) {
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
     <div class="tabs">
       <button class="tab-btn ${reportMainTab==='reports'?'active':''}" onclick="setReportMainTab('reports')">📊 ${lang==='ar'?'التقارير':'Reports'}</button>
-      ${hasPlanFeature('trial_balance')?`<button class="tab-btn ${reportMainTab==='trial_balance'?'active':''}" onclick="setReportMainTab('trial_balance')">⚖️ ${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</button>`:''}
-      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='balance'?'active':''}" onclick="setReportMainTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
-      ${hasPlanFeature('journal')?`<button class="tab-btn ${reportMainTab==='journal'?'active':''}" onclick="setReportMainTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
-      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${reportMainTab==='accounts'?'active':''}" onclick="setReportMainTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
-      ${(currentUser?.role==='owner'||has('accounts.close_period'))?`<button class="tab-btn ${reportMainTab==='period_close'?'active':''}" onclick="setReportMainTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>`:''}
-      <button class="tab-btn ${reportMainTab==='zakat'?'active':''}" onclick="setReportMainTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
-      <button class="tab-btn ${reportMainTab==='statements'?'active':''}" onclick="setReportMainTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
     </div>
     <div id="report-main-content"></div>
   </div>`;
@@ -5831,20 +5827,62 @@ function setReportMainTab(tab) {
 }
 function renderReportMainContent() {
   const mc=el('report-main-content'); if(!mc) return;
-  if(reportMainTab==='reports')       renderReportsInner(mc);
-  else if(reportMainTab==='trial_balance') renderTrialBalance(mc);
-  else if(reportMainTab==='balance')  renderBalanceSheet(mc);
-  else if(reportMainTab==='journal')  renderJournal(mc);
-  else if(reportMainTab==='overdue')  renderOverdueReport(mc);
-  else if(reportMainTab==='zakat')    renderZakatReport(mc);
-  else if(reportMainTab==='statements') renderStatements(mc);
-  else if(reportMainTab==='period_close') renderPeriodClosing(mc);
-  else renderAccounts(mc);
+  if(reportMainTab==='overdue') renderOverdueReport(mc);
+  else renderReportsInner(mc);
+}
+
+// ============ صفحة مستقلة: التقارير المحاسبية ============
+// (ميزان المراجعة، الميزانية، القيود، شجرة الحسابات، إقفال الفترات، الزكاة،
+// الكشوفات) — كانت مدمجة داخل صفحة "التقارير" نفسها فصارت مزدحمة جدًا، فُصلت
+// لصفحة خاصة بها بين التقارير والالتزامات الدورية بالشريط الجانبي
+let acctReportTab = 'trial_balance';
+function renderAccountingReports(c) {
+  const available = [
+    hasPlanFeature('trial_balance') && 'trial_balance',
+    hasPlanFeature('balance_sheet') && 'balance',
+    hasPlanFeature('journal') && 'journal',
+    hasPlanFeature('balance_sheet') && 'accounts',
+    (currentUser?.role==='owner'||has('accounts.close_period')) && 'period_close',
+    'zakat',
+    'statements',
+  ].filter(Boolean);
+  if (!available.includes(acctReportTab)) acctReportTab = available[0] || 'zakat';
+
+  c.innerHTML = `<div>
+    <div class="page-header"><div class="page-title-lg">🧮 ${lang==='ar'?'التقارير المحاسبية':'Accounting Reports'}</div></div>
+    <div class="tabs">
+      ${hasPlanFeature('trial_balance')?`<button class="tab-btn ${acctReportTab==='trial_balance'?'active':''}" onclick="setAcctReportTab('trial_balance')">⚖️ ${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</button>`:''}
+      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='balance'?'active':''}" onclick="setAcctReportTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
+      ${hasPlanFeature('journal')?`<button class="tab-btn ${acctReportTab==='journal'?'active':''}" onclick="setAcctReportTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
+      ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='accounts'?'active':''}" onclick="setAcctReportTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
+      ${(currentUser?.role==='owner'||has('accounts.close_period'))?`<button class="tab-btn ${acctReportTab==='period_close'?'active':''}" onclick="setAcctReportTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
+      <button class="tab-btn ${acctReportTab==='zakat'?'active':''}" onclick="setAcctReportTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
+      <button class="tab-btn ${acctReportTab==='statements'?'active':''}" onclick="setAcctReportTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
+    </div>
+    <div id="acct-report-content"></div>
+  </div>`;
+  renderAcctReportMainContent();
+  refreshIcons();
+}
+function setAcctReportTab(tab) {
+  acctReportTab=tab;
+  $qa('.tab-btn').forEach(b=>{const m=(b.getAttribute('onclick')||'').match(/setAcctReportTab\('(\w+)'\)/);if(m)b.classList.toggle('active',m[1]===tab);});
+  renderAcctReportMainContent();
+}
+function renderAcctReportMainContent() {
+  const mc=el('acct-report-content'); if(!mc) return;
+  if(acctReportTab==='trial_balance') renderTrialBalance(mc);
+  else if(acctReportTab==='balance')  renderBalanceSheet(mc);
+  else if(acctReportTab==='journal')  renderJournal(mc);
+  else if(acctReportTab==='accounts') renderAccounts(mc);
+  else if(acctReportTab==='period_close') renderPeriodClosing(mc);
+  else if(acctReportTab==='zakat')    renderZakatReport(mc);
+  else if(acctReportTab==='statements') renderStatements(mc);
 }
 
 let tbAsOfDate = new Date().toISOString().slice(0,10);
 
-function setTBAsOfDate(v) { tbAsOfDate = v || new Date().toISOString().slice(0,10); renderTrialBalance(el('report-main-content')); }
+function setTBAsOfDate(v) { tbAsOfDate = v || new Date().toISOString().slice(0,10); renderTrialBalance(el('acct-report-content')); }
 function resetTBAsOfDate() { setTBAsOfDate(new Date().toISOString().slice(0,10)); }
 
 function renderTrialBalance(c) {
@@ -6130,7 +6168,7 @@ function renderOverdueReport(c) {
 }
 
 let zakatAsOfDate = new Date().toISOString().slice(0,10);
-function setZakatAsOfDate(v) { zakatAsOfDate = v || new Date().toISOString().slice(0,10); renderZakatReport(el('report-main-content')); }
+function setZakatAsOfDate(v) { zakatAsOfDate = v || new Date().toISOString().slice(0,10); renderZakatReport(el('acct-report-content')); }
 function resetZakatAsOfDate() { setZakatAsOfDate(new Date().toISOString().slice(0,10)); }
 
 function zakatFigures(db, asOf) {
@@ -6562,6 +6600,21 @@ function drillIncome(kind) {
   }
 }
 
+// حقول "من - إلى" موحّدة نستخدمها بأي تبويب يحتاج فترة مخصصة (الضريبة، قائمة
+// الدخل) — نفس شكل ونمط الحقول عشان يصير للمستخدم عادة واحدة واضحة لتحديد التاريخ
+function dateRangeControlsHtml(exportFn) {
+  return `
+    ${hasPlanFeature('custom_period')?`
+      <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'من:':'From:'}</span>
+      <input type="date" class="input" style="width:150px;" value="${reportFrom}" onchange="reportPeriod='custom';reportFrom=this.value;renderPage()" />
+      <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إلى:':'To:'}</span>
+      <input type="date" class="input" style="width:150px;" value="${reportTo}" onchange="reportPeriod='custom';reportTo=this.value;renderPage()" />
+      ${reportPeriod==='custom'&&reportFrom&&reportTo?`<button class="btn btn-sm btn-outline" onclick="reportPeriod='all';reportFrom='';reportTo='';renderPage()">${lang==='ar'?'مسح الفترة':'Clear range'}</button>`:''}
+    `:`<span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'تحديد فترة مخصصة متاح بباقة النمو والاحترافية':'Custom date range available on Growth & Pro'}</span>`}
+    <button class="btn btn-outline btn-sm" onclick="${exportFn}()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+  `;
+}
+
 function renderReportsInner(c) {
   const db = getDB();
 
@@ -6569,106 +6622,32 @@ function renderReportsInner(c) {
   const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
   const {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit} = d;
 
-  // Comparison: previous period
-  const now = new Date();
-  const lastMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  const lastMonth = lastMonthDate.toISOString().slice(0,7);
-  function prevFilter(item) {
-    const dt = (item.created_at||item.date||'').slice(0,10);
-    if(reportPeriod==='thisMonth') return dt.startsWith(lastMonth);
-    if(reportPeriod==='lastMonth') { const pm=new Date(lastMonthDate.getFullYear(),lastMonthDate.getMonth()-1,1); return dt.startsWith(pm.toISOString().slice(0,7)); }
-    if(reportPeriod==='thisYear') return dt.startsWith(String(now.getFullYear()-1));
-    return false;
-  }
-  const prev = hasPlanFeature('income_statement') && reportPeriod!=='all'&&reportPeriod!=='custom' ? calcReportData(db, prevFilter) : null;
-  const diff = (cur,prv) => prv&&prv!==0 ? Math.round((cur-prv)/Math.abs(prv)*100) : null;
-  const badge = (pct) => pct===null?'':`<span class="badge ${pct>=0?'badge-green':'badge-red'}" style="font-size:10px;">${pct>=0?'↑':'↓'}${Math.abs(pct)}%</span>`;
-
-  // Build trial balance from journal entries
-  const accountMap = {};
-  (db.journal||[]).forEach(entry=>{
-    (entry.entries||[]).forEach(row=>{
-      if(!accountMap[row.account_code]) accountMap[row.account_code]={code:row.account_code,name:row.account,debit:0,credit:0};
-      if(row.side==='debit') accountMap[row.account_code].debit+=row.amount;
-      else accountMap[row.account_code].credit+=row.amount;
-    });
-  });
-  const typeMap={'1100':lang==='ar'?'أصول':'Assets','1200':lang==='ar'?'أصول':'Assets','1300':lang==='ar'?'أصول':'Assets','2100':lang==='ar'?'التزامات':'Liabilities','2200':lang==='ar'?'التزامات':'Liabilities','2210':lang==='ar'?'التزامات':'Liabilities','4100':lang==='ar'?'إيرادات':'Revenue','4200':lang==='ar'?'إيرادات':'Revenue','5100':lang==='ar'?'مصروفات':'Expenses','5200':lang==='ar'?'مصروفات':'Expenses','5300':lang==='ar'?'مصروفات':'Expenses'};
-  const trialRows = Object.values(accountMap).sort((a,b)=>a.code.localeCompare(b.code)).map(r=>({...r,type:typeMap[r.code]||(lang==='ar'?'أخرى':'Other')}));
-  // Add cash balance if no journal entries yet
-  if(!trialRows.length) {
-    trialRows.push({code:'1100',name:lang==='ar'?'النقدية':'Cash',type:lang==='ar'?'أصول':'Assets',debit:db.treasury.balance,credit:0});
-  }
-  const totalDebit=trialRows.reduce((s,r)=>s+r.debit,0);
-  const totalCredit=trialRows.reduce((s,r)=>s+r.credit,0);
-
-  const periodLabels = {
-    all:lang==='ar'?'كل الفترات':'All Time',
-    thisMonth:lang==='ar'?'هذا الشهر':'This Month',
-    lastMonth:lang==='ar'?'الشهر الماضي':'Last Month',
-    thisYear:lang==='ar'?'هذه السنة':'This Year',
-    custom:lang==='ar'?'فترة مخصصة':'Custom Range'
-  };
-
   c.innerHTML = `
   <div>
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
 
-    <!-- Period selector -->
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-pad" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <span style="font-weight:700;font-size:13px;">${icon('calendar',16)} ${lang==='ar'?'الفترة:':'Period:'}</span>
-        ${['all','thisMonth','lastMonth','thisYear',...(hasPlanFeature('custom_period')?['custom']:[])] .map(p=>`
-          <button class="btn btn-sm ${reportPeriod===p?'btn-primary':'btn-outline'}" onclick="reportPeriod='${p}';renderPage()">
-            ${periodLabels[p]}
-          </button>`).join('')}
-        ${reportPeriod==='custom'&&hasPlanFeature('custom_period')?`
-          <input type="date" class="input" style="width:140px;" value="${reportFrom}" onchange="reportFrom=this.value;renderPage()" />
-          <span>→</span>
-          <input type="date" class="input" style="width:140px;" value="${reportTo}" onchange="reportTo=this.value;renderPage()" />
-        `:''}
-        ${prev?`<span style="font-size:11px;color:var(--text-muted);margin-inline-start:8px;">🔄 ${lang==='ar'?'مقارنة بالفترة السابقة':'vs previous period'}</span>`:''}
-        ${hasPlanFeature('ai_analyze')?`<button class="btn btn-sm" onclick="runAIAnalysis()" style="margin-inline-start:auto;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;gap:6px;display:inline-flex;align-items:center;">${icon('sparkles',14)} ${lang==='ar'?'تحليل ذكي':'AI Analysis'}</button>`:''}
-      </div>
-    </div>
-
     <div class="tabs">
       <button class="tab-btn ${reportTab==='vat'?'active':''}" onclick="setReportTab('vat')">${t('vatReport')}</button>
       ${hasPlanFeature('income_statement')?`<button class="tab-btn ${reportTab==='income'?'active':''}" onclick="setReportTab('income')">${t('incomeStatement')}</button>`:''}
-      ${hasPlanFeature('trial_balance')?`<button class="tab-btn ${reportTab==='trial'?'active':''}" onclick="setReportTab('trial')">${t('trialBalance')}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" onclick="setReportTab('aging')">⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
       <button class="tab-btn ${reportTab==='products'?'active':''}" onclick="setReportTab('products')">📦 ${lang==='ar'?'المنتجات':'Products'}</button>
       <button class="tab-btn ${reportTab==='suppliers'?'active':''}" onclick="setReportTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>
       ${hasPlanFeature('bank_recon')?`<button class="tab-btn ${reportTab==='bank'?'active':''}" onclick="setReportTab('bank')">🏦 ${lang==='ar'?'تسوية البنك':'Bank Recon'}</button>`:''}
       ${hasPlanFeature('cashflow')?`<button class="tab-btn ${reportTab==='cashflow'?'active':''}" onclick="setReportTab('cashflow')">💧 ${lang==='ar'?'التدفق النقدي':'Cash Flow'}</button>`:''}
     </div>
-    <!-- PDF Export buttons -->
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-      <button class="btn btn-outline btn-sm" onclick="exportVATReportPDF()">${icon('file-text',14)} ${lang==='ar'?'تقرير الضريبة PDF':'VAT Report PDF'}</button>
-      ${hasPlanFeature('income_statement')?`<button class="btn btn-outline btn-sm" onclick="exportIncomeStatementPDF()">${icon('file-text',14)} ${lang==='ar'?'قائمة الدخل PDF':'Income Statement PDF'}</button>`:''}
-      ${hasPlanFeature('payroll')?`<button class="btn btn-outline btn-sm" onclick="exportPayrollPDF()">${icon('users',14)} ${lang==='ar'?'كشف الرواتب PDF':'Payroll PDF'}</button>`:''}
-    </div>
-
-    </div>
 
     <div id="report-content">
       ${reportTab==='vat'?`
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')}</div><div class="stat-value">${fmtMoney(vatOutput)}</div>${badge(diff(vatOutput,prev?.vatOutput))}</div>
-          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')}</div><div class="stat-value">${fmtMoney(vatInput)}</div>${badge(diff(vatInput,prev?.vatInput))}</div>
-          <div class="stat-card"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')}</div><div class="stat-value">${fmtMoney(vatNet)}</div>${badge(diff(vatNet,prev?.vatNet))}</div>
+          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')}</div><div class="stat-value">${fmtMoney(vatOutput)}</div></div>
+          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')}</div><div class="stat-value">${fmtMoney(vatInput)}</div></div>
+          <div class="stat-card"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')}</div><div class="stat-value">${fmtMoney(vatNet)}</div></div>
         </div>
         <div class="card" style="margin-top:16px;">
           <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);">
             <span style="font-weight:800;">📋 ${lang==='ar'?'كل العمليات (مبيعات ومشتريات) في الفترة':'All Operations (Sales & Purchases) in Range'}</span>
             <div style="display:flex;gap:8px;align-items:center;margin-inline-start:auto;flex-wrap:wrap;">
-              ${hasPlanFeature('custom_period')?`
-                <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'من:':'From:'}</span>
-                <input type="date" class="input" style="width:150px;" value="${reportFrom}" onchange="reportPeriod='custom';reportFrom=this.value;renderPage()" />
-                <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إلى:':'To:'}</span>
-                <input type="date" class="input" style="width:150px;" value="${reportTo}" onchange="reportPeriod='custom';reportTo=this.value;renderPage()" />
-                ${reportPeriod==='custom'&&reportFrom&&reportTo?`<button class="btn btn-sm btn-outline" onclick="reportPeriod='all';reportFrom='';reportTo='';renderPage()">${lang==='ar'?'مسح الفترة':'Clear range'}</button>`:''}
-              `:`<span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'تحديد فترة مخصصة متاح بباقة النمو والاحترافية':'Custom date range available on Growth & Pro'}</span>`}
+              ${dateRangeControlsHtml('exportVATReportPDF')}
             </div>
           </div>
           <div class="tbl-wrap" style="max-height:65vh;overflow:auto;"><table class="tbl">
@@ -6701,41 +6680,27 @@ function renderReportsInner(c) {
           </table></div>
         </div>`:
       reportTab==='income'&&hasPlanFeature('income_statement')?`
-        <div class="card"><div class="card-pad">
+        <div class="card">
+          <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+            <span style="font-weight:800;">${t('incomeStatement')}</span>
+            <div style="display:flex;gap:8px;align-items:center;margin-inline-start:auto;flex-wrap:wrap;">
+              ${dateRangeControlsHtml('exportIncomeStatementPDF')}
+              ${hasPlanFeature('ai_analyze')?`<button class="btn btn-sm" onclick="runAIAnalysis()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;gap:6px;display:inline-flex;align-items:center;">${icon('sparkles',14)} ${lang==='ar'?'تحليل ذكي':'AI Analysis'}</button>`:''}
+            </div>
+          </div>
+          <div class="card-pad">
           ${[
-            {label:t('revenue'),v:revenue,color:'var(--success)',prev:prev?.revenue,kind:'revenue'},
-            {label:t('cogs'),v:-cogs,color:'var(--danger)',prev:prev?-prev.cogs:null,kind:'cogs'},
-            {label:t('grossProfit'),v:grossProfit,bold:true,prev:prev?.grossProfit,kind:'gross'},
-            {label:t('expenses'),v:-expenses,color:'var(--danger)',prev:prev?-prev.expenses:null,kind:'expenses'},
-            {label:t('netProfit'),v:netProfit,bold:true,big:true,prev:prev?.netProfit,kind:'net'}
+            {label:t('revenue'),v:revenue,color:'var(--success)',kind:'revenue'},
+            {label:t('cogs'),v:-cogs,color:'var(--danger)',kind:'cogs'},
+            {label:t('grossProfit'),v:grossProfit,bold:true,kind:'gross'},
+            {label:t('expenses'),v:-expenses,color:'var(--danger)',kind:'expenses'},
+            {label:t('netProfit'),v:netProfit,bold:true,big:true,kind:'net'}
           ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};cursor:pointer;" onclick="drillIncome('${r.kind}')" title="${lang==='ar'?'اضغط لعرض التفاصيل':'Click for details'}">
             <span>${r.label} ${icon('search',11)}</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              ${r.prev!==null&&r.prev!==undefined?`<span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'السابق:':'Prev:'} ${fmtMoney(Math.abs(r.prev))}</span>`:''}
-              ${badge(diff(r.v,r.prev))}
-              <span>${fmtMoney(Math.abs(r.v))}</span>
-            </div>
+            <span>${fmtMoney(Math.abs(r.v))}</span>
           </div>`).join('')}
-        </div></div>`:
-      reportTab==='trial'&&hasPlanFeature('trial_balance')?`<div class="card">
-        <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-size:13px;color:var(--text-muted);">${lang==='ar'?'حتى:':'As of:'} <b>${new Date().toLocaleDateString('en-US')}</b></div>
-          <span class="badge ${Math.abs(totalDebit-totalCredit)<0.01?'badge-green':'badge-amber'}">${Math.abs(totalDebit-totalCredit)<0.01?(lang==='ar'?'✓ متوازن':'✓ Balanced'):(lang==='ar'?'⚠️ غير متوازن':'⚠ Unbalanced')}</span>
-        </div>
-        <div class="tbl-wrap"><table class="tbl">
-          <thead><tr><th>${lang==='ar'?'الرمز':'Code'}</th><th>${lang==='ar'?'اسم الحساب':'Account'}</th><th>${lang==='ar'?'التصنيف':'Type'}</th><th>${lang==='ar'?'مدين':'Debit'}</th><th>${lang==='ar'?'دائن':'Credit'}</th></tr></thead>
-          <tbody>${trialRows.map(r=>`<tr>
-            <td><code>${r.code}</code></td><td>${sanitize(r.name)}</td><td><span class="badge badge-blue">${r.type}</span></td>
-            <td style="font-weight:${r.debit>0?700:400};color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmtMoney(r.debit):'-'}</td>
-            <td style="font-weight:${r.credit>0?700:400};color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmtMoney(r.credit):'-'}</td>
-          </tr>`).join('')}</tbody>
-          <tfoot><tr style="background:var(--primary-soft);font-weight:900;">
-            <td colspan="3" style="text-align:end;padding:12px 14px;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
-            <td style="padding:12px 14px;">${fmtMoney(totalDebit)}</td>
-            <td style="padding:12px 14px;">${fmtMoney(totalCredit)}</td>
-          </tr></tfoot>
-        </table></div>
-      </div>`:
+          </div>
+        </div>`:
       reportTab==='aging'&&hasPlanFeature('aging_report')?renderAgingReport():''}
       ${reportTab==='products'?renderProductsReport(d,db):''}
       ${reportTab==='suppliers'?renderSuppliersReport(db):''}
@@ -6747,7 +6712,7 @@ function renderReportsInner(c) {
 }
 
 function setReportTab(tab) {
-  const blocked = { income_statement:['income'], trial_balance:['trial'], aging_report:['aging'], bank_recon:['bank'], cashflow:['cashflow'] };
+  const blocked = { income_statement:['income'], aging_report:['aging'], bank_recon:['bank'], cashflow:['cashflow'] };
   for(const [feat,tabs] of Object.entries(blocked)) { if(tabs.includes(tab) && !hasPlanFeature(feat)) return; }
   reportTab=tab;
   renderReportsInner(el('report-main-content')||el('page-content'));
@@ -12867,7 +12832,7 @@ function computeBankStatement(fromDate, toDate) {
 
 function setStmtMainTab(tab) {
   stmtMainTab = tab; stmtSelectedParty = null;
-  renderReportMainContent();
+  renderAcctReportMainContent();
 }
 
 function renderStatements(c) {
@@ -12886,7 +12851,7 @@ function renderStatements(c) {
 function renderStmtContent() {
   const mc = el('stmt-content'); if(!mc) return;
   if (stmtMainTab==='bank') {
-    if (!hasPlanFeature('bank_statement')) { stmtMainTab='customers'; renderStatements(el('report-main-content')); return; }
+    if (!hasPlanFeature('bank_statement')) { stmtMainTab='customers'; renderStatements(el('acct-report-content')); return; }
     renderBankStatementView(mc); return;
   }
   if (stmtSelectedParty) { renderPartyStatementDetail(mc, stmtSelectedParty, stmtMainTab==='customers'?'customer':'supplier'); return; }
