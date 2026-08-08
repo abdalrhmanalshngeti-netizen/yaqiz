@@ -54,6 +54,8 @@ router.put('/employees/:id/reset-password',  loginLimiter, ownerOnly, ctrl.reset
 // كل قسم بلوحة الإدارة صار صلاحية مستقلة يقدر المالك يوكّلها لأي موظف
 router.get('/stats',                    canAdmin('dashboard'),     ctrl.stats);
 router.get('/cost-analysis',            canAdmin('cost_analysis'), ctrl.costAnalysis);
+router.get('/ai-usage/companies',            canAdmin('ai_usage'), ctrl.aiUsageCompanies);
+router.get('/ai-usage/companies/:id/questions', canAdmin('ai_usage'), ctrl.aiUsageQuestions);
 router.get('/log',                      canAdmin('activity_log'),  ctrl.platformLog);
 router.get('/plans',                    canAdmin('plans'),         ctrl.getPlans);
 router.put('/companies/:id/status',     canAdmin('companies_manage'), ctrl.setCompanyStatus);

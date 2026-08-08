@@ -489,6 +489,47 @@ exports.costAnalysis = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── استخدام الذكاء الاصطناعي — ملخص لكل شركة ──────────────
+// عدد المستخدمين الكلي، وكم منهم فعليًا استخدم أي ميزة ذكاء اصطناعي، وعدد
+// كل ميزة على حدة — لمعرفة مين يستخدم الميزات الذكية فعليًا وبأي قدر
+exports.aiUsageCompanies = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT
+        c.id, c.name, c.plan,
+        COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
+        COUNT(DISTINCT au.user_id)::int AS ai_user_count,
+        COUNT(*) FILTER (WHERE au.feature='extract')::int   AS extract_count,
+        COUNT(*) FILTER (WHERE au.feature='analyze')::int   AS analyze_count,
+        COUNT(*) FILTER (WHERE au.feature='assistant')::int AS assistant_count
+      FROM companies c
+      LEFT JOIN users u ON u.company_id = c.id
+      LEFT JOIN ai_usage au ON au.company_id = c.id
+      GROUP BY c.id
+      ORDER BY COUNT(au.id) DESC, c.name
+    `);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+// ── نص أسئلة الشات المساعد فقط لشركة معيّنة (بدون إجابات الذكاء الاصطناعي) ──
+// الهدف: تجميع الأسئلة الفعلية اللي يسألها المستخدمون لبناء بيانات لإجابات
+// جاهزة داخلية لاحقًا بدل الاعتماد الدائم على استدعاء الذكاء الاصطناعي
+exports.aiUsageQuestions = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT au.id, au.question, au.created_at,
+             u.username, u.full_name, u.role
+      FROM ai_usage au
+      LEFT JOIN users u ON u.id = au.user_id
+      WHERE au.company_id = $1 AND au.feature = 'assistant' AND au.question IS NOT NULL
+      ORDER BY au.created_at DESC
+      LIMIT 500
+    `, [req.params.id]);
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
 // ── سجل نشاط المنصة ──────────────────────────────────────
 exports.platformLog = async (req, res, next) => {
   try {

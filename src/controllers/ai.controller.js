@@ -27,11 +27,11 @@ async function getDailyUsage(company_id, feature) {
   return parseInt(row.cnt, 10);
 }
 
-async function logUsage(company_id, feature, tokens_in, tokens_out, user_id) {
+async function logUsage(company_id, feature, tokens_in, tokens_out, user_id, question) {
   await db.query(`
-    INSERT INTO ai_usage (company_id, feature, tokens_in, tokens_out, user_id)
-    VALUES ($1,$2,$3,$4,$5)
-  `, [company_id, feature, tokens_in || 0, tokens_out || 0, user_id || null]);
+    INSERT INTO ai_usage (company_id, feature, tokens_in, tokens_out, user_id, question)
+    VALUES ($1,$2,$3,$4,$5,$6)
+  `, [company_id, feature, tokens_in || 0, tokens_out || 0, user_id || null, question || null]);
 }
 
 // ── Plan limits ──────────────────────────────────────────────
@@ -210,7 +210,7 @@ exports.assistant = async (req, res, next) => {
     }
 
     const result = await ai.askAssistant(question, context || {}, Array.isArray(history) ? history : []);
-    await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out, req.user.sub);
+    await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out, req.user.sub, question);
 
     res.json({
       success: true,

@@ -232,6 +232,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <button class="nav-tab" onclick="switchTab('tickets')"     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
     <button class="nav-tab" onclick="switchTab('costs')"       id="tab-costs">💰 تحليل التكلفة</button>
     <button class="nav-tab" onclick="switchTab('plans')"       id="tab-plans">📦 الباقات والإيرادات</button>
+    <button class="nav-tab" onclick="switchTab('aiusage')"     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
     <button class="nav-tab" onclick="switchTab('log')"         id="tab-log">📋 سجل النشاط</button>
     <button class="nav-tab" onclick="switchTab('employees')"   id="tab-employees">🧑‍💼 الموظفون</button>
     <button class="nav-tab" onclick="switchTab('myteam')"       id="tab-myteam" style="display:none;">👥 فريقي</button>
@@ -442,6 +443,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
 
+    <!-- ══ استخدام الذكاء الاصطناعي ══ -->
+    <div class="section" id="sec-aiusage">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">🤖 استخدام الذكاء الاصطناعي</div>
+          <div class="sec-sub">لكل شركة: عدد المستخدمين، وكم منهم استخدم الذكاء الاصطناعي فعليًا. اضغط على شركة لعرض نصوص أسئلتها بالشات (بدون الإجابات).</div>
+        </div>
+        <button class="btn-action" onclick="loadAIUsage()">🔄 تحديث</button>
+      </div>
+      <div id="aiusage-content"><div class="loader"><span class="spinner"></span></div></div>
+    </div>
+
     <!-- ══ سجل النشاط ══ -->
     <div class="section" id="sec-log">
       <div class="sec-head">
@@ -512,7 +525,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" 
 })();
 
 const TOKEN_KEY = 'yaqiz_admin_token';
-const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate'];
+const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate', 'ai_usage'];
 const PERM_LABELS = {
   tickets: '🎧 تذاكر الدعم',
   customers: '🏢 عرض بيانات العملاء والشركات',
@@ -522,6 +535,7 @@ const PERM_LABELS = {
   activity_log: '📋 سجل النشاط',
   dashboard: '📊 لوحة التحكم',
   impersonate: '🔑 الدخول بحساب الشركة',
+  ai_usage: '🤖 استخدام الذكاء الاصطناعي',
 };
 let _regChart = null, _statusChart = null, _costChart = null;
 let _allCompanies = [], _allUsers = [], _allEmployees = [];
@@ -668,12 +682,13 @@ function applyPermissionGating(){
   set('tab-users',      hasPerm('customers'));
   set('tab-tickets',    hasPerm('tickets'));
   set('tab-costs',      hasPerm('cost_analysis'));
+  set('tab-aiusage',    hasPerm('ai_usage'));
   set('tab-plans',      hasPerm('plans'));
   set('tab-log',        hasPerm('activity_log'));
   set('tab-employees',  isOwner()); // إدارة الموظفين لا تُوكَّل أبداً
   if (!isOwner()) {
-    const order = ['dashboard','tickets','customers','cost_analysis','plans','activity_log'];
-    const tabOf = { dashboard:'dashboard', tickets:'tickets', customers:'companies', cost_analysis:'costs', plans:'plans', activity_log:'log' };
+    const order = ['dashboard','tickets','customers','cost_analysis','plans','ai_usage','activity_log'];
+    const tabOf = { dashboard:'dashboard', tickets:'tickets', customers:'companies', cost_analysis:'costs', plans:'plans', ai_usage:'aiusage', activity_log:'log' };
     const firstPerm = order.find(p => hasPerm(p));
     if (firstPerm) switchTab(tabOf[firstPerm]);
     else { const mainEl = document.querySelector('.main'); if (mainEl) mainEl.innerHTML = '<div class="empty-state" style="padding:60px;">لا تملك صلاحية الوصول لأي قسم — تواصل مع المالك</div>'; }
@@ -691,7 +706,7 @@ async function apiFetch(path,opts={}){
 }
 
 // ── Tab Navigation ─────────────────────────────────────
-const TABS = ['dashboard','companies','newclients','users','tickets','plans','costs','log','employees','myteam'];
+const TABS = ['dashboard','companies','newclients','users','tickets','plans','costs','aiusage','log','employees','myteam'];
 function switchTab(name) {
   TABS.forEach(t => {
     $('tab-'+t)?.classList.toggle('active', t===name);
@@ -702,6 +717,7 @@ function switchTab(name) {
   if (name==='tickets'    )                        loadTickets(_ticketFilter);
   if (name==='log'        )                        loadLog();
   if (name==='plans'      )                        loadPlans();
+  if (name==='aiusage'    )                        loadAIUsage();
   if (name==='newclients' )                        loadNewClients();
   if (name==='employees'  )                        loadEmployees();
   if (name==='myteam'     )                        loadMyTeam();
@@ -732,6 +748,84 @@ async function loadPlans() {
     const data = await apiFetch('/api/admin/plans');
     renderPlansSection(data.data);
   } catch(e) { box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل الباقات</p>'; }
+}
+
+// ── استخدام الذكاء الاصطناعي ─────────────────────────────
+async function loadAIUsage() {
+  const box = $('aiusage-content');
+  box.innerHTML = '<div class="loader"><span class="spinner"></span></div>';
+  try {
+    const res = await apiFetch('/api/admin/ai-usage/companies');
+    renderAIUsageTable(res.data || []);
+  } catch (e) { box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل بيانات الاستخدام</p>'; }
+}
+
+function renderAIUsageTable(rows) {
+  const box = $('aiusage-content');
+  if (!rows.length) { box.innerHTML = '<div class="empty-state" style="padding:40px;">لا توجد شركات</div>'; return; }
+  box.innerHTML = `
+    <div style="border:1px solid #1a2942;border-radius:12px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#0d1629;">
+          <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الشركة</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">الباقة</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">عدد المستخدمين</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">استخدموا AI</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🧾 تفريغ</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">📄 تحليل</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">💬 أسئلة الشات</th>
+          <th style="padding:10px 14px;"></th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr style="border-top:1px solid #1a2942;cursor:pointer;" onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}')">
+            <td style="padding:10px 14px;font-weight:700;color:#f0f4ff;">${escHtml(r.name)}</td>
+            <td style="padding:10px 14px;text-align:center;">${planBadge(r.plan)}</td>
+            <td style="padding:10px 14px;text-align:center;color:var(--muted);">${fmt(r.user_count)}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.ai_user_count?'#34d399':'var(--muted)'};">${r.ai_user_count?fmt(r.ai_user_count):'—'}</td>
+            <td style="padding:10px 14px;text-align:center;color:${r.extract_count?'#c4b5fd':'var(--muted)'};">${r.extract_count?fmt(r.extract_count):'—'}</td>
+            <td style="padding:10px 14px;text-align:center;color:${r.analyze_count?'#f9a8d4':'var(--muted)'};">${r.analyze_count?fmt(r.analyze_count):'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};">${r.assistant_count?fmt(r.assistant_count):'—'}</td>
+            <td style="padding:10px 14px;text-align:center;color:var(--muted);font-size:12px;">${r.assistant_count?'عرض الأسئلة ›':''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function closeAIQuestionsModal() {
+  document.getElementById('ai-questions-overlay')?.remove();
+}
+async function showAIQuestionsModal(companyId, companyName) {
+  closeAIQuestionsModal();
+  const ov = document.createElement('div');
+  ov.id = 'ai-questions-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = `<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
+    <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:18px;font-weight:900;color:#f0f4ff;">💬 أسئلة الشات — ${escHtml(companyName)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">نص السؤال فقط، بدون إجابة الذكاء الاصطناعي</div>
+      </div>
+      <button onclick="closeAIQuestionsModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
+    </div>
+    <div id="ai-questions-body" style="padding:20px 28px;"><div class="loader"><span class="spinner"></span></div></div>
+  </div>`;
+  ov.onclick = closeAIQuestionsModal;
+  document.body.appendChild(ov);
+  try {
+    const res = await apiFetch(`/api/admin/ai-usage/companies/${companyId}/questions`);
+    const rows = res.data || [];
+    const body = document.getElementById('ai-questions-body');
+    if (!body) return;
+    body.innerHTML = rows.length ? rows.map(r => `
+      <div style="background:rgba(255,255,255,.04);border:1px solid #1a2942;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+        <div style="font-size:13px;color:#f0f4ff;line-height:1.6;">${escHtml(r.question)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">👤 ${escHtml(r.full_name||r.username||'—')} · ${fmtD(r.created_at)}</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:30px;">لا توجد أسئلة مسجَّلة</div>';
+  } catch (e) {
+    const body = document.getElementById('ai-questions-body');
+    if (body) body.innerHTML = '<p style="color:var(--red);">خطأ في تحميل الأسئلة</p>';
+  }
 }
 
 // ── New Clients ─────────────────────────────────────────
