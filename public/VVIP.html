@@ -6516,35 +6516,6 @@ function showReportDrillDownModal(title, subtitle, columns, rows) {
   refreshIcons();
 }
 
-function drillVAT(kind) {
-  const { d } = currentReportData();
-  if (kind==='output') {
-    const rows = d.invs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(i.subtotal), fmtMoney(i.vat_total), fmtMoney(i.grand_total)]);
-    showReportDrillDownModal(
-      lang==='ar'?'📈 تفاصيل ضريبة المخرجات (المبيعات)':'Output VAT — Sales Details',
-      lang==='ar'?`${d.invs.length} فاتورة`:`${d.invs.length} invoices`,
-      lang==='ar'?['رقم الفاتورة','التاريخ','العميل','الوعاء','الضريبة','الإجمالي']:['Invoice #','Date','Customer','Base','VAT','Total'],
-      rows);
-  } else if (kind==='input') {
-    const purchs = d.purchs.filter(p=>p.deductible!==false);
-    const rows = purchs.map(p=>[sanitize(p.vendor||''), fmtDate(p.created_at), sanitize(p.description||p.category||''), fmtMoney(p.amount), fmtMoney(p.vat)]);
-    showReportDrillDownModal(
-      lang==='ar'?'📉 تفاصيل ضريبة المدخلات (المشتريات)':'Input VAT — Purchases Details',
-      lang==='ar'?`${purchs.length} عملية`:`${purchs.length} entries`,
-      lang==='ar'?['المورد','التاريخ','البيان','الوعاء','الضريبة']:['Vendor','Date','Description','Base','VAT'],
-      rows);
-  } else if (kind==='net') {
-    showReportDrillDownModal(
-      lang==='ar'?'🧾 كيف احتسبنا صافي الضريبة المستحقة':'How Net VAT Due Was Calculated', '',
-      lang==='ar'?['البند','المبلغ']:['Item','Amount'],
-      [
-        [lang==='ar'?'ضريبة المخرجات':'Output VAT', fmtMoney(d.vatOutput)],
-        [lang==='ar'?'ناقص: ضريبة المدخلات':'Less: Input VAT', '-'+fmtMoney(d.vatInput)],
-        [`<b>${lang==='ar'?'= صافي المستحق':'= Net Due'}</b>`, `<b>${fmtMoney(d.vatNet)}</b>`],
-      ]);
-  }
-}
-
 function drillIncome(kind) {
   const { d } = currentReportData();
   if (kind==='revenue') {
@@ -6683,27 +6654,52 @@ function renderReportsInner(c) {
     <div id="report-content">
       ${reportTab==='vat'?`
         <div class="stats-grid">
-          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('output')" title="${lang==='ar'?'اضغط لعرض تفاصيل الفواتير':'Click for invoice details'}"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatOutput)}</div>${badge(diff(vatOutput,prev?.vatOutput))}</div>
-          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('input')" title="${lang==='ar'?'اضغط لعرض تفاصيل المشتريات':'Click for purchase details'}"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatInput)}</div>${badge(diff(vatInput,prev?.vatInput))}</div>
-          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('net')" title="${lang==='ar'?'اضغط لعرض طريقة الاحتساب':'Click to see calculation'}"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatNet)}</div>${badge(diff(vatNet,prev?.vatNet))}</div>
+          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')}</div><div class="stat-value">${fmtMoney(vatOutput)}</div>${badge(diff(vatOutput,prev?.vatOutput))}</div>
+          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')}</div><div class="stat-value">${fmtMoney(vatInput)}</div>${badge(diff(vatInput,prev?.vatInput))}</div>
+          <div class="stat-card"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')}</div><div class="stat-value">${fmtMoney(vatNet)}</div>${badge(diff(vatNet,prev?.vatNet))}</div>
         </div>
-        <div class="card" style="margin-top:16px;"><div class="card-pad">
-          <div style="font-weight:800;margin-bottom:12px;">📋 ${lang==='ar'?'تفاصيل الفواتير في الفترة':'Invoice Details'}</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-            <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:var(--text-muted);">${lang==='ar'?'عدد الفواتير':'Invoice Count'}</div>
-              <div style="font-size:22px;font-weight:900;color:var(--primary);">${d.invs.length}</div>
-            </div>
-            <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:var(--text-muted);">${lang==='ar'?'متوسط الفاتورة':'Avg Invoice'}</div>
-              <div style="font-size:18px;font-weight:900;color:var(--primary);">${fmtMoney(d.invs.length?revenue/d.invs.length:0)}</div>
-            </div>
-            <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center;">
-              <div style="font-size:11px;color:var(--text-muted);">${lang==='ar'?'إجمالي الإيرادات':'Total Revenue'}</div>
-              <div style="font-size:18px;font-weight:900;color:var(--success);">${fmtMoney(revenue)}</div>
+        <div class="card" style="margin-top:16px;">
+          <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+            <span style="font-weight:800;">📋 ${lang==='ar'?'كل العمليات (مبيعات ومشتريات) في الفترة':'All Operations (Sales & Purchases) in Range'}</span>
+            <div style="display:flex;gap:8px;align-items:center;margin-inline-start:auto;flex-wrap:wrap;">
+              ${hasPlanFeature('custom_period')?`
+                <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'من:':'From:'}</span>
+                <input type="date" class="input" style="width:150px;" value="${reportFrom}" onchange="reportPeriod='custom';reportFrom=this.value;renderPage()" />
+                <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إلى:':'To:'}</span>
+                <input type="date" class="input" style="width:150px;" value="${reportTo}" onchange="reportPeriod='custom';reportTo=this.value;renderPage()" />
+                ${reportPeriod==='custom'&&reportFrom&&reportTo?`<button class="btn btn-sm btn-outline" onclick="reportPeriod='all';reportFrom='';reportTo='';renderPage()">${lang==='ar'?'مسح الفترة':'Clear range'}</button>`:''}
+              `:`<span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'تحديد فترة مخصصة متاح بباقة النمو والاحترافية':'Custom date range available on Growth & Pro'}</span>`}
             </div>
           </div>
-        </div></div>`:
+          <div class="tbl-wrap" style="max-height:65vh;overflow:auto;"><table class="tbl">
+            <thead><tr>
+              <th>${lang==='ar'?'النوع':'Type'}</th>
+              <th>${lang==='ar'?'رقم/الطرف':'Ref / Party'}</th>
+              <th>${lang==='ar'?'التاريخ':'Date'}</th>
+              <th style="text-align:end;">${lang==='ar'?'قبل الضريبة':'Before VAT'}</th>
+              <th style="text-align:end;">${lang==='ar'?'الضريبة':'VAT'}</th>
+              <th style="text-align:end;">${lang==='ar'?'بعد الضريبة':'After VAT'}</th>
+            </tr></thead>
+            <tbody>${(()=>{
+              const salesRows = d.invs.map(i=>({kind:'sale',ref:i.invoice_no,party:i.customer_name,date:(i.created_at||i.date||'').slice(0,10),base:i.subtotal,vat:i.vat_total,total:i.grand_total}));
+              const purchRows = d.purchs.filter(p=>p.deductible!==false).map(p=>({kind:'purchase',ref:p.vendor||'',party:p.description||p.category||'',date:(p.created_at||p.date||'').slice(0,10),base:p.amount,vat:p.vat,total:p.total}));
+              const all = [...salesRows,...purchRows].sort((a,b)=>b.date.localeCompare(a.date));
+              if(!all.length) return `<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted);">${lang==='ar'?'لا توجد عمليات ضمن هذه الفترة':'No operations in this range'}</td></tr>`;
+              return all.map(r=>`<tr>
+                <td><span class="badge ${r.kind==='sale'?'badge-green':'badge-amber'}">${r.kind==='sale'?(lang==='ar'?'بيع':'Sale'):(lang==='ar'?'شراء':'Purchase')}</span></td>
+                <td>${sanitize(r.ref)}${r.party?` — ${sanitize(r.party)}`:''}</td>
+                <td>${fmtDate(r.date)}</td>
+                <td style="text-align:end;">${fmtMoney(r.base)}</td>
+                <td style="text-align:end;color:${r.kind==='sale'?'#16a34a':'#dc2626'};">${fmtMoney(r.vat)}</td>
+                <td style="text-align:end;font-weight:700;">${fmtMoney(r.total)}</td>
+              </tr>`).join('');
+            })()}</tbody>
+            <tfoot><tr style="background:var(--primary-soft);font-weight:900;">
+              <td colspan="4" style="padding:12px 14px;">${lang==='ar'?'صافي الضريبة المستحقة:':'Net VAT Due:'}</td>
+              <td colspan="2" style="padding:12px 14px;text-align:end;color:var(--primary);">${fmtMoney(vatNet)}</td>
+            </tr></tfoot>
+          </table></div>
+        </div>`:
       reportTab==='income'&&hasPlanFeature('income_statement')?`
         <div class="card"><div class="card-pad">
           ${[
