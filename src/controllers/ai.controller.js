@@ -27,11 +27,11 @@ async function getDailyUsage(company_id, feature) {
   return parseInt(row.cnt, 10);
 }
 
-async function logUsage(company_id, feature, tokens_in, tokens_out) {
+async function logUsage(company_id, feature, tokens_in, tokens_out, user_id) {
   await db.query(`
-    INSERT INTO ai_usage (company_id, feature, tokens_in, tokens_out)
-    VALUES ($1,$2,$3,$4)
-  `, [company_id, feature, tokens_in || 0, tokens_out || 0]);
+    INSERT INTO ai_usage (company_id, feature, tokens_in, tokens_out, user_id)
+    VALUES ($1,$2,$3,$4,$5)
+  `, [company_id, feature, tokens_in || 0, tokens_out || 0, user_id || null]);
 }
 
 // ── Plan limits ──────────────────────────────────────────────
@@ -93,7 +93,7 @@ exports.extract = async (req, res, next) => {
     } else {
       result = await ai.extractDocument(image_base64, mime_type);
     }
-    await logUsage(company_id, 'extract', result.tokens_in, result.tokens_out);
+    await logUsage(company_id, 'extract', result.tokens_in, result.tokens_out, req.user.sub);
 
     let parsed = null;
     try { parsed = JSON.parse(cleanJSON(result.content)); } catch { /* fallback */ }
@@ -143,7 +143,7 @@ exports.analyze = async (req, res, next) => {
     }
 
     const result = await ai.analyzeFinancials(summary);
-    await logUsage(company_id, 'analyze', result.tokens_in, result.tokens_out);
+    await logUsage(company_id, 'analyze', result.tokens_in, result.tokens_out, req.user.sub);
 
     res.json({
       success: true,
@@ -210,7 +210,7 @@ exports.assistant = async (req, res, next) => {
     }
 
     const result = await ai.askAssistant(question, context || {}, Array.isArray(history) ? history : []);
-    await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out);
+    await logUsage(company_id, 'assistant', result.tokens_in, result.tokens_out, req.user.sub);
 
     res.json({
       success: true,

@@ -1199,6 +1199,8 @@ function renderCoModal(c){
       <td style="padding:9px 12px;"><span style="font-size:11px;background:rgba(59,130,246,.15);color:#93c5fd;padding:2px 8px;border-radius:99px;">${{owner:'مالك',accountant:'محاسب',cashier:'كاشير'}[u.role]||u.role}</span></td>
       <td style="padding:9px 12px;">${u.active?'<span style="color:#34d399;font-size:12px;font-weight:700;">● نشط</span>':'<span style="color:#f87171;font-size:12px;font-weight:700;">● موقوف</span>'}</td>
       <td style="font-size:11px;color:var(--muted);padding:9px 12px;">${fmtD(u.last_login)}</td>
+      <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_extract_count?'#c4b5fd':'var(--muted)'};font-weight:${u.ai_extract_count?'800':'400'};">${u.ai_extract_count?fmt(u.ai_extract_count):'—'}</td>
+      <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_assistant_count?'#a5b4fc':'var(--muted)'};font-weight:${u.ai_assistant_count?'800':'400'};">${u.ai_assistant_count?fmt(u.ai_assistant_count):'—'}</td>
     </tr>`).join('');
 
   const statusColors={active:'#10b981',suspended:'#f59e0b',cancelled:'#ef4444'};
@@ -1241,6 +1243,25 @@ function renderCoModal(c){
       <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:14px;text-align:center;">
         <div style="font-size:22px;font-weight:900;color:#fbbf24;">${fmtSAR(c.total_revenue)}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">ر.س إجمالي</div>
+      </div>
+    </div>
+
+    <!-- استخدام الذكاء الاصطناعي -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🤖 استخدام الذكاء الاصطناعي (إجمالي)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:12px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#c4b5fd;">${fmt(c.ai_extract_count)}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تفريغ فواتير</div>
+        </div>
+        <div style="background:rgba(236,72,153,.1);border:1px solid rgba(236,72,153,.2);border-radius:12px;padding:12px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#f9a8d4;">${fmt(c.ai_analyze_count)}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تحليل مستندات</div>
+        </div>
+        <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:12px;text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:#a5b4fc;">${fmt(c.ai_assistant_count)}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">أسئلة الشات (اسأل يقظ)</div>
+        </div>
       </div>
     </div>
 
@@ -1292,6 +1313,8 @@ function renderCoModal(c){
           <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الدور</th>
           <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">الحالة</th>
           <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">آخر دخول</th>
+          <th style="padding:9px 12px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);" title="تفريغ فواتير AI">🧾 تفريغ AI</th>
+          <th style="padding:9px 12px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);" title="أسئلة الشات المساعد">💬 شات AI</th>
         </tr></thead>
         <tbody>${usersRows}</tbody>
       </table>

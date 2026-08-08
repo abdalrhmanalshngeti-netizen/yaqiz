@@ -400,9 +400,37 @@ exports.companyDetails = async (req, res, next) => {
     );
     if (!company) return res.status(404).json({ success: false, message: 'الشركة غير موجودة' });
 
+    // استخدام الذكاء الاصطناعي لكل مستخدم بالشركة (تفريغ فواتير، تحليل، الشات
+    // المساعد) — لمعرفة مين فعليًا يستخدم الميزات الذكية وبأي قدر
+    const { rows: aiByUser } = await db.query(
+      `SELECT user_id,
+         COUNT(*) FILTER (WHERE feature='extract')::int   AS extract_count,
+         COUNT(*) FILTER (WHERE feature='analyze')::int   AS analyze_count,
+         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count
+       FROM ai_usage WHERE company_id = $1 GROUP BY user_id`,
+      [req.params.id]
+    );
+    const aiByUserMap = {};
+    aiByUser.forEach(r => { aiByUserMap[r.user_id] = r; });
+
     const { rows: users } = await db.query(
       `SELECT id, username, full_name, role, active, last_login, created_at
        FROM users WHERE company_id = $1 AND is_super_admin = false ORDER BY created_at`,
+      [req.params.id]
+    );
+    users.forEach(u => {
+      const ai = aiByUserMap[u.id];
+      u.ai_extract_count = ai?.extract_count || 0;
+      u.ai_analyze_count = ai?.analyze_count || 0;
+      u.ai_assistant_count = ai?.assistant_count || 0;
+    });
+
+    const { rows: [aiTotals] } = await db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE feature='extract')::int   AS extract_count,
+         COUNT(*) FILTER (WHERE feature='analyze')::int   AS analyze_count,
+         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count
+       FROM ai_usage WHERE company_id = $1`,
       [req.params.id]
     );
 
@@ -412,7 +440,12 @@ exports.companyDetails = async (req, res, next) => {
       [req.params.id]
     );
 
-    res.json({ success: true, data: { ...company, users, recent_invoices: recentInvoices } });
+    res.json({ success: true, data: {
+      ...company, users, recent_invoices: recentInvoices,
+      ai_extract_count: aiTotals.extract_count,
+      ai_analyze_count: aiTotals.analyze_count,
+      ai_assistant_count: aiTotals.assistant_count,
+    } });
   } catch (err) { next(err); }
 };
 
