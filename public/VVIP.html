@@ -5842,15 +5842,23 @@ function renderReportMainContent() {
   else renderAccounts(mc);
 }
 
+let tbAsOfDate = new Date().toISOString().slice(0,10);
+
+function setTBAsOfDate(v) { tbAsOfDate = v || new Date().toISOString().slice(0,10); renderTrialBalance(el('report-main-content')); }
+function resetTBAsOfDate() { setTBAsOfDate(new Date().toISOString().slice(0,10)); }
+
 function renderTrialBalance(c) {
   const db  = getDB();
   const fmt = v => fmtMoney(Math.abs(v));
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? tbAsOfDate : new Date().toISOString().slice(0,10);
+  const isToday = asOf === new Date().toISOString().slice(0,10);
 
-  // ميزان مراجعة حقيقي: كل حساب فعليًا استُخدم بدفتر اليومية، برصيده الصافي —
-  // بدل ٦ بنود إجمالية مبسّطة. دفتر اليومية أصبح متزامنًا بالكامل مع السيرفر
-  // (رفعًا وسحبًا)، فصار الاعتماد عليه مباشرة موثوقًا ومطابقًا لدفتر اليومية
-  // نفسه ولميزان المراجعة عمليًا، بنفس أسلوب الميزانية العمومية.
-  const bal = journalAccountBalances(db);
+  // ميزان مراجعة حقيقي: كل حساب فعليًا استُخدم بدفتر اليومية، برصيده الصافي حتى
+  // تاريخ "asOf" المحدد — بدل ٦ بنود إجمالية مبسّطة. دفتر اليومية أصبح متزامنًا
+  // بالكامل مع السيرفر (رفعًا وسحبًا)، فصار الاعتماد عليه مباشرة موثوقًا ومطابقًا
+  // لدفتر اليومية نفسه ولميزان المراجعة عمليًا، بنفس أسلوب الميزانية العمومية.
+  const bal = journalAccountBalances(db, asOf);
   // نوع الحساب يُستدل عليه من بادئة الرمز المحاسبي (١=أصول، ٢=التزامات، ٣=حقوق ملكية، ٤=إيرادات، ٥=مصروفات)
   const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
 
@@ -5878,7 +5886,7 @@ function renderTrialBalance(c) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="font-size:18px;font-weight:900;">${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</div>
-        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'كل حساب استُخدم بدفتر اليومية، من إنشاء الحساب حتى اليوم':'Every account used in the journal, since inception'}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'كل حساب استُخدم بدفتر اليومية، من إنشاء الحساب حتى التاريخ المحدد':'Every account used in the journal, since inception up to the chosen date'}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <div style="padding:8px 16px;background:${balanced?'rgba(22,163,74,.1)':'rgba(239,68,68,.1)'};border-radius:10px;font-size:12px;font-weight:700;color:${balanced?'#16a34a':'#dc2626'};">
@@ -5886,6 +5894,21 @@ function renderTrialBalance(c) {
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span style="font-weight:700;font-size:13px;">${icon('calendar',16)} ${lang==='ar'?'كما كان بتاريخ:':'As of date:'}</span>
+        ${canPickDate?`
+          <input type="date" class="input" style="width:160px;" value="${asOf}" onchange="setTBAsOfDate(this.value)" />
+          ${!isToday?`<button class="btn btn-sm btn-outline" onclick="resetTBAsOfDate()">${lang==='ar'?'اليوم':'Today'}</button>`:''}
+        `:`
+          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
+        `}
+        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" onclick="exportTrialBalancePDF()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
@@ -5897,10 +5920,10 @@ function renderTrialBalance(c) {
         </tr></thead>
         <tbody>
           ${rows.length===0
-            ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد قيود بدفتر اليومية بعد':'No journal entries yet'}</td></tr>`
-            :rows.map(r=>`<tr>
+            ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد قيود بدفتر اليومية حتى هذا التاريخ':'No journal entries up to this date'}</td></tr>`
+            :rows.map(r=>`<tr style="cursor:pointer;" onclick="drillAccount('${r.code}','${sanitize(r.name).replace(/'/g,"\\'")}')" title="${lang==='ar'?'اضغط لعرض القيود المكوّنة لهذا الرصيد':'Click to see the entries behind this balance'}">
             <td><code>${r.code}</code></td>
-            <td style="font-weight:700;">${sanitize(r.name)}</td>
+            <td style="font-weight:700;">${sanitize(r.name)} ${icon('search',11)}</td>
             <td><span style="background:${typeColor[r.type]}18;color:${typeColorEn[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeLabel[r.type]}</span></td>
             <td style="text-align:end;font-weight:700;color:${r.debit>0?'var(--text-main)':'var(--text-muted)'};">${r.debit>0?fmt(r.debit):'—'}</td>
             <td style="text-align:end;font-weight:700;color:${r.credit>0?'var(--text-main)':'var(--text-muted)'};">${r.credit>0?fmt(r.credit):'—'}</td>
@@ -5916,9 +5939,65 @@ function renderTrialBalance(c) {
       </table></div>
     </div>
     <div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px;">
-      * ${lang==='ar'?'يعرض هذا التقرير الرصيد الصافي لكل حساب من واقع القيود الفعلية بدفتر اليومية — للتفاصيل الكاملة لكل قيد راجع دفتر اليومية.':'Shows the net balance of every account as posted in the journal — for full entry-level detail see the Journal report.'}
+      * ${lang==='ar'?'يعرض هذا التقرير الرصيد الصافي لكل حساب من واقع القيود الفعلية بدفتر اليومية — اضغط أي حساب لعرض القيود التفصيلية المكوّنة لرصيده.':'Shows the net balance of every account as posted in the journal — click any account to see the detailed entries behind its balance.'}
     </div>
   </div>`;
+}
+
+function drillAccount(code, name) {
+  const db = getDB();
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? tbAsOfDate : new Date().toISOString().slice(0,10);
+  const lines = journalLinesForAccount(db, code, asOf);
+  let running = 0;
+  const rows = lines.map(l=>{
+    running += l.side==='debit' ? l.amount : -l.amount;
+    return [
+      fmtDate(l.date), sanitize(l.description||''), sanitize(l.ref||'-'),
+      l.side==='debit'?fmtMoney(l.amount):'-', l.side==='credit'?fmtMoney(l.amount):'-',
+      fmtMoney(running),
+    ];
+  });
+  showReportDrillDownModal(
+    `${sanitize(name)} <code style="font-size:12px;">${code}</code>`,
+    lang==='ar'?`${lines.length} قيد حتى ${asOf}`:`${lines.length} entries up to ${asOf}`,
+    lang==='ar'?['التاريخ','البيان','المرجع','مدين','دائن','الرصيد التراكمي']:['Date','Description','Ref','Debit','Credit','Running Balance'],
+    rows);
+}
+
+function exportTrialBalancePDF() {
+  const db = getDB(); const s = db.settings||{};
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? tbAsOfDate : new Date().toISOString().slice(0,10);
+  const bal = journalAccountBalances(db, asOf);
+  const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
+  const rows = Object.keys(bal).sort().map(code=>{
+    const entry = bal[code];
+    const net = (entry.debit||0) - (entry.credit||0);
+    return { code, name: entry.name, type: typeFromCode(code), debit: Math.max(0,net), credit: Math.max(0,-net) };
+  }).filter(r=>r.debit>0.004||r.credit>0.004);
+  const totDebit = rows.reduce((s,r)=>s+r.debit,0);
+  const totCredit = rows.reduce((s,r)=>s+r.credit,0);
+
+  const bodyRows = rows.map(r=>`<tr>
+    <td>${r.code}</td><td>${sanitize(r.name)}</td><td>${r.type}</td>
+    <td>${r.debit>0?Number(r.debit).toFixed(2):'-'}</td><td>${r.credit>0?Number(r.credit).toFixed(2):'-'}</td>
+  </tr>`).join('');
+
+  const win = window.open('','_blank');
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>ميزان المراجعة</title></head><body>
+  <div class="rpt-header">
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
+    <div><div class="rpt-title">ميزان المراجعة</div><div class="rpt-date">كما كان بتاريخ: ${asOf} | طُبع: ${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
+  </div>
+  <table><thead><tr><th>الرمز</th><th>الحساب</th><th>النوع</th><th>مدين (ر.س)</th><th>دائن (ر.س)</th></tr></thead>
+  <tbody>${bodyRows}</tbody>
+  <tfoot><tr class="total-row"><td colspan="3">الإجمالي</td><td>${Number(totDebit).toFixed(2)}</td><td>${Number(totCredit).toFixed(2)}</td></tr></tfoot>
+  </table>
+  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
+  <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+  win.document.close();
 }
 
 let overdueTab = 'customers';
@@ -6050,45 +6129,73 @@ function renderOverdueReport(c) {
   </div>`;
 }
 
-function renderZakatReport(c) {
-  const db = getDB();
-  const cash = db.treasury?.balance||0;
+let zakatAsOfDate = new Date().toISOString().slice(0,10);
+function setZakatAsOfDate(v) { zakatAsOfDate = v || new Date().toISOString().slice(0,10); renderZakatReport(el('report-main-content')); }
+function resetZakatAsOfDate() { setZakatAsOfDate(new Date().toISOString().slice(0,10)); }
+
+function zakatFigures(db, asOf) {
+  const cashMovesAfter = (db.treasury?.moves||[]).filter(m=>(m.date||'').slice(0,10) > asOf);
+  const cash = (db.treasury?.balance||0) - cashMovesAfter.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0);
   const receivables = db.customers.reduce((s,cu)=>{
-    const inv = db.invoices.filter(i=>i.customer_name===cu.name).reduce((t,i)=>t+(i.grand_total||0),0);
-    const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt').reduce((t,r)=>t+r.amount,0);
+    const inv = db.invoices.filter(i=>i.customer_name===cu.name && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
+    const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
     return s+Math.max(0,inv-rcv);
   },0);
   const inventoryVal = db.products.reduce((s,p)=>s+(p.qty||0)*(p.cost_price||p.sell_price||0),0);
   const payables = db.suppliers.reduce((s,su)=>{
-    const pur = db.purchases.filter(p=>p.vendor===su.name).reduce((t,p)=>t+(p.total||0),0);
-    const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment').reduce((t,r)=>t+r.amount,0);
+    const pur = db.purchases.filter(p=>p.vendor===su.name && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
+    const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
     return s+Math.max(0,pur-pay);
   },0);
   const zakatBase = Math.max(0, cash+receivables+inventoryVal-payables);
   const zakatDue  = Math.round(zakatBase*0.025*100)/100;
+  return { cash, receivables, inventoryVal, payables, zakatBase, zakatDue };
+}
+
+function renderZakatReport(c) {
+  const db = getDB();
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? zakatAsOfDate : new Date().toISOString().slice(0,10);
+  const isToday = asOf === new Date().toISOString().slice(0,10);
+  const { cash, receivables, inventoryVal, payables, zakatBase, zakatDue } = zakatFigures(db, asOf);
   const nisab = 20908; // نصاب تقريبي بالريال (85 جرام ذهب × ~246 ريال)
 
-  const row=(label,val,color='')=>`<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
-    <span style="font-weight:600;">${label}</span>
+  const row=(label,val,color='',onclick='')=>`<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);${onclick?'cursor:pointer;':''}" ${onclick?`onclick="${onclick}"`:''}>
+    <span style="font-weight:600;">${label}${onclick?` ${icon('search',11)}`:''}</span>
     <span style="font-weight:800;${color?`color:${color};`:''}"">${fmtMoney(val)}</span>
   </div>`;
 
   c.innerHTML = `<div style="margin-top:16px;max-width:600px;">
     <div style="font-size:16px;font-weight:800;margin-bottom:8px;">🕌 ${lang==='ar'?'حاسبة الزكاة':'Zakat Calculator'}</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">
-      ${lang==='ar'?'المعلومات محسوبة من بيانات النظام الحالية — تُستخدم كمرجع تقديري':'Based on current system data — use as reference only'}
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
+      ${lang==='ar'?'المعلومات محسوبة من بيانات النظام كما كانت بالتاريخ المحدد — تُستخدم كمرجع تقديري':'Based on system data as of the chosen date — use as reference only'}
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span style="font-weight:700;font-size:13px;">${icon('calendar',16)} ${lang==='ar'?'كما كان بتاريخ:':'As of date:'}</span>
+        ${canPickDate?`
+          <input type="date" class="input" style="width:160px;" value="${asOf}" onchange="setZakatAsOfDate(this.value)" />
+          ${!isToday?`<button class="btn btn-sm btn-outline" onclick="resetZakatAsOfDate()">${lang==='ar'?'اليوم':'Today'}</button>`:''}
+        `:`
+          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
+        `}
+        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" onclick="exportZakatReportPDF()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+      </div>
     </div>
 
     <div class="card" style="padding:20px;margin-bottom:16px;">
       <div style="font-weight:800;font-size:14px;margin-bottom:12px;color:var(--primary);">📥 ${lang==='ar'?'الأصول الزكوية (تُضاف)':'Zakatable Assets (add)'}</div>
-      ${row(lang==='ar'?'💵 رصيد الخزينة (النقد)':'Cash / Treasury', cash, '#16a34a')}
-      ${row(lang==='ar'?'👤 ذمم العملاء (المستحقة)':'Customer Receivables', receivables, '#16a34a')}
+      ${row(lang==='ar'?'💵 رصيد الخزينة (النقد)':'Cash / Treasury', cash, '#16a34a', "drillZakat('cash')")}
+      ${row(lang==='ar'?'👤 ذمم العملاء (المستحقة)':'Customer Receivables', receivables, '#16a34a', "drillZakat('receivables')")}
       ${row(lang==='ar'?'📦 قيمة المخزون (بسعر التكلفة)':'Inventory at Cost', inventoryVal, '#16a34a')}
+      ${!isToday?`<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">ℹ️ ${lang==='ar'?'قيمة المخزون تُعرض دائمًا بالكمية الحالية (اليوم) لعدم توفر سجل كميات تاريخي دقيق — بقية البنود محسوبة فعليًا كما كانت بالتاريخ المحدد.':'Inventory value always reflects current quantities (no historical stock ledger) — other items are computed as of the chosen date.'}</div>`:''}
     </div>
 
     <div class="card" style="padding:20px;margin-bottom:16px;">
       <div style="font-weight:800;font-size:14px;margin-bottom:12px;color:var(--danger);">📤 ${lang==='ar'?'الالتزامات (تُطرح)':'Liabilities (deduct)'}</div>
-      ${row(lang==='ar'?'🏭 ذمم الموردين (المطلوبة)':'Supplier Payables', payables, '#dc2626')}
+      ${row(lang==='ar'?'🏭 ذمم الموردين (المطلوبة)':'Supplier Payables', payables, '#dc2626', "drillZakat('payables')")}
     </div>
 
     <div class="card" style="padding:20px;background:var(--primary-soft);border:2px solid var(--primary);">
@@ -6107,6 +6214,74 @@ function renderZakatReport(c) {
       ⚠️ ${lang==='ar'?'هذا حساب تقديري — استشر مختصاً شرعياً لتحديد الزكاة الدقيقة':'Estimated calculation — consult a specialist for exact Zakat'}
     </div>
   </div>`;
+}
+
+function drillZakat(kind) {
+  const db = getDB();
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? zakatAsOfDate : new Date().toISOString().slice(0,10);
+  if (kind==='cash') {
+    const moves = (db.treasury?.moves||[]).filter(m=>(m.date||'').slice(0,10)<=asOf)
+      .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,50);
+    const rows = moves.map(m=>[fmtDate(m.date), sanitize(m.description||''), m.type==='in'?fmtMoney(m.amount):'-', m.type==='out'?fmtMoney(m.amount):'-']);
+    showReportDrillDownModal(
+      lang==='ar'?'💵 آخر حركات الخزينة حتى هذا التاريخ':'Recent Treasury Moves Up To This Date',
+      lang==='ar'?`آخر ${rows.length} حركة`:`Last ${rows.length} moves`,
+      lang==='ar'?['التاريخ','البيان','وارد','صادر']:['Date','Description','In','Out'],
+      rows);
+  } else if (kind==='receivables') {
+    const rows = db.customers.map(cu=>{
+      const inv = db.invoices.filter(i=>i.customer_name===cu.name && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
+      const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+      return { name: cu.name, outstanding: Math.max(0, inv-rcv) };
+    }).filter(r=>r.outstanding>0.004).sort((a,b)=>b.outstanding-a.outstanding);
+    showReportDrillDownModal(
+      lang==='ar'?'👤 تفصيل ذمم العملاء المستحقة':'Customer Receivables Breakdown',
+      lang==='ar'?`${rows.length} عميل`:`${rows.length} customers`,
+      lang==='ar'?['العميل','المستحق']:['Customer','Outstanding'],
+      rows.map(r=>[sanitize(r.name), fmtMoney(r.outstanding)]));
+  } else if (kind==='payables') {
+    const rows = db.suppliers.map(su=>{
+      const pur = db.purchases.filter(p=>p.vendor===su.name && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
+      const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+      return { name: su.name, outstanding: Math.max(0, pur-pay) };
+    }).filter(r=>r.outstanding>0.004).sort((a,b)=>b.outstanding-a.outstanding);
+    showReportDrillDownModal(
+      lang==='ar'?'🏭 تفصيل ذمم الموردين المطلوبة':'Supplier Payables Breakdown',
+      lang==='ar'?`${rows.length} مورد`:`${rows.length} suppliers`,
+      lang==='ar'?['المورد','المطلوب']:['Supplier','Payable'],
+      rows.map(r=>[sanitize(r.name), fmtMoney(r.outstanding)]));
+  }
+}
+
+function exportZakatReportPDF() {
+  const db = getDB(); const s = db.settings||{};
+  const canPickDate = hasPlanFeature('custom_period');
+  const asOf = canPickDate ? zakatAsOfDate : new Date().toISOString().slice(0,10);
+  const { cash, receivables, inventoryVal, payables, zakatBase, zakatDue } = zakatFigures(db, asOf);
+  const nisab = 20908;
+  const rows = [
+    {label:'رصيد الخزينة (النقد)', v:cash},
+    {label:'ذمم العملاء (المستحقة)', v:receivables},
+    {label:'قيمة المخزون (بسعر التكلفة)', v:inventoryVal},
+    {label:'ذمم الموردين (المطلوبة)', v:-payables},
+    {label:'الوعاء الزكوي (صافي الأصول)', v:zakatBase, bold:true},
+  ];
+  const win = window.open('','_blank');
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>تقرير الزكاة</title></head><body>
+  <div class="rpt-header">
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
+    <div><div class="rpt-title">حاسبة الزكاة (تقديرية)</div><div class="rpt-date">كما كان بتاريخ: ${asOf} | طُبع: ${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
+  </div>
+  <table><thead><tr><th>البند</th><th style="text-align:end;">المبلغ (ر.س)</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr${r.bold?' class="total-row"':''}><td style="${r.bold?'font-weight:900;':''}">${r.label}</td><td style="text-align:end;">${r.v>=0?'':'-'}${Math.abs(r.v).toFixed(2)}</td></tr>`).join('')}
+  <tr class="total-row"><td style="font-weight:900;">الزكاة المستحقة (2.5%)</td><td style="text-align:end;font-weight:900;">${zakatDue.toFixed(2)}</td></tr>
+  </tbody></table>
+  <div class="section" style="margin-top:16px;font-size:11px;color:#64748b;">النصاب التقريبي: ${nisab.toFixed(2)} ر.س — هذا حساب تقديري، استشر مختصاً شرعياً لتحديد الزكاة الدقيقة.</div>
+  <div class="footer"><span>يقظ — نظام محاسبي ذكي</span><span>${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</span></div>
+  <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+  win.document.close();
 }
 function printARAPReport(section='all') {
   const db = getDB();
@@ -6294,29 +6469,139 @@ function calcReportData(db, filterFn) {
 let reportPeriod = 'all'; // all, thisMonth, lastMonth, thisYear, custom
 let reportFrom = ''; let reportTo = '';
 
+// فلتر الفترة الموحّد — نستخدمه بالعرض على الشاشة وبتصدير الـ PDF معًا، عشان ما
+// نكرر نفس المنطق بأكثر من مكان وتفوتنا حالة (كان ناقص lastMonth/thisYear بالتصدير)
+function reportPeriodFilterFn(period, from, to) {
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0,7);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,7);
+  const thisYear = String(now.getFullYear());
+  return function(item) {
+    const d = (item.created_at||item.date||'').slice(0,10);
+    if(period==='thisMonth') return d.startsWith(thisMonth);
+    if(period==='lastMonth') return d.startsWith(lastMonth);
+    if(period==='thisYear') return d.startsWith(thisYear);
+    if(period==='custom' && from && to) return d>=from && d<=to;
+    return true;
+  };
+}
+
+function currentReportData() {
+  const db = getDB();
+  const filterFn = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
+  return { db, d: calcReportData(db, reportPeriod==='all'?null:filterFn) };
+}
+
+// نافذة تفصيل عامة (Modal) — تفتح فوق نفس الصفحة بدون ما يفقد المستخدم مكانه
+// بالتقرير، وتعرض جدول العمليات الفعلية اللي كوّنت أي رقم إجمالي بالتقرير
+function showReportDrillDownModal(title, subtitle, columns, rows) {
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:760px;">
+      <div class="modal-head">
+        <h3>${icon('list',18)} ${title}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <div style="padding:0 20px 20px;">
+        ${subtitle?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${subtitle}</div>`:''}
+        <div class="tbl-wrap" style="max-height:60vh;overflow:auto;"><table class="tbl">
+          <thead><tr>${columns.map(cl=>`<th>${cl}</th>`).join('')}</tr></thead>
+          <tbody>${rows.length ? rows.map(r=>`<tr>${r.map(cell=>`<td>${cell}</td>`).join('')}</tr>`).join('') :
+            `<tr><td colspan="${columns.length}" style="text-align:center;padding:28px;color:var(--text-muted);">${lang==='ar'?'لا توجد عمليات ضمن هذا النطاق':'No transactions in this range'}</td></tr>`}</tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function drillVAT(kind) {
+  const { d } = currentReportData();
+  if (kind==='output') {
+    const rows = d.invs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(i.subtotal), fmtMoney(i.vat_total), fmtMoney(i.grand_total)]);
+    showReportDrillDownModal(
+      lang==='ar'?'📈 تفاصيل ضريبة المخرجات (المبيعات)':'Output VAT — Sales Details',
+      lang==='ar'?`${d.invs.length} فاتورة`:`${d.invs.length} invoices`,
+      lang==='ar'?['رقم الفاتورة','التاريخ','العميل','الوعاء','الضريبة','الإجمالي']:['Invoice #','Date','Customer','Base','VAT','Total'],
+      rows);
+  } else if (kind==='input') {
+    const purchs = d.purchs.filter(p=>p.deductible!==false);
+    const rows = purchs.map(p=>[sanitize(p.vendor||''), fmtDate(p.created_at), sanitize(p.description||p.category||''), fmtMoney(p.amount), fmtMoney(p.vat)]);
+    showReportDrillDownModal(
+      lang==='ar'?'📉 تفاصيل ضريبة المدخلات (المشتريات)':'Input VAT — Purchases Details',
+      lang==='ar'?`${purchs.length} عملية`:`${purchs.length} entries`,
+      lang==='ar'?['المورد','التاريخ','البيان','الوعاء','الضريبة']:['Vendor','Date','Description','Base','VAT'],
+      rows);
+  } else if (kind==='net') {
+    showReportDrillDownModal(
+      lang==='ar'?'🧾 كيف احتسبنا صافي الضريبة المستحقة':'How Net VAT Due Was Calculated', '',
+      lang==='ar'?['البند','المبلغ']:['Item','Amount'],
+      [
+        [lang==='ar'?'ضريبة المخرجات':'Output VAT', fmtMoney(d.vatOutput)],
+        [lang==='ar'?'ناقص: ضريبة المدخلات':'Less: Input VAT', '-'+fmtMoney(d.vatInput)],
+        [`<b>${lang==='ar'?'= صافي المستحق':'= Net Due'}</b>`, `<b>${fmtMoney(d.vatNet)}</b>`],
+      ]);
+  }
+}
+
+function drillIncome(kind) {
+  const { d } = currentReportData();
+  if (kind==='revenue') {
+    const rows = d.invs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(i.subtotal)]);
+    showReportDrillDownModal(
+      lang==='ar'?'💰 تفاصيل الإيرادات':'Revenue Details',
+      lang==='ar'?`${d.invs.length} فاتورة`:`${d.invs.length} invoices`,
+      lang==='ar'?['رقم الفاتورة','التاريخ','العميل','المبلغ (بدون ضريبة)']:['Invoice #','Date','Customer','Amount (excl. VAT)'],
+      rows);
+  } else if (kind==='cogs') {
+    const withCogs = d.invs.filter(i=>i.cogs_total>0);
+    const rows = withCogs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(i.cogs_total)]);
+    showReportDrillDownModal(
+      lang==='ar'?'📦 تفاصيل تكلفة البضاعة المباعة':'Cost of Goods Sold Details',
+      lang==='ar'?`${withCogs.length} فاتورة`:`${withCogs.length} invoices`,
+      lang==='ar'?['رقم الفاتورة','التاريخ','العميل','تكلفة البضاعة']:['Invoice #','Date','Customer','COGS'],
+      rows);
+  } else if (kind==='expenses') {
+    const purchs = d.purchs.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods'));
+    const rows = purchs.map(p=>[sanitize(p.vendor||''), fmtDate(p.created_at), sanitize(p.description||p.category||''), fmtMoney(p.amount)]);
+    showReportDrillDownModal(
+      lang==='ar'?'🧾 تفاصيل المصاريف التشغيلية والإدارية':'Operating Expenses Details',
+      lang==='ar'?`${purchs.length} عملية`:`${purchs.length} entries`,
+      lang==='ar'?['الجهة','التاريخ','البيان','المبلغ']:['Vendor','Date','Description','Amount'],
+      rows);
+  } else if (kind==='gross') {
+    showReportDrillDownModal(
+      lang==='ar'?'📊 كيف احتُسب إجمالي الربح':'How Gross Profit Was Calculated', '',
+      lang==='ar'?['البند','المبلغ']:['Item','Amount'],
+      [
+        [lang==='ar'?'الإيرادات':'Revenue', fmtMoney(d.revenue)],
+        [lang==='ar'?'ناقص: تكلفة البضاعة المباعة':'Less: COGS', '-'+fmtMoney(d.cogs)],
+        [`<b>${lang==='ar'?'= إجمالي الربح':'= Gross Profit'}</b>`, `<b>${fmtMoney(d.grossProfit)}</b>`],
+      ]);
+  } else if (kind==='net') {
+    showReportDrillDownModal(
+      lang==='ar'?'📊 كيف احتُسب صافي الربح':'How Net Profit Was Calculated', '',
+      lang==='ar'?['البند','المبلغ']:['Item','Amount'],
+      [
+        [lang==='ar'?'إجمالي الربح':'Gross Profit', fmtMoney(d.grossProfit)],
+        [lang==='ar'?'ناقص: المصاريف التشغيلية':'Less: Operating Expenses', '-'+fmtMoney(d.expenses)],
+        [`<b>${lang==='ar'?'= صافي الربح':'= Net Profit'}</b>`, `<b>${fmtMoney(d.netProfit)}</b>`],
+      ]);
+  }
+}
+
 function renderReportsInner(c) {
   const db = getDB();
 
-  // Period filter
-  const now = new Date();
-  const thisMonth = now.toISOString().slice(0,7);
-  const lastMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  const lastMonth = lastMonthDate.toISOString().slice(0,7);
-  const thisYear = String(now.getFullYear());
-
-  function periodFilter(item) {
-    const d = (item.created_at||item.date||'').slice(0,10);
-    if(reportPeriod==='thisMonth') return d.startsWith(thisMonth);
-    if(reportPeriod==='lastMonth') return d.startsWith(lastMonth);
-    if(reportPeriod==='thisYear') return d.startsWith(thisYear);
-    if(reportPeriod==='custom' && reportFrom && reportTo) return d>=reportFrom && d<=reportTo;
-    return true;
-  }
-
+  const periodFilter = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
   const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
   const {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit} = d;
 
   // Comparison: previous period
+  const now = new Date();
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMonth = lastMonthDate.toISOString().slice(0,7);
   function prevFilter(item) {
     const dt = (item.created_at||item.date||'').slice(0,10);
     if(reportPeriod==='thisMonth') return dt.startsWith(lastMonth);
@@ -6398,9 +6683,9 @@ function renderReportsInner(c) {
     <div id="report-content">
       ${reportTab==='vat'?`
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')}</div><div class="stat-value">${fmtMoney(vatOutput)}</div>${badge(diff(vatOutput,prev?.vatOutput))}</div>
-          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')}</div><div class="stat-value">${fmtMoney(vatInput)}</div>${badge(diff(vatInput,prev?.vatInput))}</div>
-          <div class="stat-card"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')}</div><div class="stat-value">${fmtMoney(vatNet)}</div>${badge(diff(vatNet,prev?.vatNet))}</div>
+          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('output')" title="${lang==='ar'?'اضغط لعرض تفاصيل الفواتير':'Click for invoice details'}"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatOutput)}</div>${badge(diff(vatOutput,prev?.vatOutput))}</div>
+          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('input')" title="${lang==='ar'?'اضغط لعرض تفاصيل المشتريات':'Click for purchase details'}"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatInput)}</div>${badge(diff(vatInput,prev?.vatInput))}</div>
+          <div class="stat-card" style="cursor:pointer;" onclick="drillVAT('net')" title="${lang==='ar'?'اضغط لعرض طريقة الاحتساب':'Click to see calculation'}"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')} ${icon('search',12)}</div><div class="stat-value">${fmtMoney(vatNet)}</div>${badge(diff(vatNet,prev?.vatNet))}</div>
         </div>
         <div class="card" style="margin-top:16px;"><div class="card-pad">
           <div style="font-weight:800;margin-bottom:12px;">📋 ${lang==='ar'?'تفاصيل الفواتير في الفترة':'Invoice Details'}</div>
@@ -6422,13 +6707,13 @@ function renderReportsInner(c) {
       reportTab==='income'&&hasPlanFeature('income_statement')?`
         <div class="card"><div class="card-pad">
           ${[
-            {label:t('revenue'),v:revenue,color:'var(--success)',prev:prev?.revenue},
-            {label:t('cogs'),v:-cogs,color:'var(--danger)',prev:prev?-prev.cogs:null},
-            {label:t('grossProfit'),v:grossProfit,bold:true,prev:prev?.grossProfit},
-            {label:t('expenses'),v:-expenses,color:'var(--danger)',prev:prev?-prev.expenses:null},
-            {label:t('netProfit'),v:netProfit,bold:true,big:true,prev:prev?.netProfit}
-          ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};">
-            <span>${r.label}</span>
+            {label:t('revenue'),v:revenue,color:'var(--success)',prev:prev?.revenue,kind:'revenue'},
+            {label:t('cogs'),v:-cogs,color:'var(--danger)',prev:prev?-prev.cogs:null,kind:'cogs'},
+            {label:t('grossProfit'),v:grossProfit,bold:true,prev:prev?.grossProfit,kind:'gross'},
+            {label:t('expenses'),v:-expenses,color:'var(--danger)',prev:prev?-prev.expenses:null,kind:'expenses'},
+            {label:t('netProfit'),v:netProfit,bold:true,big:true,prev:prev?.netProfit,kind:'net'}
+          ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};cursor:pointer;" onclick="drillIncome('${r.kind}')" title="${lang==='ar'?'اضغط لعرض التفاصيل':'Click for details'}">
+            <span>${r.label} ${icon('search',11)}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               ${r.prev!==null&&r.prev!==undefined?`<span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'السابق:':'Prev:'} ${fmtMoney(Math.abs(r.prev))}</span>`:''}
               ${badge(diff(r.v,r.prev))}
@@ -9956,9 +10241,10 @@ function updatePOStatus(id,status) {
 // ثابتة/رأس مال/أرصدة عملاء وموردين غير مرتبطة بفاتورة. أي كود حساب (حتى لو
 // جديد لم يكن معروفاً مسبقاً) يظهر تلقائياً ضمن فئته بحسب أول رقم بالكود
 // (1=أصول، 2=خصوم، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات).
-function journalAccountBalances(db) {
+function journalAccountBalances(db, asOfDate) {
   const bal = {};
   (db.journal||[]).forEach(entry=>{
+    if (asOfDate && (entry.date||'').slice(0,10) > asOfDate) return;
     (entry.entries||[]).forEach(line=>{
       const code = line.account_code; if(!code) return;
       if(!bal[code]) bal[code] = {debit:0, credit:0, name:line.account};
@@ -9966,6 +10252,22 @@ function journalAccountBalances(db) {
     });
   });
   return bal;
+}
+
+// كل قيود اليومية الخاصة بحساب معيّن حتى تاريخ معيّن — تُستخدم بنافذة التفصيل
+// (drill-down) لميزان المراجعة، عشان يشوف المستخدم أي عمليات كوّنت رصيد الحساب
+function journalLinesForAccount(db, code, asOfDate) {
+  const rows = [];
+  (db.journal||[]).forEach(entry=>{
+    const d = (entry.date||'').slice(0,10);
+    if (asOfDate && d > asOfDate) return;
+    (entry.entries||[]).forEach(line=>{
+      if (line.account_code === code) {
+        rows.push({ date: d, description: entry.description||'', ref: entry.ref||'', side: line.side, amount: parseFloat(line.amount)||0 });
+      }
+    });
+  });
+  return rows.sort((a,b)=>a.date.localeCompare(b.date));
 }
 
 function renderBalanceSheet(c) {
@@ -12356,14 +12658,10 @@ function getPrintStyles() {
 
 function exportVATReportPDF() {
   const db = getDB(); const s = db.settings||{};
-  const now = new Date(); const month = now.getMonth(); const year = now.getFullYear();
-  function periodFilter(item) {
-    if(reportPeriod==='thisMonth') return new Date(item.created_at||item.date).getMonth()===month&&new Date(item.created_at||item.date).getFullYear()===year;
-    if(reportPeriod==='custom'&&reportFrom&&reportTo) { const d=(item.created_at||item.date||'').slice(0,10); return d>=reportFrom&&d<=reportTo; }
-    return true;
-  }
+  const now = new Date();
+  const periodFilter = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
   const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
-  const periodLabels={all:'كل الفترات',thisMonth:'هذا الشهر',lastMonth:'الشهر الماضي',thisYear:'هذه السنة',custom:'فترة مخصصة'};
+  const periodLabels={all:'كل الفترات',thisMonth:'هذا الشهر',lastMonth:'الشهر الماضي',thisYear:'هذه السنة',custom:`${reportFrom} → ${reportTo}`};
   const period = periodLabels[reportPeriod]||'';
 
   const invRows = d.invs.map(i=>`<tr>
@@ -12410,12 +12708,10 @@ function exportVATReportPDF() {
 function exportIncomeStatementPDF() {
   const db = getDB(); const s = db.settings||{};
   const now = new Date();
-  function periodFilter(item) {
-    if(reportPeriod==='thisMonth') { const m=now.getMonth(),y=now.getFullYear(); const d=new Date(item.created_at||item.date); return d.getMonth()===m&&d.getFullYear()===y; }
-    if(reportPeriod==='custom'&&reportFrom&&reportTo) { const d=(item.created_at||item.date||'').slice(0,10); return d>=reportFrom&&d<=reportTo; }
-    return true;
-  }
+  const periodFilter = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
   const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
+  const periodLabels={all:'كل الفترات',thisMonth:'هذا الشهر',lastMonth:'الشهر الماضي',thisYear:'هذه السنة',custom:`${reportFrom} → ${reportTo}`};
+  const period = periodLabels[reportPeriod]||'';
   const rows = [
     {label:'إيرادات المبيعات', value:d.revenue, bold:false, color:'green'},
     {label:'تكلفة البضاعة المباعة (COGS)', value:-d.cogs, bold:false, color:'red'},
@@ -12428,7 +12724,7 @@ function exportIncomeStatementPDF() {
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>قائمة الدخل</title></head><body>
   <div class="rpt-header">
     <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم التجاري: ${s.cr_number||'-'}</div></div>
-    <div><div class="rpt-title">قائمة الدخل — بيان الأرباح والخسائر</div><div class="rpt-date">طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
+    <div><div class="rpt-title">قائمة الدخل — بيان الأرباح والخسائر</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <table><thead><tr><th>البند</th><th style="text-align:end;">المبلغ (ر.س)</th></tr></thead>
   <tbody>${rows.map(r=>`<tr${r.bold?' class="total-row"':''}>
