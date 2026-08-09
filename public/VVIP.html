@@ -2636,6 +2636,47 @@ function updatePOSTotals() {
     </div>`;
 }
 
+// ── تحديث موحّد للذمم المدينة/الدائنة ────────────────────────────────
+// أي عملية تغيّر ما يدين به عميل أو ما هو مستحق لمورد (بيع آجل، شراء آجل،
+// تحصيل، سداد، مرتجع...) يجب أن تمر من هاتين الدالتين فقط. قبل توحيدهما هنا،
+// كان نفس المنطق (تحديث db.customers[].balance/db.suppliers[].balance + إضافة
+// سطر بحساب 1200/2100 بدفتر اليومية) مكرّرًا يدويًا في نحو 8 دوال مختلفة —
+// أي تعديل مستقبلي على أحدها بدون تذكّر تحديث البقية كان يسبب تباعدًا صامتًا
+// بين رصيد العميل الظاهر بصفحته ورصيده الفعلي بميزان المراجعة/الميزانية.
+//
+// journalAmount: المبلغ المُسجَّل بسطر القيد المحاسبي (1200/2100)
+// direction:     'increase' (بيع/شراء آجل جديد يزيد ما هو مدين/مستحق)
+//                أو 'decrease' (تحصيل/سداد/مرتجع يقلّله)
+// balanceAmount: (اختياري) لو المبلغ المؤثر فعليًا على رصيد الطرف يختلف عن
+//                مبلغ القيد نفسه (حالة سند القبض/الصرف اللي يُطبَّق جزئيًا على
+//                فواتير محددة) — افتراضيًا نفس journalAmount
+function postCustomerReceivable(db, jEntries, customerName, journalAmount, direction, balanceAmount) {
+  if (balanceAmount === undefined) balanceAmount = journalAmount;
+  if (balanceAmount) {
+    const cust = db.customers.find(c => c.name === customerName);
+    if (cust) {
+      const next = (cust.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
+      cust.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
+    }
+  }
+  if (journalAmount) {
+    jEntries.push({ account: lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side: direction==='increase'?'debit':'credit', amount: journalAmount });
+  }
+}
+function postSupplierPayable(db, jEntries, supplierName, journalAmount, direction, balanceAmount) {
+  if (balanceAmount === undefined) balanceAmount = journalAmount;
+  if (balanceAmount) {
+    const sup = db.suppliers.find(s => s.name === supplierName);
+    if (sup) {
+      const next = (sup.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
+      sup.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
+    }
+  }
+  if (journalAmount) {
+    jEntries.push({ account: lang==='ar'?'الذمم الدائنة':'Accounts Payable', account_code:'2100', side: direction==='increase'?'credit':'debit', amount: journalAmount });
+  }
+}
+
 function doCheckout() {
   if (blockedByExpiredSubscription()) return;
   if(cart.length===0){showToast(lang==='ar'?'السلة فارغة':'Cart empty','error');return;}
@@ -2680,7 +2721,7 @@ function doCheckout() {
   if(posPayment!=='آجل') {
     jEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:total});
   } else {
-    jEntries.push({account:lang==='ar'?'الذمم المدينة':'Accounts Receivable',account_code:'1200',side:'debit',amount:total});
+    postCustomerReceivable(db, jEntries, inv.customer_name, total, 'increase');
   }
   jEntries.push({account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue',account_code:'4100',side:'credit',amount:afterDisc});
   jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT',account_code:'2200',side:'credit',amount:vat});
@@ -3598,10 +3639,10 @@ function _saveNewInvoiceActual(printAfter) {
   if(!db.nextId.journal)db.nextId.journal=1;
   const invJEntries = [];
   if(payment==='آجل') {
-    invJEntries.push({account:lang==='ar'?'الذمم المدينة':'Accounts Receivable',account_code:'1200',side:'debit',amount:total});
+    postCustomerReceivable(db, invJEntries, inv.customer_name, total, 'increase');
   } else if(payment==='جزئي') {
     if(partialPaid>0) invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:partialPaid});
-    if(total-partialPaid>0) invJEntries.push({account:lang==='ar'?'الذمم المدينة':'Accounts Receivable',account_code:'1200',side:'debit',amount:total-partialPaid});
+    if(total-partialPaid>0) postCustomerReceivable(db, invJEntries, inv.customer_name, total-partialPaid, 'increase');
   } else {
     invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:total});
   }
@@ -3614,13 +3655,6 @@ function _saveNewInvoiceActual(printAfter) {
   db.journal.push({id:db.nextId.journal++,date:new Date(el('ni-date').value).toISOString(),
     description:`فاتورة مبيعات: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:invJEntries, ref:inv.invoice_no});
-
-  // تحديث رصيد العميل بالمبلغ المتبقي (الذمم المدينة)
-  const invRemaining = total - partialPaid;
-  if(invRemaining > 0) {
-    const cust = db.customers.find(c => c.name === inv.customer_name);
-    if(cust) cust.balance = Math.round(((cust.balance||0) + invRemaining) * 100) / 100;
-  }
 
   db.invoices.push(inv); saveDB(db);
   logActivity('مبيعات',`فاتورة ${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
@@ -4299,23 +4333,18 @@ function _saveGoodsPurchaseActual() {
   // — هذا يمنع تضخيم قيمة المخزون بالدفاتر عن الكمية الفعلية الموجودة.
   if(!db.journal)db.journal=[];
   if(!db.nextId.journal)db.nextId.journal=1;
+  const pgEntries = [
+    {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit',account_code:'1350',side:'debit',amount:sub},
+    {account:lang==='ar'?'ضريبة المدخلات':'Input VAT',account_code:'2210',side:'debit',amount:vat},
+  ];
+  if(paidNow>0) pgEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount:paidNow});
+  postSupplierPayable(db, pgEntries, p.vendor, remaining, 'increase');
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`فاتورة شراء بضاعة - ${p.vendor}`,
-    entries:[
-      {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit',account_code:'1350',side:'debit',amount:sub},
-      {account:lang==='ar'?'ضريبة المدخلات':'Input VAT',account_code:'2210',side:'debit',amount:vat},
-      ...(paidNow>0?[{account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount:paidNow}]:[]),
-      ...(remaining>0?[{account:lang==='ar'?'الذمم الدائنة':'Accounts Payable',account_code:'2100',side:'credit',amount:remaining}]:[]),
-    ],
+    entries:pgEntries,
     ref:`PUR-${p.id}`
   });
-
-  // تحديث رصيد المورد بالمبلغ المتبقي (الذمم الدائنة)
-  if(remaining > 0) {
-    const sup = db.suppliers.find(s => s.name === p.vendor);
-    if(sup) sup.balance = Math.round(((sup.balance||0) + remaining) * 100) / 100;
-  }
 
   saveDB(db);
   logActivity('مشتريات',`فاتورة بضاعة من ${p.vendor} — ${fmtMoney(total)} — ${status}`);
@@ -8277,14 +8306,9 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
       left = Math.round((left-applying)*100)/100;
       logActivity('مبيعات', `تحديث فاتورة ${inv.invoice_no} من "${prevStatus}" إلى "${inv.status}" — سند ${voucher.voucher_no}`);
     }
-    // تحديث رصيد العميل
-    const _applied = amount - left;
-    voucher.applied_amount = _applied;
+    // المبلغ الفعلي المطبَّق على فواتير حقيقية (قد يقل عن amount لو تجاوز ما هو مستحق)
+    voucher.applied_amount = amount - left;
     voucher.applied_invoices = appliedInvoices;
-    const _vCust = db.customers.find(c=>c.name===party);
-    if(_vCust) {
-      _vCust.balance = Math.max(0, Math.round((((_vCust.balance)||0) - _applied)*100)/100);
-    }
   }
 
   // 2b. تطبيق سند الصرف على مشتريات المورد
@@ -8310,45 +8334,38 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
       left = Math.round((left-applying)*100)/100;
       logActivity('مشتريات', `تحديث مشتريات ${pur.vendor} — المتبقي: ${fmtMoney(pur.remaining_amount)}`);
     }
-    // تحديث رصيد المورد
-    const _applied = amount - left;
-    voucher.applied_amount = _applied;
+    // المبلغ الفعلي المطبَّق على مشتريات حقيقية (قد يقل عن amount لو تجاوز ما هو مستحق)
+    voucher.applied_amount = amount - left;
     voucher.applied_purchases = appliedPurchases;
-    const _vSup = db.suppliers.find(s=>s.name===party);
-    if(_vSup) {
-      _vSup.balance = Math.max(0, Math.round((((_vSup.balance)||0) - _applied)*100)/100);
-    }
   }
 
   // 3. Record accounting entry
   if(!db.journal) db.journal=[];
   if(isReceipt) {
-    // Dr. Cash / Cr. Accounts Receivable
+    // Dr. Cash / Cr. Accounts Receivable — القيد بكامل مبلغ السند المُستلم فعليًا
+    // نقدًا، بينما رصيد العميل ينخفض فقط بالمبلغ المُطبَّق حقًا على فواتيره
+    // (voucher.applied_amount) — قد يقل عن amount لو تجاوز السند ما هو مستحق عليه
+    const rcvEntries = [{ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount }];
+    postCustomerReceivable(db, rcvEntries, voucher.party, amount, 'decrease', voucher.applied_amount);
     db.journal.push({
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
-      entries: [
-        { account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit',  amount },
-        { account: lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side:'credit', amount }
-      ],
+      entries: rcvEntries,
       ref: voucher.voucher_no
     });
   } else {
-    // Dr. Accounts Payable / Cr. Cash
+    // Dr. Accounts Payable / Cr. Cash — نفس المبدأ بالعكس
+    const payEntries = [];
+    postSupplierPayable(db, payEntries, voucher.party, amount, 'decrease', voucher.applied_amount);
+    payEntries.push({ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount });
     db.journal.push({
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند صرف ${voucher.voucher_no} — ${voucher.party}`,
-      entries: [
-        { account: lang==='ar'?'الذمم الدائنة':'Accounts Payable', account_code:'2100', side:'debit',  amount },
-        { account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount }
-      ],
+      entries: payEntries,
       ref: voucher.voucher_no
     });
   }
   db.nextId.journal = (db.nextId.journal||1)+1;
-
-  // ملاحظة: رصيد العميل/المورد يُحدَّث مسبقاً أعلاه (الخطوة 2/2ب) أثناء تطبيق
-  // السند على الفواتير/المشتريات الفعلية — لا نكرر الخصم هنا مرة ثانية.
 
   saveDB(db);
   logActivity('سندات', `${isReceipt?'سند قبض':'سند صرف'} ${voucher.voucher_no} — ${voucher.party} — ${fmtMoney(amount)}`);
@@ -8792,17 +8809,6 @@ function _saveReturnActual(type, amount, linkedId) {
     });
   }
 
-  // 1ب. أثر رصيد العميل/المورد — فقط على الجزء الآجل غير المسدد (يقلل ما هو مديون/مستحق له فيه)
-  if (creditPortion>0) {
-    if (isSales) {
-      const cust=db.customers.find(c=>c.name===ret.party);
-      if (cust) cust.balance=Math.round((Math.max(0,(cust.balance||0)-creditPortion))*100)/100;
-    } else {
-      const sup=db.suppliers.find(s=>s.name===ret.party);
-      if (sup) sup.balance=Math.round((Math.max(0,(sup.balance||0)-creditPortion))*100)/100;
-    }
-  }
-
   // 2. Stock effect: sales return → stock IN (تُعاد للمخزون بتكلفتها الحالية)
   //    purchase return → stock OUT (تخرج من المخزون بأسلوب FIFO)
   let returnCogsReversal = 0;
@@ -8844,7 +8850,7 @@ function _saveReturnActual(type, amount, linkedId) {
       {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'debit', amount:vat},
     ];
     if(cashPortion>0) salesRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:cashPortion});
-    if(creditPortion>0) salesRetEntries.push({account:lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side:'credit', amount:creditPortion});
+    postCustomerReceivable(db, salesRetEntries, ret.party, creditPortion, 'decrease');
     if(returnCogsReversal>0) {
       // البضاعة رجعت للمخزون → نعكس جزء من تكلفة البضاعة المباعة الأصلية
       salesRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:returnCogsReversal});
@@ -8869,7 +8875,7 @@ function _saveReturnActual(type, amount, linkedId) {
     // Purchase return: Dr. Cash (الجزء المسدد) و/أو Dr. الذمم الدائنة (الجزء الآجل) / Cr. Purchase Returns & Cr. Input VAT
     const purRetEntries = [];
     if(cashPortion>0) purRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
-    if(creditPortion>0) purRetEntries.push({account:lang==='ar'?'الذمم الدائنة':'Accounts Payable', account_code:'2100', side:'debit', amount:creditPortion});
+    postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease');
     purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
     purRetEntries.push({account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'credit', amount:vat});
     db.journal.push({
@@ -9339,9 +9345,10 @@ function convertQuoteToInvoice(id) {
   if(!db.journal) db.journal=[];
   if(!db.nextId.journal) db.nextId.journal=1;
   const jEntries=[
-    {account:lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side:'debit', amount:inv.grand_total},
     {account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue', account_code:'4100', side:'credit', amount:inv.subtotal},
   ];
+  // رصيد العميل والقيد المحاسبي معًا — يرتفعان بكامل قيمة الفاتورة لأنها آجل بالكامل ولا شيء مسدد
+  postCustomerReceivable(db, jEntries, inv.customer_name, inv.grand_total, 'increase');
   if(inv.vat_total>0) jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT', account_code:'2200', side:'credit', amount:inv.vat_total});
   if(inv.cogs_total>0) {
     jEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount:inv.cogs_total});
@@ -9350,10 +9357,6 @@ function convertQuoteToInvoice(id) {
   db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(),
     description:`فاتورة من تحويل عرض سعر: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:jEntries, ref:inv.invoice_no});
-
-  // رصيد العميل — يرتفع بكامل قيمة الفاتورة لأنها آجل بالكامل ولا شيء مسدد
-  const cust=db.customers.find(c=>c.name===inv.customer_name);
-  if(cust) cust.balance=Math.round(((cust.balance||0)+inv.grand_total)*100)/100;
 
   db.invoices.push(inv);
   q.status='مقبول'; q.converted_to=inv.invoice_no;
@@ -12168,20 +12171,15 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
 
   // Journal entry
   if(!db.journal) db.journal=[];
+  const qrEntries = [{account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount}];
+  postCustomerReceivable(db, qrEntries, inv.customer_name, amount, 'decrease');
   db.journal.push({
     id: (db.nextId.journal||1), date: new Date().toISOString(),
     description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
-    entries:[
-      {account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount},
-      {account:lang==='ar'?'الذمم المدينة':'Accounts Receivable',account_code:'1200',side:'credit',amount}
-    ],
+    entries: qrEntries,
     ref: voucher.voucher_no
   });
   db.nextId.journal = (db.nextId.journal||1)+1;
-
-  // تحديث رصيد العميل
-  const qrCust = db.customers.find(c => c.name === inv.customer_name);
-  if(qrCust) qrCust.balance = Math.round((Math.max(0, (qrCust.balance||0) - amount)) * 100) / 100;
 
   saveDB(db);
   logActivity('سندات',`تحصيل فاتورة ${inv.invoice_no} — ${fmtMoney(amount)} — الحالة: ${inv.status}`);
@@ -12281,19 +12279,15 @@ function saveQuickPayPurchase(purchaseId) {
   }
   p.last_payment_date = new Date().toISOString();
 
-  // تحديث رصيد المورد
-  const sup = db.suppliers.find(s=>s.name===p.vendor);
-  if(sup) sup.balance = Math.round((Math.max(0,(sup.balance||0)-amount))*100)/100;
-
   // قيد محاسبي
   if(!db.journal) db.journal=[];
+  const qppEntries = [];
+  postSupplierPayable(db, qppEntries, p.vendor, amount, 'decrease');
+  qppEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount});
   db.journal.push({
     id:(db.nextId.journal||1), date:new Date().toISOString(),
     description:`سند صرف ${voucher.voucher_no} — ${p.vendor}`,
-    entries:[
-      {account:lang==='ar'?'الذمم الدائنة':'Accounts Payable',account_code:'2100',side:'debit',amount},
-      {account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount}
-    ],
+    entries: qppEntries,
     ref:voucher.voucher_no
   });
   db.nextId.journal=(db.nextId.journal||1)+1;
