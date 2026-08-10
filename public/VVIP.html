@@ -3388,7 +3388,10 @@ function saveQuickCustomer() {
   const name = el('qc-name')?.value?.trim();
   if(!name){showToast(lang==='ar'?'الاسم مطلوب':'Name required','error');return;}
   const db=getDB();
-  if(db.customers.find(c=>c.name===name)){showToast(lang==='ar'?'العميل موجود مسبقاً':'Customer already exists','error');return;}
+  if(db.customers.find(c=>c.is_active!==false && (c.name||'').trim().toLowerCase()===name.toLowerCase())){
+    showToast(lang==='ar'?`⚠️ عميل بهذا الاسم "${name}" موجود مسبقًا — اختره من القائمة بدل إضافته من جديد`:`⚠️ A customer named "${name}" already exists — pick them from the list instead`,'error');
+    return;
+  }
   const newCust = {id:nextId(db,'customer'), name, phone:el('qc-phone')?.value||'', vat_num:el('qc-vat')?.value||'', balance:0};
   db.customers.push(newCust);
   saveDB(db);
@@ -5191,7 +5194,24 @@ function saveEntity(type) {
   if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const isCustomer = type==='customer';
-  const data = { id:nextId(db,type), name:el('ent-name').value, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
+  const name = (el('ent-name').value||'').trim();
+  if(!name) { showToast(lang==='ar'?'الاسم مطلوب':'Name required','error'); return; }
+
+  // منع تكرار نفس الاسم لعميل/مورد نشط — بدون هذا الفحص، إضافة نفس الاسم
+  // مرتين تُنشئ سجلّين منفصلين تمامًا (رصيد وسجل مشتريات/مبيعات كل واحد
+  // مستقل عن الآخر)، فتسديد أحدهما لا يؤثر إطلاقًا على الآخر رغم ظهورهما
+  // بنفس الاسم — يبدو للمستخدم وكأن السداد "ما أثّر بشيء"
+  const list = isCustomer ? db.customers : db.suppliers;
+  const dup = list.find(x => x.is_active!==false && (x.name||'').trim().toLowerCase()===name.toLowerCase());
+  if (dup) {
+    showToast(lang==='ar'
+      ? `⚠️ ${isCustomer?'عميل':'مورد'} بهذا الاسم "${name}" موجود مسبقًا. لفتح حساب جديد منفصل بنفس الاسم، عطّل الحساب الحالي أولًا من قائمة ${isCustomer?'العملاء':'الموردين'}.`
+      : `⚠️ A ${isCustomer?'customer':'supplier'} named "${name}" already exists. To open a separate new account with the same name, deactivate the existing one first.`,
+      'error');
+    return;
+  }
+
+  const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
   if(isCustomer) db.customers.push(data); else db.suppliers.push(data);
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
   if(isCustomer) renderCusContent();
@@ -8703,6 +8723,11 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
   showToast(msg);
   closeModal();
   if(printAfter) printVoucher(voucher.id);
+  // بدون هذا، لو كان المستخدم واقف على تبويب "سندات القبض" وأنشأ سند صرف
+  // (أو العكس)، الصفحة تُحدَّث فعليًا بالخلفية لكن يبقى التبويب المعروض
+  // مفلترًا على النوع الآخر — يبدو للمستخدم وكأن السند لم يُحفظ إطلاقًا رغم
+  // أنه محفوظ ومتزامن بشكل صحيح
+  receiptTab = isReceipt ? 'receipt' : 'payment';
   renderPage();
 }
 
