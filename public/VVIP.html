@@ -1051,7 +1051,7 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   [],
-  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant','bank_statement'],
+  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','bank_recon','ai_extract','ai_analyze','ai_assistant','bank_statement'],
   pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement'],
   expired: [],
 };
@@ -6958,29 +6958,77 @@ function renderSuppliersReport(db) {
 // ── Bank Reconciliation ──
 // نقارن حركات الشبكة (البطاقة) المسجلة بالنظام خلال فترة محددة مع إجمالي
 // كشف الحساب البنكي لنفس الفترة — مو رصيد الخزينة الكامل (نقدي+شبكة مجتمعين)
-function renderBankRecon(db) {
-  const saved = JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
-  const today = new Date().toISOString().slice(0,10);
-  const from  = saved.from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
-  const to    = saved.to   || today;
-  const bankNetworkTotal = Number(saved.bankNetworkTotal||0);
-  const adjs  = saved.adjustments||[];
+// تسوية البنك تُخزَّن الآن داخل db نفسه (متزامنة مع السيرفر ومعزولة لكل شركة)
+// بدل مفتاح localStorage عام واحد كان يُستخدم بغض النظر عن الشركة المسجَّل
+// دخولها — يعني بيانات تسوية شركتين مختلفتين بنفس المتصفح كانت تتداخل مع
+// بعض، وما كانت تتزامن لأي جهاز ثاني إطلاقاً. أول تحميل يهاجر أي بيانات
+// قديمة محفوظة بالطريقة السابقة تلقائيًا حتى لا يفقدها من كان يستخدمها.
+function getBankRecon(db) {
+  if (!db.bank_recon) {
+    let legacy = null;
+    try { legacy = JSON.parse(localStorage.getItem('yaqiz_bank')||'null'); } catch(e) {}
+    db.bank_recon = legacy
+      ? { from: legacy.from||'', to: legacy.to||'', bankNetworkTotal: legacy.bankNetworkTotal||0, adjustments: legacy.adjustments||[], importedLines: null }
+      : { from:'', to:'', bankNetworkTotal:0, adjustments:[], importedLines:null };
+  }
+  if (db.bank_recon.importedLines === undefined) db.bank_recon.importedLines = null;
+  return db.bank_recon;
+}
 
-  // كل حركات "شبكة" فقط (تستثني النقدي) ضمن الفترة المحددة
-  const moves = (db.treasury.moves||[]).filter(m=>{
-    if(m.method!=='شبكة') return false;
+// حركات الخزينة اللي فعليًا تمر على حساب البنك (نفس نطاق "الكشف البنكي"
+// بصفحة الكشوفات — شبكة وتحويل بنكي، لا نقدي)
+function bankMoves(db, from, to) {
+  // isBankTreasuryMethod تغطي كل صيغ طريقة الدفع البنكية الموجودة فعليًا
+  // بالنظام (شبكة/تحويل/تحويل بنكي/شيك...) — نموذج فاتورة المبيعات تحديدًا
+  // يخزّن "تحويل" فقط (بدون كلمة بنكي) بعكس بقية الشاشات، فلو قارنّا بسلسلة
+  // نصية ثابتة زي "تحويل بنكي" فقط، فواتير المبيعات المدفوعة تحويلًا بنكيًا
+  // كانت تختفي بالكامل من التسوية بصمت
+  return (db.treasury.moves||[]).filter(m=>{
+    if (!isBankTreasuryMethod(m.method)) return false;
     const d=(m.date||'').slice(0,10);
     return d>=from && d<=to;
   });
+}
+
+// مطابقة تلقائية بين سطور كشف الحساب المستورد وحركات النظام: نفس النوع
+// (وارد/صادر)، نفس المبلغ بالضبط، وفرق تاريخ لا يتجاوز 3 أيام (تغطي فرق
+// توقيت تسوية الشبكة المعتاد بين البيع والإيداع الفعلي بالبنك)
+function matchBankLines(importedLines, sysMoves) {
+  const DATE_TOLERANCE_DAYS = 3;
+  const dayDiff = (a,b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
+  const pool = sysMoves.map(m=>({...m, _matched:false}));
+  const results = importedLines.map(line => {
+    const wantType = line.credit>0 ? 'in' : 'out';
+    const wantAmount = line.credit>0 ? line.credit : line.debit;
+    let best=null, bestDiff=Infinity;
+    for (const m of pool) {
+      if (m._matched || m.type!==wantType) continue;
+      if (Math.abs(m.amount-wantAmount) > 0.01) continue;
+      const diff = dayDiff(m.date, line.date);
+      if (diff<=DATE_TOLERANCE_DAYS && diff<bestDiff) { best=m; bestDiff=diff; }
+    }
+    if (best) { best._matched=true; return {...line, status:'matched', systemMove:best}; }
+    return {...line, status:'bank_only'};
+  });
+  const systemOnly = pool.filter(m=>!m._matched);
+  return { results, systemOnly };
+}
+
+function renderBankRecon(db) {
+  const isNewBR = !db.bank_recon;
+  const br = getBankRecon(db);
+  if (isNewBR) saveDB(db);
+
+  const today = new Date().toISOString().slice(0,10);
+  const from  = br.from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const to    = br.to   || today;
+
+  const moves = bankMoves(db, from, to);
   const systemIn  = moves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0);
   const systemOut = moves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0);
   const systemNet = Math.round((systemIn-systemOut)*100)/100;
 
-  const adjTotal = adjs.filter(a=>a.type==='add').reduce((s,a)=>s+a.amount,0)-adjs.filter(a=>a.type==='sub').reduce((s,a)=>s+a.amount,0);
-  const adjustedBank = Math.round((bankNetworkTotal+adjTotal)*100)/100;
-  const finalDiff = Math.round((systemNet-adjustedBank)*100)/100;
-
-  return `<div>
+  const periodHeader = `
     <div class="card" style="margin-bottom:16px;"><div class="card-pad">
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'من تاريخ':'From'}</label><input class="input" type="date" id="br-from" value="${from}" /></div>
@@ -6988,11 +7036,87 @@ function renderBankRecon(db) {
       </div>
       <button class="btn btn-primary" style="margin-top:10px;" onclick="setBankReconPeriod()">${lang==='ar'?'تطبيق الفترة':'Apply Period'}</button>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">${lang==='ar'?'حدّد نفس الفترة الموجودة في كشف الحساب البنكي اللي جبته من البنك (مثلاً من 1 إلى 30 من الشهر).':'Match the exact period shown on your bank statement.'}</p>
+    </div></div>`;
+
+  // ── وضع الاستيراد التلقائي: فيه كشف حساب مستورد لهذي الفترة ──
+  if (br.importedLines && br.importedLines.length) {
+    const { results, systemOnly } = matchBankLines(br.importedLines, moves);
+    const importedBankNet = Math.round(br.importedLines.reduce((s,l)=>s+(l.credit||0)-(l.debit||0),0)*100)/100;
+    const finalDiff = Math.round((systemNet-importedBankNet)*100)/100;
+    const matchedCount = results.filter(r=>r.status==='matched').length;
+    const bankOnly = results.filter(r=>r.status==='bank_only');
+
+    return `<div>
+      ${periodHeader}
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+        <div class="stat-card"><div class="stat-icon blue">${icon('credit-card',22)}</div><div class="stat-label">${lang==='ar'?'حركات البنك بالنظام (الفترة)':'System Bank Moves (Period)'}</div><div class="stat-value">${fmtMoney(systemNet)}</div></div>
+        <div class="stat-card"><div class="stat-icon">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'صافي كشف الحساب المستورد':'Imported Statement Net'}</div><div class="stat-value">${fmtMoney(importedBankNet)}</div></div>
+        <div class="stat-card" style="border-color:${Math.abs(finalDiff)<0.01?'var(--success)':'var(--danger)'};">
+          <div class="stat-icon ${Math.abs(finalDiff)<0.01?'green':'red'}">${icon(Math.abs(finalDiff)<0.01?'check-circle':'alert-triangle',22)}</div>
+          <div class="stat-label">${lang==='ar'?'الفرق':'Difference'}</div>
+          <div class="stat-value" style="color:${Math.abs(finalDiff)<0.01?'var(--success)':'var(--danger)'};">${fmtMoney(Math.abs(finalDiff))}</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;"><div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div style="font-weight:800;">📄 ${lang==='ar'?`تمت مطابقة ${matchedCount} من ${results.length} سطر تلقائيًا (فرق تاريخ حتى 3 أيام)`:`Auto-matched ${matchedCount} of ${results.length} lines (up to 3 days tolerance)`}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="showBankStatementImport()">${icon('upload',14)} ${lang==='ar'?'استيراد كشف جديد':'Import New Statement'}</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="clearBankImport()">${icon('trash-2',14)} ${lang==='ar'?'حذف الاستيراد':'Clear Import'}</button>
+        </div>
+      </div></div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><h3>⚠️ ${lang==='ar'?`موجودة بكشف البنك ولم تُسجَّل بالنظام (${bankOnly.length})`:`In bank statement, not in system (${bankOnly.length})`}</h3></div>
+        ${bankOnly.length===0?`<div class="empty" style="padding:16px;"><div class="empty-icon">✅</div>${lang==='ar'?'لا يوجد — كل سطور كشف الحساب تطابقت':'None — every statement line matched'}</div>`:
+        `<div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th></tr></thead>
+          <tbody>${bankOnly.map(r=>`<tr>
+            <td style="font-size:12px;">${fmtDate(r.date)}</td>
+            <td>${sanitize(r.description)||'—'}</td>
+            <td style="font-weight:700;color:${r.credit>0?'var(--success)':'var(--danger)'};">${r.credit>0?'+':'-'}${fmtMoney(r.credit>0?r.credit:r.debit)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <div style="padding:10px 14px;font-size:11px;color:var(--text-muted);">${lang==='ar'?'الأسباب المحتملة: رسوم بنكية، إيداع لم يُسجَّل بالنظام، أو فرق توقيت أكبر من 3 أيام.':'Possible: bank fees, an unrecorded deposit, or a timing gap over 3 days.'}</div>`}
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>⏳ ${lang==='ar'?`مسجلة بالنظام ولم تظهر بكشف البنك بعد (${systemOnly.length})`:`In system, not yet on bank statement (${systemOnly.length})`}</h3></div>
+        ${systemOnly.length===0?`<div class="empty" style="padding:16px;"><div class="empty-icon">✅</div>${lang==='ar'?'لا يوجد — كل حركات النظام ظهرت بالكشف':'None — every system move appeared on the statement'}</div>`:
+        `<div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th></tr></thead>
+          <tbody>${systemOnly.map(m=>`<tr>
+            <td style="font-size:12px;">${fmtDate(m.date)}</td>
+            <td>${sanitize(m.description)||'—'}</td>
+            <td style="font-weight:700;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${fmtMoney(m.amount)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <div style="padding:10px 14px;font-size:11px;color:var(--text-muted);">${lang==='ar'?'الأسباب المحتملة: عملية معلّقة لم تُسوَّى بالبنك بعد، أو خارج فترة كشف الحساب المستورد.':'Possible: still pending settlement, or outside the imported statement range.'}</div>`}
+      </div>
+    </div>`;
+  }
+
+  // ── الوضع اليدوي (لا يوجد كشف مستورد لهذي الفترة) ──
+  const bankNetworkTotal = Number(br.bankNetworkTotal||0);
+  const adjs  = br.adjustments||[];
+  const adjTotal = adjs.filter(a=>a.type==='add').reduce((s,a)=>s+a.amount,0)-adjs.filter(a=>a.type==='sub').reduce((s,a)=>s+a.amount,0);
+  const adjustedBank = Math.round((bankNetworkTotal+adjTotal)*100)/100;
+  const finalDiff = Math.round((systemNet-adjustedBank)*100)/100;
+
+  return `<div>
+    ${periodHeader}
+
+    <div class="card" style="margin-bottom:16px;background:var(--primary-soft);"><div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-weight:800;margin-bottom:2px;">📥 ${lang==='ar'?'عندك كشف حساب من البنك؟':'Have a statement from the bank?'}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'ارفعه وخلّ النظام يطابق كل سطر تلقائيًا بدل كتابة رقم إجمالي يدويًا.':'Upload it and let the system auto-match every line instead of typing one manual total.'}</div>
+      </div>
+      <button class="btn btn-primary" onclick="showBankStatementImport()">${icon('upload',16)} ${lang==='ar'?'استيراد كشف حساب بنكي':'Import Bank Statement'}</button>
     </div></div>
 
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
-      <div class="stat-card"><div class="stat-icon blue">${icon('credit-card',22)}</div><div class="stat-label">${lang==='ar'?'مبيعات شبكة بالنظام (الفترة)':'System Network Sales (Period)'}</div><div class="stat-value">${fmtMoney(systemNet)}</div></div>
-      <div class="stat-card"><div class="stat-icon">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'شبكة حسب كشف البنك (معدّل)':'Bank Statement Network (Adjusted)'}</div><div class="stat-value">${fmtMoney(adjustedBank)}</div></div>
+      <div class="stat-card"><div class="stat-icon blue">${icon('credit-card',22)}</div><div class="stat-label">${lang==='ar'?'حركات البنك بالنظام (الفترة)':'System Bank Moves (Period)'}</div><div class="stat-value">${fmtMoney(systemNet)}</div></div>
+      <div class="stat-card"><div class="stat-icon">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'حسب كشف البنك (معدّل يدويًا)':'Per Bank Statement (Manual, Adjusted)'}</div><div class="stat-value">${fmtMoney(adjustedBank)}</div></div>
       <div class="stat-card" style="border-color:${Math.abs(finalDiff)<0.01?'var(--success)':'var(--danger)'};">
         <div class="stat-icon ${Math.abs(finalDiff)<0.01?'green':'red'}">${icon(Math.abs(finalDiff)<0.01?'check-circle':'alert-triangle',22)}</div>
         <div class="stat-label">${lang==='ar'?'الفرق':'Difference'}</div>
@@ -7003,17 +7127,17 @@ function renderBankRecon(db) {
     <div class="card" style="margin-bottom:16px;"><div class="card-pad">
       <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
         <div style="flex:1;min-width:200px;">
-          <label class="form-label">🏦 ${lang==='ar'?'إجمالي مبيعات الشبكة حسب كشف الحساب البنكي لهذه الفترة:':'Total network sales per bank statement for this period:'}</label>
+          <label class="form-label">🏦 ${lang==='ar'?'إجمالي حركات البنك حسب كشف الحساب لهذه الفترة (يدويًا):':'Total bank moves per statement for this period (manual):'}</label>
           <input class="input" type="number" id="bank-bal-input" value="${bankNetworkTotal}" />
         </div>
         <button class="btn btn-primary" onclick="saveBankBalance()">${lang==='ar'?'تحديث':'Update'}</button>
       </div>
       <div style="margin-top:12px;background:${Math.abs(finalDiff)<0.01?'#dcfce7':'#fee2e2'};padding:12px;border-radius:10px;font-weight:700;">
         ${Math.abs(finalDiff)<0.01
-          ?`✅ ${lang==='ar'?'مبيعات الشبكة متطابقة مع كشف الحساب لهذه الفترة':'Network sales match the bank statement for this period'}`
-          :`⚠️ ${lang==='ar'?`فرق ${fmtMoney(Math.abs(finalDiff))}`:`Difference: ${fmtMoney(Math.abs(finalDiff))}`} — ${lang==='ar'?'الأسباب المحتملة: عملية لم تُسوَّى بالبنك بعد، رسوم شبكة، أو فرق توقيت بين تاريخ العملية وتاريخ الإيداع':'Possible: pending settlement, network fees, or timing mismatch'}`}
+          ?`✅ ${lang==='ar'?'حركات البنك متطابقة مع كشف الحساب لهذه الفترة':'Bank moves match the statement for this period'}`
+          :`⚠️ ${lang==='ar'?`فرق ${fmtMoney(Math.abs(finalDiff))}`:`Difference: ${fmtMoney(Math.abs(finalDiff))}`} — ${lang==='ar'?'الأسباب المحتملة: عملية لم تُسوَّى بالبنك بعد، رسوم بنكية، أو فرق توقيت بين تاريخ العملية وتاريخ الإيداع':'Possible: pending settlement, bank fees, or timing mismatch'}`}
       </div>
-      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">${lang==='ar'?`عدد عمليات الشبكة بالنظام لهذه الفترة: ${moves.length}`:`Network transactions in system for this period: ${moves.length}`}</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">${lang==='ar'?`عدد حركات البنك بالنظام لهذه الفترة: ${moves.length}`:`Bank transactions in system for this period: ${moves.length}`}</div>
     </div></div>
 
     <div class="card">
@@ -7040,17 +7164,17 @@ function setBankReconPeriod() {
   const from=el('br-from')?.value, to=el('br-to')?.value;
   if(!from||!to){showToast(lang==='ar'?'حدد الفترة كاملة':'Select full period','error');return;}
   if(from>to){showToast(lang==='ar'?'تاريخ البداية بعد تاريخ النهاية':'From date is after to date','error');return;}
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
-  saved.from=from; saved.to=to;
-  localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
-  renderPage();
+  const db=getDB(); const br=getBankRecon(db);
+  br.from=from; br.to=to;
+  saveDB(db); renderPage();
 }
 
 function saveBankBalance() {
   if (blockedByExpiredSubscription()) return;
   const val=Number(el('bank-bal-input')?.value||0);
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
-  saved.bankNetworkTotal=val; localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
+  const db=getDB(); const br=getBankRecon(db);
+  br.bankNetworkTotal=val;
+  saveDB(db);
   showToast(`✅ ${lang==='ar'?'تم تحديث رصيد البنك':'Updated'}`); renderPage();
 }
 
@@ -7079,20 +7203,210 @@ function addBankAdjustment() {
 
 function saveBankAdj() {
   if (blockedByExpiredSubscription()) return;
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
+  const db=getDB(); const br=getBankRecon(db);
   const desc=el('ba-desc')?.value; const amount=Number(el('ba-amount')?.value||0);
   const date=el('ba-date')?.value || new Date().toISOString().slice(0,10);
   if(!desc||!amount){showToast(lang==='ar'?'البيانات مطلوبة':'Required','error');return;}
-  if(!saved.adjustments)saved.adjustments=[];
-  saved.adjustments.push({desc,amount,type:el('ba-type').value,date});
-  localStorage.setItem('yaqiz_bank',JSON.stringify(saved));
+  if(!br.adjustments)br.adjustments=[];
+  br.adjustments.push({desc,amount,type:el('ba-type').value,date});
+  saveDB(db);
   showToast(`✅ ${lang==='ar'?'تم':'Done'}`); closeModal(); renderPage();
 }
 
 function removeBankAdj(idx) {
-  const saved=JSON.parse(localStorage.getItem('yaqiz_bank')||'{}');
-  saved.adjustments.splice(idx,1);
-  localStorage.setItem('yaqiz_bank',JSON.stringify(saved)); renderPage();
+  const db=getDB(); const br=getBankRecon(db);
+  br.adjustments.splice(idx,1);
+  saveDB(db); renderPage();
+}
+
+// ============ BANK STATEMENT IMPORT + AUTO-MATCHING ============
+function showBankStatementImport() {
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>📥 ${lang==='ar'?'استيراد كشف حساب بنكي':'Import Bank Statement'}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <div style="padding:0 4px 8px;display:flex;flex-direction:column;gap:12px;">
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 4px;">
+          ${lang==='ar'?'ارفع كشف حسابك بأي صيغة عندك — النظام يقرأه ويطابق كل حركة تلقائيًا مع حركات النظام، بدون ما تنسخ أي شيء يدويًا.':'Upload your statement in whatever format you have — the system reads it and auto-matches every transaction against system records, no manual copying needed.'}
+        </p>
+
+        <label class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;cursor:pointer;border-color:#6366f1;color:#6366f1;">
+          <span style="font-size:28px;line-height:1;">🤖</span>
+          <span>
+            <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع PDF أو صورة للكشف':'Upload Statement PDF or Photo'}</span>
+            <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'يقرأه الذكاء الاصطناعي تلقائيًا — نفس الميزة المستخدمة لتفريغ الفواتير':'Read automatically by AI — same feature used for invoice extraction'}</span>
+          </span>
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleBankStatementAIImport(this)" />
+        </label>
+
+        <label class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;cursor:pointer;border-color:#3b82f6;color:#3b82f6;">
+          <span style="font-size:28px;line-height:1;">📤</span>
+          <span>
+            <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع ملف Excel/CSV جاهز من البنك':'Upload Excel/CSV Straight From Bank'}</span>
+            <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'لو البنك يصدّره جاهز — يُقرأ مباشرة بدون ذكاء اصطناعي':'If your bank exports one directly — read instantly, no AI needed'}</span>
+          </span>
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleBankStatementImport(this)" />
+        </label>
+
+        <button onclick="downloadBankStatementTemplate()" class="btn btn-outline btn-sm" style="align-self:flex-start;color:var(--text-muted);border-color:var(--border);">
+          ${icon('download',13)} ${lang==='ar'?'أو حمّل نموذج فارغ لتعبئته يدويًا':'Or download a blank template to fill manually'}
+        </button>
+
+        <div id="bank-import-status"></div>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function handleBankStatementAIImport(input) {
+  const file = input.files[0]; if(!file) return;
+  const status = el('bank-import-status');
+  if(status) status.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);">🤖 ${lang==='ar'?'جاري قراءة الكشف بالذكاء الاصطناعي... قد يستغرق بضع ثوانٍ':'Reading statement with AI... this may take a few seconds'}</div>`;
+
+  const isPDF = file.type==='application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const base64 = String(e.target.result).split(',')[1] || '';
+      const token = localStorage.getItem('yaqiz_access_token');
+      if (!token) throw new Error(lang==='ar'?'يجب تسجيل الدخول عبر الخادم':'Server login required');
+      const base = (window._YAQIZ_API || '').replace(/\/$/, '');
+      const body = isPDF ? { pdf_base64: base64 } : { image_base64: base64, mime_type: file.type || 'image/jpeg' };
+      const controller = new AbortController();
+      const timer = setTimeout(()=>controller.abort(), 60000);
+      const res = await fetch(`${base}/api/ai/extract-bank-statement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const data = await res.json();
+      if (!data.success) {
+        if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${sanitize(data.message||(lang==='ar'?'فشل الاستخراج':'Extraction failed'))}</div>`;
+        return;
+      }
+      const parsed = (data.transactions||[]).map(t=>({
+        date: parseBankDate(t.date),
+        description: String(t.description||'').trim(),
+        credit: Number(t.credit)||0,
+        debit: Number(t.debit)||0,
+      })).filter(r=>r.date && (r.credit>0 || r.debit>0));
+      if (!parsed.length) {
+        if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${lang==='ar'?'ما قدر الذكاء الاصطناعي يقرأ أي حركة من الملف — جرّب صورة أوضح':'AI could not read any transactions — try a clearer file'}</div>`;
+        return;
+      }
+      const db = getDB(); const br = getBankRecon(db);
+      br.importedLines = parsed;
+      saveDB(db);
+      showToast(`✅ ${lang==='ar'?`تم استخراج ${parsed.length} حركة بالذكاء الاصطناعي — جاري المطابقة`:`Extracted ${parsed.length} transactions via AI — matching`}`);
+      closeModal();
+      renderPage();
+    } catch(err) {
+      if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${sanitize(err?.message || (lang==='ar'?'خطأ أثناء الاستخراج':'Extraction error'))}</div>`;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function downloadBankStatementTemplate() {
+  if (typeof XLSX === 'undefined') { showToast(lang==='ar'?'⚠️ مكتبة Excel غير محملة':'Excel library not loaded','error'); return; }
+  const headers = lang==='ar' ? ['التاريخ','البيان','مبلغ وارد (إيداع)','مبلغ صادر (سحب)'] : ['Date','Description','Credit (In)','Debit (Out)'];
+  const rows = lang==='ar'
+    ? [['2026-08-01','تحصيل شبكة نقاط بيع',1150,''],['2026-08-02','رسوم بنكية','',15],['2026-08-03','تحويل من عميل',500,'']]
+    : [['2026-08-01','POS network settlement',1150,''],['2026-08-02','Bank fee','',15],['2026-08-03','Customer transfer',500,'']];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:14},{wch:30},{wch:16},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, lang==='ar'?'كشف الحساب':'Statement');
+  XLSX.writeFile(wb, 'yaqiz-bank-statement-template.xlsx');
+  showToast(lang==='ar'?'✅ تم تحميل القالب — افتحه وأضف بيانات كشف حسابك ثم ارفعه':'✅ Template downloaded — fill it with your statement data then upload');
+}
+
+// يقرأ تواريخ بعدة صيغ شائعة (YYYY-MM-DD، DD/MM/YYYY، رقم تسلسلي من Excel) ويعيدها كـ YYYY-MM-DD
+function parseBankDate(raw) {
+  if (raw===null || raw===undefined || raw==='') return '';
+  if (typeof raw === 'number') {
+    const d = new Date(Math.round((raw-25569)*86400*1000));
+    if (!isNaN(d)) return d.toISOString().slice(0,10);
+  }
+  const s = String(raw).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+  const d = new Date(s);
+  return isNaN(d) ? '' : d.toISOString().slice(0,10);
+}
+
+function handleBankStatementImport(input) {
+  const file = input.files[0]; if(!file) return;
+  const status = el('bank-import-status');
+  if(status) status.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);">⏳ ${lang==='ar'?'جاري القراءة...':'Reading...'}</div>`;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const isExcel = ext==='xlsx' || ext==='xls';
+
+  function parseRows(rows) {
+    const parsed = rows.map(r=>({
+      date: parseBankDate(r[0]),
+      description: String(r[1]||'').trim(),
+      credit: Number(r[2])||0,
+      debit: Number(r[3])||0,
+    })).filter(r=>r.date && (r.credit>0 || r.debit>0));
+    if(!parsed.length) {
+      if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${lang==='ar'?'لا توجد بيانات صالحة — تأكد من صحة الأعمدة والتاريخ':'No valid rows found — check columns/date format'}</div>`;
+      return;
+    }
+    const db = getDB(); const br = getBankRecon(db);
+    br.importedLines = parsed;
+    saveDB(db);
+    showToast(`✅ ${lang==='ar'?`تم استيراد ${parsed.length} سطر — جاري المطابقة`:`Imported ${parsed.length} lines — matching`}`);
+    closeModal();
+    renderPage();
+  }
+
+  if (isExcel) {
+    if (typeof XLSX === 'undefined') { if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${lang==='ar'?'مكتبة Excel غير محملة':'Excel library not loaded'}</div>`; return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        parseRows(data.slice(1).filter(r=>r.some(c=>String(c).trim())));
+      } catch(err) { if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${lang==='ar'?'خطأ في قراءة ملف Excel':'Error reading Excel file'}</div>`; }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result.replace(/\r/g,'');
+        const lines = text.split('\n').filter(l=>l.trim());
+        const sample = lines[0]||''; const sep = sample.includes('\t')?'\t':sample.includes(';')?';':',';
+        const rows = lines.slice(1).map(l=>{
+          const cols=[]; let cur=''; let inQ=false;
+          for(let i=0;i<l.length;i++){ const ch=l[i]; if(ch==='"'){inQ=!inQ;} else if(ch===sep&&!inQ){cols.push(cur.trim());cur='';} else{cur+=ch;} }
+          cols.push(cur.trim());
+          return cols.map(c=>c.replace(/^"|"$/g,'').trim());
+        });
+        parseRows(rows);
+      } catch(err) { if(status) status.innerHTML = `<div style="background:#fee2e2;padding:12px;border-radius:8px;color:var(--danger);">⚠️ ${lang==='ar'?'خطأ في قراءة الملف':'File read error'}</div>`; }
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+}
+
+function clearBankImport() {
+  if(!confirm(lang==='ar'?'حذف الاستيراد الحالي والعودة للطريقة اليدوية؟':'Clear the current import and go back to manual mode?')) return;
+  const db=getDB(); const br=getBankRecon(db);
+  br.importedLines = null;
+  saveDB(db); renderPage();
 }
 
 // ============ USERS ============
@@ -7596,11 +7910,19 @@ function showPaySalaryModal(id) {
         <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
       </div>
       <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">
-        ${lang==='ar'?'يُسجَّل الدفع كمصروف نقدي فوري (خزينة + قيد محاسبي) — مطابق لسلوك المصاريف الإدارية الأخرى.':'Recorded as an instant cash expense (treasury + journal entry) — same as other administrative expenses.'}
+        ${lang==='ar'?'يُسجَّل الدفع فورًا (خزينة + قيد محاسبي) بمجرد التأكيد.':'Recorded instantly (treasury + journal entry) upon confirmation.'}
       </p>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'المبلغ':'Amount'} *</label><input class="input" type="number" id="ps-amount" value="${e.salary}" /></div>
         <div><label class="form-label">${lang==='ar'?'تاريخ الدفع':'Payment Date'}</label><input class="input" type="date" id="ps-date" value="${new Date().toISOString().slice(0,10)}" /></div>
+      </div>
+      <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'طريقة الدفع':'Payment Method'}</label>
+        <select class="select" id="ps-method">
+          <option value="نقدي">${lang==='ar'?'نقدي':'Cash'}</option>
+          <option value="شبكة">${lang==='ar'?'شبكة':'Card'}</option>
+          <option value="تحويل بنكي">${lang==='ar'?'تحويل بنكي':'Bank Transfer'}</option>
+          <option value="شيك">${lang==='ar'?'شيك':'Cheque'}</option>
+        </select>
       </div>
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'ملاحظات':'Notes'}</label><input class="input" id="ps-notes" placeholder="${lang==='ar'?'مثال: راتب شهر...':'e.g. Salary for month of...'}" /></div>
       <div style="display:flex;gap:8px;">
@@ -7623,15 +7945,18 @@ function _paySalaryActual(id) {
   const amount=Number(el('ps-amount').value||0);
   const date=el('ps-date').value||new Date().toISOString().slice(0,10);
   const notes=el('ps-notes')?.value||'';
+  const method=el('ps-method')?.value||'نقدي';
 
-  // 1. الخزينة — دفع نقدي فوري
+  // 1. الخزينة — طريقة الدفع الفعلية (مهم لتسوية البنك: قبل هذا التعديل كان
+  // كل راتب يُسجَّل نقدي دائمًا حتى لو دُفع فعليًا تحويلًا بنكيًا، فتختفي
+  // كل الرواتب من تسوية البنك رغم أنها خرجت فعليًا من الحساب البنكي)
   if(!db.treasury) db.treasury={balance:0,moves:[]};
   if(!db.treasury.moves) db.treasury.moves=[];
   db.treasury.balance=Math.round((db.treasury.balance-amount)*100)/100;
   db.treasury.moves.unshift({
     id:nextId(db,'treasury'), type:'out', amount,
     description:`راتب: ${e.name}${notes?' — '+notes:''}`,
-    reference:`SAL-${e.id}-${date}`, date:new Date(date).toISOString(), method:'نقدي'
+    reference:`SAL-${e.id}-${date}`, date:new Date(date).toISOString(), method
   });
 
   // 2. القيد المحاسبي — لا ضريبة على الرواتب (الأجور خارج نطاق ضريبة القيمة المضافة)
@@ -7649,7 +7974,7 @@ function _paySalaryActual(id) {
 
   // 3. سجل الدفعات على الموظف نفسه — لعرض "آخر دفعة" وتاريخ الرواتب
   if(!e.payments) e.payments=[];
-  e.payments.push({date:new Date(date).toISOString(), amount, notes});
+  e.payments.push({date:new Date(date).toISOString(), amount, notes, method});
   e.last_paid_date=new Date(date).toISOString();
   e.last_paid_amount=amount;
 

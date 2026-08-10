@@ -39,6 +39,9 @@ const EXTRACT_LIMITS  = { basic: 30,  growth: 100, pro: 500 };
 const ANALYZE_LIMITS  = { basic: 0,   growth: 10,  pro: 200 };
 const ASSISTANT_DAILY = { basic: 0,   growth: 3,   pro: 9999 };
 // assistant: pro only, no hard monthly limit (fair use)
+// استخراج كشف حساب بنكي بالذكاء الاصطناعي — حد شهري منفصل عن تفريغ الفواتير
+// العادي، وغير متاح على الباقة الأساسية إطلاقًا (تسوية البنك نفسها Growth/Pro فقط)
+const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 3, pro: 4 };
 
 async function getPlan(company_id) {
   const { rows: [co] } = await db.query(
@@ -109,6 +112,63 @@ exports.extract = async (req, res, next) => {
     });
   } catch (err) {
     // إرجاع رسالة الخطأ الحقيقية للمساعدة في التشخيص
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في الذكاء الاصطناعي' });
+  }
+};
+
+// POST /api/ai/extract-bank-statement  (image_base64 أو pdf_base64)
+exports.extractBankStatement = async (req, res, next) => {
+  try {
+    const { company_id } = req.user;
+    const { image_base64, pdf_base64, mime_type = 'image/jpeg' } = req.body;
+    if (!image_base64 && !pdf_base64) {
+      return res.status(400).json({ success: false, message: 'image_base64 أو pdf_base64 مطلوب' });
+    }
+
+    const plan  = await getPlan(company_id);
+    const limit = BANK_STMT_EXTRACT_LIMITS[plan] ?? 0;
+
+    if (limit === 0) {
+      return res.status(403).json({
+        success: false,
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message: 'استخراج كشف الحساب البنكي بالذكاء الاصطناعي متاح من باقة النمو فأعلى.',
+        current_plan: plan,
+      });
+    }
+
+    const used = await getMonthlyUsage(company_id, 'extract_bank');
+    if (used >= limit) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_LIMIT_REACHED',
+        message: `وصلت للحد الأقصى لاستخراج كشوفات الحساب البنكي هذا الشهر (${limit} ${limit===1?'مرة':'مرات'}). سيتجدد الحد أول الشهر القادم.`,
+        used, limit,
+      });
+    }
+
+    let result;
+    if (pdf_base64) {
+      const pdfBuffer = Buffer.from(pdf_base64, 'base64');
+      result = await ai.extractBankStatementFromPDF(pdfBuffer);
+    } else {
+      result = await ai.extractBankStatementFromImages([image_base64]);
+    }
+    await logUsage(company_id, 'extract_bank', result.tokens_in, result.tokens_out, req.user.sub);
+
+    let parsed = null;
+    try { parsed = JSON.parse(cleanJSON(result.content)); } catch { /* fallback */ }
+
+    if (!parsed || !Array.isArray(parsed.transactions)) {
+      return res.status(422).json({ success: false, message: 'تعذّرت قراءة كشف الحساب — حاول برفع ملف أوضح' });
+    }
+
+    res.json({
+      success: true,
+      transactions: parsed.transactions,
+      usage: { used: used + 1, limit },
+    });
+  } catch (err) {
     return res.status(500).json({ success: false, message: err.message || 'خطأ في الذكاء الاصطناعي' });
   }
 };
@@ -286,18 +346,20 @@ exports.usage = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const plan = await getPlan(company_id);
-    const [extractUsed, analyzeUsed, assistantDaily] = await Promise.all([
+    const [extractUsed, analyzeUsed, assistantDaily, bankStmtUsed] = await Promise.all([
       getMonthlyUsage(company_id, 'extract'),
       getMonthlyUsage(company_id, 'analyze'),
       getDailyUsage(company_id, 'assistant'),
+      getMonthlyUsage(company_id, 'extract_bank'),
     ]);
     res.json({
       success: true,
       plan,
       usage: {
-        extract:   { used: extractUsed,   limit: EXTRACT_LIMITS[plan]   ?? 0 },
-        analyze:   { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]   ?? 0 },
-        assistant: { used: assistantDaily, limit: ASSISTANT_DAILY[plan] ?? 0, period: 'daily' },
+        extract:      { used: extractUsed,   limit: EXTRACT_LIMITS[plan]   ?? 0 },
+        analyze:      { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]   ?? 0 },
+        assistant:    { used: assistantDaily, limit: ASSISTANT_DAILY[plan] ?? 0, period: 'daily' },
+        extract_bank: { used: bankStmtUsed,  limit: BANK_STMT_EXTRACT_LIMITS[plan] ?? 0 },
       },
     });
   } catch (err) { next(err); }

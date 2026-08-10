@@ -204,4 +204,71 @@ async function extractFromPDF(pdfBuffer) {
   }
 }
 
-module.exports = { extractDocument, extractFromPDF, analyzeFinancials, askAssistant };
+// نستخرج بيانات كشف حساب بنكي (تاريخ/بيان/مبلغ لكل حركة) بدل فاتورة واحدة —
+// كشف الحساب غالبًا عدة صفحات، فنحوّل كل صفحاتها لصور ونرسلها كلها بطلب واحد
+// للنموذج عشان يرجّع قائمة موحّدة بكل الحركات مع بعض
+async function extractBankStatementFromImages(imagesBase64) {
+  const systemPrompt = `أنت نظام استخراج بيانات كشف حساب بنكي سعودي. اقرأ كل الصور المرفقة بعناية (قد تكون عدة صفحات لنفس الكشف) واستخرج كل حركة مالية ظهرت في الجدول: التاريخ، البيان/الوصف، والمبلغ (وارد إلى الحساب أو صادر منه).
+
+أعد JSON فقط بهذا التنسيق بالضبط — لا تكتب أي كلام قبله أو بعده:
+{
+  "transactions": [
+    {"date": "YYYY-MM-DD", "description": "نص البيان كما هو", "credit": 0.00, "debit": 0.00}
+  ]
+}
+
+قواعد مهمة:
+1. لكل حركة: إمّا credit (مبلغ دخل للحساب) أو debit (مبلغ خرج من الحساب) — الآخر يبقى 0، لا تضع قيمة بالاثنين معًا لنفس الحركة.
+2. التاريخ بصيغة YYYY-MM-DD دائمًا — إذا كان التاريخ بصيغة يوم/شهر/سنة حوّله بدقة، ولا تخمّن سنة غير مذكورة.
+3. اجمع حركات كل الصور المرفقة بقائمة واحدة مرتبة بترتيب ظهورها، بدون تكرار نفس الحركة مرتين إذا تكررت صفحة بالخطأ.
+4. تجاهل صفوف الرصيد الافتتاحي/الختامي والعناوين — استخرج فقط الحركات الفعلية.
+5. لا تخترع حركات غير موجودة فعليًا بالصورة.`;
+
+  const content = [
+    { type: 'text', text: 'استخرج كل حركات كشف الحساب هذا وأعد JSON فقط.' },
+    ...imagesBase64.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${b64}`, detail: 'high' } })),
+  ];
+
+  return callAI([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content },
+  ], { model: 'gpt-4o-mini', maxTokens: 4000 });
+}
+
+// نحوّل كل صفحات ملف الكشف (حتى 10 صفحات) لصور ونمررها كلها معًا لدالة
+// الاستخراج أعلاه بطلب واحد — بخلاف extractFromPDF (فاتورة واحدة، صفحة واحدة تكفي)
+async function extractBankStatementFromPDF(pdfBuffer) {
+  const { PDFiumLibrary } = require('@hyzyla/pdfium');
+  const sharp = require('sharp');
+  const MAX_PAGES = 10;
+
+  let library;
+  try {
+    library = await PDFiumLibrary.init();
+    const document = await library.loadDocument(pdfBuffer);
+
+    const images = [];
+    let i = 0;
+    for (const page of document.pages()) {
+      if (i >= MAX_PAGES) break;
+      const image = await page.render({
+        scale: 2.5,
+        render: async (options) => sharp(options.data, {
+          raw: { width: options.width, height: options.height, channels: 4 },
+        }).png().toBuffer(),
+      });
+      images.push(Buffer.from(image.data).toString('base64'));
+      i++;
+    }
+    document.destroy();
+    if (!images.length) throw new Error('empty');
+
+    return await extractBankStatementFromImages(images);
+  } catch (err) {
+    throw new Error('تعذّرت قراءة ملف الكشف — يُرجى رفع صورة واضحة له بدلاً من ذلك');
+  } finally {
+    if (library) library.destroy();
+  }
+}
+
+module.exports = { extractDocument, extractFromPDF, extractBankStatementFromImages, extractBankStatementFromPDF, analyzeFinancials, askAssistant };
