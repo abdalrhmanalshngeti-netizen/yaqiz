@@ -2,8 +2,8 @@ const https  = require('https');
 const db     = require('../config/db');
 
 const PLAN_PRICES = {
-  basic:  { monthly: 149, annual: 1500 },
-  growth: { monthly: 299, annual: 3200 },
+  basic:  { monthly: 199, annual: 2000 },
+  growth: { monthly: 349, annual: 3700 },
   pro:    { monthly: 499, annual: 5500 },
 };
 const PLAN_LABELS = { basic: 'الأساسية', growth: 'النمو', pro: 'الاحترافية' };

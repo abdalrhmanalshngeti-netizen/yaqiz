@@ -12107,8 +12107,8 @@ function renderSettingsGeneral(c) {
     <!-- ── بطاقة الباقة الحالية ── -->
     ${(()=>{
       const planMeta = {
-        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 149 ريال/شهر'},
-        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 299 ريال/شهر'},
+        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 199 ريال/شهر'},
+        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 349 ريال/شهر'},
         pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 499 ريال/شهر'},
       };
       const cur = getCurrentPlan();
@@ -12243,8 +12243,8 @@ function renderSettingsGeneral(c) {
 
 // ============ SUBSCRIPTION UPGRADE / RENEW ============
 const SUB_PRICING = {
-  basic:  { monthly:149, annual:1500, label:'الأساسية',   labelEn:'Basic',  icon:'📗' },
-  growth: { monthly:299, annual:3200, label:'النمو',       labelEn:'Growth', icon:'📘' },
+  basic:  { monthly:199, annual:2000, label:'الأساسية',   labelEn:'Basic',  icon:'📗' },
+  growth: { monthly:349, annual:3700, label:'النمو',       labelEn:'Growth', icon:'📘' },
   pro:    { monthly:499, annual:5500, label:'الاحترافية',  labelEn:'Pro',    icon:'📙' },
 };
 let _subModalPlan  = null;
