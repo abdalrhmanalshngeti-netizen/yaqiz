@@ -13402,7 +13402,15 @@ function exportSupplierStatementPDF(supplierName) {
 
 // ============ OPENING BALANCES WIZARD ============
 let _obStep = 1;
-const _OB_STEPS = 9;
+// خطوات المعالج مبنية على حدود الباقة — الباقة الأساسية بدون عملاء أو التزامات دورية
+const _OB_ALL_STEPS = ['cash','products','customers','suppliers','fixed_assets','obligations','employees','capital','review'];
+function _obActiveSteps() {
+  return _OB_ALL_STEPS.filter(s =>
+    (s!=='customers'   || hasPlanPage('customers')) &&
+    (s!=='obligations' || hasPlanPage('obligations'))
+  );
+}
+function _obStepCount() { return _obActiveSteps().length; }
 let _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
 
 function checkOpeningBalances() {
@@ -13421,20 +13429,25 @@ function showOpeningBalancesWizard(editMode) {
   } else {
     _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
   }
+  // إسقاط أي بيانات عملاء/التزامات قديمة (مثلاً من ترقية سابقة قبل التنزيل للباقة الأساسية)
+  // حتى لا تدخل في حساب القيود الافتتاحية رغم إخفاء خطواتها من المعالج
+  if (!hasPlanPage('customers'))   _obData.customers = [];
+  if (!hasPlanPage('obligations')) _obData.obligations = [];
   renderOBWizard();
 }
 
 function obReadStep() {
-  if (_obStep===1) {
+  const key = _obActiveSteps()[_obStep-1];
+  if (key==='cash') {
     _obData.cash_box  = parseFloat(el('ob-cash-box')?.value||0)||0;
     _obData.cash_bank = parseFloat(el('ob-cash-bank')?.value||0)||0;
-  } else if (_obStep===8) {
+  } else if (key==='capital') {
     _obData.capital = parseFloat(el('ob-capital')?.value||0)||0;
   }
 }
 
-function obNextStep() { obReadStep(); if (_obStep < _OB_STEPS) { _obStep++; renderOBWizard(); } }
-function obSkipStep()  { if (_obStep < _OB_STEPS) { _obStep++; renderOBWizard(); } }
+function obNextStep() { obReadStep(); if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); } }
+function obSkipStep()  { if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); } }
 function obPrevStep()  { obReadStep(); if (_obStep > 1) { _obStep--; renderOBWizard(); } }
 
 function obSkipWizard() {
@@ -13512,31 +13525,36 @@ function obAddEmployee() {
 function obRemoveEmployee(i) { _obData.employees.splice(i,1); el('ob-step-content').innerHTML=renderOBStepContent(); refreshIcons(); }
 
 function renderOBWizard() {
-  const stepTitles = ['','💰 النقدية والبنك','📦 المخزون','👥 العملاء','🏭 الموردون','🏗️ الأصول الثابتة','📋 الالتزامات الدورية','👨‍💼 الموظفون','💼 رأس المال','✅ مراجعة وتأكيد'];
+  const stepTitles = { cash:'💰 النقدية والبنك', products:'📦 المخزون', customers:'👥 العملاء', suppliers:'🏭 الموردون',
+    fixed_assets:'🏗️ الأصول الثابتة', obligations:'📋 الالتزامات الدورية', employees:'👨‍💼 الموظفون', capital:'💼 رأس المال', review:'✅ مراجعة وتأكيد' };
+  const active = _obActiveSteps();
+  const stepCount = active.length;
+  const curKey = active[_obStep-1];
   const mc = el('modal-container');
   if (!mc) return;
   mc.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 16px;">'
     +'<div style="background:var(--card);border-radius:20px;width:100%;max-width:700px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);margin:auto;">'
     +'<div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);padding:22px 28px;color:#fff;">'
     +'<div style="font-size:12px;opacity:0.75;margin-bottom:4px;letter-spacing:.5px;">إعداد المنشأة — أرصدة البداية</div>'
-    +'<div style="font-size:20px;font-weight:900;">'+stepTitles[_obStep]+'</div>'
+    +'<div style="font-size:20px;font-weight:900;">'+stepTitles[curKey]+'</div>'
     +'<div style="margin-top:14px;">'
     +'<div style="display:flex;gap:4px;margin-bottom:6px;">'
-    +Array.from({length:_OB_STEPS},(_,i)=>'<div style="flex:1;height:4px;border-radius:999px;background:'+(i<_obStep?'#fff':i===_obStep-1?'#93c5fd':'rgba(255,255,255,0.2)')+'"></div>').join('')
+    +Array.from({length:stepCount},(_,i)=>'<div style="flex:1;height:4px;border-radius:999px;background:'+(i<_obStep?'#fff':i===_obStep-1?'#93c5fd':'rgba(255,255,255,0.2)')+'"></div>').join('')
     +'</div>'
-    +'<div style="font-size:11px;opacity:0.7;">الخطوة '+_obStep+' من '+_OB_STEPS+'</div>'
+    +'<div style="font-size:11px;opacity:0.7;">الخطوة '+_obStep+' من '+stepCount+'</div>'
     +'</div></div>'
     +'<div id="ob-step-content" style="padding:24px 28px;min-height:280px;">'+renderOBStepContent()+'</div>'
     +'<div style="padding:14px 28px 22px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);">'
     +'<div>'+(_obStep>1?'<button class="btn btn-outline" onclick="obPrevStep()">← السابق</button>':'<button class="btn btn-outline" style="color:var(--text-muted);" onclick="obSkipWizard()">تخطّ الآن</button>')+'</div>'
-    +'<div style="display:flex;gap:8px;">'+(_obStep<_OB_STEPS?'<button class="btn btn-outline" onclick="obSkipStep()">تخطّ</button><button class="btn btn-primary" onclick="obNextStep()">التالي →</button>':'<button class="btn btn-primary" style="padding:10px 32px;font-size:14px;" onclick="obSaveAll()">✓ حفظ والبدء الآن</button>')+'</div>'
+    +'<div style="display:flex;gap:8px;">'+(_obStep<stepCount?'<button class="btn btn-outline" onclick="obSkipStep()">تخطّ</button><button class="btn btn-primary" onclick="obNextStep()">التالي →</button>':'<button class="btn btn-primary" style="padding:10px 32px;font-size:14px;" onclick="obSaveAll()">✓ حفظ والبدء الآن</button>')+'</div>'
     +'</div></div></div>';
   refreshIcons();
 }
 
 function renderOBStepContent() {
-  const steps = [null, obStep1, obStep2, obStep3, obStep4, obStep5, obStep6, obStep7, obStep8, obStep9];
-  return (steps[_obStep]||(() => ''))();
+  const stepFns = { cash:obStep1, products:obStep2, customers:obStep3, suppliers:obStep4, fixed_assets:obStep5, obligations:obStep6, employees:obStep7, capital:obStep8, review:obStep9 };
+  const key = _obActiveSteps()[_obStep-1];
+  return (stepFns[key]||(() => ''))();
 }
 
 function obStep1() {
@@ -13741,9 +13759,9 @@ function obStep9() {
     // ── عمود التفاصيل ──
     +'<div style="overflow-y:auto;max-height:360px;">'
     +section('🏗️ الأصول الثابتة', assetChips)
-    +section('👥 العملاء (ذمم مدينة)', custChips)
+    +(hasPlanPage('customers')?section('👥 العملاء (ذمم مدينة)', custChips):'')
     +section('🏭 الموردون (ذمم دائنة)', suppChips)
-    +section('📋 الالتزامات الدورية', obligChips)
+    +(hasPlanPage('obligations')?section('📋 الالتزامات الدورية', obligChips):'')
     +section('📦 المخزون (أبرز الأصناف)', prodChips)
     +section('👨‍💼 الموظفون ('+_obData.employees.length+' — رواتب: '+fmtMoney(totalSal)+')', empChips)
     +'</div>'
@@ -13780,14 +13798,16 @@ function obSaveAll() {
       buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0, created_at:new Date().toISOString() });
   });
 
-  // العملاء
-  if (!db.customers) db.customers = [];
-  if (!db.nextId.customer) db.nextId.customer = 1;
-  _obData.customers.forEach(c => {
-    const ex = db.customers.find(x=>x.name===c.name);
-    if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; }
-    else { db.customers.push({ id:nextId(db,'customer'), name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString() }); }
-  });
+  // العملاء — غير متاح في الباقة الأساسية، حتى لو بقيت بيانات قديمة من ترقية سابقة
+  if (hasPlanPage('customers')) {
+    if (!db.customers) db.customers = [];
+    if (!db.nextId.customer) db.nextId.customer = 1;
+    _obData.customers.forEach(c => {
+      const ex = db.customers.find(x=>x.name===c.name);
+      if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; }
+      else { db.customers.push({ id:nextId(db,'customer'), name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString() }); }
+    });
+  }
 
   // الموردون
   if (!db.suppliers) db.suppliers = [];
@@ -13806,13 +13826,15 @@ function obSaveAll() {
       hire_date:new Date().toISOString().slice(0,10), active:true, created_at:new Date().toISOString() });
   });
 
-  // الالتزامات
-  if (!db.obligations) db.obligations = [];
-  if (!db.nextId.obligation) db.nextId.obligation = 1;
-  _obData.obligations.forEach(o => {
-    db.obligations.push({ id:nextId(db,'obligation'), name:o.name, amount:o.amount, frequency:o.frequency,
-      next_due:new Date().toISOString().slice(0,10), created_at:new Date().toISOString() });
-  });
+  // الالتزامات — غير متاحة في الباقة الأساسية
+  if (hasPlanPage('obligations')) {
+    if (!db.obligations) db.obligations = [];
+    if (!db.nextId.obligation) db.nextId.obligation = 1;
+    _obData.obligations.forEach(o => {
+      db.obligations.push({ id:nextId(db,'obligation'), name:o.name, amount:o.amount, frequency:o.frequency,
+        next_due:new Date().toISOString().slice(0,10), created_at:new Date().toISOString() });
+    });
+  }
 
   // القيود المحاسبية الافتتاحية
   if (!db.journal) db.journal = [];
