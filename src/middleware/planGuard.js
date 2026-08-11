@@ -2,8 +2,8 @@ const db = require('../config/db');
 
 const PLAN_FEATURES = {
   basic:   [],
-  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze'],
-  pro:     ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','ai_assistant'],
+  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','customers','obligations','pricing_policy','period_close'],
+  pro:     ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','ai_assistant','customers','obligations','pricing_policy','period_close'],
   expired: [],
 };
 

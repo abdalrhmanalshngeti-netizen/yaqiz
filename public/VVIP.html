@@ -1042,7 +1042,7 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  basic:   ['pos','dashboard','sales','purchases','inventory','customers','suppliers','treasury','obligations','accountingReports','reports','settings'],
+  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','accountingReports','reports','settings'],
   growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
   pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
   expired: ['settings'],
@@ -1051,8 +1051,8 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   [],
-  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','bank_recon','ai_extract','ai_analyze','ai_assistant','bank_statement'],
-  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement'],
+  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','bank_recon','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
+  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
   expired: [],
 };
 
@@ -3347,6 +3347,8 @@ function onGpVendorInput(val) {
 function onNiCustomerInput(val) {
   const db = getDB();
   const warn = el('ni-customer-warn'); if(!warn) return;
+  // الباقة الأساسية ما فيها إدارة عملاء — اسم العميل نص حر بدون اقتراح "إضافة عميل جديد"
+  if(!hasPlanPage('customers')) { warn.style.display='none'; return; }
   const name = val.trim();
   if(!name || name==='عميل نقدي' || name==='Cash Customer') { warn.style.display='none'; return; }
   const found = db.customers.find(c=>c.name===name);
@@ -3362,6 +3364,7 @@ function onNiCustomerInput(val) {
 }
 
 function quickAddCustomerFromInvoice() {
+  if(!hasPlanPage('customers')) { showToast(lang==='ar'?'إدارة العملاء غير متاحة في الباقة الأساسية':'Customer management is not available on the Basic plan','error'); return; }
   const name = el('ni-customer')?.value?.trim()||'';
   const mc2 = document.createElement('div');
   mc2.id = 'quick-cust-modal';
@@ -3385,6 +3388,7 @@ function quickAddCustomerFromInvoice() {
 
 function saveQuickCustomer() {
   if (blockedByExpiredSubscription()) return;
+  if(!hasPlanPage('customers')) { showToast(lang==='ar'?'إدارة العملاء غير متاحة في الباقة الأساسية':'Customer management is not available on the Basic plan','error'); return; }
   const name = el('qc-name')?.value?.trim();
   if(!name){showToast(lang==='ar'?'الاسم مطلوب':'Name required','error');return;}
   const db=getDB();
@@ -4439,7 +4443,7 @@ function doInventoryUpdate() {
       // تحديث سعر الشراء بأحدث سعر شراء + تطبيق سياسة التسعير فوراً لتفادي تعارض _diffAndPush
       if (item.price) {
         prod.buy_price = item.price;
-        if (prod.auto_price_update && prod.profit_policy_type === 'percentage_on_cost') {
+        if (prod.auto_price_update && prod.profit_policy_type === 'percentage_on_cost' && hasPlanFeature('pricing_policy')) {
           const margin = parseFloat(prod.profit_policy_value) || 0;
           if (margin > 0) {
             prod.sell_price = Math.round(item.price * (1 + margin / 100) * 100) / 100;
@@ -4740,7 +4744,7 @@ function showProductModal(id) {
         <div><label class="form-label">${t('sellPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(قبل الضريبة)</span></label><input class="input" type="number" id="pr-sell" value="${p?.sell_price||0}" /></div>
       </div>
       ${id?`<div style="margin-bottom:12px;"><button type="button" class="btn btn-outline btn-sm" onclick="showPriceHistory(${id})">📋 ${lang==='ar'?'سجل تغييرات السعر':'Price change history'}</button></div>`:''}
-      ${has('pricing.manage')?`
+      ${(has('pricing.manage')&&hasPlanFeature('pricing_policy'))?`
       <div style="margin-top:12px;padding:14px 16px;background:rgba(59,130,246,.06);border:1.5px solid rgba(59,130,246,.3);border-radius:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div style="font-size:13px;font-weight:900;color:#60a5fa;">⚡ التسعير الديناميكي</div>
@@ -4766,7 +4770,7 @@ function showProductModal(id) {
     </div>
   </div>`;
   refreshIcons();
-  if (p?.auto_price_update && has('pricing.manage')) updatePricingPreview();
+  if (p?.auto_price_update && has('pricing.manage') && hasPlanFeature('pricing_policy')) updatePricingPreview();
 }
 
 function togglePrPolicyFields() {
@@ -5192,6 +5196,7 @@ function showAddEntity(type) {
 
 function saveEntity(type) {
   if (blockedByExpiredSubscription()) return;
+  if (type==='customer' && !hasPlanPage('customers')) { showToast(lang==='ar'?'إدارة العملاء غير متاحة في الباقة الأساسية':'Customer management is not available on the Basic plan','error'); return; }
   const db = getDB();
   const isCustomer = type==='customer';
   const name = (el('ent-name').value||'').trim();
@@ -5891,7 +5896,7 @@ function renderAccountingReports(c) {
     hasPlanFeature('balance_sheet') && 'balance',
     hasPlanFeature('journal') && 'journal',
     hasPlanFeature('balance_sheet') && 'accounts',
-    (currentUser?.role==='owner'||has('accounts.close_period')) && 'period_close',
+    getCurrentPlan()!=='basic' && (currentUser?.role==='owner'||has('accounts.close_period')) && 'period_close',
     'zakat',
     'statements',
   ].filter(Boolean);
@@ -5904,7 +5909,7 @@ function renderAccountingReports(c) {
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='balance'?'active':''}" onclick="setAcctReportTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
       ${hasPlanFeature('journal')?`<button class="tab-btn ${acctReportTab==='journal'?'active':''}" onclick="setAcctReportTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='accounts'?'active':''}" onclick="setAcctReportTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
-      ${(currentUser?.role==='owner'||has('accounts.close_period'))?`<button class="tab-btn ${acctReportTab==='period_close'?'active':''}" onclick="setAcctReportTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
+      ${(getCurrentPlan()!=='basic'&&(currentUser?.role==='owner'||has('accounts.close_period')))?`<button class="tab-btn ${acctReportTab==='period_close'?'active':''}" onclick="setAcctReportTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
       <button class="tab-btn ${acctReportTab==='zakat'?'active':''}" onclick="setAcctReportTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
       <button class="tab-btn ${acctReportTab==='statements'?'active':''}" onclick="setAcctReportTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
     </div>
@@ -5924,7 +5929,7 @@ function renderAcctReportMainContent() {
   else if(acctReportTab==='balance')  renderBalanceSheet(mc);
   else if(acctReportTab==='journal')  renderJournal(mc);
   else if(acctReportTab==='accounts') renderAccounts(mc);
-  else if(acctReportTab==='period_close') renderPeriodClosing(mc);
+  else if(acctReportTab==='period_close' && getCurrentPlan()!=='basic') renderPeriodClosing(mc);
   else if(acctReportTab==='zakat')    renderZakatReport(mc);
   else if(acctReportTab==='statements') renderStatements(mc);
 }
@@ -6679,8 +6684,8 @@ function renderReportsInner(c) {
       <button class="tab-btn ${reportTab==='vat'?'active':''}" onclick="setReportTab('vat')">${t('vatReport')}</button>
       ${hasPlanFeature('income_statement')?`<button class="tab-btn ${reportTab==='income'?'active':''}" onclick="setReportTab('income')">${t('incomeStatement')}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" onclick="setReportTab('aging')">⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
-      <button class="tab-btn ${reportTab==='products'?'active':''}" onclick="setReportTab('products')">📦 ${lang==='ar'?'المنتجات':'Products'}</button>
-      <button class="tab-btn ${reportTab==='suppliers'?'active':''}" onclick="setReportTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>
+      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='products'?'active':''}" onclick="setReportTab('products')">📦 ${lang==='ar'?'المنتجات':'Products'}</button>`:''}
+      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='suppliers'?'active':''}" onclick="setReportTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>`:''}
       ${hasPlanFeature('bank_recon')?`<button class="tab-btn ${reportTab==='bank'?'active':''}" onclick="setReportTab('bank')">🏦 ${lang==='ar'?'تسوية البنك':'Bank Recon'}</button>`:''}
       ${hasPlanFeature('cashflow')?`<button class="tab-btn ${reportTab==='cashflow'?'active':''}" onclick="setReportTab('cashflow')">💧 ${lang==='ar'?'التدفق النقدي':'Cash Flow'}</button>`:''}
     </div>
@@ -6751,8 +6756,8 @@ function renderReportsInner(c) {
           </div>
         </div>`:
       reportTab==='aging'&&hasPlanFeature('aging_report')?renderAgingReport():''}
-      ${reportTab==='products'?renderProductsReport(d,db):''}
-      ${reportTab==='suppliers'?renderSuppliersReport(db):''}
+      ${reportTab==='products'&&hasPlanFeature('extra_reports')?renderProductsReport(d,db):''}
+      ${reportTab==='suppliers'&&hasPlanFeature('extra_reports')?renderSuppliersReport(db):''}
       ${reportTab==='bank'&&hasPlanFeature('bank_recon')?renderBankRecon(db):''}
       ${reportTab==='cashflow'&&hasPlanFeature('cashflow')?renderCashFlow(db,d,periodFilter,reportPeriod):''}
     </div>
@@ -6761,7 +6766,7 @@ function renderReportsInner(c) {
 }
 
 function setReportTab(tab) {
-  const blocked = { income_statement:['income'], aging_report:['aging'], bank_recon:['bank'], cashflow:['cashflow'] };
+  const blocked = { income_statement:['income'], aging_report:['aging'], bank_recon:['bank'], cashflow:['cashflow'], extra_reports:['products','suppliers'] };
   for(const [feat,tabs] of Object.entries(blocked)) { if(tabs.includes(tab) && !hasPlanFeature(feat)) return; }
   reportTab=tab;
   renderReportsInner(el('report-main-content')||el('page-content'));
@@ -7462,7 +7467,7 @@ function renderUsers(c) {
       <div class="page-title-lg">${t('users')}</div>
       ${(()=>{
         if(!has('users.manage')) return '';
-        const limit = getCurrentPlan()==='basic' ? 4 : null;
+        const limit = getCurrentPlan()==='basic' ? 3 : null;
         const count = (db.users||[]).filter(u=>u.active!==false).length;
         if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} مستخدمين) في الباقة الأساسية`:`Max users reached (${limit}) on Basic plan`}</div>`;
         return `<button class="btn btn-primary" onclick="showUserModal()">${icon('plus',16)} ${t('newUser')}</button>`;
@@ -7491,7 +7496,7 @@ function showUserModal(id) {
   const db = getDB();
   if (!id && getCurrentPlan()==='basic') {
     const count = (db.users||[]).filter(u=>u.active!==false).length;
-    if (count >= 4) { showToast(lang==='ar'?'الباقة الأساسية تسمح بـ 4 مستخدمين فقط. رقّ باقتك للمزيد.':'Basic plan allows 4 users only.','error'); return; }
+    if (count >= 3) { showToast(lang==='ar'?'الباقة الأساسية تسمح بـ 3 مستخدمين فقط. رقّ باقتك للمزيد.':'Basic plan allows 3 users only.','error'); return; }
   }
   const u = id ? db.users.find(x=>x.id===id) : null;
 
@@ -11926,7 +11931,7 @@ function renderSettings(c) {
       ${hasPlanFeature('activity_log')?`<button class="tab-btn ${settingsTab==='activity'?'active':''}" onclick="setSettingsTab('activity')">📋 ${lang==='ar'?'النشاطات':'Activity'}</button>`:''}
       ${showSec?`<button class="tab-btn ${settingsTab==='security'?'active':''}" onclick="setSettingsTab('security')">🔐 ${lang==='ar'?'الأمان':'Security'}</button>`:''}
       ${currentUser?.role==='owner'?`<button class="tab-btn ${settingsTab==='opening'?'active':''}" onclick="setSettingsTab('opening')">📋 ${lang==='ar'?'الأرصدة الافتتاحية':'Opening Balances'}</button>`:''}
-      ${has('pricing.manage')?`<button class="tab-btn ${settingsTab==='pricing'?'active':''}" onclick="setSettingsTab('pricing')">💰 ${lang==='ar'?'سياسات التسعير':'Pricing Policies'}</button>`:''}
+      ${(has('pricing.manage')&&hasPlanFeature('pricing_policy'))?`<button class="tab-btn ${settingsTab==='pricing'?'active':''}" onclick="setSettingsTab('pricing')">💰 ${lang==='ar'?'سياسات التسعير':'Pricing Policies'}</button>`:''}
     </div>
     <div id="settings-main-content"></div>
   </div>`;
@@ -11949,7 +11954,7 @@ function renderSettingsContent() {
   if(settingsTab==='activity') { renderActivity(mc); return; }
   if(settingsTab==='security') { renderAdminSessionsTab(mc); return; }
   if(settingsTab==='opening')  { renderOpeningBalancesSettings(mc); return; }
-  if(settingsTab==='pricing')  { renderPricingPolicies(mc); return; }
+  if(settingsTab==='pricing' && hasPlanFeature('pricing_policy')) { renderPricingPolicies(mc); return; }
   renderSettingsGeneral(mc);
 }
 
@@ -13180,10 +13185,11 @@ function setStmtMainTab(tab) {
 }
 
 function renderStatements(c) {
-  if (stmtMainTab==='bank' && !hasPlanFeature('bank_statement')) stmtMainTab = 'customers';
+  if (stmtMainTab==='bank' && !hasPlanFeature('bank_statement')) stmtMainTab = hasPlanPage('customers')?'customers':'suppliers';
+  if (stmtMainTab==='customers' && !hasPlanPage('customers')) stmtMainTab = 'suppliers';
   c.innerHTML = `<div>
     <div class="tabs" style="margin-bottom:14px;">
-      <button class="tab-btn ${stmtMainTab==='customers'?'active':''}" onclick="setStmtMainTab('customers')">👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>
+      ${hasPlanPage('customers')?`<button class="tab-btn ${stmtMainTab==='customers'?'active':''}" onclick="setStmtMainTab('customers')">👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>`:''}
       <button class="tab-btn ${stmtMainTab==='suppliers'?'active':''}" onclick="setStmtMainTab('suppliers')">🏭 ${lang==='ar'?'كشوفات الموردين':'Supplier Statements'}</button>
       ${hasPlanFeature('bank_statement')?`<button class="tab-btn ${stmtMainTab==='bank'?'active':''}" onclick="setStmtMainTab('bank')">🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>`:''}
     </div>
@@ -13194,8 +13200,9 @@ function renderStatements(c) {
 
 function renderStmtContent() {
   const mc = el('stmt-content'); if(!mc) return;
+  if (stmtMainTab==='customers' && !hasPlanPage('customers')) { stmtMainTab='suppliers'; renderStatements(el('acct-report-content')); return; }
   if (stmtMainTab==='bank') {
-    if (!hasPlanFeature('bank_statement')) { stmtMainTab='customers'; renderStatements(el('acct-report-content')); return; }
+    if (!hasPlanFeature('bank_statement')) { stmtMainTab = hasPlanPage('customers')?'customers':'suppliers'; renderStatements(el('acct-report-content')); return; }
     renderBankStatementView(mc); return;
   }
   if (stmtSelectedParty) { renderPartyStatementDetail(mc, stmtSelectedParty, stmtMainTab==='customers'?'customer':'supplier'); return; }

@@ -308,6 +308,8 @@
     .basic  .feat-list .ck { color:#34d399; }
     .growth .feat-list .ck { color:#60a5fa; }
     .pro    .feat-list .ck { color:#c4b5fd; }
+    .feat-list li.muted { color:rgba(255,255,255,.42); font-weight:600; }
+    .feat-list .nx { flex-shrink:0; margin-top:2px; font-size:1rem; color:rgba(255,255,255,.25); }
     .feat-list .sect {
       font-size:.72rem; font-weight:800; text-transform:uppercase;
       letter-spacing:1px; padding:.9rem 0 .4rem; border-bottom:none;
@@ -625,18 +627,23 @@
           <li class="sect">الفوترة والمبيعات</li>
           <li><span class="ck">✓</span> فواتير إلكترونية (ZATCA متوافق)</li>
           <li><span class="ck">✓</span> مرتجعات المبيعات</li>
-          <li><span class="ck">✓</span> إدارة العملاء والموردين</li>
+          <li><span class="ck">✓</span> إدارة الموردين</li>
           <li class="sect">المخزون والمشتريات</li>
           <li><span class="ck">✓</span> إدارة المخزون (FIFO)</li>
           <li><span class="ck">✓</span> المشتريات والمصاريف</li>
           <li class="sect">المالية والإعدادات</li>
-          <li><span class="ck">✓</span> الالتزامات المالية والمستحقات</li>
           <li><span class="ck">✓</span> ضريبة القيمة المضافة 15% (تحكم كامل)</li>
           <li class="sect">التقارير</li>
           <li><span class="ck">✓</span> تقرير ضريبة القيمة المضافة</li>
           <li><span class="ck">✓</span> تقرير الزكاة</li>
+          <li><span class="ck">✓</span> كشوفات حسابات الموردين</li>
           <li class="sect">الفريق</li>
-          <li><span class="ck">✓</span> حتى 4 مستخدمين</li>
+          <li><span class="ck">✓</span> حتى 3 مستخدمين</li>
+          <li class="sect">غير متوفر في الباقة الأساسية</li>
+          <li class="muted"><span class="nx">✕</span> إدارة العملاء (CRM)</li>
+          <li class="muted"><span class="nx">✕</span> الالتزامات الدورية</li>
+          <li class="muted"><span class="nx">✕</span> التسعير التلقائي للمنتجات</li>
+          <li class="muted"><span class="nx">✕</span> تقارير مفصّلة إضافية (منتجات، موردون، إلخ)</li>
         </ul>
         <button class="btn-plan" onclick="openModal('basic')">ابدأ مجاناً 30 يوم</button>
       </div>
