@@ -804,7 +804,7 @@ async function showAIQuestionsModal(companyId, companyName) {
     <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div style="font-size:18px;font-weight:900;color:#f0f4ff;">💬 أسئلة الشات — ${escHtml(companyName)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">نص السؤال فقط، بدون إجابة الذكاء الاصطناعي</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">السؤال مع إجابة الذكاء الاصطناعي عليه (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
       </div>
       <button onclick="closeAIQuestionsModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
     </div>
@@ -819,8 +819,15 @@ async function showAIQuestionsModal(companyId, companyName) {
     if (!body) return;
     body.innerHTML = rows.length ? rows.map(r => `
       <div style="background:rgba(255,255,255,.04);border:1px solid #1a2942;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px;">❓ السؤال</div>
         <div style="font-size:13px;color:#f0f4ff;line-height:1.6;">${escHtml(r.question)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">👤 ${escHtml(r.full_name||r.username||'—')} · ${fmtD(r.created_at)}</div>
+        ${r.answer ? `
+        <div style="font-size:11px;color:#7dd3a0;font-weight:700;margin-top:10px;margin-bottom:4px;">🤖 الإجابة</div>
+        <div style="font-size:12.5px;color:#c8d4e8;line-height:1.6;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;" title="${escHtml(r.answer)}">${escHtml(r.answer)}</div>
+        ` : `
+        <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;">— بلا إجابة محفوظة (سؤال أقدم من هذا التحديث) —</div>
+        `}
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid #1a2942;">👤 ${escHtml(r.full_name||r.username||'—')} · ${fmtD(r.created_at)}</div>
       </div>`).join('') : '<div class="empty-state" style="padding:30px;">لا توجد أسئلة مسجَّلة</div>';
   } catch (e) {
     const body = document.getElementById('ai-questions-body');

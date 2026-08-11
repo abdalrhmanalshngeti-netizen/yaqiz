@@ -512,13 +512,15 @@ exports.aiUsageCompanies = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── نص أسئلة الشات المساعد فقط لشركة معيّنة (بدون إجابات الذكاء الاصطناعي) ──
-// الهدف: تجميع الأسئلة الفعلية اللي يسألها المستخدمون لبناء بيانات لإجابات
-// جاهزة داخلية لاحقًا بدل الاعتماد الدائم على استدعاء الذكاء الاصطناعي
+// ── أسئلة الشات المساعد وإجاباتها الفعلية لشركة معيّنة ──
+// الهدف: تجميع الأسئلة الفعلية اللي يسألها المستخدمون (وما جاوبهم فيه
+// المساعد فعليًا) لبناء بيانات لإجابات جاهزة داخلية لاحقًا بدل الاعتماد
+// الدائم على استدعاء الذكاء الاصطناعي. أسئلة قبل التحديث ما لها إجابة
+// محفوظة (answer تطلع NULL) لأنها لم تُخزَّن وقتها.
 exports.aiUsageQuestions = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
-      SELECT au.id, au.question, au.created_at,
+      SELECT au.id, au.question, au.answer, au.created_at,
              u.username, u.full_name, u.role
       FROM ai_usage au
       LEFT JOIN users u ON u.id = au.user_id
