@@ -1043,7 +1043,7 @@ const allNavItems = [
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
   basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','accountingReports','reports','settings'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','accountingReports','reports','settings'],
   pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
   expired: ['settings'],
 };
@@ -1051,10 +1051,14 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   [],
-  growth:  ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','bank_recon','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
+  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports'],
   pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
   expired: [],
-};
+}
+
+// أقصى عدد مستخدمين (الحساب الرئيسي + التابعين) لكل باقة — null يعني بلا حد (يطابق PLAN_USER_LIMITS بالسيرفر)
+const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
+function getPlanUserLimit() { return PLAN_USER_LIMITS[getCurrentPlan()] ?? null; };
 
 function getCurrentPlan() {
   const db = getDB();
@@ -7467,9 +7471,9 @@ function renderUsers(c) {
       <div class="page-title-lg">${t('users')}</div>
       ${(()=>{
         if(!has('users.manage')) return '';
-        const limit = getCurrentPlan()==='basic' ? 3 : null;
+        const limit = getPlanUserLimit();
         const count = (db.users||[]).filter(u=>u.active!==false).length;
-        if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} مستخدمين) في الباقة الأساسية`:`Max users reached (${limit}) on Basic plan`}</div>`;
+        if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} مستخدمين) في باقتك الحالية`:`Max users reached (${limit}) on your current plan`}</div>`;
         return `<button class="btn btn-primary" onclick="showUserModal()">${icon('plus',16)} ${t('newUser')}</button>`;
       })()}
     </div>
@@ -7494,9 +7498,10 @@ function renderUsers(c) {
 
 function showUserModal(id) {
   const db = getDB();
-  if (!id && getCurrentPlan()==='basic') {
+  const _uLimit = getPlanUserLimit();
+  if (!id && _uLimit) {
     const count = (db.users||[]).filter(u=>u.active!==false).length;
-    if (count >= 3) { showToast(lang==='ar'?'الباقة الأساسية تسمح بـ 3 مستخدمين فقط. رقّ باقتك للمزيد.':'Basic plan allows 3 users only.','error'); return; }
+    if (count >= _uLimit) { showToast(lang==='ar'?`باقتك الحالية تسمح بـ ${_uLimit} مستخدمين فقط. رقّ باقتك للمزيد.`:`Your current plan allows ${_uLimit} users only.`,'error'); return; }
   }
   const u = id ? db.users.find(x=>x.id===id) : null;
 

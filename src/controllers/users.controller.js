@@ -5,7 +5,7 @@ const SAFE_FIELDS = `id, username, full_name, email, phone, role,
   permissions, pos_access, shift_enabled, active, last_login, created_at`;
 
 // أقصى عدد مستخدمين (الحساب الرئيسي + التابعين) لكل باقة — null يعني بلا حد
-const PLAN_USER_LIMITS = { basic: 3, growth: null, pro: null };
+const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
 
 exports.list = async (req, res, next) => {
   try {

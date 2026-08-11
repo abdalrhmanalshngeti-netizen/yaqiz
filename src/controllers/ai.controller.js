@@ -41,7 +41,7 @@ const ASSISTANT_DAILY = { basic: 0,   growth: 3,   pro: 9999 };
 // assistant: pro only, no hard monthly limit (fair use)
 // استخراج كشف حساب بنكي بالذكاء الاصطناعي — حد شهري منفصل عن تفريغ الفواتير
 // العادي، وغير متاح على الباقة الأساسية إطلاقًا (تسوية البنك نفسها Growth/Pro فقط)
-const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 3, pro: 4 };
+const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 0, pro: 4 };
 
 async function getPlan(company_id) {
   const { rows: [co] } = await db.query(
@@ -132,7 +132,7 @@ exports.extractBankStatement = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         code: 'PLAN_UPGRADE_REQUIRED',
-        message: 'استخراج كشف الحساب البنكي بالذكاء الاصطناعي متاح من باقة النمو فأعلى.',
+        message: 'استخراج كشف الحساب البنكي بالذكاء الاصطناعي متاح لباقة الاحترافية فقط.',
         current_plan: plan,
       });
     }
