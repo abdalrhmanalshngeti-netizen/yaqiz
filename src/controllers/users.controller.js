@@ -44,7 +44,9 @@ exports.create = async (req, res, next) => {
     }
 
     const { rows: [co] } = await db.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
-    const limit = PLAN_USER_LIMITS[co?.plan];
+    let plan = co?.plan || 'basic';
+    if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
+    const limit = PLAN_USER_LIMITS[plan];
     if (limit) {
       const { rows: [{ count }] } = await db.query(
         `SELECT COUNT(*)::int AS count FROM users WHERE company_id = $1`,
