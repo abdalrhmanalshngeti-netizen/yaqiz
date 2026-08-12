@@ -54,6 +54,8 @@ exports.login = async (req, res, next) => {
       SELECT u.*, c.name AS company_name, c.vat_number AS company_vat,
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,
+             c.street_name AS company_street, c.building_number AS company_building,
+             c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
              c.plan AS company_plan, c.subscription_expires_at
       FROM users u
@@ -262,6 +264,8 @@ exports.me = async (req, res, next) => {
              c.name AS company_name, c.vat_number AS company_vat, c.logo_url,
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,
+             c.street_name AS company_street, c.building_number AS company_building,
+             c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
              c.plan AS plan, c.subscription_expires_at
       FROM users u
@@ -282,7 +286,8 @@ exports.updateCompany = async (req, res, next) => {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ success: false, message: 'هذه الميزة للمالك فقط' });
     }
-    const { company_name, vat_number, cr_number, address, city, contact_phone, contact_email } = req.body;
+    const { company_name, vat_number, cr_number, address, city, contact_phone, contact_email,
+            street_name, building_number, district, postal_code, country_code } = req.body;
     await db.query(`
       UPDATE companies SET
         name            = COALESCE($1, name),
@@ -291,11 +296,17 @@ exports.updateCompany = async (req, res, next) => {
         address         = COALESCE($4, address),
         city            = COALESCE($5, city),
         contact_phone   = COALESCE($6, contact_phone),
-        contact_email   = COALESCE($7, contact_email)
+        contact_email   = COALESCE($7, contact_email),
+        street_name     = COALESCE($9, street_name),
+        building_number = COALESCE($10, building_number),
+        district        = COALESCE($11, district),
+        postal_code     = COALESCE($12, postal_code),
+        country_code    = COALESCE($13, country_code)
       WHERE id = $8
     `, [company_name||null, vat_number||null, cr_number||null,
         address||null, city||null, contact_phone||null, contact_email||null,
-        req.user.company_id]);
+        req.user.company_id,
+        street_name||null, building_number||null, district||null, postal_code||null, country_code||null]);
     res.json({ success: true });
   } catch (err) { next(err); }
 };

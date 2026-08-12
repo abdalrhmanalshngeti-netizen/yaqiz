@@ -75,6 +75,7 @@ app.use('/api/register',  require('./routes/register.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
 app.use('/api/print',     require('./routes/print.routes'));
 app.use('/api/auth',      require('./routes/auth.routes'));
+app.use('/api/zatca',     require('./routes/zatca.routes'));
 app.use('/api/users',     require('./routes/users.routes'));
 app.use('/api/products',  require('./routes/products.routes'));
 app.use('/api/customers', require('./routes/customers.routes'));

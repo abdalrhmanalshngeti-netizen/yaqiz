@@ -5189,6 +5189,20 @@ function showAddEntity(type) {
       <div style="margin-bottom:12px;"><label class="form-label">${t('phone')}</label><input class="input" id="ent-phone" /></div>
       <div style="margin-bottom:12px;"><label class="form-label">${isCustomer?t('customerVat'):(lang==='ar'?'الرقم الضريبي':'VAT #')}</label><input class="input" id="ent-vat" /></div>
       <div style="margin-bottom:16px;"><label class="form-label">${t('balance')}</label><input class="input" type="number" id="ent-bal" value="0" /></div>
+      ${isCustomer ? `
+      <div style="margin:14px 0 10px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-weight:800;font-size:12.5px;">📍 ${lang==='ar'?'العنوان (لفواتير ضريبية كاملة B2B — اختياري)':'Address (for full B2B tax invoices — optional)'}</div>
+      </div>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div><label class="form-label">${lang==='ar'?'اسم الشارع':'Street'}</label><input class="input" id="ent-street" /></div>
+        <div><label class="form-label">${lang==='ar'?'رقم المبنى':'Building #'}</label><input class="input" id="ent-building" maxlength="4" /></div>
+      </div>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div><label class="form-label">${lang==='ar'?'الحي':'District'}</label><input class="input" id="ent-district" /></div>
+        <div><label class="form-label">${lang==='ar'?'المدينة':'City'}</label><input class="input" id="ent-city" /></div>
+      </div>
+      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'الرمز البريدي':'Postal Code'}</label><input class="input" id="ent-postal" maxlength="5" style="max-width:200px;" /></div>
+      ` : ''}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary btn-full" onclick="saveEntity('${type}')">${t('save')}</button>
         <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
@@ -5221,6 +5235,13 @@ function saveEntity(type) {
   }
 
   const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
+  if (isCustomer) {
+    data.street_name     = el('ent-street')?.value || '';
+    data.building_number = el('ent-building')?.value || '';
+    data.district         = el('ent-district')?.value || '';
+    data.city             = el('ent-city')?.value || '';
+    data.postal_code      = el('ent-postal')?.value || '';
+  }
   if(isCustomer) db.customers.push(data); else db.suppliers.push(data);
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
   if(isCustomer) renderCusContent();
@@ -12108,6 +12129,100 @@ function renderPricingPolicies(c) {
   </div>`;
 }
 
+function renderZatcaOnboardingCard() {
+  return `<div class="card" id="zatca-onboarding-card"><div class="card-pad">
+    <h3 style="margin-bottom:4px;font-weight:800;">🏛️ ${lang==='ar'?'ربط الهيئة (ZATCA) — الفوترة الإلكترونية المرحلة الثانية':'ZATCA Integration — E-Invoicing Phase 2'}</h3>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
+      ${lang==='ar'?'يتطلب حساباً فعلياً على بوابة فاتورة (Fatoora) لهذه المنشأة، ورمز OTP لمرة واحدة يصدره الحساب. لا يمكن تجربة هذا القسم بدون حساب حقيقي.':'Requires a real Fatoora portal account for this entity, and a one-time OTP issued from that account.'}
+    </div>
+    <div id="zatca-onboarding-body" style="text-align:center;padding:16px;color:var(--text-muted);">⟳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>
+  </div></div>`;
+}
+
+async function loadZatcaOnboardingStatus() {
+  const box = el('zatca-onboarding-body'); if (!box) return;
+  try {
+    const res = await window._cloudApiFetch('GET', '/api/zatca/onboarding/status');
+    const status = res?.data?.status || 'none';
+    window._zatcaOnboardingStatus = status;
+    renderZatcaOnboardingBody(status);
+  } catch (e) {
+    box.innerHTML = `<div style="color:var(--danger);font-size:13px;">${lang==='ar'?'تعذر جلب حالة التأهيل':'Could not load onboarding status'}</div>`;
+  }
+}
+
+function renderZatcaOnboardingBody(status) {
+  const box = el('zatca-onboarding-body'); if (!box) return;
+  const badges = {
+    none:               { label: lang==='ar'?'لم يبدأ التأهيل':'Not started', color: '#64748b', bg: 'rgba(100,116,139,.12)' },
+    csr_generated:      { label: lang==='ar'?'تم توليد الطلب':'CSR generated', color: '#f59e0b', bg: 'rgba(245,158,11,.12)' },
+    compliance_issued:  { label: lang==='ar'?'✓ شهادة الاختبار صادرة':'Compliance CSID issued', color: '#2563eb', bg: 'rgba(37,99,235,.12)' },
+    production_issued:  { label: lang==='ar'?'✓ شهادة الإنتاج صادرة':'Production CSID issued', color: '#16a34a', bg: 'rgba(22,163,74,.12)' },
+  };
+  const b = badges[status] || badges.none;
+  const canRequestProduction = status === 'compliance_issued' || status === 'production_issued';
+
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+      <span style="font-size:12px;font-weight:800;padding:4px 12px;border-radius:999px;color:${b.color};background:${b.bg};">${b.label}</span>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label class="form-label">${lang==='ar'?'بيئة الهيئة':'ZATCA Environment'}</label>
+        <select class="input" id="zatca-env">
+          <option value="sandbox">${lang==='ar'?'تجريبية للمطورين (Sandbox)':'Developer Sandbox'}</option>
+          <option value="simulation">${lang==='ar'?'محاكاة (Simulation)':'Simulation'}</option>
+          <option value="production">${lang==='ar'?'إنتاج فعلي':'Production'}</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">${lang==='ar'?'رمز OTP (من بوابة فاتورة)':'OTP (from Fatoora portal)'}</label>
+        <input class="input" id="zatca-otp" placeholder="123456" ${status==='production_issued'?'disabled':''} />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+      <button class="btn btn-primary" ${status==='production_issued'?'disabled style="opacity:.5;cursor:not-allowed;"':''} onclick="submitZatcaCompliance()">
+        🔑 ${lang==='ar'?'طلب شهادة الاختبار (Compliance)':'Request Compliance CSID'}
+      </button>
+      <button class="btn" style="background:${canRequestProduction?'var(--accent)':'var(--bg)'};color:${canRequestProduction?'#fff':'var(--text-muted)'};${canRequestProduction?'':'cursor:not-allowed;'}"
+        ${canRequestProduction?'':'disabled'} onclick="submitZatcaProduction()">
+        🏆 ${lang==='ar'?'طلب شهادة الإنتاج (Production)':'Request Production CSID'}
+      </button>
+    </div>
+    <div id="zatca-onboarding-msg" style="margin-top:12px;font-size:12px;"></div>
+  `;
+}
+
+async function submitZatcaCompliance() {
+  const otp = el('zatca-otp')?.value?.trim();
+  const environment = el('zatca-env')?.value || 'sandbox';
+  const msg = el('zatca-onboarding-msg');
+  if (!otp) { if (msg) { msg.style.color = 'var(--danger)'; msg.textContent = lang==='ar'?'أدخل رمز OTP أولاً':'Enter the OTP first'; } return; }
+  if (msg) { msg.style.color = 'var(--text-muted)'; msg.textContent = `⟳ ${lang==='ar'?'جاري الاتصال بالهيئة...':'Contacting ZATCA...'}`; }
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/zatca/onboarding/compliance', { otp, environment });
+    showToast(`✅ ${res?.message || (lang==='ar'?'تم إصدار شهادة الاختبار':'Compliance CSID issued')}`, 'success');
+    loadZatcaOnboardingStatus();
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--danger)'; msg.textContent = e?.message || (lang==='ar'?'فشل الاتصال بالهيئة':'ZATCA connection failed'); }
+  }
+}
+
+async function submitZatcaProduction() {
+  const environment = el('zatca-env')?.value || 'sandbox';
+  const msg = el('zatca-onboarding-msg');
+  if (msg) { msg.style.color = 'var(--text-muted)'; msg.textContent = `⟳ ${lang==='ar'?'جاري الاتصال بالهيئة...':'Contacting ZATCA...'}`; }
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/zatca/onboarding/production', { environment });
+    showToast(`✅ ${res?.message || (lang==='ar'?'تم إصدار شهادة الإنتاج':'Production CSID issued')}`, 'success');
+    loadZatcaOnboardingStatus();
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--danger)'; msg.textContent = e?.message || (lang==='ar'?'فشل الاتصال بالهيئة':'ZATCA connection failed'); }
+  }
+}
+
 function renderSettingsGeneral(c) {
   const db = getDB();
   const s = db.settings;
@@ -12170,8 +12285,27 @@ function renderSettingsGeneral(c) {
         <div><label class="form-label">${t('phone')}</label><input class="input" id="s-phone" value="${sanitize(s.phone)}" /></div>
       </div>
       <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'العنوان':'Address'}</label><input class="input" id="s-addr" value="${sanitize(s.address)}" /></div>
+
+      <div style="margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-weight:800;font-size:13px;margin-bottom:2px;">📍 ${lang==='ar'?'العنوان الوطني المُهيكل (مطلوب للفوترة الإلكترونية — المرحلة الثانية)':'Structured National Address (required for e-invoicing Phase 2)'}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${lang==='ar'?'كما يظهر بشهادة العنوان الوطني الصادرة من البريد السعودي (سبل)':'As shown on your SPL national address certificate'}</div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'اسم الشارع':'Street Name'}</label><input class="input" id="s-street" value="${sanitize(s.street_name)}" /></div>
+        <div><label class="form-label">${lang==='ar'?'رقم المبنى (4 أرقام)':'Building Number (4 digits)'}</label><input class="input" id="s-building" maxlength="4" value="${sanitize(s.building_number)}" /></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'الحي':'District'}</label><input class="input" id="s-district" value="${sanitize(s.district)}" /></div>
+        <div><label class="form-label">${lang==='ar'?'المدينة':'City'}</label><input class="input" id="s-city" value="${sanitize(s.city)}" /></div>
+      </div>
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'الرمز البريدي (5 أرقام)':'Postal Code (5 digits)'}</label><input class="input" id="s-postal" maxlength="5" value="${sanitize(s.postal_code)}" /></div>
+        <div></div>
+      </div>
     </div></div>
     ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" onclick="saveSettings()">${t('save')}</button>`:''}
+
+    ${currentUser?.role==='owner' ? renderZatcaOnboardingCard() : ''}
 
     <!-- VAT Toggle -->
     <div class="card"><div class="card-pad">
@@ -12249,6 +12383,7 @@ function renderSettingsGeneral(c) {
       <div style="margin-top:10px;font-size:11px;color:var(--text-muted);">${lang==='ar'?'آخر حفظ:':'Last saved:'} ${new Date().toLocaleString('en-US')}</div>
     </div></div>
   </div>`;
+  if (currentUser?.role === 'owner' && window._apiReachable) loadZatcaOnboardingStatus();
 }
 
 // ============ SUBSCRIPTION UPGRADE / RENEW ============
@@ -12331,18 +12466,25 @@ async function paySubscription() {
 function saveSettings() {
   if (blockedByExpiredSubscription()) return;
   const db = getDB();
-  const company_name = el('s-name')?.value||'';
-  const vat_number   = el('s-vat')?.value||'';
-  const cr_number    = el('s-cr')?.value||'';
-  const phone        = el('s-phone')?.value||'';
-  const address      = el('s-addr')?.value||'';
-  db.settings = { ...db.settings, company_name, vat_number, cr_number, phone, address, zatca_env:el('s-zatca-env')?.value };
+  const company_name    = el('s-name')?.value||'';
+  const vat_number      = el('s-vat')?.value||'';
+  const cr_number       = el('s-cr')?.value||'';
+  const phone           = el('s-phone')?.value||'';
+  const address         = el('s-addr')?.value||'';
+  const street_name     = el('s-street')?.value||'';
+  const building_number = el('s-building')?.value||'';
+  const district        = el('s-district')?.value||'';
+  const city            = el('s-city')?.value||'';
+  const postal_code     = el('s-postal')?.value||'';
+  db.settings = { ...db.settings, company_name, vat_number, cr_number, phone, address,
+    street_name, building_number, district, city, postal_code };
   saveDB(db);
   showToast(`✅ ${t('save')}`);
   // مزامنة مع API (للمالك فقط)
   if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
     window._cloudApiFetch('PUT', '/api/auth/company', {
-      company_name, vat_number, cr_number, address, contact_phone: phone
+      company_name, vat_number, cr_number, address, contact_phone: phone,
+      street_name, building_number, district, city, postal_code
     }).catch(e => console.warn('Company sync:', e.message));
   }
   renderShell();
@@ -14364,6 +14506,10 @@ async function runAISearchQuery(q) {
       if (d.company_phone)   db.settings.phone         = d.company_phone;
       if (d.company_address) db.settings.address       = d.company_address;
       if (d.company_city)    db.settings.city          = d.company_city;
+      if (d.company_street)  db.settings.street_name     = d.company_street;
+      if (d.company_building)db.settings.building_number = d.company_building;
+      if (d.company_district)db.settings.district        = d.company_district;
+      if (d.company_postal_code) db.settings.postal_code = d.company_postal_code;
       if (d.plan)            { db.settings.plan = d.plan; db.settings.plan_expires_at = d.subscription_expires_at||null; }
       window._origSaveDB ? window._origSaveDB(db) : window.saveDB(db);
       if (d.plan !== oldPlan) {
@@ -14549,7 +14695,9 @@ async function runAISearchQuery(q) {
       credit_limit: parseFloat(c.credit_limit)||0,
       balance: parseFloat(c.balance)||0,
       loyalty_points: parseInt(c.loyalty_points)||0,
-      is_active: c.is_active!==false
+      is_active: c.is_active!==false,
+      street_name: c.street_name||'', building_number: c.building_number||'',
+      district: c.district||'', city: c.city||'', postal_code: c.postal_code||''
     };
   }
 
@@ -14904,6 +15052,10 @@ async function runAISearchQuery(q) {
         if (m.company_phone)   db.settings.phone         = m.company_phone;
         if (m.company_address) db.settings.address       = m.company_address;
         if (m.company_city)    db.settings.city          = m.company_city;
+        if (m.company_street)  db.settings.street_name     = m.company_street;
+        if (m.company_building)db.settings.building_number = m.company_building;
+        if (m.company_district)db.settings.district        = m.company_district;
+        if (m.company_postal_code) db.settings.postal_code = m.company_postal_code;
         if (m.plan)            db.settings.plan          = m.plan;
         if (m.subscription_expires_at) db.settings.plan_expires_at = m.subscription_expires_at;
       }
@@ -15010,7 +15162,9 @@ async function runAISearchQuery(q) {
         const old = (prev.customers || []).find(o => o.id === c.id);
         const body = { name: c.name, phone: c.phone, email: c.email, address: c.address,
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
-                       balance: c.balance || 0, is_active: c.is_active !== false };
+                       balance: c.balance || 0, is_active: c.is_active !== false,
+                       street_name: c.street_name || null, building_number: c.building_number || null,
+                       district: c.district || null, city: c.city || null, postal_code: c.postal_code || null };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
@@ -15446,6 +15600,10 @@ async function runAISearchQuery(q) {
       if (apiUser.company_phone)   db.settings.phone         = apiUser.company_phone;
       if (apiUser.company_address) db.settings.address       = apiUser.company_address;
       if (apiUser.company_city)    db.settings.city          = apiUser.company_city;
+      if (apiUser.company_street)  db.settings.street_name     = apiUser.company_street;
+      if (apiUser.company_building)db.settings.building_number = apiUser.company_building;
+      if (apiUser.company_district)db.settings.district        = apiUser.company_district;
+      if (apiUser.company_postal_code) db.settings.postal_code = apiUser.company_postal_code;
       if (apiUser.plan)            db.settings.plan          = apiUser.plan;
       if (apiUser.subscription_expires_at) db.settings.plan_expires_at = apiUser.subscription_expires_at;
       // تحديث قاعدة المستخدمين المحلية

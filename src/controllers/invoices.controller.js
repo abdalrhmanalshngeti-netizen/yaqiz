@@ -1,6 +1,12 @@
 const db    = require('../config/db');
 const stock = require('../services/stock.service');
 const logAudit = require('../middleware/logger');
+const crypto = require('crypto');
+const { buildInvoiceXML } = require('../services/zatca.service');
+const { nextChainInfo, computeInvoiceHash } = require('../services/zatcaHash.service');
+const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
+const { generatePhase2QR } = require('../services/zatcaQR.service');
+const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -120,20 +126,29 @@ exports.create = async (req, res, next) => {
     const { rows: [seq] } = await client.query(`SELECT NEXTVAL('invoice_seq') AS n`);
     const invoice_no = `INV-${String(seq.n).padStart(6, '0')}`;
 
+    // ── معرّفات المرحلة الثانية للفوترة الإلكترونية (ZATCA): UUID فريد،
+    // عداد تسلسلي (ICV)، وتجزئة الفاتورة السابقة بالسلسلة — nextChainInfo تقفل
+    // آخر صف بنفس المعاملة لمنع تضارب فاتورتين تُنشآن بنفس اللحظة
+    const zatcaUuid = crypto.randomUUID();
+    const { icv, previousInvoiceHash } = await nextChainInfo(client, company_id);
+    const issueTimeStr = new Date().toTimeString().slice(0, 8);
+
     // ── إدراج الفاتورة ────────────────────────
     const { rows: [invoice] } = await client.query(`
       INSERT INTO invoices
         (company_id, invoice_no, invoice_type, customer_id, customer_name, customer_vat,
          date, due_date, subtotal, discount_type, discount_value, discount_amount,
          taxable_amount, vat_amount, grand_total, payment_method, notes,
-         status, created_by, cogs_total)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19)
+         status, created_by, cogs_total,
+         zatca_uuid, icv, previous_invoice_hash, issue_time)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23)
       RETURNING *
     `, [company_id, invoice_no, invoice_type || 'simplified',
         customer_id, customer_name, customer_vat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
         taxable, vat_amount, grand, payment_method, notes, user_id,
-        parseFloat(cogs_total) || 0]);
+        parseFloat(cogs_total) || 0,
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr]);
 
     // ── إدراج البنود + خصم المخزون ────────────
     for (let i = 0; i < processedItems.length; i++) {
@@ -160,6 +175,59 @@ exports.create = async (req, res, next) => {
           console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
         }
       }
+    }
+
+    // ── توليد XML الفاتورة (المرحلة الثانية) وحساب تجزئتها لسلسلة KSA-13 ──────
+    // لا نمنع إنشاء الفاتورة إن كانت بيانات البائع المُهيكلة ناقصة (شركات قديمة
+    // لم تُكمل عنوانها بعد) — الفاتورة تبقى صالحة محاسبيًا، وتحذيرات الاكتمال
+    // تُسجَّل فقط لتنبيه المالك قبل أي إرسال فعلي مستقبلي للهيئة (الخطوة 6)
+    try {
+      const { rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]);
+      let customerRow = null;
+      if (customer_id) {
+        customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [customer_id])).rows[0];
+      }
+      const xmlItems = processedItems.map(it => ({
+        ...it, vat_rate: it.tax_rate ?? 15, vat_category_code: it.vat_category_code || 'S',
+      }));
+      const { xml, warnings } = buildInvoiceXML({
+        company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,
+      });
+      const invoiceHash = computeInvoiceHash(xml);
+
+      // إن كانت الشركة أكملت تأهيل CSID (الخطوة 4) نوقّع الفاتورة رقميًا فورًا؛
+      // غير ذلك تبقى الفاتورة بلا توقيع كما كانت — لا نمنع البيع لعدم اكتمال التأهيل
+      let finalXml = xml;
+      let qrBase64 = null;
+      let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
+      if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
+      if (credential) {
+        try {
+          const { ublExtensionsXml, signatureValue } = buildXadesSignature({
+            invoiceHash, certificatePem: credential.certificatePem, privateKeyPem: credential.privateKeyPem,
+          });
+          finalXml = embedSignature(xml, ublExtensionsXml);
+          const cert = new (require('crypto')).X509Certificate(credential.certificatePem);
+          qrBase64 = generatePhase2QR({
+            company: companyRow, invoice, invoiceHashBase64: invoiceHash, signatureValueBase64: signatureValue,
+            publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
+          });
+        } catch (signErr) {
+          console.error(`[ZATCA] signing/QR failed for invoice ${invoice_no}:`, signErr.message);
+        }
+      }
+
+      await client.query(`UPDATE invoices SET xml_content = $1, zatca_hash = $2, zatca_qr_phase2 = $3 WHERE id = $4`,
+        [finalXml, invoiceHash, qrBase64, invoice.id]);
+      invoice.xml_content = finalXml;
+      invoice.zatca_hash = invoiceHash;
+      invoice.zatca_qr_phase2 = qrBase64;
+      if (warnings.length) {
+        console.warn(`[ZATCA] invoice ${invoice_no} generated with incomplete seller data:`, warnings);
+      }
+    } catch (xmlErr) {
+      // خطأ بتوليد XML لا يجب أن يمنع تسجيل عملية بيع حقيقية — يُسجَّل فقط
+      console.error(`[ZATCA] XML generation failed for invoice ${invoice_no}:`, xmlErr.message);
     }
 
     // ── تحديث رصيد العميل ────────────────────
