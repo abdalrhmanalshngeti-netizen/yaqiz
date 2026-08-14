@@ -2042,6 +2042,7 @@ function goTo(page) {
   $qa('.nav-item').forEach(n => { n.classList.toggle('active', n.getAttribute('onclick')===`goTo('${page}')`); });
   if (window.innerWidth <= 768) closeMobileSidebar();
   renderPage();
+  maybeStartPageTour(page);
 }
 
 function renderPage() {
@@ -2147,13 +2148,13 @@ function renderDashboard(c) {
       </div>
     </div>
     <div class="stats-grid">
-      <div class="stat-card" onclick="goTo('sales')"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value">${fmtMoney(todaySales)}</div></div>
+      <div id="dash-today-sales-card" class="stat-card" onclick="goTo('sales')"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value">${fmtMoney(todaySales)}</div></div>
       <div class="stat-card" onclick="goTo('sales')"><div class="stat-icon">${icon('shopping-cart',22)}</div><div class="stat-label">${t('monthSales')}</div><div class="stat-value">${fmtMoney(monthSales)}</div><div style="margin-top:6px;">${pctChange(monthSales,lastMSales)||''}</div></div>
       <div class="stat-card" onclick="goTo('purchases')"><div class="stat-icon amber">${icon('package',22)}</div><div class="stat-label">${t('monthPurchases')}</div><div class="stat-value">${fmtMoney(monthPurch)}</div><div style="margin-top:6px;">${pctChange(monthPurch,lastMPurch)||''}</div></div>
       <div class="stat-card" onclick="goTo('treasury')"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(db.treasury.balance)}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
-      <div class="card">
+      <div id="dash-trend-card" class="card">
         <div class="card-head"><h3>${t('salesTrend')}</h3>
           <div style="display:flex;gap:12px;font-size:11px;"><span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:var(--primary);border-radius:2px;display:inline-block;"></span>${lang==='ar'?'مبيعات':'Sales'}</span><span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#f59e0b;border-radius:2px;display:inline-block;"></span>${lang==='ar'?'مشتريات':'Purchases'}</span></div>
         </div>
@@ -2202,7 +2203,7 @@ function renderDashboard(c) {
     </div>`:''}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
-      <div class="card">
+      <div id="dash-receivables-card" class="card">
         <div class="card-head">
           <h3>📥 ${lang==='ar'?'الذمم المدينة (لك)':'Receivables (owed to you)'}</h3>
           <span class="badge badge-red">${fmtMoney(receivables)}</span>
@@ -2245,7 +2246,7 @@ function renderDashboard(c) {
         </div>
       </div>
 
-      <div class="card">
+      <div id="dash-payables-card" class="card">
         <div class="card-head">
           <h3>📤 ${lang==='ar'?'الذمم الدائنة (عليك)':'Payables (you owe)'}</h3>
           <span class="badge badge-amber">${fmtMoney(payables)}</span>
@@ -3036,12 +3037,12 @@ function renderInvoicesList(sc) {
           <option value="simplified" ${invFilter.type==='simplified'?'selected':''}>${lang==='ar'?'مبسطة':'Simplified'}</option>
         </select>
         <button class="btn btn-outline btn-sm" onclick="invFilter={search:'',status:'',type:''};renderInvoicesList(el('sales-content'))">${icon('rotate-ccw',14)}</button>
-        ${has('sales.create')?`<button class="btn btn-primary" onclick="showNewInvoiceModal()">${icon('plus',16)} ${lang==='ar'?'فاتورة جديدة':'New Invoice'}</button>`:''}
+        ${has('sales.create')?`<button id="sales-new-invoice-btn" class="btn btn-primary" onclick="showNewInvoiceModal()">${icon('plus',16)} ${lang==='ar'?'فاتورة جديدة':'New Invoice'}</button>`:''}
       </div>
     </div>
 
     <!-- Table -->
-    <div class="card">
+    <div id="sales-invoices-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
           <th>${lang==='ar'?'رقم الفاتورة':'Invoice #'}</th>
@@ -3880,10 +3881,10 @@ function renderPurchasesInner(c) {
     <div class="page-header">
       <div class="page-title-lg">${t('purchases')}</div>
       <div style="display:flex;gap:8px;">
-        ${has('purchases.create')?`<button class="btn btn-primary" onclick="showAddPurchaseMenu()">${icon('plus',16)} ${lang==='ar'?'إضافة':'Add'}</button>`:''}
+        ${has('purchases.create')?`<button id="purch-add-btn" class="btn btn-primary" onclick="showAddPurchaseMenu()">${icon('plus',16)} ${lang==='ar'?'إضافة':'Add'}</button>`:''}
       </div>
     </div>
-    <div class="stats-grid" style="grid-template-columns:repeat(${hasPlanFeature('admin_expenses')?4:3},1fr);margin-bottom:20px;">
+    <div id="purch-stats-grid" class="stats-grid" style="grid-template-columns:repeat(${hasPlanFeature('admin_expenses')?4:3},1fr);margin-bottom:20px;">
       <div class="stat-card" style="cursor:pointer;" onclick="setPurchTab('goods')">
         <div class="stat-icon amber">${icon('package',20)}</div>
         <div class="stat-label">${lang==='ar'?'مصاريف تشغيلية':'Operating Expenses'}</div>
@@ -3946,7 +3947,7 @@ function renderPurchContent() {
     : (lang==='ar'?'لا توجد مصاريف إدارية':'No administrative expenses');
 
   pc.innerHTML = `
-  <div class="card">
+  <div id="purch-table" class="card">
     <div class="card-head">
       <h3>${isGoods
         ?(lang==='ar'?'📦 البضاعة والموردون — تكلفة البضاعة المباعة (COGS)':'📦 Operating Expenses — Cost of Goods Sold (COGS)')
@@ -4659,7 +4660,7 @@ function renderInventory(c) {
   c.innerHTML = `<div>
     ${invBanner}
     <div class="page-header"><div class="page-title-lg">${t('inventory')}</div></div>
-    <div class="tabs">
+    <div id="inv-tabs" class="tabs">
       <button class="tab-btn ${invMainTab==='inventory'?'active':''}" onclick="setInvMainTab('inventory')">📦 ${lang==='ar'?'المخزون':'Inventory'}</button>
       ${hasPlanFeature('stock_moves')?`<button class="tab-btn ${invMainTab==='moves'?'active':''}" onclick="setInvMainTab('moves')">🔄 ${lang==='ar'?'حركة المخزون':'Stock Movements'}</button>`:''}
       <button class="tab-btn ${invMainTab==='returns'?'active':''}" onclick="setInvMainTab('returns')">↩️ ${lang==='ar'?'المرتجعات':'Returns'}</button>
@@ -4686,9 +4687,9 @@ function renderInventoryInner(c) {
   c.innerHTML = `
   <div style="margin-top:8px;">
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
-      ${has('inventory.manage')?`<button class="btn btn-primary" onclick="showAddInventoryMenu()">${icon('plus',16)} ${t('add')}</button>`:''}
+      ${has('inventory.manage')?`<button id="inv-add-btn" class="btn btn-primary" onclick="showAddInventoryMenu()">${icon('plus',16)} ${t('add')}</button>`:''}
     </div>
-    <div class="card">
+    <div id="inv-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
         <tbody>${db.products.map(p=>`<tr>
@@ -5057,10 +5058,10 @@ function renderCusContent() {
     cc.innerHTML = `
     ${cusBanner}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-      ${has('customers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('customer')">${icon('plus',16)} ${t('add')}</button>`:'<div></div>'}
+      ${has('customers.manage')?`<button id="cus-add-btn" class="btn btn-primary" onclick="showAddEntity('customer')">${icon('plus',16)} ${t('add')}</button>`:'<div></div>'}
       ${inactiveCustomers.length>0?`<button class="btn btn-outline btn-sm" onclick="cusShowInactive=!cusShowInactive;renderCusContent();">${cusShowInactive?'▲':'▼'} ${lang==='ar'?`العملاء غير النشطين (${inactiveCustomers.length})`:`Inactive customers (${inactiveCustomers.length})`}</button>`:''}
     </div>
-    <div class="card"><div class="tbl-wrap"><table class="tbl">
+    <div id="cus-table" class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
         <th>${t('name')}</th>
         <th>${t('phone')}</th>
@@ -5132,10 +5133,10 @@ function renderSuppliers(c) {
       <div class="page-title-lg">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</div>
       <div style="display:flex;gap:8px;">
         ${inactiveSuppliers.length>0?`<button class="btn btn-outline btn-sm" onclick="suppShowInactive=!suppShowInactive;renderSuppliers(el('page-content'));">${suppShowInactive?'▲':'▼'} ${lang==='ar'?`الموردون غير النشطين (${inactiveSuppliers.length})`:`Inactive suppliers (${inactiveSuppliers.length})`}</button>`:''}
-        ${has('suppliers.manage')?`<button class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
+        ${has('suppliers.manage')?`<button id="supp-add-btn" class="btn btn-primary" onclick="showAddEntity('supplier')">${icon('plus',16)} ${t('add')}</button>`:''}
       </div>
     </div>
-    <div class="card"><div class="tbl-wrap"><table class="tbl">
+    <div id="supp-table" class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
         <th>${t('name')}</th>
         <th>${t('phone')}</th>
@@ -5318,20 +5319,20 @@ function renderTreasury(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${t('treasury')}</div>
-      ${has('treasury.manage')?`<div style="display:flex;gap:8px;">
+      ${has('treasury.manage')?`<div id="tr-actions" style="display:flex;gap:8px;">
         <button class="btn btn-primary" onclick="showTreasuryMove('in')">${icon('plus',16)} ${t('deposit')}</button>
         <button class="btn btn-danger" onclick="showTreasuryMove('out')">${icon('arrow-up',16)} ${t('withdraw')}</button>
       </div>`:''}
     </div>
     ${(()=>{ const split = computeCashBankSplit(); return `
-    <div class="stats-grid">
+    <div id="tr-stats-grid" class="stats-grid">
       <div class="stat-card"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(db.treasury.balance)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('banknote',22)}</div><div class="stat-label">${lang==='ar'?'الصندوق النقدي':'Cash'}</div><div class="stat-value">${fmtMoney(split.cash)}</div></div>
       <div class="stat-card"><div class="stat-icon blue">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'الحساب البنكي':'Bank'}</div><div class="stat-value">${fmtMoney(split.bank)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الوارد':'Total In'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0))}</div></div>
       <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الصادر':'Total Out'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0))}</div></div>
     </div>`; })()}
-    <div class="card"><div class="tbl-wrap"><table class="tbl">
+    <div id="tr-table" class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('date')}</th><th>${t('type')}</th><th>${t('description')}</th><th>${t('reference')}</th><th>${t('amount')}</th></tr></thead>
       <tbody>${[...db.treasury.moves].map(m=>`<tr>
         <td>${fmtDate(m.date)}</td>
@@ -5890,7 +5891,7 @@ let reportMainTab = 'reports';
 function renderReports(c) {
   c.innerHTML = `<div>
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
-    <div class="tabs">
+    <div id="rpt-tabs" class="tabs">
       <button class="tab-btn ${reportMainTab==='reports'?'active':''}" onclick="setReportMainTab('reports')">📊 ${lang==='ar'?'التقارير':'Reports'}</button>
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportMainTab==='overdue'?'active':''}" onclick="setReportMainTab('overdue')">⏰ ${lang==='ar'?'الذمم المتأخرة':'Overdue'}</button>`:''}
     </div>
@@ -5929,7 +5930,7 @@ function renderAccountingReports(c) {
 
   c.innerHTML = `<div>
     <div class="page-header"><div class="page-title-lg">🧮 ${lang==='ar'?'التقارير المحاسبية':'Accounting Reports'}</div></div>
-    <div class="tabs">
+    <div id="acct-tabs" class="tabs">
       ${hasPlanFeature('trial_balance')?`<button class="tab-btn ${acctReportTab==='trial_balance'?'active':''}" onclick="setAcctReportTab('trial_balance')">⚖️ ${lang==='ar'?'ميزان المراجعة':'Trial Balance'}</button>`:''}
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='balance'?'active':''}" onclick="setAcctReportTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
       ${hasPlanFeature('journal')?`<button class="tab-btn ${acctReportTab==='journal'?'active':''}" onclick="setAcctReportTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
@@ -6705,7 +6706,7 @@ function renderReportsInner(c) {
   <div>
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
 
-    <div class="tabs">
+    <div id="rpt-subtabs" class="tabs">
       <button class="tab-btn ${reportTab==='vat'?'active':''}" onclick="setReportTab('vat')">${t('vatReport')}</button>
       ${hasPlanFeature('income_statement')?`<button class="tab-btn ${reportTab==='income'?'active':''}" onclick="setReportTab('income')">${t('incomeStatement')}</button>`:''}
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" onclick="setReportTab('aging')">⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
@@ -7844,16 +7845,16 @@ function renderEmployees(c) {
         <div class="page-sub">${db.employees.length} ${lang==='ar'?'موظف • إجمالي الرواتب:':'employees • Total salaries:'} ${fmtMoney(totalSalaries)}</div>
       </div>
       <div style="display:flex;gap:8px;">
-        ${has('employees.manage')?`<button class="btn btn-primary" onclick="showEmployeeModal()">${icon('plus',16)} ${lang==='ar'?'إضافة موظف':'Add Employee'}</button>`:''}
+        ${has('employees.manage')?`<button id="emp-add-btn" class="btn btn-primary" onclick="showEmployeeModal()">${icon('plus',16)} ${lang==='ar'?'إضافة موظف':'Add Employee'}</button>`:''}
         <button class="btn btn-outline" onclick="exportPayrollPDF()">${icon('printer',16)} ${lang==='ar'?'كشف الرواتب PDF':'Payroll PDF'}</button>
       </div>
     </div>
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+    <div id="emp-stats-grid" class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-card"><div class="stat-icon green">${icon('users',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الموظفين':'Total Employees'}</div><div class="stat-value">${db.employees.filter(e=>e.status==='active').length}</div></div>
       <div class="stat-card"><div class="stat-icon amber">${icon('dollar-sign',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الرواتب الشهرية':'Monthly Payroll'}</div><div class="stat-value">${fmtMoney(totalSalaries)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('dollar-sign',22)}</div><div class="stat-label">${lang==='ar'?'الرواتب السنوية':'Annual Payroll'}</div><div class="stat-value">${fmtMoney(totalSalaries*12)}</div></div>
     </div>
-    <div class="card">
+    <div id="emp-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
           <th>${lang==='ar'?'الاسم':'Name'}</th>
@@ -8068,14 +8069,14 @@ function renderObligations(c) {
         <div class="page-title-lg">${lang==='ar'?'الالتزامات الدورية':'Recurring Obligations'}</div>
         <div class="page-sub">${lang==='ar'?'المعادل الشهري:':'Monthly equivalent:'} ${fmtMoney(monthlyTotal)}</div>
       </div>
-      ${has('obligations.manage')?`<button class="btn btn-primary" onclick="showObligationModal()">${icon('plus',16)} ${lang==='ar'?'إضافة التزام':'Add Obligation'}</button>`:''}
+      ${has('obligations.manage')?`<button id="obl-add-btn" class="btn btn-primary" onclick="showObligationModal()">${icon('plus',16)} ${lang==='ar'?'إضافة التزام':'Add Obligation'}</button>`:''}
     </div>
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+    <div id="obl-stats-grid" class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-card"><div class="stat-icon">${icon('repeat',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الالتزامات':'Total Obligations'}</div><div class="stat-value">${db.obligations.filter(o=>o.status==='active').length}</div></div>
       <div class="stat-card"><div class="stat-icon amber">${icon('calendar',22)}</div><div class="stat-label">${lang==='ar'?'المعادل الشهري':'Monthly Equivalent'}</div><div class="stat-value">${fmtMoney(monthlyTotal)}</div></div>
       <div class="stat-card"><div class="stat-icon red">${icon('alert-triangle',22)}</div><div class="stat-label">${lang==='ar'?'مستحقة قريباً':'Due Soon (30 days)'}</div><div class="stat-value">${db.obligations.filter(o=>{ const d=new Date(o.next_due); return (d-now)/(1000*60*60*24)<=30 && o.status==='active'; }).length}</div></div>
     </div>
-    <div class="card">
+    <div id="obl-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
           <th>${lang==='ar'?'الالتزام':'Obligation'}</th>
@@ -8395,7 +8396,7 @@ function renderReceipts(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'سندات القبض والصرف':'Receipts & Payments'}</div>
-      ${has('receipts.manage')?`<div style="display:flex;gap:8px;">
+      ${has('receipts.manage')?`<div id="rcpt-actions" style="display:flex;gap:8px;">
         <button class="btn btn-primary" onclick="showVoucherModal('receipt')">${icon('plus',16)} ${lang==='ar'?'سند قبض':'Receipt'}</button>
         <button class="btn btn-danger" onclick="showVoucherModal('payment')">${icon('plus',16)} ${lang==='ar'?'سند صرف':'Payment'}</button>
       </div>`:''}
@@ -8405,7 +8406,7 @@ function renderReceipts(c) {
       <div class="stat-card"><div class="stat-icon red">${icon('arrow-up-circle',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي سندات الصرف':'Total Payments'}</div><div class="stat-value">${fmtMoney(totalPayments)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('wallet',22)}</div><div class="stat-label">${lang==='ar'?'الصافي':'Net'}</div><div class="stat-value" style="color:${totalReceipts-totalPayments>=0?'var(--success)':'var(--danger)'};">${fmtMoney(totalReceipts-totalPayments)}</div></div>
     </div>
-    <div class="tabs">
+    <div id="rcpt-tabs" class="tabs">
       <button class="tab-btn ${receiptTab==='receipt'?'active':''}" onclick="setReceiptTab('receipt')">📥 ${lang==='ar'?'سندات القبض':'Receipts'} (${receipts.length})</button>
       <button class="tab-btn ${receiptTab==='payment'?'active':''}" onclick="setReceiptTab('payment')">📤 ${lang==='ar'?'سندات الصرف':'Payments'} (${payments.length})</button>
     </div>
@@ -9497,7 +9498,7 @@ function renderQuotes(c) {
     ${quotesBanner}
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'عروض الأسعار':'Quotations'}</div>
-      ${has('quotes.manage')?`<button class="btn btn-primary" onclick="showQuoteModal()">${icon('plus',16)} ${lang==='ar'?'عرض سعر جديد':'New Quote'}</button>`:''}
+      ${has('quotes.manage')?`<button id="quo-add-btn" class="btn btn-primary" onclick="showQuoteModal()">${icon('plus',16)} ${lang==='ar'?'عرض سعر جديد':'New Quote'}</button>`:''}
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
       <div class="stat-card"><div class="stat-icon">${icon('file-plus',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي العروض':'Total Quotes'}</div><div class="stat-value">${quotes.length}</div></div>
@@ -9505,7 +9506,7 @@ function renderQuotes(c) {
       <div class="stat-card"><div class="stat-icon green">${icon('check-circle',22)}</div><div class="stat-label">${lang==='ar'?'مقبولة':'Accepted'}</div><div class="stat-value">${totalAccepted}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي القيمة':'Total Value'}</div><div class="stat-value">${fmtMoney(totalValue)}</div></div>
     </div>
-    <div class="card">
+    <div id="quo-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
           <th>${lang==='ar'?'رقم العرض':'Quote #'}</th>
@@ -11950,7 +11951,7 @@ function renderSettings(c) {
   const showSec = window._apiReachable && currentUser?.role === 'owner';
   c.innerHTML = `<div>
     <div class="page-header"><div class="page-title-lg">${t('settings')}</div></div>
-    <div class="tabs" style="flex-wrap:wrap;">
+    <div id="set-tabs" class="tabs" style="flex-wrap:wrap;">
       <button class="tab-btn ${settingsTab==='general'?'active':''}" onclick="setSettingsTab('general')">⚙️ ${lang==='ar'?'عام':'General'}</button>
       <button class="tab-btn ${settingsTab==='users'?'active':''}" onclick="setSettingsTab('users')">👥 ${lang==='ar'?'المستخدمون':'Users'}</button>
       ${hasPlanFeature('employees')?`<button class="tab-btn ${settingsTab==='employees'?'active':''}" onclick="setSettingsTab('employees')">👷 ${lang==='ar'?'الموظفون':'Employees'}</button>`:''}
@@ -12274,7 +12275,7 @@ function renderSettingsGeneral(c) {
       </div></div>`;
     })()}
 
-    <div class="card"><div class="card-pad">
+    <div id="s-company-card" class="card"><div class="card-pad">
       <h3 style="margin-bottom:16px;font-weight:800;">🏪 ${lang==='ar'?'بيانات المنشأة':'Company Info'}</h3>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'اسم المنشأة':'Company Name'}</label><input class="input" id="s-name" value="${s.company_name||''}" /></div>
@@ -13547,6 +13548,165 @@ function exportSupplierStatementPDF(supplierName) {
 }
 
 
+// ============ INTERACTIVE PAGE TOURS ============
+// جولة تعليمية تفاعلية بكل صفحة رئيسية، تظهر مرة واحدة فقط لكل مستخدم لكل
+// صفحة: للمالك بعد إكمال الأرصدة الافتتاحية، وللموظفين فور أول زيارة (لا
+// يمرّون بمعالج الأرصدة أصلًا). التخطي أو الإكمال يُسجَّل محليًا بجهاز/متصفح
+// هذا المستخدم تحديدًا (localStorage) — تفضيل عرض شخصي لا بيانات شركة.
+const TOUR_STEPS = {}; // تُعبَّى لاحقًا بمحتوى كل صفحة
+
+function _tourStorageKey() { return 'yaqiz_tours_seen_' + (currentUser?.id ?? currentUser?.username ?? 'guest'); }
+function _tourSeenMap() { try { return JSON.parse(localStorage.getItem(_tourStorageKey()) || '{}'); } catch { return {}; } }
+function _tourMarkSeen(pageId) { const m = _tourSeenMap(); m[pageId] = true; localStorage.setItem(_tourStorageKey(), JSON.stringify(m)); }
+
+let _activeTour = null; // { pageId, idx }
+
+function maybeStartPageTour(pageId) {
+  if (_activeTour) return;
+  const steps = TOUR_STEPS[pageId];
+  if (!steps || !steps.length) return;
+  if (_tourSeenMap()[pageId]) return;
+  const db = getDB();
+  if (currentUser?.role === 'owner' && !db.settings?.opening_balances_done) return;
+  _activeTour = { pageId, idx: 0 };
+  setTimeout(_renderTourStep, 400);
+}
+
+function _renderTourStep() {
+  el('tour-overlay')?.remove();
+  if (!_activeTour) return;
+  const steps = TOUR_STEPS[_activeTour.pageId];
+  if (_activeTour.idx >= steps.length) { _tourFinish(); return; }
+  const step = steps[_activeTour.idx];
+  const target = document.getElementById(step.id);
+  if (!target) { _activeTour.idx++; _renderTourStep(); return; } // العنصر غير موجود بهذي الحالة (فارغة/باقة أقل) — تخطَّ تلقائيًا
+
+  target.scrollIntoView({ block: 'center', behavior: 'instant' });
+  setTimeout(() => {
+    const r = target.getBoundingClientRect();
+    const pad = 8;
+    const total = steps.length;
+    const belowSpace = window.innerHeight - r.bottom;
+    const placeBelow = belowSpace > 170;
+    const top = placeBelow ? Math.min(r.bottom + 14, window.innerHeight - 190) : Math.max(14, r.top - 175);
+    const left = Math.min(Math.max(14, r.left), window.innerWidth - 324);
+
+    // بقعة ضوء حول العنصر المستهدف بتقنية box-shadow بانتشار محدود (2000px —
+    // يكفي لتغطية أي حجم شاشة واقعي). انتشار غير محدود (9999px) لا يُرسم
+    // بثبات ببعض محركات الرسم — جُرِّب وتأكد بالاختبار الفعلي.
+    const bx = r.left - pad, by = r.top - pad, bw = r.width + pad*2, bh = r.height + pad*2;
+
+    const box = document.createElement('div');
+    box.id = 'tour-overlay';
+    box.innerHTML = ''
+      // طبقة شفافة فوق العنصر المسلَّط عليه الضوء نفسه — تمنع أي نقر عليه أثناء
+      // الجولة (بعض العناصر لها onclick ينتقل لصفحة أخرى ويقطع الجولة)
+      + '<div style="position:fixed;top:'+by+'px;left:'+bx+'px;width:'+bw+'px;height:'+bh+'px;z-index:10010;background:transparent;"></div>'
+      + '<div style="position:fixed;top:'+by+'px;left:'+bx+'px;width:'+bw+'px;height:'+bh+'px;border-radius:12px;box-shadow:0 0 0 2000px rgba(15,23,42,0.72),0 0 0 3px rgba(37,99,235,.6);z-index:10011;pointer-events:none;"></div>'
+      + '<div style="position:fixed;top:'+top+'px;left:'+left+'px;width:300px;background:#fff;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.32);z-index:10012;padding:16px 18px;font-family:inherit;">'
+      +   '<div dir="ltr" style="font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:6px;text-align:right;">'+(_activeTour.idx+1)+' / '+total+'</div>'
+      +   '<div style="font-size:14px;font-weight:900;color:#0f172a;margin-bottom:6px;">'+step.title+'</div>'
+      +   '<div style="font-size:12.5px;color:#475569;line-height:1.7;margin-bottom:14px;">'+step.text+'</div>'
+      +   '<div style="display:flex;justify-content:space-between;align-items:center;">'
+      +     '<button onclick="tourSkip()" style="background:none;border:none;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">تخطّي</button>'
+      +     '<button onclick="tourNext()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">'+((_activeTour.idx+1>=total)?'إنهاء':'التالي →')+'</button>'
+      +   '</div>'
+      + '</div>';
+    document.body.appendChild(box);
+  }, 60);
+}
+
+function tourNext() { if (!_activeTour) return; _activeTour.idx++; _renderTourStep(); }
+function tourSkip() { if (!_activeTour) return; _tourMarkSeen(_activeTour.pageId); _activeTour = null; el('tour-overlay')?.remove(); }
+function _tourFinish() { if (!_activeTour) return; _tourMarkSeen(_activeTour.pageId); _activeTour = null; el('tour-overlay')?.remove(); }
+
+TOUR_STEPS.pos = [
+  { id:'pos-search', title:'البحث عن منتج', text:'اكتب اسم المنتج أو امسح الباركود هنا — النتائج تظهر فورًا وتقدر تضيفها للسلة مباشرة.' },
+  { id:'products-grid', title:'شبكة المنتجات', text:'كل منتجاتك تظهر هنا كبطاقات — اضغط على أي منتج لإضافته للسلة مباشرة بدون بحث.' },
+  { id:'pos-cart', title:'سلة البيع الحالية', text:'الأصناف اللي أضفتها للفاتورة الحالية تظهر هنا — تقدر تعدّل الكمية أو تحذف أي صنف قبل إتمام البيع.' },
+  { id:'pos-checkout-btn', title:'إتمام البيع', text:'بعد اختيار طريقة الدفع، اضغط هنا لإتمام عملية البيع وطباعة الفاتورة.' },
+];
+
+TOUR_STEPS.dashboard = [
+  { id:'dash-today-sales-card', title:'مبيعات اليوم', text:'إجمالي كل ما بِيع اليوم من نقطة البيع وفواتير المبيعات معًا. اضغط عليه في أي وقت للانتقال مباشرة لصفحة المبيعات.' },
+  { id:'dash-trend-card', title:'حركة المبيعات والمشتريات', text:'مخطط بياني يقارن مبيعاتك ومشترياتك آخر 7 أيام، عشان تشوف اتجاه نشاطك بنظرة سريعة.' },
+  { id:'dash-receivables-card', title:'الذمم المدينة (لك)', text:'قائمة كل فاتورة آجلة أو مسددة جزئيًا لعملائك، مع زر «تحصيل» سريع بجانب كل فاتورة لإنشاء سند قبض فورًا.' },
+  { id:'dash-payables-card', title:'الذمم الدائنة (عليك)', text:'قائمة كل مورد له عليك مبلغ مستحق، مع زر «دفع» سريع لتسجيل السداد مباشرة.' },
+];
+
+TOUR_STEPS.sales = [
+  { id:'sales-new-invoice-btn', title:'فاتورة جديدة', text:'أنشئ فاتورة مبيعات جديدة من هنا — اختر العميل والأصناف وطريقة الدفع مباشرة.' },
+  { id:'sales-invoices-table', title:'سجل الفواتير', text:'كل فواتير مبيعاتك تظهر هنا مع حالتها (مدفوعة / آجلة / جزئية) — اضغط على أي فاتورة لعرض تفاصيلها أو طباعتها.' },
+];
+
+TOUR_STEPS.purchases = [
+  { id:'purch-add-btn', title:'إضافة مشتريات', text:'سجّل فاتورة شراء بضاعة أو مصروف إداري جديد من هنا.' },
+  { id:'purch-stats-grid', title:'إجماليات المشتريات', text:'ملخص سريع لإجمالي مشتريات البضاعة والمصاريف الإدارية — اضغط على أي بطاقة للتصفية حسب نوعها.' },
+  { id:'purch-table', title:'سجل المشتريات', text:'كل فواتير الشراء تظهر هنا حسب النوع المختار (بضاعة أو مصاريف إدارية) — اضغط على أي فاتورة لعرض تفاصيلها.' },
+];
+
+TOUR_STEPS.inventory = [
+  { id:'inv-tabs', title:'أقسام المخزون', text:'تنقّل بين قائمة المنتجات وحركة المخزون والمرتجعات من هنا.' },
+  { id:'inv-add-btn', title:'إضافة منتج', text:'أضف منتجًا جديدًا مع الباركود والكميات وحد الطلب الأدنى.' },
+  { id:'inv-table', title:'قائمة المنتجات', text:'كل منتجاتك مع الكمية المتاحة — الكمية تظهر باللون الأحمر إذا وصلت لحد الطلب الأدنى.' },
+];
+
+TOUR_STEPS.customers = [
+  { id:'cus-add-btn', title:'إضافة عميل', text:'أضف عميلًا جديدًا مع بياناته ورصيده الافتتاحي (وعنوانه إن كان عميل B2B).' },
+  { id:'cus-table', title:'قائمة العملاء', text:'كل عملائك مع إجمالي مشترياتهم والرصيد المستحق — اضغط «كشف» لعرض كشف حساب مفصّل لأي عميل.' },
+];
+
+TOUR_STEPS.suppliers = [
+  { id:'supp-add-btn', title:'إضافة مورد', text:'أضف موردًا جديدًا مع بياناته ورصيده الافتتاحي.' },
+  { id:'supp-table', title:'قائمة الموردين', text:'كل مورديك مع إجمالي مشترياتك منهم والمبلغ المستحق عليك — اضغط «كشف» لعرض كشف حساب مفصّل.' },
+];
+
+TOUR_STEPS.employees = [
+  { id:'emp-add-btn', title:'إضافة موظف', text:'أضف موظفًا جديدًا مع راتبه الشهري وتاريخ التحاقه.' },
+  { id:'emp-stats-grid', title:'ملخص الرواتب', text:'إجمالي عدد الموظفين النشطين والرواتب الشهرية والسنوية بنظرة سريعة.' },
+  { id:'emp-table', title:'قائمة الموظفين', text:'كل موظفيك مع رواتبهم وحالتهم — اضغط زر الدفع لتسجيل صرف راتب أي موظف نشط.' },
+];
+
+TOUR_STEPS.treasury = [
+  { id:'tr-actions', title:'إيداع وسحب', text:'سجّل إيداعًا أو سحبًا يدويًا من الخزينة — كل حركة تُنشئ قيدًا محاسبيًا تلقائيًا.' },
+  { id:'tr-stats-grid', title:'أرصدة الخزينة', text:'رصيد الخزينة الإجمالي مقسّمًا بين النقدي والبنكي، مع إجمالي الوارد والصادر.' },
+  { id:'tr-table', title:'سجل حركات الخزينة', text:'كل حركة دخلت أو خرجت من الخزينة تظهر هنا بالتاريخ والمبلغ.' },
+];
+
+TOUR_STEPS.receipts = [
+  { id:'rcpt-actions', title:'سند قبض / سند صرف', text:'أنشئ سند قبض عند استلام مبلغ من عميل، أو سند صرف عند دفع مبلغ لمورد.' },
+  { id:'rcpt-tabs', title:'التنقل بين السندات', text:'بدّل بين قائمة سندات القبض وسندات الصرف من هنا.' },
+  { id:'receipt-content', title:'سجل السندات', text:'كل السندات المسجّلة تظهر هنا مع إمكانية طباعة كل سند كـ PDF.' },
+];
+
+TOUR_STEPS.quotes = [
+  { id:'quo-add-btn', title:'عرض سعر جديد', text:'أنشئ عرض سعر لعميل — يمكنك لاحقًا تحويله مباشرة لفاتورة مبيعات عند القبول.' },
+  { id:'quo-table', title:'سجل عروض الأسعار', text:'كل عروض الأسعار مع حالتها (مرسل، مقبول، منتهي) — زر «تحويل» يحوّل العرض المقبول لفاتورة فورًا.' },
+];
+
+TOUR_STEPS.obligations = [
+  { id:'obl-add-btn', title:'إضافة التزام', text:'سجّل التزامًا دوريًا مثل الإيجار أو الاشتراكات مع تكراره (شهري، ربع سنوي...).' },
+  { id:'obl-stats-grid', title:'ملخص الالتزامات', text:'المعادل الشهري لكل التزاماتك وعدد الالتزامات المستحقة خلال 30 يومًا.' },
+  { id:'obl-table', title:'سجل الالتزامات', text:'كل التزاماتك مع تاريخ الاستحقاق القادم — زر «سداد» يسجّل الدفعة فورًا.' },
+];
+
+TOUR_STEPS.reports = [
+  { id:'rpt-tabs', title:'أقسام التقارير', text:'تنقّل بين التقارير العامة وتقرير الذمم المتأخرة من هنا.' },
+  { id:'rpt-subtabs', title:'أنواع التقارير', text:'تقرير الضريبة، قائمة الدخل، أعمار الديون، المنتجات، الموردين، وغيرها — كل تقرير في تبويب مستقل.' },
+  { id:'report-content', title:'بيانات التقرير', text:'تفاصيل وأرقام التقرير المختار تظهر هنا، مع إمكانية التصفية حسب الفترة الزمنية.' },
+];
+
+TOUR_STEPS.accountingReports = [
+  { id:'acct-tabs', title:'أقسام التقارير المحاسبية', text:'ميزان المراجعة، الميزانية، القيود، شجرة الحسابات، إقفال الفترات، الزكاة، والكشوفات — كلها من هنا.' },
+  { id:'acct-report-content', title:'بيانات التقرير المحاسبي', text:'تفاصيل التقرير المحاسبي المختار (مثل ميزان المراجعة أو دفتر اليومية) تظهر هنا.' },
+];
+
+TOUR_STEPS.settings = [
+  { id:'set-tabs', title:'أقسام الإعدادات', text:'عام، المستخدمون، الموظفون، النشاطات، الأمان، الأرصدة الافتتاحية، وسياسات التسعير — كل قسم في تبويب.' },
+  { id:'s-company-card', title:'بيانات المنشأة', text:'اسمك التجاري ورقمك الضريبي وسجلك التجاري — هذه البيانات تظهر في كل فاتورة تصدرها.' },
+  { id:'settings-main-content', title:'محتوى الإعدادات', text:'محتوى القسم المختار من الإعدادات يظهر هنا بالكامل — بما في ذلك الربط مع هيئة الزكاة والضريبة (فاتورة).' },
+];
+
 // ============ OPENING BALANCES WIZARD ============
 let _obStep = 1;
 
@@ -13693,6 +13853,7 @@ function obSkipWizard() {
   saveDB(db);
   closeModal();
   renderPage();
+  maybeStartPageTour(currentPage);
 }
 
 function obAddProduct() {
@@ -14105,6 +14266,7 @@ function obSaveAll() {
   closeModal();
   showToast('✅ تم حفظ الأرصدة الافتتاحية — النظام جاهز!');
   renderPage();
+  maybeStartPageTour(currentPage);
 }
 
 function renderOpeningBalancesSettings(c) {
