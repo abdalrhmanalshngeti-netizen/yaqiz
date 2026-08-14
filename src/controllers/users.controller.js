@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const db     = require('../config/db');
 
 const SAFE_FIELDS = `id, username, full_name, email, phone, role,
-  permissions, pos_access, shift_enabled, active, last_login, created_at`;
+  permissions, pos_access, shift_enabled, active, last_login, created_at, tours_seen`;
 
 // أقصى عدد مستخدمين (الحساب الرئيسي + التابعين) لكل باقة — null يعني بلا حد
 const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
@@ -120,6 +120,25 @@ exports.remove = async (req, res, next) => {
       [req.params.id, req.user.company_id]
     );
     res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+// وضع صفحة كـ "تمت مشاهدة جولتها التعليمية" لحساب المستخدم الحالي نفسه —
+// بلا شرط صلاحية settings.edit عشان يشتغل لأي موظف مسجّل دخول، ويُزامَن عبر
+// الحساب نفسه بغضّ النظر عن الجهاز (بدل الاعتماد على localStorage فقط)
+exports.updateToursSeen = async (req, res, next) => {
+  try {
+    const { pageId } = req.body;
+    if (!pageId || typeof pageId !== 'string') {
+      return res.status(400).json({ success: false, message: 'pageId مطلوب' });
+    }
+    const { rows } = await db.query(`
+      UPDATE users SET tours_seen = tours_seen || jsonb_build_object($1::text, true)
+      WHERE id = $2 AND company_id = $3
+      RETURNING tours_seen
+    `, [pageId, req.user.sub, req.user.company_id]);
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    res.json({ success: true, data: rows[0].tours_seen });
   } catch (err) { next(err); }
 };
 

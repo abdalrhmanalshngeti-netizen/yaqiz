@@ -6,6 +6,10 @@ const { loginLimiter } = require('../middleware/rateLimiter');
 
 router.use(auth);
 
+// أي موظف مسجّل دخول يعلّم جولته التعليمية كمشاهَدة لحسابه الخاص فقط —
+// قبل مسار /:id عشان توضيح النية، لا يتعارض معه لاختلاف عدد الأجزاء بالمسار
+router.put ('/me/tours-seen', ctrl.updateToursSeen);
+
 router.get ('/',       can('settings.view'),   ctrl.list);
 router.post('/',       can('settings.edit'),   ctrl.create);
 router.get ('/:id',    can('settings.view'),   ctrl.getOne);

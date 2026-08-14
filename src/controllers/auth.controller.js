@@ -118,6 +118,7 @@ exports.login = async (req, res, next) => {
         company_email:           user.company_email   || null,
         plan:                    (['basic','growth','pro'].includes(user.company_plan) ? user.company_plan : 'basic'),
         subscription_expires_at: user.subscription_expires_at,
+        tours_seen:              user.tours_seen || {},
       }
     });
 
@@ -260,7 +261,7 @@ exports.me = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
       SELECT u.id, u.username, u.full_name, u.role, u.permissions,
-             u.pos_access, u.shift_enabled, u.last_login,
+             u.pos_access, u.shift_enabled, u.last_login, u.tours_seen,
              c.name AS company_name, c.vat_number AS company_vat, c.logo_url,
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,

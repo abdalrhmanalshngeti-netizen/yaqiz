@@ -13551,13 +13551,40 @@ function exportSupplierStatementPDF(supplierName) {
 // ============ INTERACTIVE PAGE TOURS ============
 // جولة تعليمية تفاعلية بكل صفحة رئيسية، تظهر مرة واحدة فقط لكل مستخدم لكل
 // صفحة: للمالك بعد إكمال الأرصدة الافتتاحية، وللموظفين فور أول زيارة (لا
-// يمرّون بمعالج الأرصدة أصلًا). التخطي أو الإكمال يُسجَّل محليًا بجهاز/متصفح
-// هذا المستخدم تحديدًا (localStorage) — تفضيل عرض شخصي لا بيانات شركة.
+// يمرّون بمعالج الأرصدة أصلًا). حالة "شوفها/ما شفهاش" مرتبطة بالحساب نفسه على
+// السيرفر (عمود tours_seen بجدول users) فتبقى واحدة حتى لو بدّل المستخدم
+// جهازه أو متصفحه؛ localStorage هنا احتياط لوضع عدم الاتصال بالسيرفر فقط.
 const TOUR_STEPS = {}; // تُعبَّى لاحقًا بمحتوى كل صفحة
 
 function _tourStorageKey() { return 'yaqiz_tours_seen_' + (currentUser?.id ?? currentUser?.username ?? 'guest'); }
-function _tourSeenMap() { try { return JSON.parse(localStorage.getItem(_tourStorageKey()) || '{}'); } catch { return {}; } }
-function _tourMarkSeen(pageId) { const m = _tourSeenMap(); m[pageId] = true; localStorage.setItem(_tourStorageKey(), JSON.stringify(m)); }
+function _tourSeenMap() {
+  if (currentUser?.tours_seen && typeof currentUser.tours_seen === 'object') return currentUser.tours_seen;
+  try { return JSON.parse(localStorage.getItem(_tourStorageKey()) || '{}'); } catch { return {}; }
+}
+function _tourMarkSeen(pageId) {
+  if (!currentUser) return;
+  currentUser.tours_seen = { ...(currentUser.tours_seen || {}), [pageId]: true };
+
+  // مزامنة فورية مع حساب المستخدم بالسيرفر — تشتغل من أي جهاز يسجّل دخوله فيه
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/users/me/tours-seen', { pageId }).catch(() => {});
+  }
+
+  // احتياط محلي لوضع عدم الاتصال + تحديث الكاش المحلي لقاعدة المستخدمين والجلسة
+  try {
+    const key = _tourStorageKey();
+    const m = JSON.parse(localStorage.getItem(key) || '{}'); m[pageId] = true;
+    localStorage.setItem(key, JSON.stringify(m));
+    const db = getDB();
+    const idx = (db.users || []).findIndex(x => x.id === currentUser.id);
+    if (idx >= 0) { db.users[idx].tours_seen = currentUser.tours_seen; saveDB(db); }
+    const cached = JSON.parse(localStorage.getItem('yaqiz_user') || 'null');
+    if (cached && cached.id === currentUser.id) {
+      cached.tours_seen = currentUser.tours_seen;
+      localStorage.setItem('yaqiz_user', JSON.stringify(cached));
+    }
+  } catch (e) {}
+}
 
 let _activeTour = null; // { pageId, idx }
 
@@ -15331,6 +15358,7 @@ async function runAISearchQuery(q) {
           shift_enabled:u.shift_enabled || false,
           active:       u.active !== false,
           last_login:   u.last_login,
+          tours_seen:   u.tours_seen || {},
         }));
         // أضف المستخدم الحالي إذا لم يكن في القائمة
         if (currentUser && !apiUsers.find(x => x.id === currentUser.id)) {
@@ -15847,7 +15875,8 @@ async function runAISearchQuery(q) {
         id: apiUser.id, username: apiUser.username,
         full_name: apiUser.full_name, role: apiUser.role,
         permissions: apiUser.permissions||[], active: true,
-        pos_access: apiUser.pos_access, shift_enabled: !!apiUser.shift_enabled
+        pos_access: apiUser.pos_access, shift_enabled: !!apiUser.shift_enabled,
+        tours_seen: apiUser.tours_seen || {}
       };
 
       // حفظ بيانات الشركة في الإعدادات فوراً
@@ -16044,7 +16073,8 @@ async function runAISearchQuery(q) {
             id: me.data.id, username: me.data.username,
             full_name: me.data.full_name, role: me.data.role,
             permissions: me.data.permissions||[], active: true,
-            pos_access: me.data.pos_access, shift_enabled: !!me.data.shift_enabled
+            pos_access: me.data.pos_access, shift_enabled: !!me.data.shift_enabled,
+            tours_seen: me.data.tours_seen || {}
           };
           currentUser = u;
           localStorage.setItem('yaqiz_user', JSON.stringify(u));
