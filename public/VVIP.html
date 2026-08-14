@@ -13549,6 +13549,94 @@ function exportSupplierStatementPDF(supplierName) {
 
 // ============ OPENING BALANCES WIZARD ============
 let _obStep = 1;
+
+// محتوى تعليمي لكل خطوة — منسوخ حرفيًا من نفس سكربت توليد "دليل الأرصدة
+// الافتتاحية" (scratchpad/docgen/build-opening-balances.js)، عشان يبقى محتوى
+// المعالج والدليل مصدرهما واحد ومتطابقين دايمًا مع بعض. أي تحديث لاحق على
+// الدليل يجب أن ينعكس هنا بنفس الصياغة.
+const OB_GUIDE = {
+  cash: {
+    def: 'حقلان بس: «رصيد البنك» (المبلغ الموجود بحسابك البنكي) و«رصيد الصندوق» (الكاش الموجود فعليًا لديك). اجمع أرصدة كل حساباتك البنكية برقم واحد إذا كان عندك أكثر من حساب.',
+    example: 'مثال: رصيد البنك 30,000 ريال + رصيد الصندوق 5,000 ريال = 35,000 ريال إجمالي',
+    account: 'يذهب لحساب 1100 «النقدية والبنك» (مدين)',
+    panel: 'إذا احتجت لاحقًا تفصيل كل حساب بنكي على حدة (أكثر من بنك)، تقدر تضيف حسابات بنكية إضافية من صفحة «الخزينة» بعد إكمال المعالج — الخطوة هنا بترصد فقط الإجمالي كنقطة بداية.',
+  },
+  products: {
+    def: 'أضف كل صنف موجود فعليًا بمخزونك الآن: الاسم، الكمية، سعر الشراء (التكلفة)، وسعر البيع.',
+    example: 'مثال: 100 قطعة × 20 ريال سعر شراء = 2,000 ريال قيمة مخزون',
+    warning: 'سعر الشراء هو الرقم اللي يدخل في حساباتك المالية (الكمية × سعر الشراء = قيمة المخزون بالميزانية) — سعر البيع فقط يحدد كم بتبيع فيه هذا الصنف مستقبلًا، وما له أي أثر محاسبي على رصيدك الافتتاحي.',
+    account: 'يذهب لحساب 1300 «المخزون» (مدين)',
+    panel: 'لا يوجد مخزون؟ اضغط «تخطّ» وانتقل للخطوة التالية بدون أي قلق — هذي خطوة اختيارية.',
+  },
+  customers: {
+    def: 'أضف كل عميل عليه مبلغ لك لم يسدده بعد (مبيعات سابقة قبل استخدامك يقظ). المصطلح المحاسبي لهذا الرقم «الذمم المدينة» — فلوس مستحقة لك على الغير.',
+    example: 'مثال: متجر الأمل يدين لك بمبلغ 3,000 ريال',
+    account: 'يذهب لحساب 1200 «الذمم المدينة» (مدين)',
+    panel: 'هذي الخطوة لا تظهر لك لو كان اشتراكك على الباقة الأساسية — إدارة العملاء متاحة فقط بباقتَي النمو والاحترافية.',
+  },
+  suppliers: {
+    def: 'نفس فكرة خطوة العملاء لكن بالعكس: أضف كل مورد أنت مدين له بمبلغ لم تسدده بعد. المصطلح المحاسبي «الذمم الدائنة» — فلوس مستحقة عليك للغير.',
+    example: 'مثال: مصنع النور مستحق له مبلغ 2,500 ريال',
+    account: 'يذهب لحساب 2100 «الذمم الدائنة» (دائن)',
+  },
+  fixed_assets: {
+    def: 'أي ممتلكات طويلة الأجل تستخدمها بنشاطك ولا تُباع كبضاعة عادية: سيارة توصيل، أجهزة كمبيوتر، معدات، عقار...',
+    example: 'مثال: سيارة توصيل بقيمة دفترية حالية 25,000 ريال',
+    account: 'يذهب لحساب 1500 «الأصول الثابتة» (مدين)',
+    panel: 'أدخل القيمة الدفترية الحالية للأصل (قيمته التقريبية اليوم)، وليس بالضرورة سعر شرائه الأصلي لو مضى عليه وقت طويل.',
+  },
+  obligations: {
+    def: 'التزامات متكررة تدفعها بانتظام مثل إيجار المكتب أو اشتراك الكهرباء أو تأمين السيارة.',
+    example: 'مثال: إيجار الشهر الحالي غير المسدد بعد = 4,000 ريال (مو إيجار سنة كاملة)',
+    warning: 'أي مبلغ تكتبه هنا يُسجَّل فورًا كدَين كامل عليك بالميزانية من أول يوم — فأدخل فقط الجزء اللي فعلًا لم تسدده بعد حتى تاريخ اليوم. لا تكتب القيمة الإجمالية لالتزام مستقبلي متكرر (زي إيجار سنة كاملة) وأنت مسدد كل شهر أول بأول — هذا ليس دَينًا عليك فعليًا اليوم.',
+    account: 'يذهب لحساب 2300 «الالتزامات الدورية» (دائن)',
+    panel: 'الالتزامات الدورية ميزة حصرية للباقة الاحترافية فقط. إذا كان اشتراكك على الأساسية أو النمو، هذي الخطوة لا تظهر لك.',
+  },
+  employees: {
+    def: 'أضف موظفيك الحاليين (الاسم، المسمى الوظيفي، الراتب) لتسجيلهم بصفحة «الموظفون» مباشرة جاهزين لأول عملية رواتب.',
+    example: 'مثال: أحمد سعيد — محاسب — راتب 5,000 ريال',
+    account: 'هذي الخطوة الوحيدة اللي ما تدخل بحساب رأس المال أو أي قيد محاسبي — فقط لتسجيل بيانات الموظفين.',
+  },
+  capital: {
+    def: 'رأس المال = إجمالي الأصول − إجمالي الالتزامات. النظام يحسب لك رقمًا مقترحًا تلقائيًا بناءً على كل ما أدخلته بالخطوات السابقة.',
+    example: 'مثال: أصول 67,000 − التزامات 6,500 = رأس مال مقترح 60,500 ريال',
+    account: 'يذهب لحساب 3000 «رأس المال الافتتاحي» (دائن)',
+    panel: 'غيّر الرقم المقترح يدويًا فقط لو كان عندك رقم دقيق من مصدر خارجي (مثلًا ميزانية سلّمك إياها محاسبك السابق). بغير ذلك، اترك الرقم المقترح كما هو.',
+  },
+  review: {
+    def: 'شاشة أخيرة تلخّص كل شيء أدخلته: إجمالي الأصول، إجمالي الالتزامات، رأس المال، وقائمة تفصيلية بكل عميل ومورد وصنف ومبلغ.',
+    panel: 'بعد الحفظ، تقدر ترجع تعدّل أي رقم من هذي الأرصدة لاحقًا من الإعدادات ← الأرصدة الافتتاحية ← تعديل، في أي وقت.',
+  },
+};
+
+function obGuideBlock(key) {
+  const g = OB_GUIDE[key]; if (!g) return '';
+  return ''
+    + (g.example ? '<div style="background:#eff6ff;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:#1e40af;">💡 '+g.example+'</div>' : '')
+    + (g.warning ? '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:#9a3412;">⚠️ <b>تنبيه مهم:</b> '+g.warning+'</div>' : '');
+}
+
+function showOBGuidePanel() {
+  const stepTitles = { cash:'💰 النقدية والبنك', products:'📦 المخزون', customers:'👥 العملاء', suppliers:'🏭 الموردون',
+    fixed_assets:'🏗️ الأصول الثابتة', obligations:'📋 الالتزامات الدورية', employees:'👨‍💼 الموظفون', capital:'💼 رأس المال', review:'✅ مراجعة وتأكيد' };
+  const key = _obActiveSteps()[_obStep-1];
+  const g = OB_GUIDE[key] || {};
+  const panelHtml = document.createElement('div');
+  panelHtml.id = 'ob-guide-panel';
+  panelHtml.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:10001;" onclick="closeOBGuidePanel()"></div>'
+    + '<div style="position:fixed;top:0;bottom:0;left:0;width:min(380px,92vw);background:var(--card);z-index:10002;box-shadow:8px 0 32px rgba(0,0,0,0.25);overflow-y:auto;padding:24px 22px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;">📖 من دليل الأرصدة الافتتاحية</div><button class="icon-btn" onclick="closeOBGuidePanel()">'+icon('x',18)+'</button></div>'
+    + '<div style="font-size:17px;font-weight:900;margin-bottom:14px;">'+(stepTitles[key]||'')+'</div>'
+    + '<div style="font-size:13.5px;line-height:1.9;color:var(--text-main);margin-bottom:14px;">'+(g.def||'')+'</div>'
+    + (g.example ? '<div style="background:#eff6ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;">💡 '+g.example+'</div>' : '')
+    + (g.warning ? '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#9a3412;">⚠️ <b>تنبيه مهم:</b> '+g.warning+'</div>' : '')
+    + (g.panel ? '<div style="font-size:13px;line-height:1.8;color:var(--text-muted);margin-bottom:12px;">'+g.panel+'</div>' : '')
+    + (g.account ? '<div style="background:var(--bg);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--text-muted);">📒 '+g.account+'</div>' : '')
+    + '</div>';
+  document.body.appendChild(panelHtml);
+}
+function closeOBGuidePanel() { el('ob-guide-panel')?.remove(); }
+
 // خطوات المعالج مبنية على حدود الباقة — الباقة الأساسية بدون عملاء أو التزامات دورية
 const _OB_ALL_STEPS = ['cash','products','customers','suppliers','fixed_assets','obligations','employees','capital','review'];
 function _obActiveSteps() {
@@ -13682,8 +13770,11 @@ function renderOBWizard() {
   mc.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 16px;">'
     +'<div style="background:var(--card);border-radius:20px;width:100%;max-width:700px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);margin:auto;">'
     +'<div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);padding:22px 28px;color:#fff;">'
-    +'<div style="font-size:12px;opacity:0.75;margin-bottom:4px;letter-spacing:.5px;">إعداد المنشأة — أرصدة البداية</div>'
-    +'<div style="font-size:20px;font-weight:900;">'+stepTitles[curKey]+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+    +'<div><div style="font-size:12px;opacity:0.75;margin-bottom:4px;letter-spacing:.5px;">إعداد المنشأة — أرصدة البداية</div>'
+    +'<div style="font-size:20px;font-weight:900;">'+stepTitles[curKey]+'</div></div>'
+    +(OB_GUIDE[curKey]?'<button onclick="showOBGuidePanel()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:10px;padding:7px 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">📖 الدليل</button>':'')
+    +'</div>'
     +'<div style="margin-top:14px;">'
     +'<div style="display:flex;gap:4px;margin-bottom:6px;">'
     +Array.from({length:stepCount},(_,i)=>'<div style="flex:1;height:4px;border-radius:999px;background:'+(i<_obStep?'#fff':i===_obStep-1?'#93c5fd':'rgba(255,255,255,0.2)')+'"></div>').join('')
@@ -13707,7 +13798,8 @@ function renderOBStepContent() {
 function obStep1() {
   const total = (_obData.cash_box||0)+(_obData.cash_bank||0);
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">أدخل الأرصدة النقدية الموجودة لديك في بداية تشغيل المنصة.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل الأرصدة النقدية الموجودة لديك في بداية تشغيل المنصة.</p>'
+    +obGuideBlock('cash')
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
     +'<div style="background:var(--bg);border-radius:12px;padding:18px;text-align:center;"><div style="font-size:28px;margin-bottom:8px;">🏦</div>'
     +'<label class="form-label" style="display:block;margin-bottom:8px;">رصيد البنك</label>'
@@ -13726,7 +13818,8 @@ function obStep2() {
   const total = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
   const rows  = _obData.products.map((p,i)=>'<tr><td><b>'+p.name+'</b></td><td>'+p.qty+'</td><td>'+fmtMoney(p.buy_price)+'</td><td>'+fmtMoney(p.sell_price)+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(p.qty*p.buy_price)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveProduct('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">أضف كل صنف في مخزونك الحالي مع كميته وأسعاره.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أضف كل صنف في مخزونك الحالي مع كميته وأسعاره.</p>'
+    +obGuideBlock('products')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم الصنف *</label><input class="input" id="ob-p-name" placeholder="مثال: زيت زيتون" onkeydown="if(event.key===\'Enter\')obAddProduct()" /></div>'
@@ -13746,7 +13839,8 @@ function obStep3() {
   const total = _obData.customers.reduce((s,c)=>s+c.balance,0);
   const rows  = _obData.customers.map((c,i)=>'<tr><td><b>'+c.name+'</b></td><td style="color:#16a34a;font-weight:700;">'+fmtMoney(c.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveCustomer('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">أدخل العملاء الذين عليهم مبالغ لم تُحصَّل بعد.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل العملاء الذين عليهم مبالغ لم تُحصَّل بعد.</p>'
+    +obGuideBlock('customers')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم العميل *</label><input class="input" id="ob-c-name" placeholder="اسم العميل" onkeydown="if(event.key===\'Enter\')obAddCustomer()" /></div>'
@@ -13764,7 +13858,8 @@ function obStep4() {
   const total = _obData.suppliers.reduce((s,x)=>s+x.balance,0);
   const rows  = _obData.suppliers.map((s,i)=>'<tr><td><b>'+s.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(s.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveSupplier('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">أدخل الموردين الذين عليك مبالغ لم تُسدَّد بعد.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل الموردين الذين عليك مبالغ لم تُسدَّد بعد.</p>'
+    +obGuideBlock('suppliers')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم المورد *</label><input class="input" id="ob-s-name" placeholder="اسم المورد" onkeydown="if(event.key===\'Enter\')obAddSupplier()" /></div>'
@@ -13782,8 +13877,8 @@ function obStep5() {
   const total = _obData.fixed_assets.reduce((s,a)=>s+a.value,0);
   const rows  = _obData.fixed_assets.map((a,i)=>'<tr><td><b>'+a.name+'</b></td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(a.value)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveAsset('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:4px;">هل تمتلك أصولاً ثابتة مثل سيارات أو أجهزة أو معدات أو عقارات؟</p>'
-    +'<p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;background:var(--bg);padding:10px;border-radius:8px;">💡 مثال: سيارة توصيل، جهاز كمبيوتر، آلة إنتاج، عقار...</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">هل تمتلك أصولاً ثابتة مثل سيارات أو أجهزة أو معدات أو عقارات؟</p>'
+    +obGuideBlock('fixed_assets')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم الأصل *</label><input class="input" id="ob-a-name" placeholder="مثال: سيارة هايلكس 2022" onkeydown="if(event.key===\'Enter\')obAddAsset()" /></div>'
@@ -13801,8 +13896,8 @@ function obStep6() {
   const total = _obData.obligations.reduce((s,o)=>s+o.amount,0);
   const rows  = _obData.obligations.map((o,i)=>'<tr><td><b>'+o.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(o.amount)+'</td><td>'+o.frequency+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveObligation('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:4px;">أدخل الالتزامات الدورية الثابتة التي تدفعها بانتظام.</p>'
-    +'<p style="color:var(--text-muted);font-size:12px;margin-bottom:16px;background:var(--bg);padding:10px;border-radius:8px;">💡 مثال: إيجار المكتب (شهري)، اشتراك الكهرباء (شهري)، تأمين السيارة (سنوي)...</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل الالتزامات الدورية الثابتة التي تدفعها بانتظام.</p>'
+    +obGuideBlock('obligations')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم الالتزام *</label><input class="input" id="ob-ob-name" placeholder="مثال: إيجار المستودع" onkeydown="if(event.key===\'Enter\')obAddObligation()" /></div>'
@@ -13821,7 +13916,8 @@ function obStep7() {
   const totalSal = _obData.employees.reduce((s,e)=>s+e.salary,0);
   const rows     = _obData.employees.map((e,i)=>'<tr><td style="color:var(--text-muted);">'+(i+1)+'</td><td><b>'+e.name+'</b></td><td>'+(e.job_title||'—')+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(e.salary)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveEmployee('+i+')">✕</button></td></tr>').join('');
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">أضف موظفيك الحاليين مع مسمياتهم الوظيفية ورواتبهم.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أضف موظفيك الحاليين مع مسمياتهم الوظيفية ورواتبهم.</p>'
+    +obGuideBlock('employees')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم الموظف *</label><input class="input" id="ob-e-name" placeholder="الاسم الكامل" onkeydown="if(event.key===\'Enter\')obAddEmployee()" /></div>'
@@ -13845,7 +13941,8 @@ function obStep8() {
   const suggested  = Math.max(0, totalAssets - totalLiab);
   const capVal     = _obData.capital || suggested || '';
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">رأس المال هو المبلغ الذي استثمرته في المنشأة من مالك الخاص.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">رأس المال هو المبلغ الذي استثمرته في المنشأة من مالك الخاص.</p>'
+    +obGuideBlock('capital')
     +(totalAssets>0
       ?'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;">'
        +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;">ملخص ما أدخلته:</div>'
