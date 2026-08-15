@@ -1050,7 +1050,7 @@ const PLAN_PAGES = {
 
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
-  basic:   [],
+  basic:   ['ai_assistant'],
   growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports'],
   pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
   expired: [],
@@ -1685,6 +1685,7 @@ function csCloseEscalation(id) {
 let _aiChat = { open: false, minimized: false, loading: false };
 let _aiChatHistory = [];
 let _aiDailyUsed = 0;
+const AI_ASSISTANT_DAILY_LIMIT = { basic: 3, growth: 10, pro: 9999 };
 
 function _aiGetHistoryKey() {
   try { const t=localStorage.getItem('yaqiz_access_token'); if(!t)return null; const p=JSON.parse(atob(t.split('.')[1])); return `ai_hist_${p.company_id}`; } catch{return null;}
@@ -1756,7 +1757,7 @@ function renderAIChatButton() {
           <div>
             <div style="font-weight:900;font-size:14px;display:flex;align-items:center;gap:6px;">
               ${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}
-              ${plan==='pro'?`<span style="background:rgba(255,255,255,.25);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">PRO</span>`:`<span style="background:rgba(255,255,255,.2);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">${lang==='ar'?`${3-_aiDailyUsed}/3 اليوم`:`${3-_aiDailyUsed}/3 today`}</span>`}
+              ${plan==='pro'?`<span style="background:rgba(255,255,255,.25);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">PRO</span>`:`<span style="background:rgba(255,255,255,.2);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">${lang==='ar'?`${(AI_ASSISTANT_DAILY_LIMIT[plan]||0)-_aiDailyUsed}/${AI_ASSISTANT_DAILY_LIMIT[plan]||0} اليوم`:`${(AI_ASSISTANT_DAILY_LIMIT[plan]||0)-_aiDailyUsed}/${AI_ASSISTANT_DAILY_LIMIT[plan]||0} today`}</span>`}
             </div>
             <div style="font-size:10px;opacity:.85;">${_aiChat.loading?(lang==='ar'?'⏳ يفكر...':'⏳ Thinking...'):(plan==='pro'?(lang==='ar'?'🧠 يتذكر محادثاتك':'🧠 Remembers your conversations'):(lang==='ar'?'مساعدك المحاسبي':'Your accounting assistant'))}</div>
           </div>
@@ -1811,9 +1812,10 @@ async function sendAIMsg() {
   if (!q) return;
 
   const plan = getCurrentPlan();
-  if (plan === 'growth' && _aiDailyUsed >= 3) {
+  const dailyLimit = AI_ASSISTANT_DAILY_LIMIT[plan] || 0;
+  if (plan !== 'pro' && _aiDailyUsed >= dailyLimit) {
     inp.value = '';
-    _aiChatHistory.push({ q, a: `⚠️ ${lang==='ar'?'وصلت لحد الـ 3 أسئلة اليومية. يتجدد الحد منتصف الليل. رقّ للباقة الاحترافية للوصول غير المحدود.':'Daily limit of 3 questions reached. Resets at midnight. Upgrade to Pro for unlimited access.'}` });
+    _aiChatHistory.push({ q, a: `⚠️ ${lang==='ar'?`وصلت لحد الـ ${dailyLimit} أسئلة اليومية. يتجدد الحد منتصف الليل. رقّ لباقة أعلى للحصول على حد أكبر.`:`Daily limit of ${dailyLimit} questions reached. Resets at midnight. Upgrade for a higher limit.`}` });
     renderAIChatButton();
     return;
   }
@@ -2009,7 +2011,7 @@ async function sendAIMsg() {
   }
 
   _aiChat.loading = false;
-  if (plan === 'growth') _aiDailyUsed = Math.min(3, _aiDailyUsed + 1);
+  if (plan !== 'pro') _aiDailyUsed = Math.min(AI_ASSISTANT_DAILY_LIMIT[plan] || 0, _aiDailyUsed + 1);
   if (plan === 'pro') _aiSaveHistory();
   renderAIChatButton();
 }

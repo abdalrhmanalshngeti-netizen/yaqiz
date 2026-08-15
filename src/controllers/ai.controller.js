@@ -37,8 +37,8 @@ async function logUsage(company_id, feature, tokens_in, tokens_out, user_id, que
 // ── Plan limits ──────────────────────────────────────────────
 const EXTRACT_LIMITS  = { basic: 30,  growth: 100, pro: 500 };
 const ANALYZE_LIMITS  = { basic: 0,   growth: 10,  pro: 200 };
-const ASSISTANT_DAILY = { basic: 0,   growth: 3,   pro: 9999 };
-// assistant: pro only, no hard monthly limit (fair use)
+const ASSISTANT_DAILY = { basic: 3,   growth: 10,  pro: 9999 };
+// assistant: pro effectively unlimited (fair use), basic/growth capped daily
 // استخراج كشف حساب بنكي بالذكاء الاصطناعي — حد شهري منفصل عن تفريغ الفواتير
 // العادي، وغير متاح على الباقة الأساسية إطلاقًا (تسوية البنك نفسها Growth/Pro فقط)
 const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 0, pro: 4 };
@@ -298,7 +298,7 @@ exports.assistant = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         code: 'AI_DAILY_LIMIT',
-        message: `وصلت للحد اليومي (${daily} ${daily === 3 ? 'أسئلة' : 'سؤال'}). يتجدد الحد منتصف الليل.`,
+        message: `وصلت للحد اليومي (${daily} ${daily === 1 ? 'سؤال' : 'أسئلة'}). يتجدد الحد منتصف الليل.`,
         used: usedToday,
         limit: daily,
       });
