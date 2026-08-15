@@ -12495,6 +12495,10 @@ function toggleVAT(enabled) {
   const db = getDB();
   db.settings = { ...db.settings, vat_enabled: enabled };
   saveDB(db);
+  // مزامنة مع السيرفر — إعداد على مستوى الشركة كلها، ليبقى نفسه بأي جهاز يسجّل دخوله المالك
+  if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
+    window._cloudApiFetch('PUT', '/api/settings', { settings: { vat_enabled: enabled } }).catch(e => console.warn('VAT setting sync:', e.message));
+  }
   showToast(enabled ? `✅ ${lang==='ar'?'تم تفعيل ضريبة القيمة المضافة 15%':'VAT 15% enabled'}` : `⭕ ${lang==='ar'?'تم إيقاف ضريبة القيمة المضافة':'VAT disabled'}`);
   renderSettingsContent();
 }
@@ -13878,6 +13882,10 @@ function obSkipWizard() {
   if (!db.settings) db.settings = {};
   db.settings.opening_balances_done = true;
   saveDB(db);
+  // مزامنة مع السيرفر — بدونها المعالج يطلع من جديد لو المالك سجّل دخول من جهاز آخر
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/settings', { settings: { opening_balances_done: true } }).catch(e => console.warn('OB skip sync:', e.message));
+  }
   closeModal();
   renderPage();
   maybeStartPageTour(currentPage);
@@ -14290,6 +14298,14 @@ function obSaveAll() {
   db.settings.opening_balances_data = JSON.parse(JSON.stringify(_obData));
   db.settings.opening_balances_date = new Date().toISOString();
   saveDB(db);
+  // مزامنة مع السيرفر — بدونها المعالج يطلع من جديد بجهاز آخر ويسبب تكرار القيود لو عُبّي مرتين
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/settings', { settings: {
+      opening_balances_done: true,
+      opening_balances_data: db.settings.opening_balances_data,
+      opening_balances_date: db.settings.opening_balances_date,
+    } }).catch(e => console.warn('OB save sync:', e.message));
+  }
   closeModal();
   showToast('✅ تم حفظ الأرصدة الافتتاحية — النظام جاهز!');
   renderPage();
@@ -15087,7 +15103,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all').catch(() => null),
         apiFetch('GET', '/api/customers?active=all').catch(() => null),
         apiFetch('GET', '/api/suppliers?active=all').catch(() => null),
@@ -15108,6 +15124,7 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/products/stock-moves/list').catch(() => null),
         apiFetch('GET', '/api/vouchers').catch(() => null),
         apiFetch('GET', '/api/closed-periods').catch(() => null),
+        apiFetch('GET', '/api/settings').catch(() => null),
       ]);
 
       const db = getDB();
@@ -15344,6 +15361,12 @@ async function runAISearchQuery(q) {
         if (m.company_postal_code) db.settings.postal_code = m.company_postal_code;
         if (m.plan)            db.settings.plan          = m.plan;
         if (m.subscription_expires_at) db.settings.plan_expires_at = m.subscription_expires_at;
+      }
+
+      // إعدادات على مستوى الشركة (ضريبة، حالة الأرصدة الافتتاحية...) — مصدرها
+      // السيرفر دومًا هنا، لتبقى نفسها بغضّ النظر عن الجهاز الذي يسجّل دخوله المالك
+      if (settingsRes?.data) {
+        db.settings = { ...db.settings, ...settingsRes.data };
       }
 
       // مزامنة قائمة المستخدمين من API

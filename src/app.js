@@ -97,6 +97,7 @@ app.use('/api/purchase-orders', require('./routes/purchaseOrders.routes'));
 app.use('/api/vouchers',      require('./routes/vouchers.routes'));
 app.use('/api/closed-periods', require('./routes/closedPeriods.routes'));
 app.use('/api/activity-log',  require('./routes/activityLog.routes'));
+app.use('/api/settings',      require('./routes/settings.routes'));
 
 // ── Static Pages ─────────────────────────────────────────────
 app.get('/robots.txt', (_, res) => {
