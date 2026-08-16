@@ -13945,10 +13945,18 @@ function closeOBGuidePanel() { el('ob-guide-panel')?.remove(); }
 
 // خطوات المعالج مبنية على حدود الباقة — الباقة الأساسية بدون عملاء أو التزامات دورية
 const _OB_ALL_STEPS = ['cash','products','customers','suppliers','fixed_assets','obligations','employees','capital','review'];
+// عند "تعديل" أرصدة سبق حفظها فعليًا (وليس أول تعبئة)، نستبعد المنتجات/الموظفين/
+// الالتزامات من خطوات المعالج — بعد أول حفظ تصير هذي سجلات حقيقية مستقلة (منتج
+// ممكن يكون انباع، موظف ممكن يكون انصرف له راتب...) تُدار من صفحاتها الخاصة
+// (المخزون، الموظفون، الالتزامات)، لا من إعادة تشغيل معالج الأرصدة الافتتاحية.
+// أرقام النقدية/العملاء/الموردين/الأصول الثابتة/رأس المال تبقى قابلة للتصحيح
+// لأنها مجرد قيمة رقمية تُستبدَل، لا سجل مستقل قائم بذاته.
+let _obEditMode = false;
 function _obActiveSteps() {
   return _OB_ALL_STEPS.filter(s =>
     (s!=='customers'   || hasPlanPage('customers')) &&
-    (s!=='obligations' || hasPlanPage('obligations'))
+    (s!=='obligations' || hasPlanPage('obligations')) &&
+    (!_obEditMode || !['products','employees','obligations'].includes(s))
   );
 }
 function _obStepCount() { return _obActiveSteps().length; }
@@ -13965,7 +13973,8 @@ function checkOpeningBalances() {
 function showOpeningBalancesWizard(editMode) {
   _obStep = 1;
   const db = getDB();
-  if (editMode && db.settings?.opening_balances_data) {
+  _obEditMode = !!(editMode && db.settings?.opening_balances_data);
+  if (_obEditMode) {
     _obData = JSON.parse(JSON.stringify(db.settings.opening_balances_data));
   } else {
     _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
@@ -14294,7 +14303,9 @@ function obStep9() {
   const section = (title, chips)=>'<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:8px;"><div style="font-weight:700;font-size:12px;color:var(--text-muted);margin-bottom:6px;">'+title+'</div><div style="flex-wrap:wrap;display:flex;gap:2px;">'+chips+'</div></div>';
 
   return '<div>'
-    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">راجع جميع البيانات قبل الحفظ. بعد الحفظ ستُضاف كل البيانات للنظام تلقائياً.</p>'
+    +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">'+(_obEditMode
+        ? 'راجع الأرقام قبل الحفظ. سيتم تحديث النقدية وأرصدة العملاء/الموردين والأصول الثابتة ورأس المال فقط — المنتجات والموظفون والالتزامات المُضافة سابقًا لا تتأثر (تُدار من صفحاتها الخاصة).'
+        : 'راجع جميع البيانات قبل الحفظ. بعد الحفظ ستُضاف كل البيانات للنظام تلقائياً.')+'</p>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
 
     // ── عمود الأرقام ──
@@ -14327,6 +14338,13 @@ function obStep9() {
 function obSaveAll() {
   obReadStep();
   const db = getDB();
+  // تعديل حقيقي = المستخدم فتح "✎ تعديل" على أرصدة محفوظة فعليًا سلفًا (وليس
+  // أول تعبئة، ولا مجرد تخطٍّ سابق بلا بيانات حقيقية) — عندها نستبدل الأثر
+  // القديم بالجديد بدل ما نضيفهم فوق بعض (كان هذا يُضاعف النقدية والأرصدة
+  // ويُنشئ قيد يومية جديد بكل مرة، حتى لو المستخدم ما غيّر شيء فعليًا)
+  const isEdit  = _obEditMode && !!db.settings?.opening_balances_data;
+  const oldData = isEdit ? db.settings.opening_balances_data : null;
+
   const totalCash    = (_obData.cash_box||0)+(_obData.cash_bank||0);
   const inventoryVal = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
   const receivables  = _obData.customers.reduce((s,c)=>s+c.balance,0);
@@ -14335,28 +14353,65 @@ function obSaveAll() {
   const obligV       = _obData.obligations.reduce((s,o)=>s+o.amount,0);
   const capital      = _obData.capital || Math.max(0,(totalCash+inventoryVal+receivables+fixedAssets)-(payables+obligV));
 
-  // الخزينة
+  // الخزينة — عند التعديل نطرح مساهمة الرصيد الافتتاحي القديم أولًا قبل إضافة الجديد
   if (!db.treasury) db.treasury = { balance:0, moves:[] };
   if (!Array.isArray(db.treasury.moves)) db.treasury.moves = [];
+  if (isEdit) {
+    const oldTotalCash = (oldData.cash_box||0)+(oldData.cash_bank||0);
+    if (oldTotalCash > 0) db.treasury.balance = Math.round((db.treasury.balance - oldTotalCash) * 100) / 100;
+    const oldMoveIdx = db.treasury.moves.findIndex(m => m.reference==='OPENING');
+    if (oldMoveIdx >= 0) db.treasury.moves.splice(oldMoveIdx, 1);
+  }
   if (totalCash > 0) {
     db.treasury.balance = Math.round((db.treasury.balance + totalCash) * 100) / 100;
     db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:totalCash,
       description:'رصيد افتتاحي — نقدية وبنك', reference:'OPENING', date:new Date().toISOString() });
   }
 
-  // المنتجات
-  if (!db.products) db.products = [];
-  if (!db.nextId.product) db.nextId.product = 1;
-  _obData.products.forEach(p => {
-    const pid = nextId(db,'product');
-    db.products.push({ id:pid, code:'OB-'+pid, name:p.name, category:'بضاعة',
-      buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0, created_at:new Date().toISOString() });
-  });
+  // المنتجات/الموظفون/الالتزامات — تُنشأ مرة واحدة فقط بأول تعبئة. بعدها تصير
+  // سجلات حقيقية مستقلة (منتج ممكن يكون انباع، موظف انصرف له راتب...) تُدار من
+  // صفحاتها الخاصة، لا من إعادة تشغيل هذا المعالج — لذلك تُستبعد خطواتها أصلًا
+  // من الواجهة بوضع التعديل (_obActiveSteps)، ونتجنب هنا إعادة إنشائها مكرَّرة
+  if (!isEdit) {
+    // المنتجات
+    if (!db.products) db.products = [];
+    if (!db.nextId.product) db.nextId.product = 1;
+    _obData.products.forEach(p => {
+      const pid = nextId(db,'product');
+      db.products.push({ id:pid, code:'OB-'+pid, name:p.name, category:'بضاعة',
+        buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0, created_at:new Date().toISOString() });
+    });
+
+    // الموظفون
+    if (!db.employees) db.employees = [];
+    if (!db.nextId.employee) db.nextId.employee = 1;
+    _obData.employees.forEach(e => {
+      db.employees.push({ id:nextId(db,'employee'), name:e.name, job_title:e.job_title, salary:e.salary,
+        hire_date:new Date().toISOString().slice(0,10), active:true, created_at:new Date().toISOString() });
+    });
+
+    // الالتزامات — غير متاحة في الباقة الأساسية
+    if (hasPlanPage('obligations')) {
+      if (!db.obligations) db.obligations = [];
+      if (!db.nextId.obligation) db.nextId.obligation = 1;
+      _obData.obligations.forEach(o => {
+        db.obligations.push({ id:nextId(db,'obligation'), name:o.name, amount:o.amount, frequency:o.frequency,
+          next_due:new Date().toISOString().slice(0,10), created_at:new Date().toISOString() });
+      });
+    }
+  }
 
   // العملاء — غير متاح في الباقة الأساسية، حتى لو بقيت بيانات قديمة من ترقية سابقة
+  // عند التعديل نطرح مساهمة القديم (بالاسم) من رصيد الحساب قبل إضافة الجديد
   if (hasPlanPage('customers')) {
     if (!db.customers) db.customers = [];
     if (!db.nextId.customer) db.nextId.customer = 1;
+    if (isEdit) {
+      (oldData.customers||[]).forEach(c => {
+        const ex = db.customers.find(x=>x.name===c.name);
+        if (ex) ex.balance = Math.round(((ex.balance||0)-c.balance)*100)/100;
+      });
+    }
     _obData.customers.forEach(c => {
       const ex = db.customers.find(x=>x.name===c.name);
       if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; }
@@ -14364,36 +14419,29 @@ function obSaveAll() {
     });
   }
 
-  // الموردون
+  // الموردون — نفس مبدأ طرح القديم قبل إضافة الجديد عند التعديل
   if (!db.suppliers) db.suppliers = [];
   if (!db.nextId.supplier) db.nextId.supplier = 1;
+  if (isEdit) {
+    (oldData.suppliers||[]).forEach(s => {
+      const ex = db.suppliers.find(x=>x.name===s.name);
+      if (ex) ex.balance = Math.round(((ex.balance||0)-s.balance)*100)/100;
+    });
+  }
   _obData.suppliers.forEach(s => {
     const ex = db.suppliers.find(x=>x.name===s.name);
     if (ex) { ex.balance = Math.round(((ex.balance||0)+s.balance)*100)/100; }
     else { db.suppliers.push({ id:nextId(db,'supplier'), name:s.name, phone:'', email:'', address:'', balance:s.balance, created_at:new Date().toISOString() }); }
   });
 
-  // الموظفون
-  if (!db.employees) db.employees = [];
-  if (!db.nextId.employee) db.nextId.employee = 1;
-  _obData.employees.forEach(e => {
-    db.employees.push({ id:nextId(db,'employee'), name:e.name, job_title:e.job_title, salary:e.salary,
-      hire_date:new Date().toISOString().slice(0,10), active:true, created_at:new Date().toISOString() });
-  });
-
-  // الالتزامات — غير متاحة في الباقة الأساسية
-  if (hasPlanPage('obligations')) {
-    if (!db.obligations) db.obligations = [];
-    if (!db.nextId.obligation) db.nextId.obligation = 1;
-    _obData.obligations.forEach(o => {
-      db.obligations.push({ id:nextId(db,'obligation'), name:o.name, amount:o.amount, frequency:o.frequency,
-        next_due:new Date().toISOString().slice(0,10), created_at:new Date().toISOString() });
-    });
-  }
-
-  // القيود المحاسبية الافتتاحية
+  // القيود المحاسبية الافتتاحية — عند التعديل نحذف القيد الافتتاحي القديم أولًا
+  // (ref:'OPENING') عشان يبقى قيد افتتاحي واحد فقط دائمًا، لا يتراكم بكل تعديل
   if (!db.journal) db.journal = [];
   if (!db.nextId.journal) db.nextId.journal = 1;
+  if (isEdit) {
+    const oldJIdx = db.journal.findIndex(j => j.ref === 'OPENING');
+    if (oldJIdx >= 0) db.journal.splice(oldJIdx, 1);
+  }
   const jEntries = [];
   if (totalCash>0)    jEntries.push({ account:'النقدية والبنك',      account_code:'1100', side:'debit',  amount:totalCash    });
   if (receivables>0)  jEntries.push({ account:'الذمم المدينة',       account_code:'1200', side:'debit',  amount:receivables  });
@@ -14421,6 +14469,7 @@ function obSaveAll() {
       opening_balances_date: db.settings.opening_balances_date,
     } }).catch(e => console.warn('OB save sync:', e.message));
   }
+  _obEditMode = false;
   closeModal();
   showToast('✅ تم حفظ الأرصدة الافتتاحية — النظام جاهز!');
   renderPage();
