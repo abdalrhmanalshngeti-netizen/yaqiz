@@ -119,7 +119,7 @@ exports.updateCompanyTicketStatus = async (req, res, next) => {
 // POST /api/support/ticket — المستخدم يرسل تذكرة
 exports.createTicket = async (req, res, next) => {
   try {
-    const { department, sub_dept, description, note } = req.body;
+    const { department, sub_dept, description, note, ai_transcript } = req.body;
     const { sub: userId, company_id, role } = req.user;
 
     // جلب بيانات المستخدم والشركة معاً
@@ -131,6 +131,17 @@ exports.createTicket = async (req, res, next) => {
     const co = coRow.rows[0];
     const userName    = u?.full_name || u?.username || 'مستخدم';
     const companyName = co?.name || '';
+
+    // لو التذكرة أُنشئت بعد محادثة مع بوت الدعم الفني ولم تُحل، نُرفق كامل
+    // المحادثة بالملاحظة عشان فريق الدعم البشري ما يبدأ من الصفر ويكرر نفس الأسئلة
+    let fullNote = note || '';
+    if (Array.isArray(ai_transcript) && ai_transcript.length) {
+      const transcriptText = ai_transcript
+        .filter(m => m.q)
+        .map(m => `س: ${m.q}\nج: ${m.a || '(بدون رد)'}`)
+        .join('\n\n');
+      fullNote = `${fullNote ? fullNote + '\n\n' : ''}── محادثة سابقة مع بوت الدعم الفني ──\n${transcriptText}`;
+    }
 
     const { rows: [ticket] } = await db.query(`
       INSERT INTO support_tickets
@@ -145,11 +156,11 @@ exports.createTicket = async (req, res, next) => {
       department || '',
       sub_dept   || '',
       description || '',
-      note || ''
+      fullNote
     ]);
 
     notifyEligibleAdmins(ticket, {
-      companyName, userName, role, department, subDept: sub_dept, description, note
+      companyName, userName, role, department, subDept: sub_dept, description, note: fullNote
     }).catch(e => console.warn('[support] Notify failed:', e.message));
 
     res.status(201).json({ success: true, id: ticket.id, created_at: ticket.created_at });

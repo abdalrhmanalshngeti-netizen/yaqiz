@@ -7,6 +7,7 @@ router.post('/extract',                ctrl.extract);
 router.post('/extract-bank-statement', ctrl.extractBankStatement);
 router.post('/analyze',                ctrl.analyze);
 router.post('/assistant',              ctrl.assistant);
+router.post('/support-chat',           ctrl.supportChat);
 router.get('/usage',                   ctrl.usage);
 
 module.exports = router;

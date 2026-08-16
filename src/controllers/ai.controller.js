@@ -341,6 +341,41 @@ exports.assistant = async (req, res, next) => {
   }
 };
 
+// بوت الدعم الفني — عام لكل الباقات (مو ميزة مدفوعة، الهدف تقليل تذاكر
+// الدعم البشري لا تقييدها)، حد يومي سخي فقط لمنع إساءة الاستخدام
+const SUPPORT_CHAT_DAILY = 20;
+
+// POST /api/ai/support-chat
+exports.supportChat = async (req, res, next) => {
+  try {
+    const { company_id } = req.user;
+    const { question, history } = req.body;
+    if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
+
+    const usedToday = await getDailyUsage(company_id, 'support_chat');
+    if (usedToday >= SUPPORT_CHAT_DAILY) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_DAILY_LIMIT',
+        message: `وصلت للحد اليومي (${SUPPORT_CHAT_DAILY} سؤال) لبوت الدعم الفني. يتجدد الحد منتصف الليل — يمكنك فتح تذكرة دعم مباشرة بالمقابل.`,
+        used: usedToday,
+        limit: SUPPORT_CHAT_DAILY,
+      });
+    }
+
+    const result = await ai.askSupportBot(question, Array.isArray(history) ? history : []);
+    await logUsage(company_id, 'support_chat', result.tokens_in, result.tokens_out, req.user.sub, question, result.content);
+
+    res.json({
+      success: true,
+      answer: result.content,
+      usage: { used: usedToday + 1, limit: SUPPORT_CHAT_DAILY },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في بوت الدعم الفني' });
+  }
+};
+
 // GET /api/ai/usage
 exports.usage = async (req, res, next) => {
   try {

@@ -1389,6 +1389,11 @@ function renderCSButton() {
           color:${_cs.tab==='support'?'var(--primary)':'white'};">
           🆘 دعم
         </button>
+        <button onclick="csSetTab('ai')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+          background:${_cs.tab==='ai'?'white':'rgba(255,255,255,.2)'};
+          color:${_cs.tab==='ai'?'var(--primary)':'white'};">
+          🤖 مساعد فوري
+        </button>
         <button onclick="csSetTab('tickets')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
           background:${_cs.tab==='tickets'?'white':'rgba(255,255,255,.2)'};
           color:${_cs.tab==='tickets'?'var(--primary)':'white'};">
@@ -1453,6 +1458,11 @@ function renderCSBody(db, myTickets) {
         ✓ تم المعالجة
       </button>
     </div>`).join('');
+  }
+
+  // تبويب المساعد الفوري (بوت دعم فني بالذكاء الاصطناعي)
+  if(!_cs.dept && _cs.tab==='ai') {
+    return renderCsAiTab();
   }
 
   // الشاشة الرئيسية — اختيار القسم
@@ -1630,6 +1640,9 @@ function csEscalate() {
   });
   saveDB(db);
   _postTicketToAPI({department:_cs.dept?.label||'',sub_dept:_cs.sub?.label||'',description:path,note,priority:_csPriority});
+  // لا نستدعي renderCSButton() هنا عمدًا — _cs.dept/_cs.sub ما زالا معبّئين بهذي
+  // اللحظة، فإعادة الرسم الفوري كانت تطغى على رسالة التأكيد أدناه وترجع
+  // المستخدم لنفس نموذج التصعيد بدل ما يشوف تأكيد الإرسال (خلل مكتشف بالاختبار)
   const body=document.getElementById('cs-body');
   if(body) body.innerHTML=`
     <div style="text-align:center;padding:28px 16px;">
@@ -1638,7 +1651,6 @@ function csEscalate() {
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6;">وصلت مشكلتك لفريق الدعم<br>يمكنك متابعة حالتها من تبويب "تذاكري"</div>
       <button onclick="csSetTab('tickets');_cs.dept=null;renderCSButton();" style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
     </div>`;
-  renderCSButton();
 }
 
 function csSubmitOther() {
@@ -1650,9 +1662,9 @@ function csSubmitOther() {
   db.escalations.push({id:db.nextId.escalation++,user:currentUser.full_name||currentUser.username,role:currentUser.role,path:'مشكلة أخرى',note:text,priority:'normal',status:'open',created_at:new Date().toISOString()});
   saveDB(db);
   _postTicketToAPI({department:'مشكلة أخرى',sub_dept:'',description:'مشكلة أخرى',note:text});
+  // نفس سبب حذف renderCSButton() بـ csEscalate() أعلاه
   const body=document.getElementById('cs-body');
   if(body) body.innerHTML=`<div style="text-align:center;padding:28px 16px;"><div style="font-size:44px;margin-bottom:12px;">✅</div><div style="font-weight:900;font-size:15px;margin-bottom:6px;">تم الإرسال</div><div style="font-size:12px;color:var(--text-muted);">سيتواصل معك فريق الدعم قريباً.</div></div>`;
-  renderCSButton();
 }
 
 function csSolved() {
@@ -1663,6 +1675,107 @@ function csSolved() {
 function resetCS() {
   _cs={open:true,dept:null,sub:null,tab:'support'};
   renderCSButton();
+}
+
+// ============ تبويب المساعد الفوري (بوت دعم فني بالذكاء الاصطناعي) ============
+// منفصل تمامًا عن شات "يقظ الذكي" (لا يشترك معه بأي حالة أو سجل) — عام لكل
+// مستخدم بغض النظر عن باقته، ولا يستقبل أي بيانات عن حساب الشركة، مهمته
+// الوحيدة تشخيص وحل مشاكل الاستخدام الشائعة والمتوقعة قبل فتح تذكرة بشرية.
+let _csAiChat = { history: [], loading: false };
+
+function renderCsAiTab() {
+  const msgHtml = _csAiChat.history.length === 0
+    ? `<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:20px 10px;">
+        <div style="font-size:32px;margin-bottom:8px;">🤖</div>
+        <div style="font-weight:900;font-size:13px;color:var(--text-main);margin-bottom:4px;">مساعد الدعم الفوري</div>
+        <div style="line-height:1.7;">اكتب مشكلتك وبحاول أحلها فورًا.<br>ما قدرت؟ حوّلها لتذكرة بضغطة واحدة.</div>
+      </div>`
+    : _csAiChat.history.map(h => `
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
+        <div style="align-self:flex-end;max-width:85%;background:linear-gradient(135deg,var(--primary),#7c3aed);color:#fff;padding:9px 13px;border-radius:16px 16px 4px 16px;font-size:13px;line-height:1.6;word-break:break-word;">${sanitize(h.q)}</div>
+        ${h.a != null
+          ? `<div style="align-self:flex-start;max-width:92%;background:var(--bg);border:1px solid var(--border);padding:9px 13px;border-radius:16px 16px 16px 4px;font-size:13px;line-height:1.8;color:var(--text-main);word-break:break-word;">${h.a.replace(/\n/g,'<br>')}</div>`
+          : `<div style="align-self:flex-start;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:16px;color:var(--text-muted);font-size:20px;letter-spacing:4px;">●●●</div>`}
+      </div>`).join('');
+
+  return `
+  <div style="display:flex;flex-direction:column;height:100%;">
+    <div id="cs-ai-msgs" style="flex:1;overflow-y:auto;margin-bottom:10px;">${msgHtml}</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <input id="cs-ai-inp" class="input" placeholder="اكتب مشكلتك..." style="flex:1;font-size:13px;"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();csAiSend();}" ${_csAiChat.loading?'disabled':''} />
+      <button onclick="csAiSend()" ${_csAiChat.loading?'disabled':''} style="padding:0 14px;background:var(--primary);color:white;border:none;border-radius:10px;cursor:pointer;font-size:15px;">➤</button>
+    </div>
+    <button onclick="csAiEscalate()" style="
+      width:100%;padding:10px;background:linear-gradient(135deg,#f97316,#ef4444);
+      color:white;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;">
+      🚨 ما حلّت مشكلتي — حوّلها لتذكرة دعم
+    </button>
+  </div>`;
+}
+
+async function csAiSend() {
+  const inp = document.getElementById('cs-ai-inp');
+  if (!inp || _csAiChat.loading) return;
+  const q = inp.value.trim();
+  if (!q) return;
+  inp.value = '';
+  _csAiChat.history.push({ q, a: null });
+  _csAiChat.loading = true;
+  const body = document.getElementById('cs-body');
+  if (body) body.innerHTML = renderCsAiTab();
+
+  try {
+    const history = _csAiChat.history.slice(0, -1).slice(-6).filter(h => h.a).map(h => ({ question: h.q, answer: h.a }));
+    const res = await window._cloudApiFetch('POST', '/api/ai/support-chat', { question: q, history });
+    _csAiChat.history[_csAiChat.history.length - 1].a = res?.answer || 'لم أتمكن من الإجابة.';
+  } catch (e) {
+    _csAiChat.history[_csAiChat.history.length - 1].a = `⚠️ ${e?.message || 'خطأ في الاتصال'}`;
+  }
+  _csAiChat.loading = false;
+  const body2 = document.getElementById('cs-body');
+  if (body2) body2.innerHTML = renderCsAiTab();
+  const msgs = document.getElementById('cs-ai-msgs');
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function csAiEscalate() {
+  const transcript = _csAiChat.history.filter(h => h.a);
+  const lastQ = transcript.length ? transcript[transcript.length-1].q : '';
+  const path = 'مساعد فوري (ذكاء اصطناعي)';
+  const description = lastQ ? `تصعيد من المساعد الفوري: ${lastQ}` : 'تصعيد من المساعد الفوري';
+
+  const db = getDB();
+  if (!db.escalations) db.escalations = [];
+  if (!db.nextId.escalation) db.nextId.escalation = 1;
+  db.escalations.push({
+    id: db.nextId.escalation++,
+    user: currentUser.full_name || currentUser.username,
+    role: currentUser.role, path, note: '',
+    priority: 'normal', status: 'open', created_at: new Date().toISOString()
+  });
+  saveDB(db);
+
+  _postTicketToAPI({
+    department: path,
+    sub_dept: '',
+    description,
+    note: '',
+    ai_transcript: transcript,
+  });
+  _csAiChat = { history: [], loading: false };
+  // ملاحظة: لا نستدعي renderCSButton() هنا عمدًا — هي تعيد بناء cs-body بالكامل
+  // من renderCSBody() بناءً على _cs.tab الحالي (يبقى 'ai')، فتطغى فورًا على
+  // رسالة التأكيد التالية وتُرجع المستخدم لشاشة الشات الفارغة بدل ما يشوف
+  // تأكيد الإرسال. نفس التحديث المباشر لـ cs-body مستخدم أيضًا في csSolved().
+  const body = document.getElementById('cs-body');
+  if (body) body.innerHTML = `
+    <div style="text-align:center;padding:28px 16px;">
+      <div style="font-size:44px;margin-bottom:12px;">🎫</div>
+      <div style="font-weight:900;font-size:15px;margin-bottom:6px;">تم إرسال تذكرتك</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6;">أرفقنا محادثتك مع المساعد الفوري عشان فريق الدعم يشوفها مباشرة<br>تقدر تتابع حالتها من تبويب "تذاكري"</div>
+      <button onclick="csSetTab('tickets')" style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
+    </div>`;
 }
 
 function csCloseEscalation(id) {
