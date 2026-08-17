@@ -774,18 +774,20 @@ function renderAIUsageTable(rows) {
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🧾 تفريغ</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">📄 تحليل</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">💬 أسئلة الشات</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🎧 دعم فني</th>
           <th style="padding:10px 14px;"></th>
         </tr></thead>
         <tbody>${rows.map(r => `
-          <tr style="border-top:1px solid #1a2942;cursor:pointer;" onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}')">
+          <tr style="border-top:1px solid #1a2942;">
             <td style="padding:10px 14px;font-weight:700;color:#f0f4ff;">${escHtml(r.name)}</td>
             <td style="padding:10px 14px;text-align:center;">${planBadge(r.plan)}</td>
             <td style="padding:10px 14px;text-align:center;color:var(--muted);">${fmt(r.user_count)}</td>
             <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.ai_user_count?'#34d399':'var(--muted)'};">${r.ai_user_count?fmt(r.ai_user_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;color:${r.extract_count?'#c4b5fd':'var(--muted)'};">${r.extract_count?fmt(r.extract_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;color:${r.analyze_count?'#f9a8d4':'var(--muted)'};">${r.analyze_count?fmt(r.analyze_count):'—'}</td>
-            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};">${r.assistant_count?fmt(r.assistant_count):'—'}</td>
-            <td style="padding:10px 14px;text-align:center;color:var(--muted);font-size:12px;">${r.assistant_count?'عرض الأسئلة ›':''}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};cursor:${r.assistant_count?'pointer':'default'};" ${r.assistant_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','assistant')"`:''}>${r.assistant_count?fmt(r.assistant_count)+' ›':'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.support_chat_count?'#fb923c':'var(--muted)'};cursor:${r.support_chat_count?'pointer':'default'};" ${r.support_chat_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','support_chat')"`:''}>${r.support_chat_count?fmt(r.support_chat_count)+' ›':'—'}</td>
+            <td></td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -795,7 +797,9 @@ function renderAIUsageTable(rows) {
 function closeAIQuestionsModal() {
   document.getElementById('ai-questions-overlay')?.remove();
 }
-async function showAIQuestionsModal(companyId, companyName) {
+async function showAIQuestionsModal(companyId, companyName, feature) {
+  feature = feature === 'support_chat' ? 'support_chat' : 'assistant';
+  const isSupport = feature === 'support_chat';
   closeAIQuestionsModal();
   const ov = document.createElement('div');
   ov.id = 'ai-questions-overlay';
@@ -803,8 +807,8 @@ async function showAIQuestionsModal(companyId, companyName) {
   ov.innerHTML = `<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:center;justify-content:space-between;">
       <div>
-        <div style="font-size:18px;font-weight:900;color:#f0f4ff;">💬 أسئلة الشات — ${escHtml(companyName)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">السؤال مع إجابة الذكاء الاصطناعي عليه (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
+        <div style="font-size:18px;font-weight:900;color:#f0f4ff;">${isSupport?'🎧 محادثات الدعم الفني':'💬 أسئلة الشات'} — ${escHtml(companyName)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${isSupport?'كل محادثة مع بوت الدعم الفني، حتى لو العميل ما رفعها تذكرة لأن البوت حلّها بنفسه':'السؤال مع إجابة الذكاء الاصطناعي عليه'} (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
       </div>
       <button onclick="closeAIQuestionsModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
     </div>
@@ -813,7 +817,7 @@ async function showAIQuestionsModal(companyId, companyName) {
   ov.onclick = closeAIQuestionsModal;
   document.body.appendChild(ov);
   try {
-    const res = await apiFetch(`/api/admin/ai-usage/companies/${companyId}/questions`);
+    const res = await apiFetch(`/api/admin/ai-usage/companies/${companyId}/questions?feature=${feature}`);
     const rows = res.data || [];
     const body = document.getElementById('ai-questions-body');
     if (!body) return;
@@ -828,7 +832,7 @@ async function showAIQuestionsModal(companyId, companyName) {
         <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;">— بلا إجابة محفوظة (سؤال أقدم من هذا التحديث) —</div>
         `}
         <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid #1a2942;">👤 ${escHtml(r.full_name||r.username||'—')} · ${fmtD(r.created_at)}</div>
-      </div>`).join('') : '<div class="empty-state" style="padding:30px;">لا توجد أسئلة مسجَّلة</div>';
+      </div>`).join('') : `<div class="empty-state" style="padding:30px;">${isSupport?'لا توجد محادثات دعم فني مسجَّلة':'لا توجد أسئلة مسجَّلة'}</div>`;
   } catch (e) {
     const body = document.getElementById('ai-questions-body');
     if (body) body.innerHTML = '<p style="color:var(--red);">خطأ في تحميل الأسئلة</p>';
@@ -1303,6 +1307,7 @@ function renderCoModal(c){
       <td style="font-size:11px;color:var(--muted);padding:9px 12px;">${fmtD(u.last_login)}</td>
       <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_extract_count?'#c4b5fd':'var(--muted)'};font-weight:${u.ai_extract_count?'800':'400'};">${u.ai_extract_count?fmt(u.ai_extract_count):'—'}</td>
       <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_assistant_count?'#a5b4fc':'var(--muted)'};font-weight:${u.ai_assistant_count?'800':'400'};">${u.ai_assistant_count?fmt(u.ai_assistant_count):'—'}</td>
+      <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_support_chat_count?'#fdba74':'var(--muted)'};font-weight:${u.ai_support_chat_count?'800':'400'};">${u.ai_support_chat_count?fmt(u.ai_support_chat_count):'—'}</td>
     </tr>`).join('');
 
   const statusColors={active:'#10b981',suspended:'#f59e0b',cancelled:'#ef4444'};
@@ -1355,7 +1360,7 @@ function renderCoModal(c){
     <!-- استخدام الذكاء الاصطناعي -->
     <div style="margin-bottom:20px;">
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🤖 استخدام الذكاء الاصطناعي (إجمالي)</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
         <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:12px;text-align:center;">
           <div style="font-size:22px;font-weight:900;color:#c4b5fd;">${fmt(c.ai_extract_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تفريغ فواتير</div>
@@ -1364,9 +1369,13 @@ function renderCoModal(c){
           <div style="font-size:22px;font-weight:900;color:#f9a8d4;">${fmt(c.ai_analyze_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تحليل مستندات</div>
         </div>
-        <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:12px;text-align:center;">
+        <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_assistant_count?'pointer':'default'};" ${c.ai_assistant_count?`onclick="showAIQuestionsModal(${c.id},'${escHtml(c.name).replace(/'/g,"\\'")}','assistant')"`:''}>
           <div style="font-size:22px;font-weight:900;color:#a5b4fc;">${fmt(c.ai_assistant_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">أسئلة الشات (اسأل يقظ)</div>
+        </div>
+        <div style="background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_support_chat_count?'pointer':'default'};" ${c.ai_support_chat_count?`onclick="showAIQuestionsModal(${c.id},'${escHtml(c.name).replace(/'/g,"\\'")}','support_chat')"`:''}>
+          <div style="font-size:22px;font-weight:900;color:#fdba74;">${fmt(c.ai_support_chat_count)}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">محادثات الدعم الفني</div>
         </div>
       </div>
     </div>
@@ -1421,6 +1430,7 @@ function renderCoModal(c){
           <th style="padding:9px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);">آخر دخول</th>
           <th style="padding:9px 12px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);" title="تفريغ فواتير AI">🧾 تفريغ AI</th>
           <th style="padding:9px 12px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);" title="أسئلة الشات المساعد">💬 شات AI</th>
+          <th style="padding:9px 12px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);" title="محادثات بوت الدعم الفني">🎧 دعم فني</th>
         </tr></thead>
         <tbody>${usersRows}</tbody>
       </table>

@@ -403,12 +403,14 @@ exports.companyDetails = async (req, res, next) => {
     if (!company) return res.status(404).json({ success: false, message: 'الشركة غير موجودة' });
 
     // استخدام الذكاء الاصطناعي لكل مستخدم بالشركة (تفريغ فواتير، تحليل، الشات
-    // المساعد) — لمعرفة مين فعليًا يستخدم الميزات الذكية وبأي قدر
+    // المساعد، محادثات بوت الدعم الفني) — لمعرفة مين فعليًا يستخدم الميزات
+    // الذكية وبأي قدر
     const { rows: aiByUser } = await db.query(
       `SELECT user_id,
          COUNT(*) FILTER (WHERE feature='extract')::int   AS extract_count,
          COUNT(*) FILTER (WHERE feature='analyze')::int   AS analyze_count,
-         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count
+         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count,
+         COUNT(*) FILTER (WHERE feature='support_chat')::int AS support_chat_count
        FROM ai_usage WHERE company_id = $1 GROUP BY user_id`,
       [req.params.id]
     );
@@ -425,13 +427,15 @@ exports.companyDetails = async (req, res, next) => {
       u.ai_extract_count = ai?.extract_count || 0;
       u.ai_analyze_count = ai?.analyze_count || 0;
       u.ai_assistant_count = ai?.assistant_count || 0;
+      u.ai_support_chat_count = ai?.support_chat_count || 0;
     });
 
     const { rows: [aiTotals] } = await db.query(
       `SELECT
          COUNT(*) FILTER (WHERE feature='extract')::int   AS extract_count,
          COUNT(*) FILTER (WHERE feature='analyze')::int   AS analyze_count,
-         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count
+         COUNT(*) FILTER (WHERE feature='assistant')::int AS assistant_count,
+         COUNT(*) FILTER (WHERE feature='support_chat')::int AS support_chat_count
        FROM ai_usage WHERE company_id = $1`,
       [req.params.id]
     );
@@ -447,6 +451,7 @@ exports.companyDetails = async (req, res, next) => {
       ai_extract_count: aiTotals.extract_count,
       ai_analyze_count: aiTotals.analyze_count,
       ai_assistant_count: aiTotals.assistant_count,
+      ai_support_chat_count: aiTotals.support_chat_count,
     } });
   } catch (err) { next(err); }
 };
@@ -503,7 +508,8 @@ exports.aiUsageCompanies = async (req, res, next) => {
         COUNT(DISTINCT au.user_id)::int AS ai_user_count,
         COUNT(*) FILTER (WHERE au.feature='extract')::int   AS extract_count,
         COUNT(*) FILTER (WHERE au.feature='analyze')::int   AS analyze_count,
-        COUNT(*) FILTER (WHERE au.feature='assistant')::int AS assistant_count
+        COUNT(*) FILTER (WHERE au.feature='assistant')::int AS assistant_count,
+        COUNT(*) FILTER (WHERE au.feature='support_chat')::int AS support_chat_count
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
       LEFT JOIN ai_usage au ON au.company_id = c.id
@@ -514,22 +520,25 @@ exports.aiUsageCompanies = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── أسئلة الشات المساعد وإجاباتها الفعلية لشركة معيّنة ──
-// الهدف: تجميع الأسئلة الفعلية اللي يسألها المستخدمون (وما جاوبهم فيه
-// المساعد فعليًا) لبناء بيانات لإجابات جاهزة داخلية لاحقًا بدل الاعتماد
-// الدائم على استدعاء الذكاء الاصطناعي. أسئلة قبل التحديث ما لها إجابة
-// محفوظة (answer تطلع NULL) لأنها لم تُخزَّن وقتها.
+// ── أسئلة شات (المساعد الذكي أو بوت الدعم الفني) وإجاباتها الفعلية لشركة
+// معيّنة — ?feature=assistant (افتراضي) أو ?feature=support_chat. الهدف:
+// تجميع كل محادثة فعلية (حتى لو العميل ما رفعها تذكرة دعم أبدًا لأن البوت
+// حلّها بنفسه) كبيانات للمراجعة، بدل ما تضيع بمجرد إغلاق نافذة الشات — بلا
+// أي إشعار مصاحب (تخزين صامت)، بعكس التصعيد الصريح لتذكرة حقيقية اللي يبقى
+// يُنشئ إشعارًا فوريًا كالمعتاد. أسئلة قبل هذا التحديث ما لها إجابة محفوظة
+// (answer تطلع NULL) لأنها لم تُخزَّن وقتها.
 exports.aiUsageQuestions = async (req, res, next) => {
   try {
+    const feature = req.query.feature === 'support_chat' ? 'support_chat' : 'assistant';
     const { rows } = await db.query(`
       SELECT au.id, au.question, au.answer, au.created_at,
              u.username, u.full_name, u.role
       FROM ai_usage au
       LEFT JOIN users u ON u.id = au.user_id
-      WHERE au.company_id = $1 AND au.feature = 'assistant' AND au.question IS NOT NULL
+      WHERE au.company_id = $1 AND au.feature = $2 AND au.question IS NOT NULL
       ORDER BY au.created_at DESC
       LIMIT 500
-    `, [req.params.id]);
+    `, [req.params.id, feature]);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 };
