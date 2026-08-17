@@ -364,6 +364,7 @@ exports.companies = async (req, res, next) => {
         COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
         COUNT(DISTINCT i.id)::int  AS invoice_count,
         COALESCE(SUM(i.grand_total), 0)::numeric AS total_revenue,
+        (SELECT COUNT(*)::int FROM branches b WHERE b.company_id = c.id AND b.is_active = true) AS branch_count,
         COUNT(*) OVER() AS total_count
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
@@ -390,7 +391,8 @@ exports.companyDetails = async (req, res, next) => {
       `SELECT c.*,
          COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin=false)::int AS user_count,
          COUNT(DISTINCT i.id)::int AS invoice_count,
-         COALESCE(SUM(i.grand_total),0)::numeric AS total_revenue
+         COALESCE(SUM(i.grand_total),0)::numeric AS total_revenue,
+         (SELECT COUNT(*)::int FROM branches b WHERE b.company_id = c.id AND b.is_active = true) AS branch_count
        FROM companies c
        LEFT JOIN users u ON u.company_id = c.id
        LEFT JOIN invoices i ON i.company_id = c.id

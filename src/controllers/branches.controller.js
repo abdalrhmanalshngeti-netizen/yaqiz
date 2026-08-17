@@ -1,5 +1,9 @@
 const db = require('../config/db');
 
+// أقصى عدد فروع نشطة (شامل الفرع الرئيسي) لكل باقة — يطابق PLAN_BRANCH_LIMITS
+// بالواجهة تمامًا (نفس نمط PLAN_USER_LIMITS بـ users.controller.js)
+const PLAN_BRANCH_LIMITS = { basic: 1, growth: 3, pro: 5 };
+
 exports.list = async (req, res, next) => {
   try {
     const { active = 'true' } = req.query;
@@ -46,6 +50,25 @@ exports.create = async (req, res, next) => {
       [req.user.company_id]
     );
     const isFirstBranch = count === 0;
+
+    const { rows: [co] } = await client.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
+    let plan = co?.plan || 'basic';
+    if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
+    const branchLimit = PLAN_BRANCH_LIMITS[plan];
+    if (branchLimit) {
+      const { rows: [{ count: activeCount }] } = await client.query(
+        `SELECT COUNT(*)::int AS count FROM branches WHERE company_id = $1 AND is_active = true`,
+        [req.user.company_id]
+      );
+      if (activeCount >= branchLimit) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          code: 'BRANCH_LIMIT_REACHED',
+          message: `باقتك الحالية تسمح بـ ${branchLimit} فروع كحد أقصى (شامل الفرع الرئيسي). يرجى الترقية لإضافة المزيد.`
+        });
+      }
+    }
 
     const { rows: [branch] } = await client.query(`
       INSERT INTO branches (company_id, name, branch_number, address, phone, is_main)

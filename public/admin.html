@@ -326,10 +326,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <table>
             <thead><tr>
               <th>#</th><th>اسم الشركة</th><th>الحالة</th><th>الخطة</th><th>الفترة المجانية</th>
-              <th>المستخدمون</th><th>الفواتير</th><th>الإيرادات (ر.س)</th>
+              <th>المستخدمون</th><th>الفروع</th><th>الفواتير</th><th>الإيرادات (ر.س)</th>
               <th>تاريخ الانضمام</th><th>إجراء</th>
             </tr></thead>
-            <tbody id="companies-tbody"><tr><td colspan="10" class="loader"><span class="spinner"></span></td></tr></tbody>
+            <tbody id="companies-tbody"><tr><td colspan="11" class="loader"><span class="spinner"></span></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -726,12 +726,12 @@ function switchTab(name) {
 // موظف عنده صلاحية "بيانات العملاء" بس — يجلب الشركات من endpoint المسموح له فيه
 // (مو cost-analysis اللي خاص بالمالك فقط)
 async function loadCompaniesForStaff(){
-  $('companies-tbody').innerHTML='<tr><td colspan="10" class="loader"><span class="spinner"></span></td></tr>';
+  $('companies-tbody').innerHTML='<tr><td colspan="11" class="loader"><span class="spinner"></span></td></tr>';
   try{
     const res=await apiFetch('/api/admin/companies?limit=1000');
     _allCompanies=res.data||[];
     renderCompaniesTable(_allCompanies);
-  }catch{$('companies-tbody').innerHTML='<tr><td colspan="10" class="empty-state">خطأ في التحميل</td></tr>';}
+  }catch{$('companies-tbody').innerHTML='<tr><td colspan="11" class="empty-state">خطأ في التحميل</td></tr>';}
 }
 
 // ── Plans ──────────────────────────────────────────────
@@ -1185,7 +1185,7 @@ function renderCompaniesTable(companies) {
   if(_coFilterStatus!=='all') list=list.filter(c=>c.status===_coFilterStatus);
   if(q) list=list.filter(c=>c.name?.toLowerCase().includes(q));
   $('companies-label').textContent=`${list.length} من ${companies.length} شركة`;
-  if(!list.length){$('companies-tbody').innerHTML='<tr><td colspan="10" class="empty-state">لا توجد نتائج</td></tr>';return;}
+  if(!list.length){$('companies-tbody').innerHTML='<tr><td colspan="11" class="empty-state">لا توجد نتائج</td></tr>';return;}
   $('companies-tbody').innerHTML=list.map((c,i)=>`
     <tr>
       <td style="font-weight:800;color:var(--muted)">${i+1}</td>
@@ -1197,6 +1197,7 @@ function renderCompaniesTable(companies) {
       <td>${planBadge(c.plan)}</td>
       <td>${trialBadge(c)}</td>
       <td style="font-weight:900;color:#93c5fd">${fmt(c.user_count)}</td>
+      <td style="font-weight:700;color:#fbbf24">${fmt(c.branch_count)}</td>
       <td style="color:#6ee7b7">${fmt(c.invoice_count)}</td>
       <td>${fmtSAR(c.total_revenue)}</td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
@@ -1332,10 +1333,14 @@ function renderCoModal(c){
   </div>`:''}
 
   <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
       <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;text-align:center;">
         <div style="font-size:28px;font-weight:900;color:#93c5fd;">${fmt(c.user_count)}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">مستخدم</div>
+      </div>
+      <div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:900;color:#a78bfa;">${fmt(c.branch_count)}</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">فرع</div>
       </div>
       <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:14px;text-align:center;">
         <div style="font-size:28px;font-weight:900;color:#34d399;">${fmt(c.invoice_count)}</div>

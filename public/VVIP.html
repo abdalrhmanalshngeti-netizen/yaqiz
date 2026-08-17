@@ -1128,6 +1128,10 @@ const PLAN_FEATURES = {
 const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
 function getPlanUserLimit() { return PLAN_USER_LIMITS[getCurrentPlan()] ?? null; };
 
+// أقصى عدد فروع نشطة (شامل الفرع الرئيسي) لكل باقة — يطابق PLAN_BRANCH_LIMITS بالسيرفر (branches.controller.js)
+const PLAN_BRANCH_LIMITS = { basic: 1, growth: 3, pro: 5 };
+function getPlanBranchLimit() { return PLAN_BRANCH_LIMITS[getCurrentPlan()] ?? null; };
+
 function getCurrentPlan() {
   const db = getDB();
   let plan = db.settings?.plan || 'basic';
@@ -7959,13 +7963,14 @@ function showUserModal(id) {
         </div>
       </div>
 
+      ${getPlanBranchLimit()!==1?`
       <div style="margin-bottom:16px;">
         <label class="form-label">${lang==='ar'?'الفرع':'Branch'} ${u?.role!=='owner'?'':`<span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${lang==='ar'?'غير مطلوب للمالك — يشوف كل الفروع':'not needed for owner — sees all branches'})</span>`}</label>
         <select class="select" id="u-branch">
           <option value="">${lang==='ar'?'— بدون فرع —':'— No branch —'}</option>
           ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(b.name)} (#${sanitize(b.branch_number)})</option>`).join('')}
         </select>
-      </div>
+      </div>`:''}
 
       <div style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -8191,7 +8196,13 @@ function renderBranches(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'الفروع':'Branches'}</div>
-      ${currentUser?.role==='owner'?`<button class="btn btn-primary" onclick="showBranchModal()">${icon('plus',16)} ${lang==='ar'?'فرع جديد':'New Branch'}</button>`:''}
+      ${(()=>{
+        if(currentUser?.role!=='owner') return '';
+        const limit = getPlanBranchLimit();
+        const count = branches.length;
+        if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} فروع) في باقتك الحالية`:`Max branches reached (${limit}) on your current plan`}</div>`;
+        return `<button class="btn btn-primary" onclick="showBranchModal()">${icon('plus',16)} ${lang==='ar'?'فرع جديد':'New Branch'}</button>`;
+      })()}
     </div>
     <div class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr>
@@ -8222,6 +8233,12 @@ function showBranchModal(id) {
   const db = getDB();
   const activeBranches = (db.branches||[]).filter(x=>x.active!==false);
   const b = id ? (db.branches||[]).find(x=>x.id===id) : null;
+
+  const _brLimit = getPlanBranchLimit();
+  if (!id && _brLimit && activeBranches.length >= _brLimit) {
+    showToast(lang==='ar'?`باقتك الحالية تسمح بـ ${_brLimit} فروع كحد أقصى (شامل الفرع الرئيسي). رقّ باقتك للمزيد.`:`Your current plan allows ${_brLimit} branches max.`,'error');
+    return;
+  }
 
   // إضافة أول فرع ثانٍ للشركة (يعني عندها فرع رئيسي ضمني واحد بس لحد الآن،
   // ما سمّاه المالك أبدًا) — نطلب تسمية الفرع الأول (الحالي) مع الفرع الجديد
@@ -12666,7 +12683,7 @@ function renderSettings(c) {
     <div id="set-tabs" class="tabs" style="flex-wrap:wrap;">
       <button class="tab-btn ${settingsTab==='general'?'active':''}" onclick="setSettingsTab('general')">⚙️ ${lang==='ar'?'عام':'General'}</button>
       <button class="tab-btn ${settingsTab==='users'?'active':''}" onclick="setSettingsTab('users')">👥 ${lang==='ar'?'المستخدمون':'Users'}</button>
-      ${currentUser?.role==='owner'?`<button class="tab-btn ${settingsTab==='branches'?'active':''}" onclick="setSettingsTab('branches')">🏬 ${lang==='ar'?'الفروع':'Branches'}</button>`:''}
+      ${(currentUser?.role==='owner' && getPlanBranchLimit()!==1)?`<button class="tab-btn ${settingsTab==='branches'?'active':''}" onclick="setSettingsTab('branches')">🏬 ${lang==='ar'?'الفروع':'Branches'}</button>`:''}
       ${hasPlanFeature('employees')?`<button class="tab-btn ${settingsTab==='employees'?'active':''}" onclick="setSettingsTab('employees')">👷 ${lang==='ar'?'الموظفون':'Employees'}</button>`:''}
       ${hasPlanFeature('activity_log')?`<button class="tab-btn ${settingsTab==='activity'?'active':''}" onclick="setSettingsTab('activity')">📋 ${lang==='ar'?'النشاطات':'Activity'}</button>`:''}
       ${showSec?`<button class="tab-btn ${settingsTab==='security'?'active':''}" onclick="setSettingsTab('security')">🔐 ${lang==='ar'?'الأمان':'Security'}</button>`:''}
@@ -12690,7 +12707,7 @@ function switchPlanPreview(plan) {
 function renderSettingsContent() {
   const mc=el('settings-main-content'); if(!mc) return;
   if(settingsTab==='users')    { renderUsers(mc); return; }
-  if(settingsTab==='branches') { renderBranches(mc); return; }
+  if(settingsTab==='branches' && getPlanBranchLimit()!==1) { renderBranches(mc); return; }
   if(settingsTab==='employees'){ renderEmployees(mc); return; }
   if(settingsTab==='activity') { renderActivity(mc); return; }
   if(settingsTab==='security') { renderAdminSessionsTab(mc); return; }
