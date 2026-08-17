@@ -1,4 +1,5 @@
-const db = require('../config/db');
+const db     = require('../config/db');
+const branch = require('../services/branch.service');
 
 // حقول قائمة الموظفين — تُستثنى national_id وiqama_no وiban من قائمة الكل
 const LIST_FIELDS = `id, company_id, employee_no, name, position, department,
@@ -221,17 +222,31 @@ exports.markPayrollPaid = async (req, res, next) => {
 exports.listShifts = async (req, res, next) => {
   try {
     const { from, to } = req.query;
-    const canSeeAll = req.user.role === 'owner' || (req.user.perms||[]).includes('settings.view');
+    const perms = req.user.perms || [];
+    const canSeeAll = req.user.role === 'owner' || perms.includes('settings.view');
+    // "مسؤول فرع": لا يرى كل الشركة، لكن يرى كل ورديات فرعه (لا وردياته هو فقط) —
+    // فرعه يُقرأ طازجًا من قاعدة البيانات دائمًا، ليس من التوكن (المالك يقدر
+    // يغيّر فرع الموظف بأي وقت والتوكن يبقى صالحًا ٨ ساعات)
+    const isBranchManager = !canSeeAll && perms.includes('branch.manage');
+
     let where  = [`s.company_id = $1`];
     let params = [req.user.company_id];
     let idx    = 2;
-    if (!canSeeAll) { where.push(`s.user_id = $${idx++}`); params.push(req.user.sub); }
+
+    if (isBranchManager) {
+      const { rows: [u] } = await db.query(`SELECT branch_id FROM users WHERE id = $1`, [req.user.sub]);
+      if (u?.branch_id) { where.push(`s.branch_id = $${idx++}`); params.push(u.branch_id); }
+      else { where.push(`s.user_id = $${idx++}`); params.push(req.user.sub); }
+    } else if (!canSeeAll) {
+      where.push(`s.user_id = $${idx++}`); params.push(req.user.sub);
+    }
     if (from) { where.push(`s.start_time >= $${idx++}`); params.push(from); }
     if (to)   { where.push(`s.start_time <= $${idx++}`); params.push(to); }
 
     const { rows } = await db.query(`
-      SELECT s.*, u.full_name, u.username FROM shifts s
+      SELECT s.*, u.full_name, u.username, b.name AS branch_name FROM shifts s
       JOIN users u ON u.id = s.user_id
+      LEFT JOIN branches b ON b.id = s.branch_id
       WHERE ${where.join(' AND ')}
       ORDER BY s.start_time DESC
     `, params);
@@ -241,17 +256,32 @@ exports.listShifts = async (req, res, next) => {
 
 exports.openShift = async (req, res, next) => {
   try {
-    const { opening_cash } = req.body;
+    const { opening_cash, branch_id, pos_point_id } = req.body;
     const { rows: [existing] } = await db.query(
       `SELECT id FROM shifts WHERE user_id = $1 AND status = 'open'`,
       [req.user.sub]
     );
     if (existing) return res.status(400).json({ success: false, message: 'لديك وردية مفتوحة بالفعل' });
 
+    const { branch_id: resolvedBranchId } =
+      await branch.resolveWarehouseForUser(db, req.user.company_id, req.user.sub, branch_id);
+
+    let resolvedPosPointId = null;
+    if (pos_point_id) {
+      const { rows: [pp] } = await db.query(
+        `SELECT pp.id FROM pos_points pp
+         JOIN warehouses w ON w.id = pp.warehouse_id
+         WHERE pp.id = $1 AND pp.company_id = $2 AND w.branch_id = $3 AND pp.is_active = true`,
+        [pos_point_id, req.user.company_id, resolvedBranchId]
+      );
+      if (!pp) return res.status(400).json({ success: false, message: 'نقطة البيع غير تابعة لفرعك' });
+      resolvedPosPointId = pp.id;
+    }
+
     const { rows } = await db.query(`
-      INSERT INTO shifts (company_id, user_id, opening_cash)
-      VALUES ($1,$2,$3) RETURNING *
-    `, [req.user.company_id, req.user.sub, opening_cash || 0]);
+      INSERT INTO shifts (company_id, user_id, opening_cash, branch_id, pos_point_id)
+      VALUES ($1,$2,$3,$4,$5) RETURNING *
+    `, [req.user.company_id, req.user.sub, opening_cash || 0, resolvedBranchId, resolvedPosPointId]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }

@@ -1,5 +1,6 @@
-const db    = require('../config/db');
-const stock = require('../services/stock.service');
+const db     = require('../config/db');
+const stock  = require('../services/stock.service');
+const branch = require('../services/branch.service');
 const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
 const { buildInvoiceXML } = require('../services/zatca.service');
@@ -83,20 +84,29 @@ exports.create = async (req, res, next) => {
       if (!custRow) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     }
 
-    // ── التحقق من كفاية المخزون قبل إنشاء أي شيء — نرفض الفاتورة كاملة بدل
-    // إنشائها وتجاهل خصم المخزون بصمت لو الكمية غير كافية (كان يسبب تضاربًا
-    // بين الدفاتر والمخزون الفعلي). القفل (FOR UPDATE) يمنع تضارب السباق مع
-    // عملية بيع أخرى متزامنة على نفس الصنف.
+    // فرع الفاتورة: مصرَّح صراحة بالطلب (نقطة بيع/فرع مُختار) وإلا فرع البائع
+    // نفسه — بقراءة طازجة دائمًا، ليس من التوكن (المالك يقدر يغيّر فرع الموظف
+    // بأي وقت والتوكن يبقى صالحًا ٨ ساعات)
+    const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
+      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id);
+
+    // ── التحقق من كفاية المخزون *بمستودع هذا الفرع تحديدًا* قبل إنشاء أي شيء —
+    // نرفض الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت لو الكمية غير
+    // كافية بهذا المستودع تحديدًا (كان يسبب تضاربًا بين الدفاتر والمخزون الفعلي).
+    // القفل (FOR UPDATE) يمنع تضارب السباق مع عملية بيع أخرى متزامنة على نفس الصنف.
     const stockShortages = [];
     for (const item of items) {
       if (!item.product_id) continue;
       const { rows: [prod] } = await client.query(
-        `SELECT name, qty FROM products WHERE id = $1 AND company_id = $2 FOR UPDATE`,
-        [item.product_id, company_id]
+        `SELECT p.name, COALESCE(ps.qty, 0) AS qty
+         FROM products p
+         LEFT JOIN product_stock ps ON ps.product_id = p.id AND ps.warehouse_id = $3
+         WHERE p.id = $1 AND p.company_id = $2 FOR UPDATE OF p`,
+        [item.product_id, company_id, resolvedWarehouseId]
       );
       if (!prod) continue;
       if (parseFloat(prod.qty) < parseFloat(item.qty)) {
-        stockShortages.push(`${prod.name} (المتوفر: ${prod.qty}، المطلوب: ${item.qty})`);
+        stockShortages.push(`${prod.name} (المتوفر بهذا الفرع: ${prod.qty}، المطلوب: ${item.qty})`);
       }
     }
     if (stockShortages.length) {
@@ -140,15 +150,15 @@ exports.create = async (req, res, next) => {
          date, due_date, subtotal, discount_type, discount_value, discount_amount,
          taxable_amount, vat_amount, grand_total, payment_method, notes,
          status, created_by, cogs_total,
-         zatca_uuid, icv, previous_invoice_hash, issue_time)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23)
+         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23,$24)
       RETURNING *
     `, [company_id, invoice_no, invoice_type || 'simplified',
         customer_id, customer_name, customer_vat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
         taxable, vat_amount, grand, payment_method, notes, user_id,
         parseFloat(cogs_total) || 0,
-        zatcaUuid, icv, previousInvoiceHash, issueTimeStr]);
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
 
     // ── إدراج البنود + خصم المخزون ────────────
     for (let i = 0; i < processedItems.length; i++) {
@@ -166,7 +176,7 @@ exports.create = async (req, res, next) => {
         try {
           await client.query('SAVEPOINT sp_stock');
           await stock.deduct(client, {
-            company_id, product_id: item.product_id, qty: item.qty,
+            company_id, product_id: item.product_id, warehouse_id: resolvedWarehouseId, qty: item.qty,
             reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
             reference: invoice_no, user_id
           });
@@ -368,14 +378,17 @@ exports.cancel = async (req, res, next) => {
 
     await client.query(`UPDATE invoices SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [inv.id]);
 
-    // إرجاع المخزون
+    // إرجاع المخزون — لنفس مستودع فرع الفاتورة وقت البيع (وليس فرع المستخدم
+    // الحالي الذي قد يكون تغيّر منذ ذلك الحين)
+    const { warehouse_id: cancelWarehouseId } =
+      await branch.resolveWarehouseForBranch(client, req.user.company_id, inv.branch_id);
     const { rows: items } = await client.query(
       `SELECT * FROM invoice_items WHERE invoice_id = $1`, [inv.id]
     );
     for (const item of items) {
       if (item.product_id) {
         await stock.add(client, {
-          company_id: req.user.company_id, product_id: item.product_id, qty: item.qty,
+          company_id: req.user.company_id, product_id: item.product_id, warehouse_id: cancelWarehouseId, qty: item.qty,
           reason: 'مرتجع — إلغاء فاتورة', source_type: 'invoice_cancel', source_id: inv.id,
           reference: inv.invoice_no, user_id: req.user.sub
         });

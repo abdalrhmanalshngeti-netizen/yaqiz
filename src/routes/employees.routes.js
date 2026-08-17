@@ -2,6 +2,7 @@ const router     = require('express').Router();
 const auth       = require('../middleware/auth');
 const can        = require('../middleware/permissions');
 const planGuard  = require('../middleware/planGuard');
+const requireBranch = require('../middleware/requireBranch');
 const ctrl       = require('../controllers/employees.controller');
 
 router.use(auth);
@@ -10,7 +11,7 @@ router.use(auth);
 // كل موظف يقدر يجيب وردياته هو نفسه (يحتاجها عند الدخول ليعرف إن كانت له
 // وردية مفتوحة أصلاً)؛ رؤية ورديات كل الموظفين تبقى محصورة بصلاحية settings.view
 router.get ('/shifts/list',       ctrl.listShifts);
-router.post('/shifts/open',       ctrl.openShift);
+router.post('/shifts/open',       requireBranch, ctrl.openShift);
 router.put ('/shifts/:id/close',  ctrl.closeShift);
 
 router.use(planGuard('employees'));

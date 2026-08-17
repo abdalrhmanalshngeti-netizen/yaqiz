@@ -1,0 +1,41 @@
+// يحل فرعًا (أو الفرع الرئيسي إن لم يُحدَّد) إلى مستودعه الوحيد الحالي —
+// نقطة موحّدة يستخدمها كل من المشتريات والفواتير والتعديل اليدوي للمخزون
+// بدل ما كل مسار يكرر نفس منطق الحل بنفسه.
+exports.resolveWarehouseForBranch = async (client, company_id, branch_id) => {
+  let bId = branch_id;
+
+  if (!bId) {
+    const { rows: [main] } = await client.query(
+      `SELECT id FROM branches WHERE company_id = $1 AND is_main = true AND is_active = true LIMIT 1`,
+      [company_id]
+    );
+    if (!main) throw Object.assign(new Error('لا يوجد فرع نشط للشركة — يجب إعداد فرع أولاً'), { status: 400 });
+    bId = main.id;
+  } else {
+    const { rows: [b] } = await client.query(
+      `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_active = true`,
+      [bId, company_id]
+    );
+    if (!b) throw Object.assign(new Error('الفرع غير موجود'), { status: 404 });
+  }
+
+  const { rows: [wh] } = await client.query(
+    `SELECT id FROM warehouses WHERE branch_id = $1 AND is_active = true LIMIT 1`,
+    [bId]
+  );
+  if (!wh) throw Object.assign(new Error('لا يوجد مستودع لهذا الفرع'), { status: 400 });
+
+  return { branch_id: bId, warehouse_id: wh.id };
+};
+
+// يحل فرع الفاتورة: مصرَّح صراحة بالطلب أولًا، وإلا فرع المستخدم نفسه —
+// بقراءة طازجة من قاعدة البيانات دائمًا (لا نثق بأي شيء مخزَّن بالـ JWT لأن
+// المالك يقدر يغيّر فرع الموظف في أي وقت والتوكن يبقى صالحًا ٨ ساعات).
+exports.resolveWarehouseForUser = async (client, company_id, user_id, explicitBranchId) => {
+  if (explicitBranchId) return exports.resolveWarehouseForBranch(client, company_id, explicitBranchId);
+  const { rows: [u] } = await client.query(
+    `SELECT branch_id FROM users WHERE id = $1 AND company_id = $2`,
+    [user_id, company_id]
+  );
+  return exports.resolveWarehouseForBranch(client, company_id, u?.branch_id || null);
+};

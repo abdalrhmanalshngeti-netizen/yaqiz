@@ -14,5 +14,6 @@ router.get('/balance-sheet',     requireFeature('balance_sheet'),    ctrl.balanc
 router.get('/aging/customers',   requireFeature('aging_report'),     ctrl.customerAging);
 router.get('/aging/suppliers',   requireFeature('aging_report'),     ctrl.supplierAging);
 router.get('/low-stock',         ctrl.lowStock);
+router.get('/branch-performance', ctrl.branchPerformance);
 
 module.exports = router;

@@ -1,5 +1,6 @@
-const db    = require('../config/db');
-const stock = require('../services/stock.service');
+const db     = require('../config/db');
+const stock  = require('../services/stock.service');
+const branch = require('../services/branch.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -73,6 +74,12 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'المبلغ أو البنود مطلوبة' });
     }
 
+    // يُحل دائمًا (حتى لمشتريات opex بلا بنود) عشان تُنسب فاتورة المشتريات
+    // لفرع معيّن بالتقارير — لكن المستودع المُستخرَج منه لا يُستخدم إلا لو
+    // كانت مشتريات بضاعة فعلية (أدناه)
+    const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
+      await branch.resolveWarehouseForBranch(client, company_id, req.body.branch_id);
+
     if (supplier_id) {
       const { rows: [supRow] } = await client.query(
         `SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`,
@@ -97,13 +104,13 @@ exports.create = async (req, res, next) => {
       INSERT INTO purchases
         (company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
          purchase_type, category, description, date, amount, vat_amount, total,
-         remaining, payment_method, status, deductible, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         remaining, payment_method, status, deductible, notes, created_by, branch_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *
     `, [company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
         purchase_type || 'goods', category, description, date,
         baseAmount, vatAmount, total,
-        remaining, payment_method, purchStatus, deductible !== false, notes, user_id]);
+        remaining, payment_method, purchStatus, deductible !== false, notes, user_id, resolvedBranchId]);
 
     // إضافة المخزون لو كانت مشتريات بضاعة مع بنود
     if (purchase_type !== 'opex' && items.length) {
@@ -112,7 +119,7 @@ exports.create = async (req, res, next) => {
         try {
           await client.query('SAVEPOINT sp_stock_add');
           await stock.add(client, {
-            company_id, product_id: item.product_id, qty: item.qty,
+            company_id, product_id: item.product_id, warehouse_id: resolvedWarehouseId, qty: item.qty,
             unit_cost: item.unit_cost || item.unit_price,
             reason: 'شراء', source: supplier_name,
             source_type: 'purchase', source_id: purchase.id,

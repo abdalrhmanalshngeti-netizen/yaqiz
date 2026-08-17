@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const db     = require('../config/db');
 
 const SAFE_FIELDS = `id, username, full_name, email, phone, role,
-  permissions, pos_access, shift_enabled, active, last_login, created_at, tours_seen`;
+  permissions, pos_access, shift_enabled, active, last_login, created_at, tours_seen, branch_id`;
 
 // أقصى عدد مستخدمين (الحساب الرئيسي + التابعين) لكل باقة — null يعني بلا حد
 const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
@@ -31,7 +31,14 @@ exports.getOne = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { username, password, full_name, email, phone,
-            role, permissions, pos_access, shift_enabled } = req.body;
+            role, permissions, pos_access, shift_enabled, branch_id } = req.body;
+
+    if (branch_id) {
+      const { rows: [b] } = await db.query(
+        `SELECT id FROM branches WHERE id = $1 AND company_id = $2`, [branch_id, req.user.company_id]
+      );
+      if (!b) return res.status(400).json({ success: false, message: 'الفرع غير موجود' });
+    }
 
     if (!username || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'اسم المستخدم وكلمة المرور والاسم الكامل مطلوبة' });
@@ -65,12 +72,13 @@ exports.create = async (req, res, next) => {
     const { rows } = await db.query(`
       INSERT INTO users
         (company_id, username, password_hash, full_name, email, phone,
-         role, permissions, pos_access, shift_enabled)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         role, permissions, pos_access, shift_enabled, branch_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING ${SAFE_FIELDS}
     `, [
       req.user.company_id, username, hash, full_name, email, phone,
-      role || 'cashier', permissions || [], pos_access || false, shift_enabled || false
+      role || 'cashier', permissions || [], pos_access || false, shift_enabled || false,
+      branch_id || null
     ]);
 
     db.query(`
@@ -90,6 +98,32 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const { full_name, email, phone, role, permissions, pos_access, shift_enabled, active } = req.body;
+
+    // تغيير الفرع مسار منفصل عمدًا عن التحديث العام (COALESCE) أدناه — owner-only،
+    // ومحظور لو عند المستخدم وردية مفتوحة حاليًا، حتى لا تُخصم عملية لاحقة من
+    // مستودع فرع مختلف عن الفرع اللي فُتحت فيه الوردية فعليًا
+    if (req.body.branch_id !== undefined) {
+      if (req.user.role !== 'owner') {
+        return res.status(403).json({ success: false, message: 'تغيير الفرع للمالك فقط' });
+      }
+      if (req.body.branch_id) {
+        const { rows: [b] } = await db.query(
+          `SELECT id FROM branches WHERE id = $1 AND company_id = $2`,
+          [req.body.branch_id, req.user.company_id]
+        );
+        if (!b) return res.status(400).json({ success: false, message: 'الفرع غير موجود' });
+      }
+      const { rows: [openShift] } = await db.query(
+        `SELECT id FROM shifts WHERE user_id = $1 AND company_id = $2 AND status = 'open'`,
+        [req.params.id, req.user.company_id]
+      );
+      if (openShift) {
+        return res.status(400).json({ success: false, message: 'لا يمكن تغيير فرع موظف عنده وردية مفتوحة — يجب إقفالها أولًا' });
+      }
+      await db.query(`UPDATE users SET branch_id = $1 WHERE id = $2 AND company_id = $3`,
+        [req.body.branch_id || null, req.params.id, req.user.company_id]);
+    }
+
     const { rows } = await db.query(`
       UPDATE users SET
         full_name     = COALESCE($1, full_name),

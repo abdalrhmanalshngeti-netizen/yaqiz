@@ -758,6 +758,53 @@ function initDB() {
 
 function nextId(db, key) { const id = db.nextId[key]||1; db.nextId[key] = id+1; return id; }
 
+// ============ فروع/مستودعات: نقطة موحّدة لحل المستودع النشط ============
+// المستخدم الحالي (فرعه) وإلا الفرع الرئيسي — نفس منطق الحل بالباكند
+// (branch.service.js) بالضبط، عشان لا يتعارض الاثنان أبدًا
+function resolveActiveBranchId() {
+  const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  if (!branches.length) return null;
+  let branchId = currentUser?.branch_id;
+  if (!branchId || !branches.some(b=>b.id===branchId)) {
+    branchId = (branches.find(b=>b.is_main) || branches[0]).id;
+  }
+  return branchId;
+}
+function resolveActiveWarehouseId() {
+  const db = getDB();
+  const branchId = resolveActiveBranchId();
+  if (!branchId) return null;
+  const wh = (db.warehouses||[]).find(w=>w.branch_id===branchId && w.active!==false);
+  return wh ? wh.id : null;
+}
+
+// يحل مستودع فرع مُحدَّد تحديدًا (وليس فرع المستخدم النشط) — يُستخدم عند عكس
+// أثر سجل قديم (إلغاء فاتورة، استلام شراء...) اللي لازم يرجع لنفس المستودع
+// اللي أثّر فيه وقتها، حتى لو warehouse_id المحلي غير محفوظ بعد إعادة تحميل
+// من السيرفر (branch_id فقط يُخزَّن بالباكند، warehouse_id تسهيل محلي فقط)
+function resolveWarehouseIdForBranch(db, branchId) {
+  if (!branchId) return null;
+  const wh = (db.warehouses||[]).find(w=>w.branch_id===branchId && w.active!==false);
+  return wh ? wh.id : null;
+}
+
+// يحدّث كمية المستودع المحلية (db.productStock[productId][warehouseId]) و
+// products.qty الإجمالي المُشتق بنفس اللحظة دائمًا معًا — نقطة موحّدة بدل
+// تكرار "p.qty += delta" بكل موقع تعديل مخزون على حدة (كانت ٨ مواقع مختلفة)
+function mutateWarehouseStock(db, productId, warehouseId, delta) {
+  const p = db.products.find(x=>x.id===productId);
+  if (p) p.qty = Math.round(((parseFloat(p.qty)||0) + delta) * 1000) / 1000;
+  if (!warehouseId) return;
+  if (!db.productStock) db.productStock = {};
+  if (!db.productStock[productId]) db.productStock[productId] = {};
+  const cur = db.productStock[productId][warehouseId] || 0;
+  db.productStock[productId][warehouseId] = Math.round((cur + delta) * 1000) / 1000;
+}
+function getWarehouseStockQty(db, productId, warehouseId) {
+  return db.productStock?.[productId]?.[warehouseId] ?? 0;
+}
+
 // ============ HELPERS ============
 function fmtMoney(n) {
   return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -811,6 +858,7 @@ function renderApp() {
   document.documentElement.lang = 'en';
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
   if (!currentUser) { renderLogin(); return; }
+  if (needsBranchSetup()) { renderBranchSetupGate(); return; }
   renderShell();
   checkOpeningBalances();
 }
@@ -972,8 +1020,8 @@ function doLogin() {
   resetSessionTimer();
   const _hasOpenShift = (db.shifts||[]).some(s=>s.username===u.username&&!s.end_time);
   if (u.shift_enabled && !_hasOpenShift) {
-    showShiftOpenScreen(u, (openingCash) => {
-      startShift(u, openingCash);
+    showShiftOpenScreen(u, (openingCash, branchId) => {
+      startShift(u, openingCash, branchId);
       logActivity('نظام', `تسجيل دخول: ${u.full_name}`);
       renderApp();
     });
@@ -2807,6 +2855,8 @@ function doCheckout() {
   const _stPOS=db.settings;
   const _vatActivePOS=_stPOS?.vat_enabled!==false&&_stPOS?.vat_enabled!==0;
   const vat=_vatActivePOS?afterDisc*0.15:0; const total=afterDisc+vat;
+  const activeWarehouseId=resolveActiveWarehouseId();
+  const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
   const inv={
     id:nextId(db,'invoice'),
     invoice_no:`SAL-${new Date().getFullYear()}${String(db.nextId.invoice-1).padStart(5,'0')}`,
@@ -2815,6 +2865,7 @@ function doCheckout() {
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
     invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
+    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
     created_at:new Date().toISOString()
   };
   // stock moves (FIFO)
@@ -2825,8 +2876,8 @@ function doCheckout() {
     const p=db.products.find(x=>x.id===ci.id);
     if(p){const oldQty=p.qty;
       cogsTotal+=fifoDeduct(p, ci.qty);
-      p.qty=Math.max(0,p.qty-ci.qty);
-      db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ci.qty,balance_before:oldQty,balance_after:p.qty,reason:'مبيعات POS',reference:inv.invoice_no,date:new Date().toISOString()});}
+      mutateWarehouseStock(db, p.id, activeWarehouseId, -ci.qty);
+      db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',warehouse_id:activeWarehouseId,type:'out',qty:ci.qty,balance_before:oldQty,balance_after:p.qty,reason:'مبيعات POS',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
   inv.cogs_total = Math.round(cogsTotal*100)/100;
   // treasury
@@ -3251,15 +3302,19 @@ function cancelInvoice(id) {
   if(inv.items){
     if(!db.stock_moves) db.stock_moves=[];
     if(!db.nextId.stock_move) db.nextId.stock_move=1;
+    // ترجع للمستودع اللي خُصمت منه وقت البيع (لا فرع المستخدم الحالي، اللي
+    // ممكن يكون تغيّر منذ ذلك الحين) — الفواتير القديمة من قبل الفروع بلا
+    // warehouse_id تسترجع لأقرب مستودع نشط حاليًا كتوافق رجعي
+    const cancelWarehouseId = inv.warehouse_id || resolveWarehouseIdForBranch(db, inv.branch_id) || resolveActiveWarehouseId();
     inv.items.forEach(item=>{
       const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
       if(prod){
         const oldQty=prod.qty;
-        prod.qty=Math.min(999999, (prod.qty||0)+item.qty);
+        mutateWarehouseStock(db, prod.id, cancelWarehouseId, item.qty);
         if(!prod.lots) prod.lots=[];
         prod.lots.push({ qty:item.qty, cost:prod.buy_price||0, date:new Date().toISOString(), ref:'cancel-'+inv.invoice_no });
         db.stock_moves.push({
-          id:db.nextId.stock_move++, product_id:prod.id, product_name:prod.name, product_code:prod.code,
+          id:db.nextId.stock_move++, product_id:prod.id, product_name:prod.name, product_code:prod.code, warehouse_id:cancelWarehouseId,
           type:'in', qty:item.qty, balance_before:oldQty, balance_after:prod.qty,
           reason:`إلغاء فاتورة ${inv.invoice_no}`, reference:'CANCEL-'+inv.invoice_no, date:new Date().toISOString()
         });
@@ -3728,6 +3783,8 @@ function _saveNewInvoiceActual(printAfter) {
     if(partialPaid>=total){showToast(lang==='ar'?'❌ المبلغ الجزئي يجب أن يكون أقل من الإجمالي — استخدم "نقدي" للسداد الكامل':'❌ Partial must be less than total','error');return;}
   }
 
+  const activeWarehouseId=resolveActiveWarehouseId();
+  const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
   const inv={
     id:nextId(db,'invoice'),
     invoice_no:el('ni-no').value,
@@ -3739,6 +3796,7 @@ function _saveNewInvoiceActual(printAfter) {
     invoice_type:el('ni-type').value,
     notes: el('ni-notes')?.value?.trim()||'',
     zatca_status:false, paid_amount:partialPaid,
+    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
     created_at:new Date(el('ni-date').value).toISOString()
   };
 
@@ -3750,8 +3808,8 @@ function _saveNewInvoiceActual(printAfter) {
     const p=db.products.find(x=>x.id===ni.id);
     if(p){const oldQty=p.qty;
       cogsTotal+=fifoDeduct(p, ni.qty);
-      p.qty=Math.max(0,p.qty-ni.qty);
-      db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',type:'out',qty:ni.qty,balance_before:oldQty,balance_after:p.qty,reason:'فاتورة مبيعات',reference:inv.invoice_no,date:new Date().toISOString()});}
+      mutateWarehouseStock(db, p.id, activeWarehouseId, -ni.qty);
+      db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',warehouse_id:activeWarehouseId,type:'out',qty:ni.qty,balance_before:oldQty,balance_after:p.qty,reason:'فاتورة مبيعات',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
   inv.cogs_total = Math.round(cogsTotal*100)/100;
 
@@ -4422,6 +4480,8 @@ function _saveGoodsPurchaseActual() {
 
   const _vendorName = el('gp-vendor').value.trim();
   const _vendorRec  = db.suppliers.find(s => s.name.trim().toLowerCase() === _vendorName.toLowerCase());
+  const _activeWarehouseId = resolveActiveWarehouseId();
+  const _activeBranchId = (db.warehouses||[]).find(w=>w.id===_activeWarehouseId)?.branch_id||null;
   const p={
     id:nextId(db,'purchase'),
     vendor: _vendorName,
@@ -4434,6 +4494,7 @@ function _saveGoodsPurchaseActual() {
     paid_amount:paidNow,
     remaining_amount:remaining,
     status,
+    branch_id:_activeBranchId, warehouse_id:_activeWarehouseId,
     supplier_ref:el('gp-ref')?.value||'',
     notes:el('gp-notes')?.value||'',
     created_at:new Date(el('gp-date').value).toISOString()
@@ -4549,6 +4610,10 @@ function doInventoryUpdate() {
   if(!db.nextId.stock_move) db.nextId.stock_move = 1;
   const missing = [];
   let transferredValue = 0;
+  // يُستلَم دائمًا لمستودع فرع فاتورة الشراء نفسها (لا فرع المستخدم الحالي وقت
+  // التأكيد، اللي ممكن يكون مختلفًا) — مشتريات قديمة قبل الفروع تستخدم المستودع النشط حاليًا
+  const _receivingPurchase = db.purchases.find(x=>x.id===_pendingPurchaseId);
+  const receivingWarehouseId = _receivingPurchase?.warehouse_id || resolveWarehouseIdForBranch(db, _receivingPurchase?.branch_id) || resolveActiveWarehouseId();
   _pendingInventoryItems.forEach(item => {
     const prod = db.products.find(x =>
       x.name.trim().toLowerCase() === item.name.trim().toLowerCase() ||
@@ -4556,7 +4621,7 @@ function doInventoryUpdate() {
     );
     if (prod) {
       const oldQty = prod.qty;
-      prod.qty += item.qty;
+      mutateWarehouseStock(db, prod.id, receivingWarehouseId, item.qty);
       // إضافة دفعة FIFO
       if (!prod.lots) prod.lots = [];
       prod.lots.push({ qty: item.qty, cost: item.price || prod.buy_price || 0, date: new Date().toISOString(), ref: `PUR-${_pendingPurchaseId}` });
@@ -4572,7 +4637,7 @@ function doInventoryUpdate() {
       }
       db.stock_moves.push({
         id: db.nextId.stock_move++,
-        product_id: prod.id, product_name: prod.name, product_code: prod.code,
+        product_id: prod.id, product_name: prod.name, product_code: prod.code, warehouse_id: receivingWarehouseId,
         type: 'in', qty: item.qty, balance_before: oldQty, balance_after: prod.qty,
         reason: `فاتورة شراء #${_pendingPurchaseId}`,
         reference: `PUR-${_pendingPurchaseId}`,
@@ -4580,7 +4645,7 @@ function doInventoryUpdate() {
       });
       transferredValue += (item.qty||0) * (item.price || prod.buy_price || 0);
       // علّم الصنف كـ"أُدرج بالمخزون" على فاتورة الشراء نفسها — يتيح لاحقاً معرفة أي فاتورة لسه فيها أصناف معلّقة
-      const purch = db.purchases.find(x=>x.id===_pendingPurchaseId);
+      const purch = _receivingPurchase;
       const purchItem = purch?.items?.find(x=>x.name.trim().toLowerCase()===item.name.trim().toLowerCase());
       if (purchItem) purchItem.stocked = true;
     } else {
@@ -6827,6 +6892,7 @@ function renderReportsInner(c) {
       ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" onclick="setReportTab('aging')">⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
       ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='products'?'active':''}" onclick="setReportTab('products')">📦 ${lang==='ar'?'المنتجات':'Products'}</button>`:''}
       ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='suppliers'?'active':''}" onclick="setReportTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>`:''}
+      ${(db.branches||[]).filter(b=>b.active!==false).length>1?`<button class="tab-btn ${reportTab==='branches'?'active':''}" onclick="setReportTab('branches')">🏬 ${lang==='ar'?'أداء الفروع':'Branch Performance'}</button>`:''}
       ${hasPlanFeature('bank_recon')?`<button class="tab-btn ${reportTab==='bank'?'active':''}" onclick="setReportTab('bank')">🏦 ${lang==='ar'?'تسوية البنك':'Bank Recon'}</button>`:''}
       ${hasPlanFeature('cashflow')?`<button class="tab-btn ${reportTab==='cashflow'?'active':''}" onclick="setReportTab('cashflow')">💧 ${lang==='ar'?'التدفق النقدي':'Cash Flow'}</button>`:''}
     </div>
@@ -6899,6 +6965,7 @@ function renderReportsInner(c) {
       reportTab==='aging'&&hasPlanFeature('aging_report')?renderAgingReport():''}
       ${reportTab==='products'&&hasPlanFeature('extra_reports')?renderProductsReport(d,db):''}
       ${reportTab==='suppliers'&&hasPlanFeature('extra_reports')?renderSuppliersReport(db):''}
+      ${reportTab==='branches'?renderBranchPerformanceReport(db, periodFilter, reportPeriod):''}
       ${reportTab==='bank'&&hasPlanFeature('bank_recon')?renderBankRecon(db):''}
       ${reportTab==='cashflow'&&hasPlanFeature('cashflow')?renderCashFlow(db,d,periodFilter,reportPeriod):''}
     </div>
@@ -7056,6 +7123,72 @@ function renderProductsReport(d, db) {
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`:''}
+  </div>`;
+}
+
+// ── تقرير أداء الفرع (تحليلي فقط، ليس جزءًا من الدفاتر الرسمية) ──
+// إجمالي الربح = مبيعات الفرع − تكلفة البضاعة المباعة الفعلية (invoices.cogs_total،
+// محسوبة FIFO وقت كل فاتورة) — بلا توزيع مصاريف عامة. يختلف عمدًا عن منهجية
+// قائمة الدخل الموحّدة اللي تُقرِّب التكلفة بإجمالي مشتريات الفترة، ولا يجوز
+// توحيد المنهجيتين لاحقًا — كل واحدة تُجاوب سؤالًا مختلفًا.
+function renderBranchPerformanceReport(db, periodFilter, period) {
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  const invs = (db.invoices||[]).filter(i=>i.status!=='ملغاة' && (period==='all' || periodFilter(i)));
+  const rows = branches.map(b=>{
+    const branchInvs = invs.filter(i=>i.branch_id===b.id);
+    const revenue = branchInvs.reduce((s,i)=>s+(i.subtotal||0),0);
+    const cogs    = branchInvs.reduce((s,i)=>s+(i.cogs_total||0),0);
+    const gross   = revenue-cogs;
+    return { branch_id:b.id, name:b.name, is_main:b.is_main, revenue, cogs, gross_profit:gross,
+      margin: revenue>0 ? (gross/revenue*100) : 0, invoices_count: branchInvs.length };
+  }).sort((a,b)=> (b.is_main-a.is_main) || b.revenue-a.revenue);
+  const maxRev = Math.max(1, ...rows.map(r=>r.revenue));
+  const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  const totalGross   = rows.reduce((s,r)=>s+r.gross_profit,0);
+
+  return `<div>
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-icon">${icon('git-branch',22)}</div><div class="stat-label">${lang==='ar'?'عدد الفروع':'Branches'}</div><div class="stat-value">${rows.length}</div></div>
+      <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي المبيعات':'Total Revenue'}</div><div class="stat-value">${fmtMoney(totalRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-icon amber">${icon('percent',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الربح':'Total Gross Profit'}</div><div class="stat-value">${fmtMoney(totalGross)}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>🏬 ${lang==='ar'?'أداء الفروع (تحليلي — مبيعات ناقص تكلفة البضاعة فقط)':'Branch Performance (analytical — revenue minus COGS only)'}</h3></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr>
+          <th>${lang==='ar'?'الفرع':'Branch'}</th>
+          <th>${lang==='ar'?'عدد الفواتير':'Invoices'}</th>
+          <th>${lang==='ar'?'المبيعات':'Revenue'}</th>
+          <th>${lang==='ar'?'تكلفة البضاعة':'COGS'}</th>
+          <th>${lang==='ar'?'إجمالي الربح':'Gross Profit'}</th>
+          <th>${lang==='ar'?'الهامش %':'Margin %'}</th>
+          <th>${lang==='ar'?'الحصة':'Share'}</th>
+        </tr></thead>
+        <tbody>${rows.length===0
+          ?`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد فروع':'No branches'}</td></tr>`
+          :rows.map(r=>`<tr>
+          <td><b>${sanitize(r.name)}</b>${r.is_main?` <span class="badge badge-blue" style="font-size:10px;">${lang==='ar'?'رئيسي':'Main'}</span>`:''}</td>
+          <td style="text-align:center;font-weight:700;">${r.invoices_count}</td>
+          <td style="color:var(--success);font-weight:700;">${fmtMoney(r.revenue)}</td>
+          <td style="color:var(--text-muted);">${fmtMoney(r.cogs)}</td>
+          <td style="color:${r.gross_profit>=0?'var(--success)':'var(--danger)'};font-weight:800;">${fmtMoney(r.gross_profit)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="flex:1;background:var(--border);border-radius:999px;height:8px;overflow:hidden;min-width:50px;">
+                <div style="background:${r.margin>=50?'var(--success)':r.margin>=25?'var(--warning)':'var(--danger)'};height:100%;width:${Math.max(2,Math.min(100,r.margin))}%;border-radius:999px;"></div>
+              </div>
+              <span style="font-weight:700;font-size:12px;">${r.margin.toFixed(1)}%</span>
+            </div>
+          </td>
+          <td>
+            <div style="background:var(--primary-soft);height:8px;border-radius:999px;overflow:hidden;">
+              <div style="background:var(--primary);height:100%;width:${(r.revenue/maxRev*100).toFixed(1)}%;border-radius:999px;"></div>
+            </div>
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
   </div>`;
 }
 
@@ -7676,6 +7809,7 @@ function showUserModal(id) {
     'quotes.view':lang==='ar'?'عرض عروض الأسعار':'View Quotes',
     'quotes.manage':lang==='ar'?'إدارة عروض الأسعار':'Manage Quotes',
     'pricing.manage':lang==='ar'?'إدارة التسعير وسياسات الربح':'Manage Pricing Policies',
+    'branch.manage':lang==='ar'?'مسؤول فرع (يرى ورديات وحركات مخزون فرعه فقط، لا كل الشركة)':'Branch Manager (sees own branch\'s shifts & stock moves only, not the whole company)',
   };
   window._permLabels = permLabels;
   const allPerms = Object.keys(permLabels);
@@ -7742,6 +7876,14 @@ function showUserModal(id) {
             ${Object.keys(jobTitles).map(jt=>`<option value="${jt}" ${jt===currentTitle?'selected':''}>${jt}</option>`).join('')}
           </select>
         </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label class="form-label">${lang==='ar'?'الفرع':'Branch'} ${u?.role!=='owner'?'':`<span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${lang==='ar'?'غير مطلوب للمالك — يشوف كل الفروع':'not needed for owner — sees all branches'})</span>`}</label>
+        <select class="select" id="u-branch">
+          <option value="">${lang==='ar'?'— بدون فرع —':'— No branch —'}</option>
+          ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(b.name)} (#${sanitize(b.branch_number)})</option>`).join('')}
+        </select>
       </div>
 
       <div style="margin-top:16px;">
@@ -7823,6 +7965,12 @@ function saveUser(id) {
   const role     = (window._jobTitles||{})[title]?.role || 'cashier';
   const perms    = Object.keys(window._permLabels||{}).filter(p=>el('perm-'+p.replace(/\./g,'-'))?.checked);
   const posAccess    = el('u-pos')?.checked||false;
+  const branchIdRaw  = el('u-branch')?.value||'';
+  const branchId     = branchIdRaw ? Number(branchIdRaw) : null;
+  // تغيير الفرع owner-only بالباكند (وممنوع لو عند المستخدم وردية مفتوحة) —
+  // نرسله فقط لو المُحرِّر الحالي هو المالك، حتى لا يفشل تحديث بقية الحقول
+  // (صلاحيات، اسم...) لمستخدم عنده users.manage بدون كونه المالك نفسه
+  const isEditorOwner = currentUser?.role === 'owner';
 
   let valid = true;
 
@@ -7880,6 +8028,7 @@ function saveUser(id) {
       u.permissions   = perms;
       u.pos_access    = posAccess;
       u.shift_enabled = shiftEnabled;
+      if (isEditorOwner) u.branch_id = branchId;
       if (password) u.password = password;
     }
   } else {
@@ -7892,6 +8041,7 @@ function saveUser(id) {
       permissions:    perms,
       pos_access:     posAccess,
       shift_enabled:  shiftEnabled,
+      branch_id:      branchId,
       active:         true
     });
   }
@@ -7909,7 +8059,8 @@ function saveUser(id) {
           // تعديل مستخدم موجود
           await window._cloudApiFetch('PUT', `/api/users/${id}`, {
             full_name: fullname, role, permissions: perms,
-            pos_access: posAccess, shift_enabled: shiftEnabled, active: true
+            pos_access: posAccess, shift_enabled: shiftEnabled, active: true,
+            ...(isEditorOwner ? { branch_id: branchId } : {})
           });
           if (password) {
             await window._cloudApiFetch('PUT', `/api/users/${id}/password`, { new_password: password });
@@ -7918,7 +8069,8 @@ function saveUser(id) {
           // إنشاء مستخدم جديد
           const res = await window._cloudApiFetch('POST', '/api/users', {
             username, password, full_name: fullname, role,
-            permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled
+            permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled,
+            branch_id: branchId
           });
           if (res?.data?.id) {
             // تحديث الـ ID المحلي بـ ID من قاعدة البيانات
@@ -7947,6 +8099,131 @@ function deleteUser(id) {
   }
 }
 
+// ============ الفروع (BRANCHES) ============
+// نفس قالب المستخدمين بالضبط: حفظ محلي أولًا عبر saveDB، ثم مزامنة غير حاجبة
+// عبر _cloudApiFetch. كل فرع ينشئ مستودعًا مرتبطًا تلقائيًا محليًا هنا أيضًا،
+// مطابقةً لما يسويه الباكند (branches.controller.js create) بنفس الطلب.
+function renderBranches(c) {
+  const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  c.innerHTML = `
+  <div>
+    <div class="page-header">
+      <div class="page-title-lg">${lang==='ar'?'الفروع':'Branches'}</div>
+      ${currentUser?.role==='owner'?`<button class="btn btn-primary" onclick="showBranchModal()">${icon('plus',16)} ${lang==='ar'?'فرع جديد':'New Branch'}</button>`:''}
+    </div>
+    <div class="card"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr>
+        <th>${lang==='ar'?'الاسم':'Name'}</th>
+        <th>${lang==='ar'?'رقم الفرع':'Branch #'}</th>
+        <th>${lang==='ar'?'المستودع':'Warehouse'}</th>
+        <th>${lang==='ar'?'رئيسي؟':'Main?'}</th>
+        ${currentUser?.role==='owner'?'<th></th>':''}
+      </tr></thead>
+      <tbody>${branches.map(b=>{
+        const wh = (db.warehouses||[]).find(w=>w.branch_id===b.id && w.active!==false);
+        return `<tr>
+        <td><b>${sanitize(b.name)}</b></td>
+        <td><code>${sanitize(b.branch_number)}</code></td>
+        <td>${wh?sanitize(wh.name):'—'}</td>
+        <td>${b.is_main?`<span class="badge badge-blue">${lang==='ar'?'رئيسي':'Main'}</span>`:''}</td>
+        ${currentUser?.role==='owner'?`<td>
+          <button class="icon-btn" style="width:28px;height:28px;" onclick="showBranchModal(${b.id})">${icon('edit',13)}</button>
+          ${!b.is_main?`<button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" onclick="deleteBranch(${b.id})">${icon('trash-2',13)}</button>`:''}
+        </td>`:''}
+      </tr>`;}).join('')}</tbody>
+    </table>${branches.length===0?`<div class="empty">${lang==='ar'?'لا توجد فروع':'No branches'}</div>`:''}</div></div>
+  </div>`;
+  refreshIcons();
+}
+
+function showBranchModal(id) {
+  const db = getDB();
+  const b = id ? (db.branches||[]).find(x=>x.id===id) : null;
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-head"><h3>${b?t('edit'):(lang==='ar'?'فرع جديد':'New Branch')}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'اسم الفرع':'Branch Name'} *</label><input class="input" id="br-name" value="${b?sanitize(b.name):''}" /></div>
+      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'رقم الفرع':'Branch Number'} *</label><input class="input" id="br-number" value="${b?sanitize(b.branch_number):''}" /></div>
+      <div id="br-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:12px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" onclick="saveBranch(${id||'null'})">${t('save')}</button>
+        <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+function saveBranch(id) {
+  const name = (el('br-name')?.value||'').trim();
+  const number = (el('br-number')?.value||'').trim();
+  const errEl = el('br-err');
+  if (!name || !number) {
+    if (errEl) { errEl.textContent = lang==='ar'?'اسم الفرع ورقمه مطلوبان':'Branch name and number are required'; errEl.style.display='block'; }
+    return;
+  }
+
+  const db = getDB();
+  if (!db.branches) db.branches = [];
+  if (!db.warehouses) db.warehouses = [];
+
+  if (id) {
+    const b = db.branches.find(x=>x.id===id);
+    if (b) { b.name = name; b.branch_number = number; }
+  } else {
+    const branch = { id: nextId(db,'branch'), name, branch_number: number, is_main: db.branches.filter(x=>x.active!==false).length===0, active: true, created_at: new Date().toISOString() };
+    db.branches.push(branch);
+    db.warehouses.push({ id: nextId(db,'warehouse'), branch_id: branch.id, name: `مستودع ${name}`, active: true, created_at: new Date().toISOString() });
+  }
+  saveDB(db);
+  showToast(`✅ ${t('save')}`);
+  closeModal();
+  renderPage();
+
+  if (window._apiReachable && window._cloudApiFetch) {
+    (async () => {
+      try {
+        if (id) {
+          await window._cloudApiFetch('PUT', `/api/branches/${id}`, { name, branch_number: number });
+        } else {
+          const res = await window._cloudApiFetch('POST', '/api/branches', { name, branch_number: number });
+          if (res?.data?.id) {
+            const db2 = getDB();
+            // نستخدم آخر فرع محلي أُضيف بدون _serverId (بدل مطابقة بالاسم، عشان
+            // نتفادى تصادم أسماء متطابقة بالخطأ)
+            const localBranch = db2.branches[db2.branches.length-1];
+            if (localBranch && !localBranch._serverId) {
+              const oldId = localBranch.id;
+              localBranch.id = res.data.id;
+              localBranch._serverId = res.data.id;
+              const wh = db2.warehouses.find(w=>w.branch_id===oldId);
+              if (wh) { wh.branch_id = res.data.id; if (res.data.warehouse?.id) wh.id = res.data.warehouse.id; }
+              saveDB(db2);
+            }
+          }
+        }
+      } catch(e) { console.warn('Branch API sync:', e.message); showToast('⚠️ ' + (e.message||(lang==='ar'?'خطأ في مزامنة الفرع':'Branch sync error')), 'warning'); }
+    })();
+  }
+}
+
+function deleteBranch(id) {
+  if (!confirm(t('confirm'))) return;
+  const db = getDB();
+  const b = (db.branches||[]).find(x=>x.id===id);
+  if (b) b.active = false;
+  saveDB(db);
+  renderPage();
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('DELETE', `/api/branches/${id}`).catch(e=>{
+      console.warn('Branch delete API:', e.message);
+      showToast('⚠️ ' + (e.message||(lang==='ar'?'تعذر حذف الفرع':'Could not delete branch')), 'error');
+    });
+  }
+}
 
 // ============ EMPLOYEES ============
 function renderEmployees(c) {
@@ -9309,6 +9586,9 @@ function _saveReturnActual(type, amount, linkedId) {
   // 2. Stock effect: sales return → stock IN (تُعاد للمخزون بتكلفتها الحالية)
   //    purchase return → stock OUT (تخرج من المخزون بأسلوب FIFO)
   let returnCogsReversal = 0;
+  // مرتجع مبيعات يرجع لنفس مستودع فاتورة البيع الأصلية، ومرتجع مشتريات يخرج
+  // من نفس مستودع فاتورة الشراء الأصلية — وإلا المستودع النشط حاليًا كتوافق رجعي
+  const returnWarehouseId = linkedRec?.warehouse_id || resolveActiveWarehouseId();
   if(prodId && qty>0) {
     const prod=db.products.find(p=>p.id===prodId);
     if(prod) {
@@ -9320,14 +9600,14 @@ function _saveReturnActual(type, amount, linkedId) {
         returnCogsReversal = Math.round(qty*unitCost*100)/100;
         if(!prod.lots) prod.lots=[];
         prod.lots.push({qty, cost:unitCost, date:new Date().toISOString(), ref:ret.return_no});
-        prod.qty = oldQty+qty;
+        mutateWarehouseStock(db, prod.id, returnWarehouseId, qty);
       } else {
         returnCogsReversal = fifoDeduct(prod, qty);
-        prod.qty = Math.max(0, oldQty-qty);
+        mutateWarehouseStock(db, prod.id, returnWarehouseId, -qty);
       }
       db.stock_moves.push({
         id:db.nextId.stock_move++,
-        product_id:prodId, product_name:prod.name, product_code:prod.code,
+        product_id:prodId, product_name:prod.name, product_code:prod.code, warehouse_id:returnWarehouseId,
         type:isSales?'in':'out', qty,
         balance_before:oldQty, balance_after:prod.qty,
         reason:`مرتجع ${isSales?'مبيعات':'مشتريات'}: ${ret.party}`,
@@ -9807,6 +10087,8 @@ function printQuote(id){
 function convertQuoteToInvoice(id) {
   const db=getDB(); const q=(db.quotes||[]).find(x=>x.id===id); if(!q)return;
   if(!confirm(lang==='ar'?`تحويل عرض السعر ${q.quote_no} إلى فاتورة؟`:`Convert quote ${q.quote_no} to invoice?`))return;
+  const activeWarehouseId=resolveActiveWarehouseId();
+  const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
   const inv={
     id:nextId(db,'invoice'),
     invoice_no:`INV-${new Date().getFullYear()}-${String(db.nextId.invoice-1).padStart(3,'0')}`,
@@ -9817,6 +10099,7 @@ function convertQuoteToInvoice(id) {
     payment_method:'آجل',status:'آجل',
     invoice_type:'simplified',zatca_status:false,
     paid_amount:0,quote_ref:q.quote_no,
+    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
     created_at:new Date().toISOString()
   };
 
@@ -9830,8 +10113,8 @@ function convertQuoteToInvoice(id) {
     if(prod){
       const oldQty=prod.qty;
       cogsTotal+=fifoDeduct(prod, item.qty);
-      prod.qty=Math.max(0,prod.qty-item.qty);
-      db.stock_moves.push({id:db.nextId.stock_move++,product_id:prod.id,product_name:prod.name,product_code:prod.code||'',
+      mutateWarehouseStock(db, prod.id, activeWarehouseId, -item.qty);
+      db.stock_moves.push({id:db.nextId.stock_move++,product_id:prod.id,product_name:prod.name,product_code:prod.code||'',warehouse_id:activeWarehouseId,
         type:'out',qty:item.qty,balance_before:oldQty,balance_after:prod.qty,
         reason:'تحويل عرض سعر لفاتورة',reference:inv.invoice_no,date:new Date().toISOString()});
     }
@@ -9901,7 +10184,10 @@ function renderStockMoves(c){
   <div>
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'حركة المخزون':'Stock Movements'}</div>
-      ${has('inventory.manage')?`<button class="btn btn-primary" onclick="showStockMoveModal()">${icon('plus',16)} ${lang==='ar'?'حركة يدوية':'Manual Move'}</button>`:''}
+      <div style="display:flex;gap:8px;">
+        ${(currentUser?.role==='owner' && (db.warehouses||[]).filter(w=>w.active!==false).length>1)?`<button class="btn btn-outline" onclick="showStockTransferModal()">${icon('shuffle',16)} ${lang==='ar'?'نقل بضاعة بين الفروع':'Transfer Between Branches'}</button>`:''}
+        ${has('inventory.manage')?`<button class="btn btn-primary" onclick="showStockMoveModal()">${icon('plus',16)} ${lang==='ar'?'حركة يدوية':'Manual Move'}</button>`:''}
+      </div>
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-card" style="cursor:pointer;transition:.15s;" onclick="setSmFilter('in')" id="smc-in">
@@ -10008,6 +10294,8 @@ function filterStockMoves(){
 function showStockMoveModal(){
   const db=getDB();
   const mc=el('modal-container');
+  const _warehouses=(db.warehouses||[]).filter(w=>w.active!==false);
+  const _activeWh=resolveActiveWarehouseId();
   mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">
     <div class="modal-head"><h3>${lang==='ar'?'تسجيل حركة مخزون':'Stock Movement'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
     <div class="form-row">
@@ -10024,13 +10312,18 @@ function showStockMoveModal(){
         </select>
       </div>
     </div>
+    ${_warehouses.length>1?`
+    <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'المستودع':'Warehouse'} *</label>
+      <select class="select" id="sm-warehouse">
+        ${_warehouses.map(w=>`<option value="${w.id}" ${w.id===_activeWh?'selected':''}>${sanitize(w.name)}</option>`).join('')}
+      </select>
+    </div>`:`<input type="hidden" id="sm-warehouse" value="${_activeWh||''}" />`}
     <div class="form-row">
       <div><label class="form-label">${lang==='ar'?'الكمية':'Quantity'} *</label><input class="input" type="number" id="sm-qty" value="1" min="1" /></div>
       <div><label class="form-label">${lang==='ar'?'السبب / مصدر الحركة':'Reason / Source'}</label>
         <select class="select" id="sm-reason">
           <optgroup label="${lang==='ar'?'وارد (إضافة إلى المخزون)':'Inbound'}">
             <option value="شراء">${lang==='ar'?'شراء من مورد':'Purchase from Supplier'}</option>
-            <option value="نقل وارد">${lang==='ar'?'نقل من فرع آخر':'Transfer In'}</option>
             <option value="مرتجع من عميل">${lang==='ar'?'مرتجع من عميل':'Return from Customer'}</option>
             <option value="جرد - زيادة">${lang==='ar'?'جرد - زيادة':'Stock Count - Surplus'}</option>
           </optgroup>
@@ -10038,7 +10331,6 @@ function showStockMoveModal(){
             <option value="تلف">${lang==='ar'?'تلف / هالك':'Damaged/Wasted'}</option>
             <option value="مفقود">${lang==='ar'?'مفقود / سرقة':'Missing/Stolen'}</option>
             <option value="هدية أو عينة">${lang==='ar'?'هدية / عينة':'Gift/Sample'}</option>
-            <option value="نقل صادر">${lang==='ar'?'نقل لفرع آخر':'Transfer Out'}</option>
             <option value="تجزئة">${lang==='ar'?'تجزئة منتج':'Product Split'}</option>
             <option value="جرد - نقص">${lang==='ar'?'جرد - نقص':'Stock Count - Deficit'}</option>
           </optgroup>
@@ -10070,13 +10362,15 @@ function saveStockMove(){
   const pid=Number(sel.value); const qty=Number(el('sm-qty').value||0);
   if(!qty){showToast(lang==='ar'?'أدخل الكمية':'Enter quantity','error');return;}
   const type=el('sm-type').value;
+  const warehouseId=Number(el('sm-warehouse')?.value)||null;
+  if(!warehouseId){showToast(lang==='ar'?'اختر المستودع':'Select warehouse','error');return;}
   const prod=db.products.find(p=>p.id===pid); if(!prod)return;
   const oldQty=prod.qty;
-  prod.qty=type==='in'?oldQty+qty:Math.max(0,oldQty-qty);
+  mutateWarehouseStock(db, prod.id, warehouseId, type==='in'?qty:-qty);
   if(!db.stock_moves)db.stock_moves=[];
   const move={
     id:db.nextId.stock_move||1,
-    product_id:pid, product_name:opt.dataset.name, product_code:opt.dataset.code,
+    product_id:pid, product_name:opt.dataset.name, product_code:opt.dataset.code, warehouse_id:warehouseId,
     type, qty, balance_before:oldQty, balance_after:prod.qty,
     reason:el('sm-reason').value, note:el('sm-note').value,
     source:el('sm-source')?.value||'',
@@ -10088,6 +10382,109 @@ function saveStockMove(){
   saveDB(db);
   logActivity('مخزون',`حركة ${type==='in'?'وارد':'صادر'} — ${opt.dataset.name} — ${type==='in'?'+':'-'}${qty}`);
   showToast(`✅ ${lang==='ar'?`تم: ${opt.dataset.name} ${type==='in'?'+':'-'}${qty}`:`Done: ${opt.dataset.name} ${type==='in'?'+':'-'}${qty}`}`);
+  closeModal(); renderPage();
+}
+
+// ============ نقل بضاعة حقيقي بين مستودعين (فروع) ============
+function showStockTransferModal(){
+  const db=getDB();
+  const warehouses=(db.warehouses||[]).filter(w=>w.active!==false);
+  if(warehouses.length<2){showToast(lang==='ar'?'تحتاج مستودعين نشطين على الأقل':'Need at least 2 active warehouses','error');return;}
+  const mc=el('modal-container');
+  mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-head"><h3>${icon('shuffle',18)} ${lang==='ar'?'نقل بضاعة بين الفروع':'Transfer Stock Between Branches'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+    <div style="padding:0 20px 20px;">
+      <div class="form-row">
+        <div><label class="form-label">${lang==='ar'?'من مستودع':'From Warehouse'} *</label>
+          <select class="select" id="tr-from" onchange="renderTransferItemsList()">
+            <option value="">${lang==='ar'?'اختر':'Select'}</option>
+            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(w.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="form-label">${lang==='ar'?'إلى مستودع':'To Warehouse'} *</label>
+          <select class="select" id="tr-to">
+            <option value="">${lang==='ar'?'اختر':'Select'}</option>
+            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(w.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="tr-items-wrap" style="max-height:320px;overflow-y:auto;margin:12px 0;"></div>
+      <div id="tr-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" id="tr-save-btn">${lang==='ar'?'تنفيذ النقل':'Execute Transfer'}</button>
+        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div></div>`;
+  refreshIcons();
+  el('tr-save-btn').onclick = saveStockTransfer;
+}
+
+function renderTransferItemsList(){
+  const db=getDB();
+  const fromId=Number(el('tr-from')?.value)||null;
+  const wrap=el('tr-items-wrap');
+  if(!fromId){wrap.innerHTML='';return;}
+  const items=db.products.filter(p=>p.is_active!==false)
+    .map(p=>({p,qty:getWarehouseStockQty(db,p.id,fromId)}))
+    .filter(x=>x.qty>0);
+  wrap.innerHTML = items.length ? items.map(({p,qty})=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;"><b>${sanitize(p.name)}</b><div style="font-size:11px;color:var(--text-muted);">${lang==='ar'?'متاح':'Available'}: ${qty}</div></div>
+      <input class="input" type="number" min="0" max="${qty}" placeholder="0" style="width:100px;" data-tr-product="${p.id}" data-tr-name="${sanitize(p.name)}" data-tr-max="${qty}" />
+    </div>`).join('')
+    : `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">${lang==='ar'?'لا يوجد مخزون بهذا المستودع':'No stock in this warehouse'}</div>`;
+}
+
+function saveStockTransfer(){
+  const db=getDB();
+  const fromId=Number(el('tr-from')?.value)||null;
+  const toId=Number(el('tr-to')?.value)||null;
+  const errEl=el('tr-err'), btn=el('tr-save-btn');
+  errEl.style.display='none';
+  if(!fromId||!toId){errEl.textContent=lang==='ar'?'اختر المستودع المصدر والوجهة':'Select source and destination warehouse';errEl.style.display='block';return;}
+  if(fromId===toId){errEl.textContent=lang==='ar'?'لا يمكن النقل لنفس المستودع':'Cannot transfer to the same warehouse';errEl.style.display='block';return;}
+  const inputs=[...document.querySelectorAll('[data-tr-product]')];
+  const items=inputs.map(inp=>({product_id:Number(inp.dataset.trProduct),name:inp.dataset.trName,qty:Number(inp.value)||0,max:Number(inp.dataset.trMax)})).filter(x=>x.qty>0);
+  if(!items.length){errEl.textContent=lang==='ar'?'أدخل كمية صنف واحد على الأقل':'Enter quantity for at least one item';errEl.style.display='block';return;}
+  const over=items.find(x=>x.qty>x.max);
+  if(over){errEl.textContent=lang==='ar'?`الكمية المطلوبة لـ"${over.name}" أكبر من المتاح`:`Requested quantity for "${over.name}" exceeds available stock`;errEl.style.display='block';return;}
+
+  btn.disabled=true;
+  if(!db.stock_moves)db.stock_moves=[];
+  if(!db.nextId.stock_move)db.nextId.stock_move=1;
+  if(!db.stock_transfers)db.stock_transfers=[];
+  const transferNo = `TRF-${String(nextId(db,'stock_transfer')).padStart(6,'0')}`;
+  items.forEach(it=>{
+    const oldFromQty = getWarehouseStockQty(db, it.product_id, fromId);
+    const oldToQty   = getWarehouseStockQty(db, it.product_id, toId);
+    mutateWarehouseStock(db, it.product_id, fromId, -it.qty);
+    mutateWarehouseStock(db, it.product_id, toId, it.qty);
+    db.stock_moves.push({id:db.nextId.stock_move++,product_id:it.product_id,product_name:it.name,warehouse_id:fromId,
+      type:'out',qty:it.qty,balance_before:oldFromQty,balance_after:oldFromQty-it.qty,
+      reason:'نقل بضاعة إلى مستودع آخر',reference:transferNo,date:new Date().toISOString()});
+    db.stock_moves.push({id:db.nextId.stock_move++,product_id:it.product_id,product_name:it.name,warehouse_id:toId,
+      type:'in',qty:it.qty,balance_before:oldToQty,balance_after:oldToQty+it.qty,
+      reason:'نقل بضاعة من مستودع آخر',reference:transferNo,date:new Date().toISOString()});
+  });
+  const transfer = { id: nextId(db,'stock_transfer'), transfer_no: transferNo, from_warehouse_id: fromId, to_warehouse_id: toId,
+    items: items.map(it=>({product_id:it.product_id,product_name:it.name,qty:it.qty})), created_at: new Date().toISOString() };
+  db.stock_transfers.push(transfer);
+  saveDB(db);
+  logActivity('مخزون', `نقل بضاعة ${transferNo} — ${items.length} صنف`);
+
+  window._cloudApiFetch?.('POST', '/api/stock-transfers', {
+    from_warehouse_id: fromId, to_warehouse_id: toId,
+    items: items.map(it=>({product_id:it.product_id,qty:it.qty}))
+  }).then(res => {
+    if (res?.data?.id) {
+      const _db = getDB();
+      const _t = (_db.stock_transfers||[]).find(t=>t.id===transfer.id);
+      if (_t) { _t._serverId = res.data.id; saveDB(_db); }
+    }
+  }).catch(e => console.warn('stock transfer sync:', e.message));
+
+  showToast(`✅ ${lang==='ar'?`تم النقل ${transferNo}`:`Transferred ${transferNo}`}`);
   closeModal(); renderPage();
 }
 
@@ -10323,6 +10720,11 @@ async function _updateNotifBadge() {
 function showShiftOpenScreen(user, onProceed) {
   document.documentElement.lang = 'en';
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
+  const db = getDB();
+  // اختيار الفرع يظهر فقط لو الموظف يقدر يبدأ وردية بأكثر من فرع نشط —
+  // الحالة الشائعة (فرع واحد) تُحل تلقائيًا بلا أي حقل إضافي بالشاشة
+  const _branches = (db.branches||[]).filter(b=>b.active!==false);
+  const _defaultBranchId = resolveActiveBranchId();
   el('app').innerHTML = `
   <div class="login-bg">
     <div class="login-card">
@@ -10332,6 +10734,13 @@ function showShiftOpenScreen(user, onProceed) {
       <div style="text-align:center;margin:12px 0 18px;font-size:13px;color:var(--text-muted);">
         🕐 ${new Date().toLocaleString(lang==='ar'?'ar-SA-u-nu-latn':'en-US',{dateStyle:'medium',timeStyle:'short'})}
       </div>
+      ${_branches.length>1?`
+      <div style="margin-bottom:16px;">
+        <label class="form-label">🏬 ${lang==='ar'?'الفرع':'Branch'}</label>
+        <select class="select" id="so-branch">
+          ${_branches.map(b=>`<option value="${b.id}" ${b.id===_defaultBranchId?'selected':''}>${sanitize(b.name)}</option>`).join('')}
+        </select>
+      </div>`:`<input type="hidden" id="so-branch" value="${_defaultBranchId||''}" />`}
       <div style="margin-bottom:16px;">
         <label class="form-label">💵 ${lang==='ar'?'المبلغ الموجود في الدرج الآن':'Amount currently in the drawer'}</label>
         <input id="so-cash" class="input" type="number" placeholder="0.00" autofocus />
@@ -10350,15 +10759,16 @@ function showShiftOpenScreen(user, onProceed) {
       errEl.style.display = 'block';
       return;
     }
-    onProceed(Number(cashEl.value));
+    onProceed(Number(cashEl.value), Number(el('so-branch')?.value)||null);
   };
 }
 
-function startShift(user, openingCash) {
+function startShift(user, openingCash, branchId) {
   const db = getDB();
   // close any open shift for this user first
   const open = (db.shifts||[]).find(s=>s.username===user.username&&!s.end_time);
   if(open) { open.end_time=new Date().toISOString(); }
+  const resolvedBranchId = branchId || resolveActiveBranchId();
   const shift = {
     id: db.nextId.shift||1,
     username: user.username,
@@ -10369,7 +10779,8 @@ function startShift(user, openingCash) {
     opening_cash: Number(openingCash)||0,
     closing_cash: 0, closing_card: 0, closing_transfer: 0,
     sales_cash: 0, sales_card: 0, sales_transfer: 0, sales_credit: 0,
-    invoices_count: 0, invoice_ids: []
+    invoices_count: 0, invoice_ids: [],
+    branch_id: resolvedBranchId
   };
   if(!db.shifts) db.shifts=[];
   db.shifts.push(shift);
@@ -10378,7 +10789,7 @@ function startShift(user, openingCash) {
   localStorage.setItem('yaqiz_shift_id', shift.id);
 
   // مزامنة مع السيرفر (بدون انتظار حتى ما نأخر تسجيل الدخول)
-  window._cloudApiFetch?.('POST', '/api/employees/shifts/open', { opening_cash: Number(openingCash)||0 })
+  window._cloudApiFetch?.('POST', '/api/employees/shifts/open', { opening_cash: Number(openingCash)||0, branch_id: resolvedBranchId })
     .then(res => {
       if (!res?.data?.id) return;
       const _db = getDB();
@@ -10396,6 +10807,11 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
     shift.closing_cash = Number(closingCash)||0;
     shift.closing_card = Number(closingCard)||0;
     shift.closing_transfer = Number(closingTransfer)||0;
+    // فرق المُعلن عن المتوقع — يُحفظ مع الوردية عشان يظهر لاحقًا بسجل الورديات
+    // (بدل ما يُحسب فقط لحظيًا بشاشة الإغلاق ويضيع)
+    shift.variance_cash     = Math.round((shift.closing_cash     - (shift.sales_cash||0))     * 100) / 100;
+    shift.variance_card     = Math.round((shift.closing_card     - (shift.sales_card||0))     * 100) / 100;
+    shift.variance_transfer = Math.round((shift.closing_transfer - (shift.sales_transfer||0)) * 100) / 100;
     saveDB(db);
     if (shift._serverId) {
       window._cloudApiFetch?.('PUT', `/api/employees/shifts/${shift._serverId}/close`, {
@@ -10498,6 +10914,7 @@ function showShiftSummary(onConfirm) {
           <label class="form-label">🏦 ${lang==='ar'?'إجمالي التحويل البنكي الفعلي':'Actual bank transfer total'}</label>
           <input class="input" type="number" id="ss-transfer" placeholder="0.00" />
         </div>
+        <div id="ss-variance" style="display:none;margin-top:10px;padding:10px;border-radius:8px;font-size:12px;font-weight:700;"></div>
         <div id="ss-err" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;"></div>
       </div>
 
@@ -10512,6 +10929,25 @@ function showShiftSummary(onConfirm) {
     </div>
   </div>`;
   refreshIcons();
+  // فرق المُعلن عن المتوقع — يُحسب فوريًا مع كتابة المستخدم، عشان يلاحظ أي عجز/فائض
+  // قبل ما يأكد الخروج، لا بعد ما يكتشفها المالك لاحقًا بمراجعة منفصلة
+  const _expectedCash = shift.sales_cash||0, _expectedCard = shift.sales_card||0, _expectedTransfer = shift.sales_transfer||0;
+  function _updateVariance() {
+    const cashEl = el('ss-cash'), cardEl = el('ss-card'), transferEl = el('ss-transfer'), vEl = el('ss-variance');
+    if (cashEl.value===''&&cardEl.value===''&&transferEl.value==='') { vEl.style.display='none'; return; }
+    const vCash = (Number(cashEl.value)||0) - _expectedCash;
+    const vCard = (Number(cardEl.value)||0) - _expectedCard;
+    const vTransfer = (Number(transferEl.value)||0) - _expectedTransfer;
+    const total = vCash+vCard+vTransfer;
+    const ok = Math.abs(total) < 0.01;
+    vEl.style.display = 'block';
+    vEl.style.background = ok?'#dcfce7':(total<0?'#fee2e2':'#fef3c7');
+    vEl.style.color = ok?'#15803d':(total<0?'#b91c1c':'#a16207');
+    vEl.textContent = ok
+      ? (lang==='ar'?'✅ مطابق — لا فرق':'✅ Matches — no variance')
+      : (lang==='ar'?`⚠️ فرق إجمالي: ${total>0?'+':''}${fmtMoney(total)} (${total<0?'عجز':'فائض'})`:`⚠️ Total variance: ${total>0?'+':''}${fmtMoney(total)} (${total<0?'shortage':'surplus'})`);
+  }
+  ['ss-cash','ss-card','ss-transfer'].forEach(id => el(id).addEventListener('input', _updateVariance));
   el('ss-confirm-btn').onclick = () => {
     const cashEl = el('ss-cash'), cardEl = el('ss-card'), transferEl = el('ss-transfer');
     const errEl = el('ss-err');
@@ -12069,6 +12505,7 @@ function renderSettings(c) {
     <div id="set-tabs" class="tabs" style="flex-wrap:wrap;">
       <button class="tab-btn ${settingsTab==='general'?'active':''}" onclick="setSettingsTab('general')">⚙️ ${lang==='ar'?'عام':'General'}</button>
       <button class="tab-btn ${settingsTab==='users'?'active':''}" onclick="setSettingsTab('users')">👥 ${lang==='ar'?'المستخدمون':'Users'}</button>
+      <button class="tab-btn ${settingsTab==='branches'?'active':''}" onclick="setSettingsTab('branches')">🏬 ${lang==='ar'?'الفروع':'Branches'}</button>
       ${hasPlanFeature('employees')?`<button class="tab-btn ${settingsTab==='employees'?'active':''}" onclick="setSettingsTab('employees')">👷 ${lang==='ar'?'الموظفون':'Employees'}</button>`:''}
       ${hasPlanFeature('activity_log')?`<button class="tab-btn ${settingsTab==='activity'?'active':''}" onclick="setSettingsTab('activity')">📋 ${lang==='ar'?'النشاطات':'Activity'}</button>`:''}
       ${showSec?`<button class="tab-btn ${settingsTab==='security'?'active':''}" onclick="setSettingsTab('security')">🔐 ${lang==='ar'?'الأمان':'Security'}</button>`:''}
@@ -12092,6 +12529,7 @@ function switchPlanPreview(plan) {
 function renderSettingsContent() {
   const mc=el('settings-main-content'); if(!mc) return;
   if(settingsTab==='users')    { renderUsers(mc); return; }
+  if(settingsTab==='branches') { renderBranches(mc); return; }
   if(settingsTab==='employees'){ renderEmployees(mc); return; }
   if(settingsTab==='activity') { renderActivity(mc); return; }
   if(settingsTab==='security') { renderAdminSessionsTab(mc); return; }
@@ -13962,6 +14400,97 @@ function _obActiveSteps() {
 function _obStepCount() { return _obActiveSteps().length; }
 let _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
 
+// ============ بوابة إعداد الفرع الإجبارية ============
+// بعكس معالج الأرصدة الافتتاحية (قابل للتخطي، owner-only)، هذي البوابة غير
+// قابلة للتجاوز إطلاقًا ولكل الأدوار — المخزون/نقطة البيع/الورديات بلا معنى
+// بدون فرع. مصدر الحقيقة الوجود الفعلي لفرع نشط، لا علم منفصل قابل للانحراف.
+function needsBranchSetup() {
+  const db = getDB();
+  return !(db.branches||[]).some(b=>b.active!==false);
+}
+
+function renderBranchSetupGate() {
+  document.documentElement.lang = 'en';
+  document.documentElement.dir = lang==='ar'?'rtl':'ltr';
+
+  if (currentUser.role !== 'owner') {
+    el('app').innerHTML = `
+    <div class="login-bg">
+      <div class="login-card" style="text-align:center;">
+        <div class="login-logo">${LOGO_SVG}</div>
+        <div class="login-title">${lang==='ar'?'بانتظار إعداد الفروع':'Waiting for Branch Setup'}</div>
+        <div class="login-sub">${lang==='ar'?'المالك لسا ما أعدّ فروع الشركة — تواصل معه لإكمال الإعداد قبل ما تقدر تستخدم المنصة.':'The owner hasn’t set up any branches yet — contact them before you can use the platform.'}</div>
+        <button class="btn btn-outline btn-full" style="margin-top:16px;" onclick="doLogout()">${lang==='ar'?'تسجيل الخروج':'Logout'}</button>
+      </div>
+    </div>`;
+    refreshIcons();
+    return;
+  }
+
+  el('app').innerHTML = `
+  <div class="login-bg">
+    <div class="login-card">
+      <div class="login-logo">${LOGO_SVG}</div>
+      <div class="login-title">${lang==='ar'?'إعداد الفرع الأول':'Set Up Your First Branch'}</div>
+      <div class="login-sub">${lang==='ar'?'قبل ما تقدر تستخدم المخزون أو نقطة البيع أو الورديات، أضف فرعك الأول — اسم ورقم فقط.':'Before using inventory, POS, or shifts, add your first branch — just a name and number.'}</div>
+      <div style="margin-bottom:16px;">
+        <label class="form-label">${lang==='ar'?'اسم الفرع':'Branch Name'}</label>
+        <input id="bg-name" class="input" placeholder="${lang==='ar'?'مثال: الفرع الرئيسي':'e.g. Main Branch'}" autofocus />
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="form-label">${lang==='ar'?'رقم الفرع':'Branch Number'}</label>
+        <input id="bg-number" class="input" placeholder="1" />
+      </div>
+      <div id="bg-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
+      <button class="btn btn-primary btn-full" id="bg-save-btn" style="padding:12px;font-size:14px;">
+        ${icon('check',18)} ${lang==='ar'?'حفظ والمتابعة':'Save & Continue'}
+      </button>
+    </div>
+  </div>`;
+  refreshIcons();
+  el('bg-save-btn').onclick = saveFirstBranch;
+}
+
+async function saveFirstBranch() {
+  const nameEl = el('bg-name'), numEl = el('bg-number'), errEl = el('bg-err'), btn = el('bg-save-btn');
+  const name = (nameEl.value||'').trim();
+  const number = (numEl.value||'').trim();
+  errEl.style.display = 'none';
+  if (!name || !number) {
+    errEl.textContent = lang==='ar'?'أدخل اسم الفرع ورقمه':'Enter the branch name and number';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.disabled = true;
+
+  const db = getDB();
+  if (!db.branches) db.branches = [];
+  if (!db.warehouses) db.warehouses = [];
+  const branch = { id: nextId(db,'branch'), name, branch_number: number, is_main: db.branches.length===0, active: true, created_at: new Date().toISOString() };
+  db.branches.push(branch);
+  const warehouse = { id: nextId(db,'warehouse'), branch_id: branch.id, name: `مستودع ${name}`, active: true, created_at: new Date().toISOString() };
+  db.warehouses.push(warehouse);
+  saveDB(db);
+
+  if (window._apiReachable && window._cloudApiFetch) {
+    try {
+      const res = await window._cloudApiFetch('POST', '/api/branches', { name, branch_number: number });
+      if (res?.data?.id) {
+        branch.id = res.data.id;
+        warehouse.branch_id = branch.id;
+        if (res.data.warehouse?.id) warehouse.id = res.data.warehouse.id;
+        saveDB(db);
+      }
+    } catch(e) {
+      errEl.textContent = e?.message || (lang==='ar'?'تعذر الحفظ، حاول مجددًا':'Save failed, try again');
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      return;
+    }
+  }
+  renderApp();
+}
+
 function checkOpeningBalances() {
   if (!currentUser || currentUser.role !== 'owner') return;
   const db = getDB();
@@ -14373,13 +14902,22 @@ function obSaveAll() {
   // صفحاتها الخاصة، لا من إعادة تشغيل هذا المعالج — لذلك تُستبعد خطواتها أصلًا
   // من الواجهة بوضع التعديل (_obActiveSteps)، ونتجنب هنا إعادة إنشائها مكرَّرة
   if (!isEdit) {
-    // المنتجات
+    // المنتجات — الكمية الافتتاحية تُنسب لمستودع الفرع النشط (البوابة الإجبارية
+    // تضمن وجود فرع/مستودع دائمًا قبل الوصول لهذا المعالج)
     if (!db.products) db.products = [];
     if (!db.nextId.product) db.nextId.product = 1;
+    const _obWarehouseId = resolveActiveWarehouseId();
     _obData.products.forEach(p => {
       const pid = nextId(db,'product');
       db.products.push({ id:pid, code:'OB-'+pid, name:p.name, category:'بضاعة',
         buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0, created_at:new Date().toISOString() });
+      // p.qty الإجمالي انضبط أعلاه مباشرة عند الإنشاء — هنا فقط نسجّل نصيب
+      // المستودع النشط منها بدون مضاعفتها (لا نستخدم mutateWarehouseStock هنا)
+      if (p.qty && _obWarehouseId) {
+        if (!db.productStock) db.productStock = {};
+        if (!db.productStock[pid]) db.productStock[pid] = {};
+        db.productStock[pid][_obWarehouseId] = p.qty;
+      }
     });
 
     // الموظفون
@@ -15086,6 +15624,7 @@ async function runAISearchQuery(q) {
       discount_type:  inv.discount>0 ? 'value' : null,
       discount_value: parseFloat(inv.discount)||0,
       cogs_total: parseFloat(inv.cogs_total)||0,
+      branch_id: inv.branch_id||null,
       notes: '',
       items: (inv.items||[]).map(it => {
         const _prod = _liveDB.products.find(p=>p.id===(it.id||it.product_id)) ||
@@ -15122,6 +15661,7 @@ async function runAISearchQuery(q) {
       status:         STATUS_TO_FE[inv.status]||inv.status,
       invoice_type:   inv.invoice_type||'simplified',
       zatca_status:   inv.zatca_status==='accepted',
+      branch_id:      inv.branch_id||null,
       created_at:     inv.created_at
     };
   }
@@ -15195,6 +15735,7 @@ async function runAISearchQuery(q) {
       deductible: p.deductible!==false,
       status: p.status||'unpaid',
       purchase_no: p.purchase_no||'',
+      branch_id: p.branch_id||null,
       created_at: p.created_at
     };
   }
@@ -15267,7 +15808,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes, branchesRes, warehousesRes, stockByWhRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all').catch(() => null),
         apiFetch('GET', '/api/customers?active=all').catch(() => null),
         apiFetch('GET', '/api/suppliers?active=all').catch(() => null),
@@ -15289,6 +15830,9 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/vouchers').catch(() => null),
         apiFetch('GET', '/api/closed-periods').catch(() => null),
         apiFetch('GET', '/api/settings').catch(() => null),
+        apiFetch('GET', '/api/branches').catch(() => null),
+        apiFetch('GET', '/api/warehouses').catch(() => null),
+        apiFetch('GET', '/api/products/stock-by-warehouse').catch(() => null),
       ]);
 
       const db = getDB();
@@ -15445,6 +15989,7 @@ async function runAISearchQuery(q) {
             local.sales_credit = parseFloat(row.sales_credit)||0; local.invoices_count = row.invoices_count||0;
             local.opening_cash = parseFloat(row.opening_cash)||0; local.closing_cash = parseFloat(row.closing_cash)||0;
             local.closing_card = parseFloat(row.closing_card)||0; local.closing_transfer = parseFloat(row.closing_transfer)||0;
+            local.branch_id = row.branch_id||local.branch_id||null; local.branch_name = row.branch_name||local.branch_name;
           } else if (!_knownShiftServerIds.has(row.id)) {
             db.shifts.unshift({
               id: 'srv-' + row.id, _serverId: row.id, username: row.username || '', full_name: row.full_name || '',
@@ -15455,6 +16000,7 @@ async function runAISearchQuery(q) {
               sales_cash: parseFloat(row.sales_cash)||0, sales_card: parseFloat(row.sales_card)||0,
               sales_transfer: parseFloat(row.sales_transfer)||0, sales_credit: parseFloat(row.sales_credit)||0,
               invoices_count: row.invoices_count||0, invoice_ids: [],
+              branch_id: row.branch_id||null, branch_name: row.branch_name||'',
             });
           }
         });
@@ -15533,6 +16079,24 @@ async function runAISearchQuery(q) {
         db.settings = { ...db.settings, ...settingsRes.data };
       }
 
+      // الفروع والمستودعات — مصدرها السيرفر دومًا (بلا تعقيد محلي إضافي)، عشان
+      // بوابة إعداد الفرع الإجبارية (needsBranchSetup) تعرف الحالة الصحيحة فورًا
+      // حتى من جهاز/متصفح جديد لم يسبق له تسجيل الدخول لهذا الحساب. نطبّع
+      // is_active (اسم عمود الباكند) إلى active (نفس الاسم المستخدم بكل كود
+      // الفروع المحلي — showBranchModal/renderBranches/deleteBranch)
+      if (branchesRes?.data)   db.branches   = branchesRes.data.map(b=>({ ...b, active: b.is_active !== false }));
+      if (warehousesRes?.data) db.warehouses = warehousesRes.data.map(w=>({ ...w, active: w.is_active !== false }));
+      // كمية كل (منتج، مستودع) — تُستبدل بالكامل بنسخة السيرفر (مصدر الحقيقة)،
+      // بعكس بقية القوائم اللي تُدمج تراكميًا، لأن هذا الجدول مُشتق بالكامل
+      // ولا يحتاج تسوية مع تعديلات محلية معلّقة
+      if (stockByWhRes?.data) {
+        db.productStock = {};
+        for (const row of stockByWhRes.data) {
+          if (!db.productStock[row.product_id]) db.productStock[row.product_id] = {};
+          db.productStock[row.product_id][row.warehouse_id] = parseFloat(row.qty) || 0;
+        }
+      }
+
       // مزامنة قائمة المستخدمين من API
       if (usersRes?.data) {
         const apiUsers = usersRes.data.map(u => ({
@@ -15546,6 +16110,7 @@ async function runAISearchQuery(q) {
           active:       u.active !== false,
           last_login:   u.last_login,
           tours_seen:   u.tours_seen || {},
+          branch_id:    u.branch_id || null,
         }));
         // أضف المستخدم الحالي إذا لم يكن في القائمة
         if (currentUser && !apiUsers.find(x => x.id === currentUser.id)) {
@@ -15715,7 +16280,7 @@ async function runAISearchQuery(q) {
             purchase_type: p.purchase_type || ((p.category === 'بضاعة' || p.category === 'goods') ? 'goods' : 'opex'),
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
             payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
-            supplier_ref: p.supplier_ref||'', notes: p.notes||'',
+            supplier_ref: p.supplier_ref||'', notes: p.notes||'', branch_id: p.branch_id||null,
             items: (p.items||[]).filter(it=>it.name||it.product_id).map(it=>{
               const _pr=_ldb2.products.find(x=>x.id===it.product_id)||_ldb2.products.find(x=>x.name===it.name);
               return {product_id:_pr?.id||it.product_id||null, name:it.name||_pr?.name||'', qty:parseFloat(it.qty)||1, unit_cost:parseFloat(it.price||it.unit_price||it.unit_cost||0)};
@@ -16003,7 +16568,8 @@ async function runAISearchQuery(q) {
         if (SYNC_LOG) console.log('→ API: manual stock move', sm.product_name, sm.type, sm.qty);
         const res = await apiFetch('POST', `/api/products/${sm.product_id}/move`, {
           type: sm.type, qty: sm.qty, reason: sm.reason || '',
-          source: sm.source || '', reference: sm.reference || 'MANUAL'
+          source: sm.source || '', reference: sm.reference || 'MANUAL',
+          warehouse_id: sm.warehouse_id || null
         }).catch(e => { console.warn('stock move sync:', e.message); return null; });
 
         if (res?.data?.id) {

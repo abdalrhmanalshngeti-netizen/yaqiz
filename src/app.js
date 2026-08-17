@@ -98,6 +98,10 @@ app.use('/api/vouchers',      require('./routes/vouchers.routes'));
 app.use('/api/closed-periods', require('./routes/closedPeriods.routes'));
 app.use('/api/activity-log',  require('./routes/activityLog.routes'));
 app.use('/api/settings',      require('./routes/settings.routes'));
+app.use('/api/branches',      require('./routes/branches.routes'));
+app.use('/api/warehouses',    require('./routes/warehouses.routes'));
+app.use('/api/pos-points',    require('./routes/posPoints.routes'));
+app.use('/api/stock-transfers', require('./routes/stockTransfers.routes'));
 
 // ── Static Pages ─────────────────────────────────────────────
 app.get('/robots.txt', (_, res) => {

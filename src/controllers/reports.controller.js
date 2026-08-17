@@ -146,6 +146,43 @@ exports.incomeStatement = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// تقرير فرع تحليلي فقط (ليس جزءًا من الدفاتر الرسمية) — إجمالي الربح لكل فرع =
+// مبيعات الفرع − تكلفة البضاعة المباعة الفعلية المحسوبة وقت كل فاتورة
+// (invoices.cogs_total، دقيقة FIFO حقيقية). هذا **يختلف عمدًا** عن قائمة الدخل
+// الموحّدة أعلاه اللي تُقرِّب التكلفة بإجمالي مشتريات الفترة — لا تُوحَّد
+// المنهجيتان لاحقًا، القيمتان تُجاوبان سؤالين مختلفين (تقرير تحليلي محلي لكل
+// فرع، مقابل دفتر محاسبي رسمي موحّد للشركة كلها) وتغيير أحدهما ليطابق الآخر
+// يُفسد دقة الطرف الآخر.
+exports.branchPerformance = async (req, res, next) => {
+  try {
+    const { from, to } = req.query;
+    const { rows } = await db.query(`
+      SELECT b.id AS branch_id, b.name AS branch_name, b.is_main,
+        COALESCE(SUM(i.taxable_amount),0) AS revenue,
+        COALESCE(SUM(i.cogs_total),0) AS cogs,
+        COUNT(i.id) AS invoices_count
+      FROM branches b
+      LEFT JOIN invoices i ON i.branch_id = b.id AND i.status != 'cancelled'
+        AND ($2::date IS NULL OR i.date >= $2) AND ($3::date IS NULL OR i.date <= $3)
+      WHERE b.company_id = $1 AND b.is_active = true
+      GROUP BY b.id, b.name, b.is_main
+      ORDER BY b.is_main DESC, b.name
+    `, [req.user.company_id, from || null, to || null]);
+
+    const data = rows.map(r => {
+      const revenue = parseFloat(r.revenue), cogs = parseFloat(r.cogs);
+      const gross = revenue - cogs;
+      return {
+        branch_id: r.branch_id, branch_name: r.branch_name, is_main: r.is_main,
+        revenue, cogs, gross_profit: gross,
+        gross_margin: revenue > 0 ? Number(((gross / revenue) * 100).toFixed(2)) : 0,
+        invoices_count: parseInt(r.invoices_count),
+      };
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+};
+
 exports.balanceSheet = async (req, res, next) => {
   try {
     const cid = req.user.company_id;

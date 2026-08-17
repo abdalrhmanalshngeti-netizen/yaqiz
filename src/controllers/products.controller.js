@@ -195,15 +195,24 @@ exports.manualMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { type, qty, reason, source, reference } = req.body;
+    const { type, qty, reason, source, reference, warehouse_id } = req.body;
 
     if (!['in','out'].includes(type) || !qty || qty <= 0) {
       return res.status(400).json({ success: false, message: 'بيانات الحركة غير صحيحة' });
     }
+    if (!warehouse_id) {
+      return res.status(400).json({ success: false, message: 'المستودع مطلوب' });
+    }
+    const { rows: [wh] } = await client.query(
+      `SELECT id FROM warehouses WHERE id = $1 AND company_id = $2 AND is_active = true`,
+      [warehouse_id, req.user.company_id]
+    );
+    if (!wh) return res.status(404).json({ success: false, message: 'المستودع غير موجود' });
 
     const args = {
       company_id: req.user.company_id,
       product_id: req.params.id,
+      warehouse_id,
       qty, reason, source, reference,
       source_type: 'manual', source_id: null,
       user_id: req.user.sub
@@ -230,6 +239,18 @@ exports.manualMove = async (req, res, next) => {
   }
 };
 
+// GET /api/products/stock-by-warehouse — كل صفوف الكمية لكل (منتج، مستودع)
+// بالشركة، تُستخدم لتغذية db.productStock بالواجهة عند تحميل البيانات
+exports.stockByWarehouse = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT product_id, warehouse_id, qty::float FROM product_stock WHERE company_id = $1`,
+      [req.user.company_id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
 exports.listAllMoves = async (req, res, next) => {
   try {
     const { from, to, limit = 500 } = req.query;
@@ -238,6 +259,18 @@ exports.listAllMoves = async (req, res, next) => {
     let where  = [`sm.company_id = $1`, `sm.source_type = 'manual'`];
     let params = [req.user.company_id];
     let idx    = 2;
+
+    // "مسؤول فرع": يرى فقط حركات مستودع فرعه — نفس تعميم المرحلة C على
+    // الورديات (listShifts)، فرعه يُقرأ طازجًا من قاعدة البيانات دائمًا
+    const perms = req.user.perms || [];
+    const canSeeAll = req.user.role === 'owner' || perms.includes('settings.view');
+    if (!canSeeAll && perms.includes('branch.manage')) {
+      const { rows: [u] } = await db.query(`SELECT branch_id FROM users WHERE id = $1`, [req.user.sub]);
+      if (u?.branch_id) {
+        where.push(`sm.warehouse_id IN (SELECT id FROM warehouses WHERE branch_id = $${idx++})`);
+        params.push(u.branch_id);
+      }
+    }
 
     if (from) { where.push(`sm.created_at >= $${idx++}`); params.push(from); }
     if (to)   { where.push(`sm.created_at <= $${idx++}`); params.push(to); }
