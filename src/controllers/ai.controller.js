@@ -223,6 +223,7 @@ exports.analyze = async (req, res, next) => {
 const AI_CONTEXT_SAFE_KEYS = new Set([
   'today', 'yesterday', 'this_month', 'last_month',
   'company', 'vat_number', 'address', 'platform',
+  'branches', 'branch_count',
 ]);
 const AI_CONTEXT_PERMISSION_MAP = {
   // ── الخزينة ──

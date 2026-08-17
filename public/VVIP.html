@@ -2083,6 +2083,13 @@ async function sendAIMsg() {
       // ── الخزينة ─────────────────────────────────────────
       treasury_balance: db.treasury?.balance || 0,
 
+      // ── الفروع والمستودعات (بيانات حقيقية لهذي الشركة تحديدًا،
+      // مو وصف عام للميزة) ──────────────────────────────────
+      branch_count: (db.branches||[]).filter(b=>b.active!==false).length,
+      branches: (db.branches||[]).filter(b=>b.active!==false).map(b=>({
+        name: b.name, branch_number: b.branch_number, is_main: !!b.is_main
+      })),
+
       // ── إحصائيات اليوم ──────────────────────────────────
       today_invoices_count:   todayInv.length,
       today_revenue:          todayInv.reduce((s,i)=>s+(i.grand_total||0),0),
@@ -2138,7 +2145,15 @@ async function sendAIMsg() {
       products: prodList.map(p=>({
         name: p.name, code: p.code,
         qty: p.qty, min_qty: p.min_qty,
-        sell_price: p.sell_price, buy_price: p.buy_price
+        sell_price: p.sell_price, buy_price: p.buy_price,
+        // تفصيل الكمية لكل فرع — فقط لو أكثر من فرع نشط، عشان ما نضخّم
+        // السياق بلا داعٍ للحالة الشائعة (فرع واحد)
+        ...((db.branches||[]).filter(b=>b.active!==false).length>1 ? {
+          stock_by_branch: (db.branches||[]).filter(b=>b.active!==false).map(b=>{
+            const wh=(db.warehouses||[]).find(w=>w.branch_id===b.id&&w.active!==false);
+            return { branch: b.name, qty: wh?getWarehouseStockQty(db,p.id,wh.id):0 };
+          })
+        } : {})
       })),
 
       // ── المشتريات الكاملة (آخر 200) ─────────────────────
