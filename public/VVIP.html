@@ -805,6 +805,27 @@ function getWarehouseStockQty(db, productId, warehouseId) {
   return db.productStock?.[productId]?.[warehouseId] ?? 0;
 }
 
+// حقل اختيار الفرع لنماذج المعاملات (شراء/فاتورة مبيعات عادية) — يظهر فقط
+// لو في أكثر من فرع نشط (يصير إجباريًا وقتها)، وإلا لا يظهر أي شيء ويُحل
+// الفرع الوحيد تلقائيًا بصمت — بلا أي احتكاك للشركات اللي عندها فرع واحد
+function branchFieldHtml(inputId, labelOverride) {
+  const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  if (branches.length <= 1) return '';
+  const activeId = resolveActiveBranchId();
+  return `<div style="margin-bottom:12px;"><label class="form-label">${labelOverride||(lang==='ar'?'الفرع / المستودع':'Branch / Warehouse')} <span style="color:#ef4444">*</span></label>
+    <select class="select" id="${inputId}">
+      ${branches.map(b=>`<option value="${b.id}" ${b.id===activeId?'selected':''}>${sanitize(b.name)}</option>`).join('')}
+    </select>
+  </div>`;
+}
+// يقرأ حقل الفرع المُدخَل إن وُجد، وإلا يحل الفرع الوحيد تلقائيًا
+function readBranchField(inputId) {
+  const el2 = el(inputId);
+  if (el2) return Number(el2.value) || null;
+  return resolveActiveBranchId();
+}
+
 // ============ HELPERS ============
 function fmtMoney(n) {
   return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -858,7 +879,6 @@ function renderApp() {
   document.documentElement.lang = 'en';
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
   if (!currentUser) { renderLogin(); return; }
-  if (needsBranchSetup()) { renderBranchSetupGate(); return; }
   renderShell();
   checkOpeningBalances();
 }
@@ -3431,6 +3451,7 @@ function showNewInvoiceModal() {
               <input class="input" id="ni-customer-vat" placeholder="300XXXXXXXXX" />
             </div>
           </div>
+          ${branchFieldHtml('ni-branch', lang==='ar'?'الفرع اللي بتخرج منه البضاعة':'Branch fulfilling this order')}
 
           <!-- Item search -->
           <div style="margin-bottom:10px;font-weight:800;font-size:13px;">${lang==='ar'?'إضافة أصناف:':'Add Items:'}</div>
@@ -3783,8 +3804,21 @@ function _saveNewInvoiceActual(printAfter) {
     if(partialPaid>=total){showToast(lang==='ar'?'❌ المبلغ الجزئي يجب أن يكون أقل من الإجمالي — استخدم "نقدي" للسداد الكامل':'❌ Partial must be less than total','error');return;}
   }
 
-  const activeWarehouseId=resolveActiveWarehouseId();
-  const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
+  const activeBranchId=readBranchField('ni-branch');
+  const activeWarehouseId=resolveWarehouseIdForBranch(db, activeBranchId);
+
+  // لازم يتحقق من كفاية مخزون *هذا الفرع تحديدًا* قبل إنشاء أي شيء — نرفض
+  // الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت
+  const shortages = newInvItems
+    .map(ni => ({ ni, avail: getWarehouseStockQty(db, ni.id, activeWarehouseId) }))
+    .filter(x => x.avail < x.ni.qty);
+  if (shortages.length) {
+    const branchName = (db.branches||[]).find(b=>b.id===activeBranchId)?.name || '';
+    const msg = shortages.map(x => `${x.ni.name} (${lang==='ar'?'متاح':'avail'}: ${x.avail}، ${lang==='ar'?'مطلوب':'needed'}: ${x.ni.qty})`).join('، ');
+    showToast(`❌ ${lang==='ar'?`الكمية غير كافية بفرع ${branchName}: ${msg}`:`Insufficient stock at ${branchName}: ${msg}`}`,'error');
+    return;
+  }
+
   const inv={
     id:nextId(db,'invoice'),
     invoice_no:el('ni-no').value,
@@ -4289,6 +4323,7 @@ function showAddGoodsPurchase(keepItems) {
         <div><label class="form-label">${lang==='ar'?'رقم فاتورة المورد':'Supplier Invoice #'}</label>
           <input class="input" id="gp-ref" placeholder="${lang==='ar'?'اختياري':'Optional'}" /></div>
       </div>
+      ${branchFieldHtml('gp-branch')}
 
       <!-- Items -->
       <div style="font-weight:800;font-size:13px;margin-bottom:8px;">📋 ${lang==='ar'?'الأصناف:':'Items:'}</div>
@@ -4480,8 +4515,8 @@ function _saveGoodsPurchaseActual() {
 
   const _vendorName = el('gp-vendor').value.trim();
   const _vendorRec  = db.suppliers.find(s => s.name.trim().toLowerCase() === _vendorName.toLowerCase());
-  const _activeWarehouseId = resolveActiveWarehouseId();
-  const _activeBranchId = (db.warehouses||[]).find(w=>w.id===_activeWarehouseId)?.branch_id||null;
+  const _activeBranchId = readBranchField('gp-branch');
+  const _activeWarehouseId = resolveWarehouseIdForBranch(db, _activeBranchId);
   const p={
     id:nextId(db,'purchase'),
     vendor: _vendorName,
@@ -4826,15 +4861,34 @@ function savePurchase(purchase_type) {
 
 // ============ INVENTORY ============
 let invMainTab = 'inventory';
+let invBranchFilter = 'total'; // 'total' أو رقم فرع (نص) — للأونر فقط عند وجود أكثر من فرع
 function renderInventory(c) {
   const _idb = getDB();
-  const _lowStock = (_idb.products||[]).filter(p=>p.min_qty>0&&p.qty<=p.min_qty);
-  const invBanner = _lowStock.length > 0 ? `
+  const _branches = (_idb.branches||[]).filter(b=>b.active!==false);
+  const _multiBranch = _branches.length > 1;
+
+  // تنبيه نقص المخزون — لو أكثر من فرع، لكل (منتج، مستودع) على حدة بالاسم
+  // الصريح للفرع (منتج ممكن يكون كافي بالإجمالي لكن ناقص بفرع معيّن تحديدًا)
+  let _lowStockAlerts = [];
+  if (_multiBranch) {
+    (_idb.products||[]).forEach(p => {
+      if (!(p.min_qty > 0)) return;
+      _branches.forEach(b => {
+        const wh = (_idb.warehouses||[]).find(w=>w.branch_id===b.id && w.active!==false);
+        if (!wh) return;
+        const q = getWarehouseStockQty(_idb, p.id, wh.id);
+        if (q <= p.min_qty) _lowStockAlerts.push({ name: p.name, branchName: b.name, qty: q, min_qty: p.min_qty });
+      });
+    });
+  } else {
+    _lowStockAlerts = (_idb.products||[]).filter(p=>p.min_qty>0&&p.qty<=p.min_qty).map(p=>({ name: p.name, branchName: null, qty: p.qty, min_qty: p.min_qty }));
+  }
+  const invBanner = _lowStockAlerts.length > 0 ? `
     <div style="background:#fef2f2;border:1.5px solid #ef4444;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
       <span style="font-size:20px;">🔴</span>
       <div style="flex:1;">
-        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_lowStock.length} صنف${_lowStock.length>1?'':'ًا'} وصل لحد الطلب الأدنى`:`You have ${_lowStock.length} product(s) at or below minimum stock`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStock.map(p=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(p.name)} — ${p.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${p.min_qty})</span>`).join('')}</div>
+        <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_lowStockAlerts.length} تنبيه${_lowStockAlerts.length>1?'':''} نقص مخزون`:`You have ${_lowStockAlerts.length} low-stock alert(s)`}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStockAlerts.map(a=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(a.name)}${a.branchName?` — ${sanitize(a.branchName)}`:''} — ${a.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${a.min_qty})</span>`).join('')}</div>
       </div>
     </div>` : '';
   c.innerHTML = `<div>
@@ -4862,26 +4916,53 @@ function renderInvMainContent() {
   else if(invMainTab==='moves') renderStockMoves(mc);
   else renderReturns(mc);
 }
+function setInvBranchFilter(val) {
+  invBranchFilter = val;
+  renderInvMainContent();
+}
 function renderInventoryInner(c) {
   const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  const isOwner = currentUser?.role === 'owner';
+  const multiBranch = branches.length > 1;
+
+  // نطاق العرض: null = التوتال (كل الفروع مع بعض). الأونر يقدر يختار (توتال أو
+  // فرع معيّن)، غيره مقصور تلقائيًا على مستودع فرعه فقط بلا أي خيار للتبديل
+  let scopeWarehouseId = null;
+  if (multiBranch) {
+    if (!isOwner) {
+      scopeWarehouseId = resolveActiveWarehouseId();
+    } else if (invBranchFilter !== 'total') {
+      scopeWarehouseId = resolveWarehouseIdForBranch(db, Number(invBranchFilter));
+    }
+  }
+  const qtyFor = p => scopeWarehouseId ? getWarehouseStockQty(db, p.id, scopeWarehouseId) : p.qty;
+
+  const tabsHtml = (isOwner && multiBranch) ? `
+    <div class="tabs" style="margin-bottom:12px;">
+      <button class="tab-btn ${invBranchFilter==='total'?'active':''}" onclick="setInvBranchFilter('total')">${lang==='ar'?'الكل (توتال)':'All (Total)'}</button>
+      ${branches.map(b=>`<button class="tab-btn ${invBranchFilter===String(b.id)?'active':''}" onclick="setInvBranchFilter('${b.id}')">${sanitize(b.name)}</button>`).join('')}
+    </div>` : '';
+
   c.innerHTML = `
   <div style="margin-top:8px;">
+    ${tabsHtml}
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
       ${has('inventory.manage')?`<button id="inv-add-btn" class="btn btn-primary" onclick="showAddInventoryMenu()">${icon('plus',16)} ${t('add')}</button>`:''}
     </div>
     <div id="inv-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
-        <tbody>${db.products.map(p=>`<tr>
+        <tbody>${db.products.map(p=>{ const q=qtyFor(p); return `<tr>
           <td><code>${p.code}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(p.category)}</td>
           <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
-          <td><span class="badge ${p.qty<=p.min_qty?'badge-red':'badge-green'}">${p.qty}</span></td>
+          <td><span class="badge ${q<=p.min_qty?'badge-red':'badge-green'}">${q}</span></td>
           <td>${p.min_qty}</td>
           ${has('inventory.manage')?`<td>
             <button class="icon-btn" style="width:28px;height:28px;" onclick="showProductModal(${p.id})">${icon('edit',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" onclick="deleteProduct(${p.id})">${icon('trash-2',13)}</button>
           </td>`:''}
-        </tr>`).join('')}</tbody>
+        </tr>`;}).join('')}</tbody>
       </table></div>
     </div>
   </div>`;
@@ -8139,7 +8220,41 @@ function renderBranches(c) {
 
 function showBranchModal(id) {
   const db = getDB();
+  const activeBranches = (db.branches||[]).filter(x=>x.active!==false);
   const b = id ? (db.branches||[]).find(x=>x.id===id) : null;
+
+  // إضافة أول فرع ثانٍ للشركة (يعني عندها فرع رئيسي ضمني واحد بس لحد الآن،
+  // ما سمّاه المالك أبدًا) — نطلب تسمية الفرع الأول (الحالي) مع الفرع الجديد
+  // معًا بنفس اللحظة، بدل ما "الفرع الرئيسي" يبقى بمسمى عام للأبد
+  if (!id && activeBranches.length === 1) {
+    const mainBranch = activeBranches[0];
+    const mc = el('modal-container');
+    mc.innerHTML = `
+    <div class="modal-bg" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-head"><h3>${lang==='ar'?'إضافة فرع ثانٍ':'Add a Second Branch'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${lang==='ar'?'بما إنها أول مرة تضيف فرعًا، سمِّ فرعك الحالي (اللي تستخدمه من البداية) والفرع الجديد معًا:':'Since this is your first extra branch, name your current branch (the one you\'ve been using) and the new one together:'}</p>
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;">
+          <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🏬 ${lang==='ar'?'الفرع الحالي':'Current Branch'}</div>
+          <div style="margin-bottom:10px;"><label class="form-label">${lang==='ar'?'الاسم':'Name'} *</label><input class="input" id="br-first-name" value="${sanitize(mainBranch.name)}" /></div>
+          <div><label class="form-label">${lang==='ar'?'الرقم':'Number'} *</label><input class="input" id="br-first-number" value="${sanitize(mainBranch.branch_number)}" /></div>
+        </div>
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;">
+          <div style="font-weight:800;font-size:12px;margin-bottom:8px;">➕ ${lang==='ar'?'الفرع الجديد':'New Branch'}</div>
+          <div style="margin-bottom:10px;"><label class="form-label">${lang==='ar'?'الاسم':'Name'} *</label><input class="input" id="br-name" placeholder="${lang==='ar'?'مثال: فرع جدة':'e.g. Jeddah Branch'}" autofocus /></div>
+          <div><label class="form-label">${lang==='ar'?'الرقم':'Number'} *</label><input class="input" id="br-number" placeholder="2" /></div>
+        </div>
+        <div id="br-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:12px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-full" onclick="saveSecondBranch(${mainBranch.id})">${t('save')}</button>
+          <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
+        </div>
+      </div>
+    </div>`;
+    refreshIcons();
+    return;
+  }
+
   const mc = el('modal-container');
   mc.innerHTML = `
   <div class="modal-bg" onclick="closeModal()">
@@ -8155,6 +8270,52 @@ function showBranchModal(id) {
     </div>
   </div>`;
   refreshIcons();
+}
+
+function saveSecondBranch(mainBranchId) {
+  const firstName = (el('br-first-name')?.value||'').trim();
+  const firstNumber = (el('br-first-number')?.value||'').trim();
+  const name = (el('br-name')?.value||'').trim();
+  const number = (el('br-number')?.value||'').trim();
+  const errEl = el('br-err');
+  if (!firstName || !firstNumber || !name || !number) {
+    if (errEl) { errEl.textContent = lang==='ar'?'كل الحقول مطلوبة':'All fields are required'; errEl.style.display='block'; }
+    return;
+  }
+
+  const db = getDB();
+  const mainBranch = (db.branches||[]).find(x=>x.id===mainBranchId);
+  if (mainBranch) { mainBranch.name = firstName; mainBranch.branch_number = firstNumber; }
+
+  if (!db.branches) db.branches = [];
+  if (!db.warehouses) db.warehouses = [];
+  const branch = { id: nextId(db,'branch'), name, branch_number: number, is_main: false, active: true, created_at: new Date().toISOString() };
+  db.branches.push(branch);
+  db.warehouses.push({ id: nextId(db,'warehouse'), branch_id: branch.id, name: `مستودع ${name}`, active: true, created_at: new Date().toISOString() });
+  saveDB(db);
+  showToast(`✅ ${t('save')}`);
+  closeModal();
+  renderPage();
+
+  if (window._apiReachable && window._cloudApiFetch) {
+    (async () => {
+      try {
+        if (mainBranch) await window._cloudApiFetch('PUT', `/api/branches/${mainBranchId}`, { name: firstName, branch_number: firstNumber });
+        const res = await window._cloudApiFetch('POST', '/api/branches', { name, branch_number: number });
+        if (res?.data?.id) {
+          const db2 = getDB();
+          const localBranch = db2.branches.find(x=>x.id===branch.id);
+          if (localBranch) {
+            localBranch.id = res.data.id;
+            localBranch._serverId = res.data.id;
+            const wh = db2.warehouses.find(w=>w.branch_id===branch.id);
+            if (wh) { wh.branch_id = res.data.id; if (res.data.warehouse?.id) wh.id = res.data.warehouse.id; }
+            saveDB(db2);
+          }
+        }
+      } catch(e) { console.warn('Branch API sync:', e.message); showToast('⚠️ ' + (e.message||(lang==='ar'?'خطأ في مزامنة الفرع':'Branch sync error')), 'warning'); }
+    })();
+  }
 }
 
 function saveBranch(id) {
@@ -12505,7 +12666,7 @@ function renderSettings(c) {
     <div id="set-tabs" class="tabs" style="flex-wrap:wrap;">
       <button class="tab-btn ${settingsTab==='general'?'active':''}" onclick="setSettingsTab('general')">⚙️ ${lang==='ar'?'عام':'General'}</button>
       <button class="tab-btn ${settingsTab==='users'?'active':''}" onclick="setSettingsTab('users')">👥 ${lang==='ar'?'المستخدمون':'Users'}</button>
-      <button class="tab-btn ${settingsTab==='branches'?'active':''}" onclick="setSettingsTab('branches')">🏬 ${lang==='ar'?'الفروع':'Branches'}</button>
+      ${currentUser?.role==='owner'?`<button class="tab-btn ${settingsTab==='branches'?'active':''}" onclick="setSettingsTab('branches')">🏬 ${lang==='ar'?'الفروع':'Branches'}</button>`:''}
       ${hasPlanFeature('employees')?`<button class="tab-btn ${settingsTab==='employees'?'active':''}" onclick="setSettingsTab('employees')">👷 ${lang==='ar'?'الموظفون':'Employees'}</button>`:''}
       ${hasPlanFeature('activity_log')?`<button class="tab-btn ${settingsTab==='activity'?'active':''}" onclick="setSettingsTab('activity')">📋 ${lang==='ar'?'النشاطات':'Activity'}</button>`:''}
       ${showSec?`<button class="tab-btn ${settingsTab==='security'?'active':''}" onclick="setSettingsTab('security')">🔐 ${lang==='ar'?'الأمان':'Security'}</button>`:''}
@@ -14400,97 +14561,6 @@ function _obActiveSteps() {
 function _obStepCount() { return _obActiveSteps().length; }
 let _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
 
-// ============ بوابة إعداد الفرع الإجبارية ============
-// بعكس معالج الأرصدة الافتتاحية (قابل للتخطي، owner-only)، هذي البوابة غير
-// قابلة للتجاوز إطلاقًا ولكل الأدوار — المخزون/نقطة البيع/الورديات بلا معنى
-// بدون فرع. مصدر الحقيقة الوجود الفعلي لفرع نشط، لا علم منفصل قابل للانحراف.
-function needsBranchSetup() {
-  const db = getDB();
-  return !(db.branches||[]).some(b=>b.active!==false);
-}
-
-function renderBranchSetupGate() {
-  document.documentElement.lang = 'en';
-  document.documentElement.dir = lang==='ar'?'rtl':'ltr';
-
-  if (currentUser.role !== 'owner') {
-    el('app').innerHTML = `
-    <div class="login-bg">
-      <div class="login-card" style="text-align:center;">
-        <div class="login-logo">${LOGO_SVG}</div>
-        <div class="login-title">${lang==='ar'?'بانتظار إعداد الفروع':'Waiting for Branch Setup'}</div>
-        <div class="login-sub">${lang==='ar'?'المالك لسا ما أعدّ فروع الشركة — تواصل معه لإكمال الإعداد قبل ما تقدر تستخدم المنصة.':'The owner hasn’t set up any branches yet — contact them before you can use the platform.'}</div>
-        <button class="btn btn-outline btn-full" style="margin-top:16px;" onclick="doLogout()">${lang==='ar'?'تسجيل الخروج':'Logout'}</button>
-      </div>
-    </div>`;
-    refreshIcons();
-    return;
-  }
-
-  el('app').innerHTML = `
-  <div class="login-bg">
-    <div class="login-card">
-      <div class="login-logo">${LOGO_SVG}</div>
-      <div class="login-title">${lang==='ar'?'إعداد الفرع الأول':'Set Up Your First Branch'}</div>
-      <div class="login-sub">${lang==='ar'?'قبل ما تقدر تستخدم المخزون أو نقطة البيع أو الورديات، أضف فرعك الأول — اسم ورقم فقط.':'Before using inventory, POS, or shifts, add your first branch — just a name and number.'}</div>
-      <div style="margin-bottom:16px;">
-        <label class="form-label">${lang==='ar'?'اسم الفرع':'Branch Name'}</label>
-        <input id="bg-name" class="input" placeholder="${lang==='ar'?'مثال: الفرع الرئيسي':'e.g. Main Branch'}" autofocus />
-      </div>
-      <div style="margin-bottom:16px;">
-        <label class="form-label">${lang==='ar'?'رقم الفرع':'Branch Number'}</label>
-        <input id="bg-number" class="input" placeholder="1" />
-      </div>
-      <div id="bg-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
-      <button class="btn btn-primary btn-full" id="bg-save-btn" style="padding:12px;font-size:14px;">
-        ${icon('check',18)} ${lang==='ar'?'حفظ والمتابعة':'Save & Continue'}
-      </button>
-    </div>
-  </div>`;
-  refreshIcons();
-  el('bg-save-btn').onclick = saveFirstBranch;
-}
-
-async function saveFirstBranch() {
-  const nameEl = el('bg-name'), numEl = el('bg-number'), errEl = el('bg-err'), btn = el('bg-save-btn');
-  const name = (nameEl.value||'').trim();
-  const number = (numEl.value||'').trim();
-  errEl.style.display = 'none';
-  if (!name || !number) {
-    errEl.textContent = lang==='ar'?'أدخل اسم الفرع ورقمه':'Enter the branch name and number';
-    errEl.style.display = 'block';
-    return;
-  }
-  btn.disabled = true;
-
-  const db = getDB();
-  if (!db.branches) db.branches = [];
-  if (!db.warehouses) db.warehouses = [];
-  const branch = { id: nextId(db,'branch'), name, branch_number: number, is_main: db.branches.length===0, active: true, created_at: new Date().toISOString() };
-  db.branches.push(branch);
-  const warehouse = { id: nextId(db,'warehouse'), branch_id: branch.id, name: `مستودع ${name}`, active: true, created_at: new Date().toISOString() };
-  db.warehouses.push(warehouse);
-  saveDB(db);
-
-  if (window._apiReachable && window._cloudApiFetch) {
-    try {
-      const res = await window._cloudApiFetch('POST', '/api/branches', { name, branch_number: number });
-      if (res?.data?.id) {
-        branch.id = res.data.id;
-        warehouse.branch_id = branch.id;
-        if (res.data.warehouse?.id) warehouse.id = res.data.warehouse.id;
-        saveDB(db);
-      }
-    } catch(e) {
-      errEl.textContent = e?.message || (lang==='ar'?'تعذر الحفظ، حاول مجددًا':'Save failed, try again');
-      errEl.style.display = 'block';
-      btn.disabled = false;
-      return;
-    }
-  }
-  renderApp();
-}
-
 function checkOpeningBalances() {
   if (!currentUser || currentUser.role !== 'owner') return;
   const db = getDB();
@@ -16080,10 +16150,9 @@ async function runAISearchQuery(q) {
       }
 
       // الفروع والمستودعات — مصدرها السيرفر دومًا (بلا تعقيد محلي إضافي)، عشان
-      // بوابة إعداد الفرع الإجبارية (needsBranchSetup) تعرف الحالة الصحيحة فورًا
-      // حتى من جهاز/متصفح جديد لم يسبق له تسجيل الدخول لهذا الحساب. نطبّع
-      // is_active (اسم عمود الباكند) إلى active (نفس الاسم المستخدم بكل كود
-      // الفروع المحلي — showBranchModal/renderBranches/deleteBranch)
+      // تبقى نفس القائمة بغضّ النظر عن الجهاز/المتصفح. نطبّع is_active (اسم
+      // عمود الباكند) إلى active (نفس الاسم المستخدم بكل كود الفروع المحلي —
+      // showBranchModal/renderBranches/deleteBranch)
       if (branchesRes?.data)   db.branches   = branchesRes.data.map(b=>({ ...b, active: b.is_active !== false }));
       if (warehousesRes?.data) db.warehouses = warehousesRes.data.map(w=>({ ...w, active: w.is_active !== false }));
       // كمية كل (منتج، مستودع) — تُستبدل بالكامل بنسخة السيرفر (مصدر الحقيقة)،
@@ -16629,6 +16698,7 @@ async function runAISearchQuery(q) {
         full_name: apiUser.full_name, role: apiUser.role,
         permissions: apiUser.permissions||[], active: true,
         pos_access: apiUser.pos_access, shift_enabled: !!apiUser.shift_enabled,
+        branch_id: apiUser.branch_id || null,
         tours_seen: apiUser.tours_seen || {}
       };
 
@@ -16664,8 +16734,8 @@ async function runAISearchQuery(q) {
 
       const _hasOpenShift2 = (getDB().shifts||[]).some(s=>s.username===u.username&&!s.end_time);
       if (u.shift_enabled && !_hasOpenShift2) {
-        window.showShiftOpenScreen?.(u, (openingCash) => {
-          window.startShift?.(u, openingCash);
+        window.showShiftOpenScreen?.(u, (openingCash, branchId) => {
+          window.startShift?.(u, openingCash, branchId);
           window.logActivity?.('نظام', `تسجيل دخول (API): ${u.full_name}`);
           window.renderApp?.();
         });
@@ -16827,6 +16897,7 @@ async function runAISearchQuery(q) {
             full_name: me.data.full_name, role: me.data.role,
             permissions: me.data.permissions||[], active: true,
             pos_access: me.data.pos_access, shift_enabled: !!me.data.shift_enabled,
+            branch_id: me.data.branch_id || null,
             tours_seen: me.data.tours_seen || {}
           };
           currentUser = u;

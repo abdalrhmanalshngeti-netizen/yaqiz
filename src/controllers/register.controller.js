@@ -82,14 +82,29 @@ exports.register = async (req, res, next) => {
     `, [company.id, company_name]);
 
     // 4. حساب الصندوق الرئيسي (كاش) + الحساب البنكي — لفصل تحصيلات الشبكة/التحويل عن النقد تلقائياً
-    await client.query(`
+    const { rows: [cashAccount] } = await client.query(`
       INSERT INTO treasury_accounts (company_id, name, type, balance, is_default)
       VALUES ($1,'الصندوق الرئيسي','cash',0,true)
+      RETURNING id
     `, [company.id]);
     await client.query(`
       INSERT INTO treasury_accounts (company_id, name, type, balance, is_default)
       VALUES ($1,'الحساب البنكي','bank',0,false)
     `, [company.id]);
+
+    // 4c. فرع رئيسي ضمني تلقائي — بلا أي شاشة أو طلب من المالك. يبقى غير مرئي
+    // تمامًا بالواجهة إلى أن يضيف المالك فرعًا ثانيًا فعليًا من الإعدادات (عندها
+    // يُطلب منه تسمية هذا الفرع الأول أيضًا، بدل ما يبقى بمسمى عام للأبد)
+    const { rows: [mainBranch] } = await client.query(`
+      INSERT INTO branches (company_id, name, branch_number, is_main, is_active)
+      VALUES ($1,'الفرع الرئيسي','1',true,true)
+      RETURNING id
+    `, [company.id]);
+    await client.query(`
+      INSERT INTO warehouses (company_id, branch_id, name)
+      VALUES ($1,$2,'المستودع الرئيسي')
+    `, [company.id, mainBranch.id]);
+    await client.query(`UPDATE treasury_accounts SET branch_id = $1 WHERE id = $2`, [mainBranch.id, cashAccount.id]);
 
     // 4b. دليل الحسابات (لازم لربط قيود دفتر اليومية) — نفس القائمة المحلية بالواجهة
     const coaRows = [
