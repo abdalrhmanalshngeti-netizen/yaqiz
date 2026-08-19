@@ -708,7 +708,7 @@ exports.setBranchLimitOverride = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── عملاء جدد ومحتملون ────────────────────────────────────
+// ── عملاء جدد ومحتملون (النافذة والتقسيم يطابقان مدة التجربة الحالية: 15 يوم) ──
 exports.newClients = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
@@ -718,12 +718,12 @@ exports.newClients = async (req, res, next) => {
              u.full_name, u.username
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id AND u.role = 'owner'
-      WHERE c.created_at >= NOW() - INTERVAL '30 days'
+      WHERE c.created_at >= NOW() - INTERVAL '15 days'
         AND NOT EXISTS (SELECT 1 FROM platform_admins WHERE email = u.username)
       ORDER BY c.created_at DESC
     `);
-    const newClients       = rows.filter(r => r.days_since <  15);
-    const potentialClients = rows.filter(r => r.days_since >= 15);
+    const newClients       = rows.filter(r => r.days_since <  8);
+    const potentialClients = rows.filter(r => r.days_since >= 8);
     res.json({ success: true, new: newClients, potential: potentialClients });
   } catch (err) { next(err); }
 };
