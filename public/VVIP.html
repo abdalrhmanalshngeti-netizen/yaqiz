@@ -1110,8 +1110,8 @@ const allNavItems = [
 
 // ── تعريف الباقات ─────────────────────────────────────
 const PLAN_PAGES = {
-  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','accountingReports','reports','settings'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','accountingReports','reports','settings'],
+  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings'],
   pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
   expired: ['settings'],
 };
@@ -1119,7 +1119,7 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   ['ai_assistant'],
-  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports'],
+  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','journal','purchase_orders','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports'],
   pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
   expired: [],
 }
@@ -1128,9 +1128,14 @@ const PLAN_FEATURES = {
 const PLAN_USER_LIMITS = { basic: 3, growth: 5, pro: null };
 function getPlanUserLimit() { return PLAN_USER_LIMITS[getCurrentPlan()] ?? null; };
 
-// أقصى عدد فروع نشطة (شامل الفرع الرئيسي) لكل باقة — يطابق PLAN_BRANCH_LIMITS بالسيرفر (branches.controller.js)
+// أقصى عدد فروع نشطة (شامل الفرع الرئيسي) لكل باقة — يطابق PLAN_BRANCH_LIMITS بالسيرفر (branches.controller.js).
+// لو المالك (لوحة الإدارة) عيّن تجاوزًا يدويًا لهذي الشركة تحديدًا (branch_limit_override)، يحل محل حد الباقة بالكامل.
 const PLAN_BRANCH_LIMITS = { basic: 1, growth: 3, pro: 5 };
-function getPlanBranchLimit() { return PLAN_BRANCH_LIMITS[getCurrentPlan()] ?? null; };
+function getPlanBranchLimit() {
+  const override = getDB().settings?.branch_limit_override;
+  if (override != null) return override;
+  return PLAN_BRANCH_LIMITS[getCurrentPlan()] ?? null;
+};
 
 function getCurrentPlan() {
   const db = getDB();
@@ -15617,6 +15622,7 @@ async function runAISearchQuery(q) {
       if (d.company_district)db.settings.district        = d.company_district;
       if (d.company_postal_code) db.settings.postal_code = d.company_postal_code;
       if (d.plan)            { db.settings.plan = d.plan; db.settings.plan_expires_at = d.subscription_expires_at||null; }
+      db.settings.branch_limit_override = (d.branch_limit_override ?? null);
       window._origSaveDB ? window._origSaveDB(db) : window.saveDB(db);
       if (d.plan !== oldPlan) {
         window.renderShell?.();
@@ -16173,6 +16179,7 @@ async function runAISearchQuery(q) {
         if (m.company_postal_code) db.settings.postal_code = m.company_postal_code;
         if (m.plan)            db.settings.plan          = m.plan;
         if (m.subscription_expires_at) db.settings.plan_expires_at = m.subscription_expires_at;
+        db.settings.branch_limit_override = (m.branch_limit_override ?? null);
       }
 
       // إعدادات على مستوى الشركة (ضريبة، حالة الأرصدة الافتتاحية...) — مصدرها
@@ -16749,6 +16756,7 @@ async function runAISearchQuery(q) {
       if (apiUser.company_postal_code) db.settings.postal_code = apiUser.company_postal_code;
       if (apiUser.plan)            db.settings.plan          = apiUser.plan;
       if (apiUser.subscription_expires_at) db.settings.plan_expires_at = apiUser.subscription_expires_at;
+      db.settings.branch_limit_override = (apiUser.branch_limit_override ?? null);
       // تحديث قاعدة المستخدمين المحلية
       const idx = db.users.findIndex(x => x.id === u.id || x.username === u.username);
       if (idx >= 0) db.users[idx] = { ...db.users[idx], ...u };

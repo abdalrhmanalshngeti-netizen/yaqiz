@@ -1407,7 +1407,21 @@ function renderCoModal(c){
         <button onclick="coModalSavePlan(${c.id})" style="padding:10px 22px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
       </div>
       ${expiry?`<div style="margin-top:8px;font-size:12px;color:${new Date(expiry)<new Date()?'#f87171':'#6b7fa3'};">⏳ تنتهي: ${fmtD(c.subscription_expires_at)}</div>`:''}
-    </div>`:''}
+    </div>
+
+    <!-- تجاوز حد الفروع -->
+    <div style="background:rgba(255,255,255,.04);border:1px solid #1a2942;border-radius:12px;padding:16px;margin-top:14px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">تجاوز حد الفروع (بيع فروع إضافية فوق حد الباقة)</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:120px;">
+          <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">حد الفروع المخصص (فارغ = حد الباقة الطبيعي)</label>
+          <input type="number" min="1" step="1" id="co-modal-branch-limit" placeholder="حد الباقة: ${({basic:1,growth:3,pro:5})[c.plan]||1}" value="${c.branch_limit_override ?? ''}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
+        </div>
+        <button onclick="coModalSaveBranchLimit(${c.id})" style="padding:10px 22px;background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ</button>
+        ${c.branch_limit_override!=null?`<button onclick="coModalClearBranchLimit(${c.id})" style="padding:10px 16px;background:transparent;border:1.5px solid #3a2942;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;">إلغاء التجاوز</button>`:''}
+      </div>
+      ${c.branch_limit_override!=null?`<div style="margin-top:8px;font-size:12px;color:#a78bfa;">🏬 هذي الشركة على تجاوز مخصص: ${c.branch_limit_override} فروع (بدل حد باقتها العادي)</div>`:''}
+    </div>
   </div>
 
   ${hasPerm('impersonate')?`
@@ -1466,6 +1480,27 @@ async function coModalSavePlan(id){
     _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);
     if(r2?.success)renderCoModal(r2.data);
   }catch{toast('خطأ في تحديث الباقة','#f87171');}
+}
+
+async function coModalSaveBranchLimit(id){
+  const raw=document.getElementById('co-modal-branch-limit')?.value?.trim();
+  const limit=raw?parseInt(raw,10):null;
+  if(raw && (!Number.isInteger(limit)||limit<1)){toast('❌ أدخل رقمًا صحيحًا 1 أو أكثر','#f87171');return;}
+  try{
+    await apiFetch(`/api/admin/companies/${id}/branch-limit`,{method:'PUT',body:JSON.stringify({limit})});
+    toast(limit?`✅ تم تعيين حد الفروع: ${limit}`:'✅ تم إلغاء التجاوز','#34d399');
+    const [r1,r2]=await Promise.all([
+      apiFetch('/api/admin/cost-analysis'),
+      apiFetch(`/api/admin/companies/${id}`)
+    ]);
+    _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);
+    if(r2?.success)renderCoModal(r2.data);
+  }catch{toast('❌ خطأ في تحديث حد الفروع','#f87171');}
+}
+function coModalClearBranchLimit(id){
+  const inp=document.getElementById('co-modal-branch-limit');
+  if(inp) inp.value='';
+  coModalSaveBranchLimit(id);
 }
 
 function coModalImpersonate(id){ promptImpersonationReason(id, _currentCoModalCompany?.name||''); }

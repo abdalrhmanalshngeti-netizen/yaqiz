@@ -36,12 +36,13 @@ async function logUsage(company_id, feature, tokens_in, tokens_out, user_id, que
 
 // ── Plan limits ──────────────────────────────────────────────
 const EXTRACT_LIMITS  = { basic: 30,  growth: 100, pro: 500 };
-const ANALYZE_LIMITS  = { basic: 0,   growth: 10,  pro: 200 };
-const ASSISTANT_DAILY = { basic: 3,   growth: 10,  pro: 9999 };
-// assistant: pro effectively unlimited (fair use), basic/growth capped daily
+const ANALYZE_LIMITS  = { basic: 0,   growth: 15,  pro: 200 };
+// assistant: سقف يومي حقيقي للاحترافية (150) بدل رقم شبه لا نهائي (كان 9999) —
+// حماية فعلية من إساءة استخدام/استهلاك API بدون أي أثر محسوس على استخدام بشري طبيعي
+const ASSISTANT_DAILY = { basic: 5,   growth: 20,  pro: 150 };
 // استخراج كشف حساب بنكي بالذكاء الاصطناعي — حد شهري منفصل عن تفريغ الفواتير
-// العادي، وغير متاح على الباقة الأساسية إطلاقًا (تسوية البنك نفسها Growth/Pro فقط)
-const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 0, pro: 4 };
+// العادي، وغير متاح على الباقة الأساسية والنمو إطلاقًا (تسوية البنك نفسها Pro فقط)
+const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 0, pro: 10 };
 
 async function getPlan(company_id) {
   const { rows: [co] } = await db.query(

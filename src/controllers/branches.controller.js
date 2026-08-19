@@ -51,10 +51,11 @@ exports.create = async (req, res, next) => {
     );
     const isFirstBranch = count === 0;
 
-    const { rows: [co] } = await client.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
+    const { rows: [co] } = await client.query(`SELECT plan, branch_limit_override FROM companies WHERE id = $1`, [req.user.company_id]);
     let plan = co?.plan || 'basic';
     if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
-    const branchLimit = PLAN_BRANCH_LIMITS[plan];
+    // تجاوز يدوي من لوحة الإدارة يحل محل حد الباقة بالكامل لهذي الشركة تحديدًا
+    const branchLimit = co?.branch_limit_override ?? PLAN_BRANCH_LIMITS[plan];
     if (branchLimit) {
       const { rows: [{ count: activeCount }] } = await client.query(
         `SELECT COUNT(*)::int AS count FROM branches WHERE company_id = $1 AND is_active = true`,

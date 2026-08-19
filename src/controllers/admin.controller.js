@@ -359,7 +359,7 @@ exports.companies = async (req, res, next) => {
       SELECT
         c.id, c.name, c.vat_number, c.status, c.plan,
         c.contact_email, c.contact_phone, c.city, c.created_at,
-        c.subscription_expires_at,
+        c.subscription_expires_at, c.branch_limit_override,
         EXISTS(SELECT 1 FROM subscriptions s WHERE s.company_id = c.id) AS has_paid,
         COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
         COUNT(DISTINCT i.id)::int  AS invoice_count,
@@ -681,6 +681,30 @@ exports.setCompanyPlan = async (req, res, next) => {
     `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.email || req.admin.name}`, req.admin.sub]);
 
     res.json({ success: true, message: `تم تغيير الباقة إلى ${plan}` });
+  } catch (err) { next(err); }
+};
+
+// ── تجاوز يدوي لحد عدد فروع شركة معيّنة (بيع فروع إضافية فوق حد باقتها) ──
+// null = رجوع لحد الباقة الطبيعي؛ أي رقم آخر يحل محل حد الباقة بالكامل لهذي
+// الشركة تحديدًا (مو حدًا إضافيًا يُجمع فوق حد الباقة)
+exports.setBranchLimitOverride = async (req, res, next) => {
+  try {
+    const { limit } = req.body;
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      return res.status(400).json({ success: false, message: 'الحد يجب أن يكون رقمًا صحيحًا 1 أو أكثر، أو null لإلغاء التجاوز' });
+    }
+    const { rowCount } = await db.query(
+      `UPDATE companies SET branch_limit_override = $1 WHERE id = $2`,
+      [limit, req.params.id]
+    );
+    if (!rowCount) return res.status(404).json({ success: false, message: 'الشركة غير موجودة' });
+
+    await db.query(`
+      INSERT INTO platform_log (event_type, company_id, description, admin_id)
+      VALUES ('branch_limit_override_changed', $1, $2, $3)
+    `, [req.params.id, limit === null ? `إلغاء تجاوز حد الفروع (رجوع لحد الباقة) بواسطة ${req.admin.email || req.admin.name}` : `تعيين حد فروع مخصص: ${limit} بواسطة ${req.admin.email || req.admin.name}`, req.admin.sub]);
+
+    res.json({ success: true, message: limit === null ? 'تم إلغاء التجاوز — رجعت الشركة لحد باقتها الطبيعي' : `تم تعيين حد الفروع المخصص: ${limit}` });
   } catch (err) { next(err); }
 };
 

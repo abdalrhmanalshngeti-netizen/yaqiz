@@ -57,7 +57,7 @@ exports.login = async (req, res, next) => {
              c.street_name AS company_street, c.building_number AS company_building,
              c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
-             c.plan AS company_plan, c.subscription_expires_at
+             c.plan AS company_plan, c.subscription_expires_at, c.branch_limit_override
       FROM users u
       JOIN companies c ON c.id = u.company_id
       WHERE u.username = $1 AND u.active = true
@@ -119,6 +119,7 @@ exports.login = async (req, res, next) => {
         company_email:           user.company_email   || null,
         plan:                    (['basic','growth','pro'].includes(user.company_plan) ? user.company_plan : 'basic'),
         subscription_expires_at: user.subscription_expires_at,
+        branch_limit_override:   user.branch_limit_override ?? null,
         tours_seen:              user.tours_seen || {},
       }
     });
@@ -269,7 +270,7 @@ exports.me = async (req, res, next) => {
              c.street_name AS company_street, c.building_number AS company_building,
              c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
-             c.plan AS plan, c.subscription_expires_at
+             c.plan AS plan, c.subscription_expires_at, c.branch_limit_override
       FROM users u
       JOIN companies c ON c.id = u.company_id
       WHERE u.id = $1
