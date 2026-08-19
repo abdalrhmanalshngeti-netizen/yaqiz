@@ -1421,7 +1421,7 @@ function renderCoModal(c){
         ${c.branch_limit_override!=null?`<button onclick="coModalClearBranchLimit(${c.id})" style="padding:10px 16px;background:transparent;border:1.5px solid #3a2942;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;">إلغاء التجاوز</button>`:''}
       </div>
       ${c.branch_limit_override!=null?`<div style="margin-top:8px;font-size:12px;color:#a78bfa;">🏬 هذي الشركة على تجاوز مخصص: ${c.branch_limit_override} فروع (بدل حد باقتها العادي)</div>`:''}
-    </div>
+    </div>`:''}
   </div>
 
   ${hasPerm('impersonate')?`
