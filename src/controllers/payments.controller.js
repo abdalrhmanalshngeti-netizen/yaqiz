@@ -94,6 +94,7 @@ exports.verifyCallback = async (req, res) => {
 
   if (!id) return res.redirect(`${redirectBase}/subscribe?error=missing_id`);
 
+  const client = await db.pool.connect();
   try {
     const moyasarRes = await moyasarRequest(
       'GET', `/v1/payments/${id}`, null,
@@ -110,45 +111,74 @@ exports.verifyCallback = async (req, res) => {
       return res.redirect(`${redirectBase}/subscribe?error=not_paid&status=${mPayment.status}`);
     }
 
-    const meta = mPayment.metadata || {};
-    const companyId = parseInt(meta.company_id);
-    const plan      = meta.plan;
-    const months    = parseInt(meta.months) || 1;
-    const isAnnual  = meta.cycle === 'annual';
+    await client.query('BEGIN');
 
-    if (!companyId || !PLAN_PRICES[plan]) {
-      return res.redirect(`${redirectBase}/subscribe?error=invalid_meta`);
+    // مصدر الحقيقة هو صف payments المحلي (أنشأناه نحن وقت إنشاء الدفعة، بمبلغ
+    // وباقة محسوبين بالسيرفر) — لا بيانات metadata الراجعة من Moyasar، لأنها
+    // نظريًا قابلة للتلاعب لو استُخدم مسار دفع آخر بمفتاح publishable. FOR UPDATE
+    // يمنع أيضًا معالجة نفس الدفعة مرتين بالتوازي (نداءين متزامنين لنفس id)
+    const { rows: [payment] } = await client.query(
+      `SELECT * FROM payments WHERE moyasar_id = $1 FOR UPDATE`, [id]
+    );
+    if (!payment) {
+      await client.query('ROLLBACK');
+      return res.redirect(`${redirectBase}/subscribe?error=unknown_payment`);
     }
 
-    await db.query(`
-      UPDATE payments SET status='paid', paid_at=NOW()
-      WHERE moyasar_id=$1 AND status='pending'
-    `, [id]);
+    // المبلغ المدفوع فعليًا بالهيئة الخارجية يجب يطابق المبلغ المحسوب بالسيرفر
+    // وقت إنشاء الدفعة تحديدًا — دفاع إضافي ضد أي دفعة أُنشئت أو عُدّلت خارج
+    // مسار createPayment الطبيعي
+    const expectedHalala = Math.round(Number(payment.amount) * 100);
+    if (Math.abs(mPayment.amount - expectedHalala) > 1) {
+      console.error(`[payment callback] amount mismatch: expected ${expectedHalala} halala, got ${mPayment.amount} for moyasar_id=${id}`);
+      await client.query('ROLLBACK');
+      return res.redirect(`${redirectBase}/subscribe?error=amount_mismatch`);
+    }
+
+    // idempotency فعلية: نتحقق من عدد الصفوف المتأثرة قبل ما نكمّل — لو الصف
+    // مو 'pending' (اتعالج قبل كذا)، هذا استدعاء مكرر لنفس الرابط (تاريخ متصفح،
+    // إعادة تحميل الصفحة) ولا يجوز يمدد الاشتراك من جديد
+    const { rowCount } = await client.query(
+      `UPDATE payments SET status='paid', paid_at=NOW() WHERE moyasar_id=$1 AND status='pending'`,
+      [id]
+    );
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.redirect(`${redirectBase}/VVIP.html?subscribed=1`);
+    }
+
+    const companyId = payment.company_id;
+    const plan      = payment.plan;
+    const isAnnual  = Number(payment.months) >= 12;
 
     // اشتراك سنوي = سنة تقويمية كاملة، مو 12×30 يوم تقريبية
     const expiresInterval = isAnnual ? '1 year' : '1 month';
-    await db.query(`
+    await client.query(`
       UPDATE companies
       SET plan=$1,
           subscription_expires_at = GREATEST(subscription_expires_at, NOW()) + INTERVAL '${expiresInterval}'
       WHERE id=$2
     `, [plan, companyId]);
 
-    await db.query(`
+    await client.query(`
       INSERT INTO subscriptions (company_id, plan, expires_at, amount, status)
       VALUES ($1,$2, NOW() + INTERVAL '${expiresInterval}', $3,'active')
-    `, [companyId, plan, mPayment.amount / 100]);
+    `, [companyId, plan, payment.amount]);
 
-    await db.query(`
+    await client.query(`
       INSERT INTO platform_log (event_type, company_id, description)
       VALUES ('payment_success',$1,$2)
-    `, [companyId, `دفع ناجح — باقة ${plan} — ${months} شهر — ${mPayment.amount / 100} ر.س`]);
+    `, [companyId, `دفع ناجح — باقة ${plan} — ${payment.months} شهر — ${payment.amount} ر.س`]);
 
+    await client.query('COMMIT');
     res.redirect(`${redirectBase}/VVIP.html?subscribed=1`);
 
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('[payment callback]', err.message);
     res.redirect(`${redirectBase}/subscribe?error=server_error`);
+  } finally {
+    client.release();
   }
 };
 

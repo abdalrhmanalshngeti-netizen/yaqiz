@@ -2114,7 +2114,7 @@ function renderTicketDetail(t, history, replies){
               <span style="font-weight:800;color:#93c5fd;font-size:13px;">#${h.id}</span>
               <span class="badge ${sClass[h.status]||'blue'}" style="font-size:10px;">● ${sLabel[h.status]||h.status}</span>
             </div>
-            <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(h.description||h.sub_dept||h.department||'—').slice(0,60)}</div>
+            <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml((h.description||h.sub_dept||h.department||'—').slice(0,60))}</div>
             <div style="font-size:11px;color:var(--muted2);margin-top:3px;">${fmtD(h.created_at)}</div>
           </div>`).join(''));
 

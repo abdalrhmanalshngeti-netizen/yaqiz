@@ -97,7 +97,19 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const { full_name, email, phone, role, permissions, pos_access, shift_enabled, active } = req.body;
+    const { full_name, email, phone, pos_access, shift_enabled, active } = req.body;
+    let { role, permissions } = req.body;
+
+    // تغيير الدور/الصلاحيات owner-only — وإلا يقدر أي مستخدم عنده settings.edit
+    // يرفّع نفسه أو غيره لصلاحيات owner كاملة عبر هذا المسار نفسه
+    if ((role !== undefined || permissions !== undefined) && req.user.role !== 'owner') {
+      return res.status(403).json({ success: false, message: 'تغيير الدور أو الصلاحيات للمالك فقط' });
+    }
+    // حتى المالك لا يمكنه منح دور owner لمستخدم آخر عبر هذا المسار — يبقى دور
+    // owner محصورًا بحساب واحد أُنشئ وقت تسجيل الشركة فقط
+    if (role === 'owner' && parseInt(req.params.id) !== req.user.sub) {
+      return res.status(403).json({ success: false, message: 'لا يمكن منح دور المالك لمستخدم آخر' });
+    }
 
     // تغيير الفرع مسار منفصل عمدًا عن التحديث العام (COALESCE) أدناه — owner-only،
     // ومحظور لو عند المستخدم وردية مفتوحة حاليًا، حتى لا تُخصم عملية لاحقة من

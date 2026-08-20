@@ -56,12 +56,14 @@ exports.create = async (req, res, next) => {
     await client.query('BEGIN');
     const { description, ref, date, entries = [] } = req.body;
     if (!entries.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة سطر واحد على الأقل' });
     }
     const debit  = entries.filter(e => e.side === 'debit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     const credit = entries.filter(e => e.side === 'credit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     // سماحية بسيطة لفروق التقريب المتراكمة عبر عدة بنود (نسبة الضريبة، الخصومات...)
     if (Math.abs(debit - credit) > 0.05) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'القيد غير متوازن — المدين لا يساوي الدائن' });
     }
 

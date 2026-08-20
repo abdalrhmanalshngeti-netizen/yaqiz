@@ -37,7 +37,7 @@ exports.createAccount = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { name, type, bank_name, account_number, iban, balance, is_default } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'اسم الحساب مطلوب' });
+    if (!name) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'اسم الحساب مطلوب' }); }
 
     if (is_default) {
       await client.query(`UPDATE treasury_accounts SET is_default = false WHERE company_id = $1`, [req.user.company_id]);
@@ -91,6 +91,7 @@ exports.transfer = async (req, res, next) => {
 
     const { from_id, to_id, amount, description } = req.body;
     if (!from_id || !to_id || !amount || from_id === to_id) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'بيانات التحويل غير صحيحة' });
     }
 
@@ -103,8 +104,9 @@ exports.transfer = async (req, res, next) => {
       [to_id, req.user.company_id]
     );
 
-    if (!from || !to) return res.status(404).json({ success: false, message: 'حساب غير موجود' });
+    if (!from || !to) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب غير موجود' }); }
     if (parseFloat(from.balance) < parseFloat(amount)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'الرصيد غير كافي' });
     }
 
@@ -138,11 +140,12 @@ exports.addMove = async (req, res, next) => {
     await client.query('BEGIN');
     const { type, amount, description, reference, payment_method, source_type } = req.body;
     if (!['in', 'out'].includes(type) || !amount) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
     }
 
     const acct = await resolveTreasuryAccount(client, req.user.company_id, payment_method);
-    if (!acct) return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' });
+    if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' }); }
 
     const newBal = type === 'in'
       ? parseFloat(acct.balance) + parseFloat(amount)
@@ -241,6 +244,7 @@ exports.createVoucher = async (req, res, next) => {
     } = req.body;
 
     if (!type || !amount || !account_id) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'النوع والمبلغ والحساب مطلوبة' });
     }
 
@@ -252,7 +256,7 @@ exports.createVoucher = async (req, res, next) => {
       `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [account_id, req.user.company_id]
     );
-    if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
+    if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' }); }
 
     const moveType = type === 'receipt' ? 'in' : 'out';
     const newBal   = type === 'receipt'

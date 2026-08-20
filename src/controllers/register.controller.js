@@ -25,6 +25,7 @@ exports.register = async (req, res, next) => {
     const plan = ['basic','growth','pro'].includes(chosenPlan) ? chosenPlan : 'basic';
 
     if (!contact_email && !contact_phone) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'يجب تعبئة البريد الإلكتروني أو رقم الجوال على الأقل'
@@ -32,6 +33,7 @@ exports.register = async (req, res, next) => {
     }
 
     if (!company_name || !username || !password || !full_name) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: 'اسم الشركة واسم المستخدم وكلمة المرور والاسم الكامل مطلوبة'
@@ -39,10 +41,12 @@ exports.register = async (req, res, next) => {
     }
 
     if (username.length < 6 || !/\d/.test(username)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'اسم المستخدم يجب أن يكون 6 أحرف على الأقل ويحتوي على رقم واحد على الأقل' });
     }
 
     if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير بالإنجليزية' });
     }
 
@@ -51,6 +55,7 @@ exports.register = async (req, res, next) => {
       `SELECT id FROM users WHERE username = $1`, [username]
     );
     if (existing.length) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ success: false, message: 'اسم المستخدم مستخدم مسبقاً' });
     }
 

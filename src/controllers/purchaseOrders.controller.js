@@ -26,6 +26,7 @@ exports.create = async (req, res, next) => {
     await client.query('BEGIN');
     const { supplier_name, items = [], notes, expected_date, status } = req.body;
     if (!items.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة صنف واحد على الأقل' });
     }
     const grand_total = items.reduce((s, i) => s + (parseFloat(i.total ?? i.line_total) || 0), 0);

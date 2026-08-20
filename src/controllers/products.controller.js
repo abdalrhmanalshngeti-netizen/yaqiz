@@ -198,16 +198,18 @@ exports.manualMove = async (req, res, next) => {
     const { type, qty, reason, source, reference, warehouse_id } = req.body;
 
     if (!['in','out'].includes(type) || !qty || qty <= 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'بيانات الحركة غير صحيحة' });
     }
     if (!warehouse_id) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'المستودع مطلوب' });
     }
     const { rows: [wh] } = await client.query(
       `SELECT id FROM warehouses WHERE id = $1 AND company_id = $2 AND is_active = true`,
       [warehouse_id, req.user.company_id]
     );
-    if (!wh) return res.status(404).json({ success: false, message: 'المستودع غير موجود' });
+    if (!wh) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المستودع غير موجود' }); }
 
     const args = {
       company_id: req.user.company_id,

@@ -74,6 +74,7 @@ exports.create = async (req, res, next) => {
     } = req.body;
 
     if (!items.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة منتج واحد على الأقل' });
     }
 
@@ -82,7 +83,10 @@ exports.create = async (req, res, next) => {
         `SELECT id FROM customers WHERE id = $1 AND company_id = $2`,
         [customer_id, company_id]
       );
-      if (!custRow) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
+      if (!custRow) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'العميل غير موجود' });
+      }
     }
 
     // فرع الفاتورة: مصرَّح صراحة بالطلب (نقطة بيع/فرع مُختار) وإلا فرع البائع
@@ -111,6 +115,7 @@ exports.create = async (req, res, next) => {
       }
     }
     if (stockShortages.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         message: `الكمية غير كافية بالمخزون: ${stockShortages.join('، ')}`
@@ -311,6 +316,7 @@ exports.addPayment = async (req, res, next) => {
 
     const { amount, payment_method, account_id, reference } = req.body;
     if (!amount || amount <= 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'المبلغ غير صحيح' });
     }
 
@@ -318,7 +324,7 @@ exports.addPayment = async (req, res, next) => {
       `SELECT * FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [req.params.id, req.user.company_id]
     );
-    if (!inv) return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
+    if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
 
     const remaining = parseFloat(inv.grand_total) - parseFloat(inv.paid_amount);
     const paying    = Math.min(parseFloat(amount), remaining);
@@ -342,7 +348,7 @@ exports.addPayment = async (req, res, next) => {
         `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
         [account_id, req.user.company_id]
       );
-      if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
+      if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' }); }
       const newBal = parseFloat(acct.balance) + paying;
       await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, account_id]);
       await client.query(`
@@ -375,8 +381,8 @@ exports.cancel = async (req, res, next) => {
       `SELECT * FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [req.params.id, req.user.company_id]
     );
-    if (!inv) return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
-    if (inv.status === 'cancelled') return res.status(400).json({ success: false, message: 'الفاتورة ملغاة بالفعل' });
+    if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
+    if (inv.status === 'cancelled') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'الفاتورة ملغاة بالفعل' }); }
 
     await client.query(`UPDATE invoices SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [inv.id]);
 

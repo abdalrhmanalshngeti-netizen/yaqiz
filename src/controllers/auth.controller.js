@@ -57,7 +57,8 @@ exports.login = async (req, res, next) => {
              c.street_name AS company_street, c.building_number AS company_building,
              c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
-             c.plan AS company_plan, c.subscription_expires_at, c.branch_limit_override
+             c.plan AS company_plan, c.subscription_expires_at, c.branch_limit_override,
+             c.status AS company_status
       FROM users u
       JOIN companies c ON c.id = u.company_id
       WHERE u.username = $1 AND u.active = true
@@ -75,6 +76,16 @@ exports.login = async (req, res, next) => {
 
     if (!valid) {
       return res.status(401).json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
+    }
+
+    if (user.company_status === 'suspended' || user.company_status === 'cancelled') {
+      return res.status(403).json({
+        success: false,
+        code: user.company_status === 'suspended' ? 'COMPANY_SUSPENDED' : 'COMPANY_CANCELLED',
+        message: user.company_status === 'suspended'
+          ? 'تم تعليق حساب شركتكم. يرجى التواصل مع الدعم الفني.'
+          : 'تم إلغاء حساب شركتكم.'
+      });
     }
 
     const refreshToken = signRefresh(user.id);
@@ -175,13 +186,24 @@ exports.refreshToken = async (req, res, next) => {
     }
 
     const { rows } = await db.query(`
-      SELECT u.*, s.id AS session_id FROM user_sessions s
+      SELECT u.*, s.id AS session_id, c.status AS company_status FROM user_sessions s
       JOIN users u ON u.id = s.user_id
+      JOIN companies c ON c.id = u.company_id
       WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.active = true
     `, [refreshToken]);
 
     if (!rows[0]) {
       return res.status(401).json({ success: false, message: 'جلسة منتهية، سجّل الدخول مجدداً' });
+    }
+
+    if (rows[0].company_status === 'suspended' || rows[0].company_status === 'cancelled') {
+      return res.status(403).json({
+        success: false,
+        code: rows[0].company_status === 'suspended' ? 'COMPANY_SUSPENDED' : 'COMPANY_CANCELLED',
+        message: rows[0].company_status === 'suspended'
+          ? 'تم تعليق حساب شركتكم. يرجى التواصل مع الدعم الفني.'
+          : 'تم إلغاء حساب شركتكم.'
+      });
     }
 
     const newAccessToken = signAccess(rows[0], rows[0].session_id);

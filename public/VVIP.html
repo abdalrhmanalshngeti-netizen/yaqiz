@@ -2588,8 +2588,8 @@ function renderPOS(sc) {
       <div id="pos-search-results" style="display:none;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;max-height:200px;overflow-y:auto;margin-top:4px;z-index:10;position:relative;"></div>
       <div class="products-grid" id="products-grid">
         ${db.products.map(p=>`
-          <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id})" title="${p.code}">
-            <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${p.code}</div>
+          <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id})" title="${sanitize(p.code)}">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${sanitize(p.code)}</div>
             <div class="product-name">${sanitize(p.name)}</div>
             <div class="product-price">${fmtMoney(p.sell_price)}</div>
             <div class="product-qty ${p.qty<=p.min_qty?'':''}">
@@ -2606,7 +2606,7 @@ function renderPOS(sc) {
       <!-- Customer -->
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
         ${icon('user',16)}
-        <input class="input" placeholder="${t('customer')}" value="${posCustomer}" id="pos-customer"
+        <input class="input" placeholder="${t('customer')}" value="${sanitize(posCustomer)}" id="pos-customer"
           oninput="posCustomer=this.value" list="cust-list" style="flex:1;" />
         <datalist id="cust-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
       </div>
@@ -2700,7 +2700,7 @@ function posSearchInput(val) {
       onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background=''">
       <div>
         <div style="font-weight:700;font-size:13px;">${sanitize(p.name)}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${p.code} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${sanitize(p.code)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
       </div>
       <div style="font-weight:800;color:var(--primary);">${fmtMoney(p.sell_price)}</div>
     </div>`).join('');
@@ -2753,8 +2753,8 @@ function filterProductGrid(q) {
   const grid=el('products-grid'); if(!grid) return;
   const matches=db.products.filter(p=>!q||p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q));
   grid.innerHTML=matches.map(p=>`
-    <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id});el('pos-search').value='';el('pos-search-results').style.display='none';el('pos-search').focus();" title="${p.code}">
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${p.code}</div>
+    <div class="product-card ${p.qty<=p.min_qty?'low':''}" onclick="addToCart(${p.id});el('pos-search').value='';el('pos-search-results').style.display='none';el('pos-search').focus();" title="${sanitize(p.code)}">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${sanitize(p.code)}</div>
       <div class="product-name">${sanitize(p.name)}</div>
       <div class="product-price">${fmtMoney(p.sell_price)}</div>
       <div class="product-qty">${p.qty<=p.min_qty?'⚠️ ':''} ${p.qty}</div>
@@ -3593,7 +3593,7 @@ function quickAddCustomerFromInvoice() {
   mc2.innerHTML = `<div style="background:var(--card-bg);border-radius:16px;padding:24px;width:380px;box-shadow:var(--shadow-lg);">
     <div style="font-weight:800;font-size:15px;margin-bottom:16px;">➕ ${lang==='ar'?'إضافة عميل جديد':'New Customer'}</div>
     <div style="margin-bottom:10px;"><label class="form-label">${lang==='ar'?'الاسم':'Name'} *</label>
-      <input class="input" id="qc-name" value="${name}" /></div>
+      <input class="input" id="qc-name" value="${sanitize(name)}" /></div>
     <div style="margin-bottom:10px;"><label class="form-label">${lang==='ar'?'الجوال':'Phone'}</label>
       <input class="input" id="qc-phone" /></div>
     <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'الرقم الضريبي':'VAT #'}</label>
@@ -3623,7 +3623,7 @@ function saveQuickCustomer() {
   if(el('ni-customer')) el('ni-customer').value = name;
   if(el('ni-customer-vat') && newCust.vat_num) el('ni-customer-vat').value = newCust.vat_num;
   const warn=el('ni-customer-warn'); if(warn) warn.style.display='none';
-  const dl=el('ni-cust-list'); if(dl) dl.innerHTML+=`<option value="${name}">`;
+  const dl=el('ni-cust-list'); if(dl) dl.innerHTML+=`<option value="${sanitize(name)}">`;
   document.getElementById('quick-cust-modal')?.remove();
   showToast(`✅ ${lang==='ar'?'تم إضافة العميل':'Customer added'}: ${name}`);
 }
@@ -3707,7 +3707,7 @@ function niSearchInput(val) {
       onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background=''">
       <div>
         <div style="font-weight:700;font-size:13px;">${sanitize(p.name)}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${p.code} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${sanitize(p.code)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div>
       </div>
       <div style="font-weight:800;color:var(--primary);">${fmtMoney(p.sell_price)}</div>
     </div>`).join('');
@@ -3761,9 +3761,9 @@ function renderNewInvItems() {
       <th>${lang==='ar'?'حذف':'Del'}</th>
     </tr></thead>
     <tbody>${newInvItems.map((i,idx)=>`<tr>
-      <td><code style="font-size:11px;">${i.code}</code></td>
+      <td><code style="font-size:11px;">${sanitize(i.code)}</code></td>
       <td style="font-weight:700;">${sanitize(i.name)}</td>
-      <td style="color:var(--text-muted);">${i.unit}</td>
+      <td style="color:var(--text-muted);">${sanitize(i.unit)}</td>
       <td><div style="display:flex;align-items:center;gap:4px;">
         <button class="qty-btn" onclick="niQty(${idx},-1)">−</button>
         <input type="number" value="${i.qty}" min="1" style="width:50px;text-align:center;border:1px solid var(--border);border-radius:6px;padding:4px;font-family:inherit;background:var(--card-bg);color:var(--text-main);" onchange="niSetQty(${idx},Number(this.value))" />
@@ -3961,8 +3961,8 @@ function printSalesInvoice(id) {
   <table>
     <thead><tr><th>#</th><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
     <tbody>${(inv.items||[]).map((i,idx)=>`<tr>
-      <td>${idx+1}</td><td><code>${i.code||'-'}</code></td><td style="font-weight:700;">${sanitize(i.name)}</td>
-      <td>${i.unit||'-'}</td><td>${i.qty}</td>
+      <td>${idx+1}</td><td><code>${sanitize(i.code)||'-'}</code></td><td style="font-weight:700;">${sanitize(i.name)}</td>
+      <td>${sanitize(i.unit)||'-'}</td><td>${i.qty}</td>
       <td>${fmtMoney(i.price)}</td><td style="font-weight:800;">${fmtMoney(i.line_total||i.qty*i.price)}</td>
     </tr>`).join('')}</tbody>
   </table>
@@ -3977,7 +3977,7 @@ function printSalesInvoice(id) {
     </div>
   </div>
   ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${sanitize(inv.notes)}</div>`:''}
-  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -4147,7 +4147,7 @@ async function printCreditNote(id) {
       <div class="tot-row tot-final"><span>إجمالي المبلغ الدائن:</span><span>${fmtMoney(note.grand_total)}</span></div>
     </div>
   </div>
-  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${note.note_no} • إشعار دائن مرجَّع للفاتورة ${note.reference_invoice_no}</div>
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${note.note_no} • إشعار دائن مرجَّع للفاتورة ${note.reference_invoice_no}</div>
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -4188,7 +4188,7 @@ function printPurchaseInvoice(id) {
     <div>
       <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
       ${s.vat_number?`<div class="sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
-      <div class="sub">${sanitize(s.address)} ${s.city||''}</div>
+      <div class="sub">${sanitize(s.address)} ${sanitize(s.city)}</div>
     </div>
     <div style="text-align:end;">
       <div class="title">فاتورة شراء</div>
@@ -5149,7 +5149,7 @@ function renderInventoryInner(c) {
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
         <tbody>${db.products.map(p=>{ const q=qtyFor(p); return `<tr>
-          <td><code>${p.code}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(p.category)}</td>
+          <td><code>${sanitize(p.code)}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(p.category)}</td>
           <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
           <td><span class="badge ${q<=p.min_qty?'badge-red':'badge-green'}">${q}</span></td>
           <td>${p.min_qty}</td>
@@ -5173,14 +5173,14 @@ function showProductModal(id) {
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-head"><h3>${p?t('edit'):t('add')} - ${t('products')}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
       <div class="form-row">
-        <div><label class="form-label">${t('productName')}</label><input class="input" id="pr-name" value="${p?.name||''}" /></div>
-        <div><label class="form-label">${t('code')}</label><input class="input" id="pr-code" value="${p?.code||''}" /></div>
+        <div><label class="form-label">${t('productName')}</label><input class="input" id="pr-name" value="${sanitize(p?.name||'')}" /></div>
+        <div><label class="form-label">${t('code')}</label><input class="input" id="pr-code" value="${sanitize(p?.code||'')}" /></div>
       </div>
       <!-- حقل الباركود مع زر المسح -->
       <div style="margin-bottom:12px;">
         <label class="form-label">🔖 ${lang==='ar'?'الباركود':'Barcode'}</label>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input class="input" id="pr-barcode" value="${p?.barcode||''}"
+          <input class="input" id="pr-barcode" value="${sanitize(p?.barcode||'')}"
             placeholder="${lang==='ar'?'امسح الباركود أو أدخله يدوياً':'Scan or type barcode'}"
             onkeydown="if(event.key==='Enter'){event.preventDefault();el('pr-name').focus();}"
             style="flex:1;" />
@@ -5198,7 +5198,7 @@ function showProductModal(id) {
         <div><label class="form-label">${t('category')}</label>
           <select class="select" id="pr-cat">${['مواد غذائية','مشروبات','إلكترونيات','ملابس','أخرى'].map(x=>`<option ${x===(p?.category||'')?'selected':''}>${x}</option>`).join('')}</select>
         </div>
-        <div><label class="form-label">${lang==='ar'?'الوحدة':'Unit'}</label><input class="input" id="pr-unit" value="${p?.unit||'قطعة'}" /></div>
+        <div><label class="form-label">${lang==='ar'?'الوحدة':'Unit'}</label><input class="input" id="pr-unit" value="${sanitize(p?.unit||'قطعة')}" /></div>
       </div>
       <div class="form-row">
         <div><label class="form-label">${t('buyPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(سعر الشراء / التكلفة)</span></label><input class="input" type="number" id="pr-buy" value="${p?.buy_price||0}" oninput="updatePricingPreview()" /></div>
@@ -8152,12 +8152,12 @@ function showUserModal(id) {
       <div class="form-row">
         <div>
           <label class="form-label">${t('username')} <span style="color:#ef4444">*</span></label>
-          <input class="input" id="u-username" value="${u?.username||''}" ${u?'disabled':''} placeholder="${lang==='ar'?'مثال: ahmed1 (6 أحرف + رقم)':'e.g. ahmed1 (6 chars + digit)'}" />
+          <input class="input" id="u-username" value="${sanitize(u?.username||'')}" ${u?'disabled':''} placeholder="${lang==='ar'?'مثال: ahmed1 (6 أحرف + رقم)':'e.g. ahmed1 (6 chars + digit)'}" />
           <div id="u-username-err" style="color:#ef4444;font-size:11px;margin-top:3px;display:none"></div>
         </div>
         <div>
           <label class="form-label">${t('fullName')} <span style="color:#ef4444">*</span></label>
-          <input class="input" id="u-fullname" value="${u?.full_name||''}" />
+          <input class="input" id="u-fullname" value="${sanitize(u?.full_name||'')}" />
         </div>
       </div>
 
@@ -8692,12 +8692,12 @@ function showEmployeeModal(id) {
         <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
       </div>
       <div class="form-row">
-        <div><label class="form-label">${lang==='ar'?'الاسم الكامل':'Full Name'} *</label><input class="input" id="em-name" value="${e?.name||''}" /></div>
-        <div><label class="form-label">${lang==='ar'?'المسمى الوظيفي':'Position'} *</label><input class="input" id="em-pos" value="${e?.position||''}" /></div>
+        <div><label class="form-label">${lang==='ar'?'الاسم الكامل':'Full Name'} *</label><input class="input" id="em-name" value="${sanitize(e?.name||'')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'المسمى الوظيفي':'Position'} *</label><input class="input" id="em-pos" value="${sanitize(e?.position||'')}" /></div>
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'الراتب الشهري':'Monthly Salary'} *</label><input class="input" type="number" id="em-salary" value="${e?.salary||0}" /></div>
-        <div><label class="form-label">${lang==='ar'?'الجوال':'Phone'}</label><input class="input" id="em-phone" value="${e?.phone||''}" /></div>
+        <div><label class="form-label">${lang==='ar'?'الجوال':'Phone'}</label><input class="input" id="em-phone" value="${sanitize(e?.phone||'')}" /></div>
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'تاريخ الالتحاق':'Start Date'}</label><input class="input" type="date" id="em-start" value="${e?.start_date||new Date().toISOString().slice(0,10)}" /></div>
@@ -8929,8 +8929,8 @@ function showObligationModal(id) {
         <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
       </div>
       <div class="form-row">
-        <div><label class="form-label">${lang==='ar'?'اسم الالتزام':'Obligation Name'} *</label><input class="input" id="ob-name" value="${o?.name||''}" /></div>
-        <div><label class="form-label">${lang==='ar'?'المورد/الجهة':'Vendor'}</label><input class="input" id="ob-vendor" value="${o?.vendor||''}" /></div>
+        <div><label class="form-label">${lang==='ar'?'اسم الالتزام':'Obligation Name'} *</label><input class="input" id="ob-name" value="${sanitize(o?.name||'')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'المورد/الجهة':'Vendor'}</label><input class="input" id="ob-vendor" value="${sanitize(o?.vendor||'')}" /></div>
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'المبلغ':'Amount'} *</label><input class="input" type="number" id="ob-amount" value="${o?.amount||0}" /></div>
@@ -9125,7 +9125,7 @@ function printObligationReceipt(o,amount,type) {
     <div>
       <div class="co">${sanitize(s.company_name)||'يقظ'}</div>
       ${s.vat_number?`<div class="sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
-      <div class="sub">${sanitize(s.address)} ${s.city||''}</div>
+      <div class="sub">${sanitize(s.address)} ${sanitize(s.city)}</div>
     </div>
     <div style="text-align:end;">
       <div class="ttl">سند صرف</div>
@@ -9584,7 +9584,7 @@ function printVoucher(id) {
     <div class="header">
       <div>
         <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
-        <div class="company-sub">${s.vat_number?(lang==='ar'?'الرقم الضريبي: ':'VAT: ')+s.vat_number:''}</div>
+        <div class="company-sub">${s.vat_number?(lang==='ar'?'الرقم الضريبي: ':'VAT: ')+sanitize(s.vat_number):''}</div>
         <div class="company-sub">${sanitize(s.address)}</div>
       </div>
       <div style="text-align:end;">
@@ -9843,7 +9843,7 @@ function showReturnModal(type) {
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'المنتج (للربط بالمخزون)':'Product (for inventory link)'}</label>
         <select class="select" id="rt-product">
           <option value="">${lang==='ar'?'— بدون ربط بمنتج —':'— No product link —'}</option>
-          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${p.code}">${sanitize(p.name)} (${lang==='ar'?'مخزون:':'Stock:'} ${p.qty})</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${sanitize(p.code)}">${sanitize(p.name)} (${lang==='ar'?'مخزون:':'Stock:'} ${p.qty})</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
@@ -10695,7 +10695,7 @@ function showStockMoveModal(){
       <div><label class="form-label">${lang==='ar'?'المنتج':'Product'} *</label>
         <select class="select" id="sm-product">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
-          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${p.code}" data-qty="${p.qty}">${sanitize(p.name)} (${lang==='ar'?'متاح:':'Stock:'} ${p.qty})</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${sanitize(p.code)}" data-qty="${p.qty}">${sanitize(p.name)} (${lang==='ar'?'متاح:':'Stock:'} ${p.qty})</option>`).join('')}
         </select>
       </div>
       <div><label class="form-label">${lang==='ar'?'نوع الحركة':'Type'}</label>
@@ -10953,7 +10953,7 @@ function showPartyStatement(partyName, partyType) {
       </tr></tfoot>
     </table></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-primary" onclick="printPartyStatement('${partyName}')">${icon('printer',14)} ${lang==='ar'?'طباعة':'Print'}</button>
+      <button class="btn btn-primary" onclick="printPartyStatement('${escJsAttr(partyName)}')">${icon('printer',14)} ${lang==='ar'?'طباعة':'Print'}</button>
       <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إغلاق':'Close'}</button>
     </div>
   </div></div>`;
@@ -11408,7 +11408,7 @@ function renderPurchaseOrders(c) {
           :[...pos].reverse().map(po=>`<tr>
             <td><b style="color:var(--primary);">${po.po_no}</b></td>
             <td>${fmtDate(po.created_at)}</td>
-            <td><b>${po.supplier}</b></td>
+            <td><b>${sanitize(po.supplier)}</b></td>
             <td style="color:var(--text-muted);">${po.items.length} ${lang==='ar'?'صنف':'items'}</td>
             <td><b>${fmtMoney(po.total)}</b></td>
             <td><span class="badge ${po.status==='مكتمل'?'badge-green':po.status==='ملغي'?'badge-red':'badge-amber'}">${po.status}</span></td>
@@ -11762,7 +11762,7 @@ function renderJournal(c) {
             ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${e.id}</td>
             <td rowspan="${e.entries.length}" style="font-size:11px;vertical-align:top;">${fmtDate(e.date)}</td>
             <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(e.description)}</td>`:''}
-            <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${row.account} <code style="font-size:10px;">${row.account_code}</code></td>
+            <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${sanitize(row.account)} <code style="font-size:10px;">${sanitize(row.account_code)}</code></td>
             <td style="color:var(--danger);font-weight:700;">${row.side==='debit'?fmtMoney(row.amount):'-'}</td>
             <td style="color:var(--success);font-weight:700;">${row.side==='credit'?fmtMoney(row.amount):'-'}</td>
             ${i===0?`<td rowspan="${e.entries.length}" style="vertical-align:top;"><code style="font-size:11px;">${e.ref||'-'}</code></td>`:''}
@@ -12726,7 +12726,7 @@ function renderActivity(c) {
         <div class="card" style="overflow:visible;">
           <!-- User header row -->
           <div style="padding:14px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;border-radius:12px;transition:background 0.15s;"
-            onclick="expandedUsers['${u.username}']=!expandedUsers['${u.username}'];renderActivity(_activityContainer||el('page-content'))"
+            onclick="expandedUsers['${escJsAttr(u.username)}']=!expandedUsers['${escJsAttr(u.username)}'];renderActivity(_activityContainer||el('page-content'))"
             onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
 
             <!-- Avatar -->
@@ -13272,11 +13272,11 @@ function renderSettingsGeneral(c) {
     <div id="s-company-card" class="card"><div class="card-pad">
       <h3 style="margin-bottom:16px;font-weight:800;">🏪 ${lang==='ar'?'بيانات المنشأة':'Company Info'}</h3>
       <div class="form-row">
-        <div><label class="form-label">${lang==='ar'?'اسم المنشأة':'Company Name'}</label><input class="input" id="s-name" value="${s.company_name||''}" /></div>
-        <div><label class="form-label">${t('companyVat')}</label><input class="input" id="s-vat" value="${s.vat_number||''}" /></div>
+        <div><label class="form-label">${lang==='ar'?'اسم المنشأة':'Company Name'}</label><input class="input" id="s-name" value="${sanitize(s.company_name||'')}" /></div>
+        <div><label class="form-label">${t('companyVat')}</label><input class="input" id="s-vat" value="${sanitize(s.vat_number||'')}" /></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">${lang==='ar'?'السجل التجاري':'CR Number'}</label><input class="input" id="s-cr" value="${s.cr_number||''}" /></div>
+        <div><label class="form-label">${lang==='ar'?'السجل التجاري':'CR Number'}</label><input class="input" id="s-cr" value="${sanitize(s.cr_number||'')}" /></div>
         <div><label class="form-label">${t('phone')}</label><input class="input" id="s-phone" value="${sanitize(s.phone)}" /></div>
       </div>
       <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'العنوان':'Address'}</label><input class="input" id="s-addr" value="${sanitize(s.address)}" /></div>
@@ -13334,8 +13334,8 @@ function renderSettingsGeneral(c) {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div style="font-weight:700;">${sanitize(u.full_name||u.username)} <span style="font-size:11px;color:var(--text-muted);">@${u.username} · ${u.role}</span></div>
             <div style="display:flex;align-items:center;gap:8px;">
-              <input class="input" type="number" min="0" style="width:130px;" value="${target||''}" id="tgt-${u.username}" placeholder="${lang==='ar'?'الهدف اليومي ر.س':'Daily target SAR'}" />
-              <button class="btn btn-sm btn-primary" onclick="saveTarget('${u.username}')">${lang==='ar'?'حفظ':'Save'}</button>
+              <input class="input" type="number" min="0" style="width:130px;" value="${target||''}" id="tgt-${sanitize(u.username)}" placeholder="${lang==='ar'?'الهدف اليومي ر.س':'Daily target SAR'}" />
+              <button class="btn btn-sm btn-primary" onclick="saveTarget('${escJsAttr(u.username)}')">${lang==='ar'?'حفظ':'Save'}</button>
             </div>
           </div>
           ${target>0?`<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden;">
@@ -13545,7 +13545,7 @@ function doGlobalSearch(q) {
     html += prods.slice(0,4).map(p => `
       <div class="search-item" onclick="closeSearch();goTo('inventory')">
         <div class="search-item-icon">${icon('box',16)}</div>
-        <div><div class="search-item-name">${sanitize(p.name)}</div><div class="search-item-sub">${p.code} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div></div>
+        <div><div class="search-item-name">${sanitize(p.name)}</div><div class="search-item-sub">${sanitize(p.code)} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${p.qty}</div></div>
       </div>`).join('');
   }
   const purs = has('purchases.view') ? db.purchases.filter(p => p.vendor.toLowerCase().includes(ql)||p.description.toLowerCase().includes(ql)) : [];
@@ -13870,7 +13870,7 @@ function showBarcodeGenerator() {
       <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
         <select class="select" id="bc-product" style="flex:1;">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
-          ${db.products.map(p=>`<option value="${p.id}">${sanitize(p.name)} — ${p.code}</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}">${sanitize(p.name)} — ${sanitize(p.code)}</option>`).join('')}
         </select>
         <input class="input" type="number" id="bc-count" value="1" min="1" max="50" style="width:80px;" placeholder="${lang==='ar'?'عدد':'Count'}" />
         <button class="btn btn-primary" onclick="generateBarcodePrint()">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
@@ -14134,7 +14134,7 @@ function exportVATReportPDF() {
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>تقرير الضريبة</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${s.vat_number||'-'}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${sanitize(s.vat_number)||'-'}</div></div>
     <div><div class="rpt-title">تقرير ضريبة القيمة المضافة</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">

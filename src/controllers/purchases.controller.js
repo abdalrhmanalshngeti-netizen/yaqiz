@@ -71,6 +71,7 @@ exports.create = async (req, res, next) => {
     } = req.body;
 
     if (!amount && !items.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'المبلغ أو البنود مطلوبة' });
     }
 
@@ -85,7 +86,7 @@ exports.create = async (req, res, next) => {
         `SELECT id FROM suppliers WHERE id = $1 AND company_id = $2`,
         [supplier_id, company_id]
       );
-      if (!supRow) return res.status(404).json({ success: false, message: 'المورد غير موجود' });
+      if (!supRow) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المورد غير موجود' }); }
     }
 
     const baseAmount = parseFloat(amount || 0);
@@ -264,7 +265,7 @@ exports.addPayment = async (req, res, next) => {
       `SELECT * FROM purchases WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [req.params.id, req.user.company_id]
     );
-    if (!pur) return res.status(404).json({ success: false, message: 'المشتريات غير موجودة' });
+    if (!pur) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات غير موجودة' }); }
 
     const paying    = Math.min(parseFloat(amount), parseFloat(pur.remaining));
     const newPaid   = parseFloat(pur.paid_amount) + paying;
@@ -284,7 +285,7 @@ exports.addPayment = async (req, res, next) => {
         `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
         [account_id, req.user.company_id]
       );
-      if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
+      if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' }); }
       const newBal = parseFloat(acct.balance) - paying;
       await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, account_id]);
       await client.query(`

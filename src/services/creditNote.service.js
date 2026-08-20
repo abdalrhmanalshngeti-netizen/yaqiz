@@ -24,9 +24,25 @@ const zatcaOnboarding = require('./zatcaOnboarding.service');
  * @returns {object} صف إشعار الدائن المُنشأ
  */
 async function createCreditNote(client, { company_id, referenceInvoice, items, reason, reference_return_id, user_id }) {
-  const subtotal    = items.reduce((s, it) => s + Number(it.line_total || 0), 0);
-  const vat_amount  = items.reduce((s, it) => s + Number(it.vat_amount || 0), 0);
-  const grand_total = subtotal + vat_amount;
+  // عند الإلغاء الكامل، نُطابق قيم الفاتورة الأصلية حرفيًا (شاملةً أي خصم على
+  // مستوى المستند) بدل إعادة حسابها من بنود invoice_items الخام — بنود الفاتورة
+  // تحمل قيمها *قبل* توزيع أي خصم على مستوى المستند (invoices.controller.js
+  // يطرح disc_amt ويوزّع الضريبة تناسبيًا بعد جمع بنود الأصل)، فإعادة الجمع من
+  // الأصفار كانت تنتج إشعارًا بمبلغ أكبر من الفاتورة الأصلية لأي فاتورة فيها
+  // خصم. المرتجع الجزئي يبقى محسوبًا من بنوده المُعطاة مباشرة (لا "إجمالي
+  // فاتورة" واحد نطابقه لعملية جزئية أصلًا)
+  let subtotal, discount_amount, vat_amount, grand_total;
+  if (reason === 'cancel') {
+    subtotal        = Number(referenceInvoice.subtotal || 0);
+    discount_amount = Number(referenceInvoice.discount_amount || 0);
+    vat_amount       = Number(referenceInvoice.vat_amount || 0);
+    grand_total      = Number(referenceInvoice.grand_total || 0);
+  } else {
+    subtotal        = items.reduce((s, it) => s + Number(it.line_total || 0), 0);
+    discount_amount = 0;
+    vat_amount       = items.reduce((s, it) => s + Number(it.vat_amount || 0), 0);
+    grand_total      = subtotal + vat_amount;
+  }
 
   const { rows: [seq] } = await client.query(`SELECT NEXTVAL('credit_note_seq') AS n`);
   const note_no = `CN-${String(seq.n).padStart(6, '0')}`;
@@ -42,13 +58,13 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
   const { rows: [note] } = await client.query(`
     INSERT INTO credit_notes
       (company_id, note_no, reason, reference_invoice_id, reference_invoice_no, reference_return_id,
-       customer_id, customer_name, customer_vat, date, subtotal, vat_amount, grand_total,
+       customer_id, customer_name, customer_vat, date, subtotal, discount_amount, vat_amount, grand_total,
        payment_method, notes, zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id, created_by)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
     RETURNING *
   `, [company_id, note_no, reason, referenceInvoice.id, referenceInvoice.invoice_no, reference_return_id || null,
       referenceInvoice.customer_id || null, referenceInvoice.customer_name || null, referenceInvoice.customer_vat || null,
-      subtotal, vat_amount, grand_total, referenceInvoice.payment_method || null, noteReason,
+      subtotal, discount_amount, vat_amount, grand_total, referenceInvoice.payment_method || null, noteReason,
       zatcaUuid, icv, previousInvoiceHash, issueTimeStr, referenceInvoice.branch_id || null, user_id]);
 
   for (let i = 0; i < items.length; i++) {
@@ -111,6 +127,19 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     }
   } catch (xmlErr) {
     console.error(`[ZATCA] credit note ${note_no} XML generation failed:`, xmlErr.message);
+  }
+
+  // حارس أمان: لو صار خطأ DB حقيقي (لا JS بحت) داخل try/catch أعلاه (استعلام
+  // شهادة CSID، تحديث xml_content، ...)، تدخل المعاملة الحالية بحالة "معطوبة"
+  // بصمت — وأي COMMIT لاحق عليها من المستدعي ينجح ظاهريًا لكنه فعليًا ينفّذ
+  // ROLLBACK كاملًا (سلوك PostgreSQL موثّق: COMMIT على معاملة معطوبة = rollback
+  // بلا خطأ). هذا الفحص الخفيف يكشف الحالة فورًا ويحوّلها لخطأ حقيقي يوقف
+  // المعاملة عمدًا بدل نجاح صامت مضلِّل (الفاتورة تبقى "ملغاة" شكليًا بينما
+  // فعليًا ما انحفظ شيء)
+  try {
+    await client.query('SELECT 1');
+  } catch {
+    throw new Error(`تعذّر إتمام توثيق إشعار الدائن ${note_no} بسبب خطأ داخلي بقاعدة البيانات — لم تُحفَظ أي عملية`);
   }
 
   return note;

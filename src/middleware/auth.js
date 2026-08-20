@@ -40,15 +40,29 @@ module.exports = async function authMiddleware(req, res, next) {
       }
     }
 
-    // منع أي عملية تعديل (غير القراءة) إذا انتهت الفترة المجانية/الاشتراك ولم يُجدَّد
-    if (req.method !== 'GET' && payload.company_id) {
-      const exempt = SUBSCRIPTION_EXEMPT_PREFIXES.some(p => req.originalUrl.startsWith(p));
-      if (!exempt) {
-        const { rows: [co] } = await db.query(
-          'SELECT subscription_expires_at FROM companies WHERE id = $1',
-          [payload.company_id]
-        );
-        if (co?.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
+    if (payload.company_id) {
+      const { rows: [co] } = await db.query(
+        'SELECT status, subscription_expires_at FROM companies WHERE id = $1',
+        [payload.company_id]
+      );
+
+      // شركة معلَّقة/ملغاة من لوحة الأدمن → حظر فوري كامل لكل الطلبات (قراءة وتعديل)،
+      // بلا أي استثناء — بعكس انتهاء الاشتراك أدناه (تعليق/إلغاء قرار إداري صريح
+      // أقوى من مجرد انتهاء فترة تجريبية، وإعادة التفعيل تتم من لوحة الأدمن نفسها)
+      if (co?.status === 'suspended' || co?.status === 'cancelled') {
+        return res.status(403).json({
+          success: false,
+          code: co.status === 'suspended' ? 'COMPANY_SUSPENDED' : 'COMPANY_CANCELLED',
+          message: co.status === 'suspended'
+            ? 'تم تعليق حساب شركتكم. يرجى التواصل مع الدعم الفني.'
+            : 'تم إلغاء حساب شركتكم.'
+        });
+      }
+
+      // منع أي عملية تعديل (غير القراءة) إذا انتهت الفترة المجانية/الاشتراك ولم يُجدَّد
+      if (req.method !== 'GET') {
+        const exempt = SUBSCRIPTION_EXEMPT_PREFIXES.some(p => req.originalUrl.startsWith(p));
+        if (!exempt && co?.subscription_expires_at && new Date(co.subscription_expires_at) < new Date()) {
           return res.status(402).json({
             success: false,
             code: 'SUBSCRIPTION_EXPIRED',

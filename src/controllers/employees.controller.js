@@ -123,6 +123,7 @@ exports.generatePayroll = async (req, res, next) => {
 
     const { month, year, overrides = [] } = req.body;
     if (!month || !year) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'الشهر والسنة مطلوبان' });
     }
 
@@ -184,8 +185,8 @@ exports.markPayrollPaid = async (req, res, next) => {
       `SELECT * FROM payroll WHERE id = $1 AND company_id = $2 FOR UPDATE`,
       [req.params.id, req.user.company_id]
     );
-    if (!p) return res.status(404).json({ success: false, message: 'كشف الراتب غير موجود' });
-    if (p.status === 'paid') return res.status(400).json({ success: false, message: 'تم الدفع بالفعل' });
+    if (!p) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'كشف الراتب غير موجود' }); }
+    if (p.status === 'paid') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'تم الدفع بالفعل' }); }
 
     await client.query(`
       UPDATE payroll SET status='paid', payment_date=$1, account_id=$2 WHERE id=$3
@@ -196,7 +197,7 @@ exports.markPayrollPaid = async (req, res, next) => {
         `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
         [account_id, req.user.company_id]
       );
-      if (!acct) return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' });
+      if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' }); }
       const newBal = parseFloat(acct.balance) - parseFloat(p.net_salary);
       await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, account_id]);
       await client.query(`
