@@ -9600,7 +9600,7 @@ function printVoucher(id) {
     <div class="row"><span class="row-label">${isReceipt?'المستلم منه':'المصروف إليه'}</span><span class="row-val">${sanitize(v.party)}</span></div>
     <div class="row"><span class="row-label">البيان</span><span class="row-val">${sanitize(v.description)||'-'}</span></div>
     <div class="row"><span class="row-label">طريقة الدفع</span><span class="row-val">${sanitize(v.method)||'نقدي'}</span></div>
-    ${v.ref?`<div class="row"><span class="row-label">المرجع</span><span class="row-val">${v.ref}</span></div>`:''}
+    ${v.ref?`<div class="row"><span class="row-label">المرجع</span><span class="row-val">${sanitize(v.ref)}</span></div>`:''}
     <div class="row"><span class="row-label">التاريخ</span><span class="row-val">${fmtDate(v.date)}</span></div>
     <div class="sigs">
       <div class="sig"><div class="sig-line"></div><div class="sig-label">المحاسب</div></div>
@@ -10919,7 +10919,7 @@ function showPartyStatement(partyName, partyType) {
   const rowsWithBalance=rows.map(r=>{running+=r.debit-r.credit; return {...r,balance:running};});
   mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-head">
-      <h3>📊 ${lang==='ar'?'كشف حساب':'Statement'}: ${partyName}</h3>
+      <h3>📊 ${lang==='ar'?'كشف حساب':'Statement'}: ${sanitize(partyName)}</h3>
       <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
     </div>
     <div class="tbl-wrap"><table class="tbl">
@@ -10966,12 +10966,12 @@ function printPartyStatement(partyName){
   const s=(getDB().settings)||{};
   const win=window.open('','_blank','width=850,height=700');
   if (!win) return;
-  win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب ${partyName}</title>
+  win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف حساب ${sanitize(partyName)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
   <style>body{font-family:'Tajawal',sans-serif;padding:30px;}table{width:100%;border-collapse:collapse;}th{background:#1e40af;color:white;padding:8px;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;}.header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1e40af;}@media print{body{padding:10px;}}</style>
   </head><body>
   <div class="header"><div><b style="font-size:18px;color:#1e40af;">${sanitize(s.company_name)||'يقظ'}</b>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}</div>
-  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${partyName}</div><div style="font-size:11px;color:#64748b;">${new Date().toLocaleDateString('en-US')}</div></div></div>
+  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${sanitize(partyName)}</div><div style="font-size:11px;color:#64748b;">${new Date().toLocaleDateString('en-US')}</div></div></div>
   ${table.outerHTML}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
@@ -11123,7 +11123,7 @@ function showShiftOpenScreen(user, onProceed) {
     <div class="login-card">
       <div class="login-logo">${LOGO_SVG}</div>
       <div class="login-title">${lang==='ar'?'بدء الوردية':'Start Shift'}</div>
-      <div class="login-sub">${lang==='ar'?`أهلًا ${user.full_name} — سجّل المبلغ الموجود بالدرج الآن قبل بدء العمل`:`Welcome ${user.full_name} — record what's in the drawer now before starting`}</div>
+      <div class="login-sub">${lang==='ar'?`أهلًا ${sanitize(user.full_name)} — سجّل المبلغ الموجود بالدرج الآن قبل بدء العمل`:`Welcome ${sanitize(user.full_name)} — record what's in the drawer now before starting`}</div>
       <div style="text-align:center;margin:12px 0 18px;font-size:13px;color:var(--text-muted);">
         🕐 ${new Date().toLocaleString(lang==='ar'?'ar-SA-u-nu-latn':'en-US',{dateStyle:'medium',timeStyle:'short'})}
       </div>
@@ -12642,7 +12642,7 @@ function exportPartyStatementPDF(partyName) {
         <td style="color:${running>0?'#dc2626':'#16a34a'};">${fmtMoney(Math.abs(running))} ${running>0?'مستحق لك':'مستحق عليك'}</td>
       </tr></tfoot>
     </table>`;
-  exportReportPDF(`كشف حساب: ${partyName}`, html);
+  exportReportPDF(`كشف حساب: ${sanitize(partyName)}`, html);
 }
 
 
@@ -16884,6 +16884,13 @@ async function runAISearchQuery(q) {
               const _smv = (_snap?.treasury?.moves || []).find(x => x.id === m.id);
               if (_smv) _smv._serverId = res.data.id;
             } catch (e) { /* ignore */ }
+          } else {
+            // فشل الدفع — نحذفها من _snap حتى تُعتبر "جديدة" وتُعاد المحاولة
+            // بالتمريرة القادمة، بدل ضياعها للأبد (نفس منطق _revertSnapEntity)
+            try {
+              const _arr = _snap?.treasury?.moves;
+              if (_arr) { const _i = _arr.findIndex(x => x.id === m.id); if (_i >= 0) _arr.splice(_i, 1); }
+            } catch (e) { /* ignore */ }
           }
         }
       }
@@ -16909,13 +16916,16 @@ async function runAISearchQuery(q) {
             const _sje = (_snap?.journal || []).find(x => x.id === j.id);
             if (_sje) _sje._serverId = res.data.id;
           } catch (e) { /* ignore */ }
+        } else {
+          _revertSnapEntity('journal', j.id, null);
         }
       }
       for (const old of _prevJournal) {
         const stillExists = _newJournal.find(j => j.id === old.id);
         if (!stillExists && old._serverId) {
           if (SYNC_LOG) console.log('→ API: delete journal entry', old.description);
-          await apiFetch('DELETE', `/api/journal/${old._serverId}`).catch(e => console.warn('journal delete sync:', e.message));
+          const ok = await apiFetch('DELETE', `/api/journal/${old._serverId}`).then(()=>true).catch(e => { console.warn('journal delete sync:', e.message); return false; });
+          if (!ok) _keepInSnap('journal', old);
         }
       }
 
@@ -16946,13 +16956,16 @@ async function runAISearchQuery(q) {
             const _sre = (_snap?.returns || []).find(x => x.id === r.id);
             if (_sre) _sre._serverId = res.data.id;
           } catch (e) { /* ignore */ }
+        } else {
+          _revertSnapEntity('returns', r.id, null);
         }
       }
       for (const old of _prevReturns) {
         const stillExists = _newReturns.find(r => r.id === old.id);
         if (!stillExists && old._serverId) {
           if (SYNC_LOG) console.log('→ API: delete return', old.return_no);
-          await apiFetch('DELETE', `/api/returns/${old._serverId}`).catch(e => console.warn('return delete sync:', e.message));
+          const ok = await apiFetch('DELETE', `/api/returns/${old._serverId}`).then(()=>true).catch(e => { console.warn('return delete sync:', e.message); return false; });
+          if (!ok) _keepInSnap('returns', old);
         }
       }
 
@@ -16975,10 +16988,13 @@ async function runAISearchQuery(q) {
               const _spo = (_snap?.purchase_orders || []).find(x => x.id === po.id);
               if (_spo) _spo._serverId = res.data.id;
             } catch (e) { /* ignore */ }
+          } else {
+            _revertSnapEntity('purchase_orders', po.id, null);
           }
         } else if (old && old.status !== po.status && po._serverId) {
           if (SYNC_LOG) console.log('→ API: update PO status', po.po_no, po.status);
-          await apiFetch('PUT', `/api/purchase-orders/${po._serverId}`, { status: po.status }).catch(e => console.warn('PO status sync:', e.message));
+          const ok = await apiFetch('PUT', `/api/purchase-orders/${po._serverId}`, { status: po.status }).then(()=>true).catch(e => { console.warn('PO status sync:', e.message); return false; });
+          if (!ok) _revertSnapEntity('purchase_orders', po.id, old);
         }
       }
 
@@ -17005,6 +17021,8 @@ async function runAISearchQuery(q) {
             const _ssm = (_snap?.stock_moves || []).find(x => x.id === sm.id);
             if (_ssm) _ssm._serverId = res.data.id;
           } catch (e) { /* ignore */ }
+        } else {
+          _revertSnapEntity('stock_moves', sm.id, null);
         }
       }
 
