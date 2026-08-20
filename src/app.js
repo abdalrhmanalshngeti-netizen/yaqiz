@@ -81,6 +81,7 @@ app.use('/api/products',  require('./routes/products.routes'));
 app.use('/api/customers', require('./routes/customers.routes'));
 app.use('/api/suppliers', require('./routes/suppliers.routes'));
 app.use('/api/invoices',  require('./routes/invoices.routes'));
+app.use('/api/credit-notes', require('./routes/creditNotes.routes'));
 app.use('/api/quotes',    require('./routes/quotes.routes'));
 app.use('/api/purchases', require('./routes/purchases.routes'));
 app.use('/api/treasury',  require('./routes/treasury.routes'));

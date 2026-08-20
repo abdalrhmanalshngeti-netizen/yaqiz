@@ -76,4 +76,42 @@ async function submitInvoice(client, company, invoice, credential) {
   }
 }
 
-module.exports = { submitInvoice };
+/**
+ * نفس منطق submitInvoice أعلاه بالضبط، لكن لمستند إشعار دائن (جدول credit_notes
+ * المنفصل) بدل فاتورة — إشعار الدائن نوع مستند قياسي بمنظور الهيئة (BT-3=381)
+ * ويمر بنفس مساري التصديق/الإبلاغ حسب نوع الفاتورة المرجعية.
+ * @param {object} client
+ * @param {object} company
+ * @param {object} note        صف من جدول credit_notes (يحتاج xml_content, zatca_uuid)
+ * @param {boolean} isSimplified هل الفاتورة المرجعية مبسطة (تحدد Reporting أو Clearance)
+ * @param {object} credential
+ */
+async function submitCreditNote(client, company, note, isSimplified, credential) {
+  if (!note.xml_content) throw new Error('لا يوجد XML محفوظ لإشعار الدائن هذا — يجب توليده وتوقيعه أولًا');
+  const endpoint = isSimplified ? 'invoices/reporting/single' : 'invoices/clearance/single';
+  const url = `${ZATCA_ENDPOINTS[credential.environment] || ZATCA_ENDPOINTS.sandbox}/${endpoint}`;
+
+  const body = {
+    invoiceHash: note.zatca_hash,
+    uuid: note.zatca_uuid,
+    invoice: Buffer.from(note.xml_content, 'utf8').toString('base64'),
+  };
+
+  try {
+    const data = await zatcaFetch(url, { certPem: credential.certificatePem, secret: credential.secret, body });
+    const status = isSimplified ? 'reported' : 'cleared';
+    await client.query(
+      `UPDATE credit_notes SET zatca_status = $1, zatca_response = $2, zatca_submitted_at = NOW() WHERE id = $3`,
+      [status, JSON.stringify(data).slice(0, 8000), note.id]
+    );
+    return { success: true, status, data };
+  } catch (err) {
+    await client.query(
+      `UPDATE credit_notes SET zatca_status = 'rejected', zatca_response = $1, zatca_submitted_at = NOW() WHERE id = $2`,
+      [JSON.stringify({ error: err.message, data: err.data }).slice(0, 8000), note.id]
+    );
+    return { success: false, status: 'rejected', error: err.message, data: err.data };
+  }
+}
+
+module.exports = { submitInvoice, submitCreditNote };

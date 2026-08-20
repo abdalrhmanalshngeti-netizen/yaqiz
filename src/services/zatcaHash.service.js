@@ -6,11 +6,16 @@
 //
 // ملاحظة مهمة على التغطية الحالية: القاعدة BR-KSA-26 تشترط تكانونة (canonicalize)
 // الفاتورة بمعيار C14N11 (Canonical XML 1.1) قبل التجزئة. مكتبات Node.js المتاحة
-// حاليًا (xml-crypto) تنفّذ C14N 1.0 القياسي وليس 1.1 حرفيًا — الفرق بينهما ضئيل
-// جدًا عمليًا (يظهر فقط مع استخدام خصائص xml:base/xml:id النادرة، وفاتورتنا لا
-// تستخدمها) لكنه ليس تطابقًا رسميًا موثقًا من الهيئة. قبل الاعتماد الفعلي في
-// الإنتاج يجب التحقق من تطابق التجزئة الناتجة هنا مع نتيجة أداة التحقق الرسمية
-// من بيئة المحاكاة (Fatoora Simulation Portal).
+// حاليًا (xml-crypto 6.1.2 — تحقّقنا فعليًا: لا تصدّر أي تنفيذ لـC14N 1.1، فقط
+// C14nCanonicalization/ExclusiveCanonicalization) تنفّذ C14N 1.0 القياسي فقط.
+// الفرقان الوحيدان الموثّقان بين 1.0 و1.1 يخصّان معالجة خاصيتَي xml:base وxml:id
+// الموروثتين — ودالة assertNoC14N11Divergence أدناه تتحقق برمجيًا من كل مستند
+// قبل تجزئته أنه لا يحتوي أيًا منهما، فتجعل الفرق بين النسختين معدومًا فعليًا
+// لهذا المستند تحديدًا (لا "على الأغلب" فقط). هذا ضمان على شكل المستند الحالي،
+// وليس بديلاً عن التحقق الرسمي: **لا يوجد بهذه البيئة حساب/شهادة إنتاج حقيقية
+// من الهيئة**، فالتحقق الفعلي من مطابقة التجزئة الناتجة هنا مع أداة التحقق
+// الرسمية من بيئة المحاكاة (Fatoora Simulation Portal) يتطلب حساب Fatoora حقيقي
+// لهذه المنشأة ورمز OTP منه — خطوة يدوية لصاحب الحساب فقط قبل أي اعتماد إنتاجي.
 
 const crypto = require('crypto');
 const { DOMParser } = require('@xmldom/xmldom');
@@ -42,6 +47,27 @@ function firstChildText(node, ln) {
   return null;
 }
 
+// يتحقق أن الشجرة كاملة خالية من xml:base وxml:id — الخاصيتان الوحيدتان
+// اللتان يختلف فيهما سلوك C14N 1.1 عن 1.0 (راجع الملاحظة أعلى الملف). لو ظهرت
+// أي منهما مستقبلاً (مثلاً بتوسعة لاحقة لبنية XML)، يجب التوقف والتحقق الفعلي
+// من فرق التجزئة بدل الاستمرار بافتراض غير مضمون
+function assertNoC14N11Divergence(node) {
+  if (node.nodeType === 1) {
+    const attrs = node.attributes;
+    for (let i = 0; i < (attrs?.length || 0); i++) {
+      const a = attrs[i];
+      if (a.nodeName === 'xml:base' || a.nodeName === 'xml:id') {
+        throw new Error(
+          `عنصر <${node.nodeName}> يستخدم ${a.nodeName} — هذا يكسر افتراض تطابق C14N 1.0/1.1 ` +
+          `الموثّق أعلى zatcaHash.service.js، ويحتاج تحقق فعلي من التجزئة قبل المتابعة`
+        );
+      }
+    }
+  }
+  const children = node.childNodes;
+  for (let i = 0; i < (children?.length || 0); i++) assertNoC14N11Divergence(children[i]);
+}
+
 /**
  * يحضّر XML الفاتورة للتجزئة حسب خطوات BR-KSA-26:
  * 1) حذف UBLExtensions  2) حذف AdditionalDocumentReference الذي معرّفه QR
@@ -57,6 +83,8 @@ function canonicalizeForHash(xml) {
   );
   removeDirectChildren(root, (n) => localName(n) === 'Signature');
 
+  assertNoC14N11Divergence(root);
+
   const c14n = new C14nCanonicalization();
   return c14n.process(root);
 }
@@ -67,22 +95,37 @@ function computeInvoiceHash(xml) {
 }
 
 /**
- * يحدد ICV التالي وتجزئة الفاتورة السابقة لشركة معيّنة، ضمن معاملة قائمة (لمنع
- * تسابق فاتورتين تُنشآن بنفس اللحظة). يجب استدعاؤها داخل نفس transaction إنشاء
- * الفاتورة، مع قفل صفوف الفواتير السابقة لهذه الشركة.
+ * يحدد ICV التالي وتجزئة المستند السابق لشركة معيّنة، ضمن معاملة قائمة (لمنع
+ * تسابق مستندين يُنشآن بنفس اللحظة). يجب استدعاؤها داخل نفس transaction إنشاء
+ * الفاتورة أو إشعار الدائن، مع قفل صف حالة السلسلة الموحّدة لهذه الشركة —
+ * السلسلة تغطي الفواتير وإشعارات الدائن معًا (BR-KSA-26 تشترط سلسلة واحدة
+ * متصلة، لا سلسلتين منفصلتين حسب نوع المستند). ICV يُخصَّص نهائيًا فور هذا
+ * الاستدعاء حتى لو فشل توليد XML لاحقًا للمستند نفسه — نفس تسامح النظام مع
+ * رقم الفاتورة العادي، المرتبط بوجود الصف لا بنجاح توليد XML.
  */
 async function nextChainInfo(client, companyId) {
-  const { rows } = await client.query(
-    `SELECT icv, zatca_hash FROM invoices
-     WHERE company_id = $1 AND icv IS NOT NULL
-     ORDER BY icv DESC LIMIT 1 FOR UPDATE`,
+  await client.query(`
+    INSERT INTO zatca_chain_state (company_id, last_icv, last_hash)
+    VALUES ($1, 0, NULL) ON CONFLICT (company_id) DO NOTHING
+  `, [companyId]);
+  const { rows: [state] } = await client.query(
+    `SELECT last_icv, last_hash FROM zatca_chain_state WHERE company_id = $1 FOR UPDATE`,
     [companyId]
   );
-  const last = rows[0];
-  return {
-    icv: (last?.icv || 0) + 1,
-    previousInvoiceHash: last?.zatca_hash || FIRST_INVOICE_HASH,
-  };
+  const icv = (state.last_icv || 0) + 1;
+  await client.query(`UPDATE zatca_chain_state SET last_icv = $1 WHERE company_id = $2`, [icv, companyId]);
+  return { icv, previousInvoiceHash: state.last_hash || FIRST_INVOICE_HASH };
 }
 
-module.exports = { FIRST_INVOICE_HASH, canonicalizeForHash, computeInvoiceHash, nextChainInfo };
+/**
+ * تُستدعى بعد نجاح حساب تجزئة مستند (فاتورة أو إشعار دائن) — تُحدّث آخر تجزئة
+ * معروفة بالسلسلة الموحّدة لتُستخدم كـ"تجزئة سابقة" للمستند التالي أيًا كان
+ * نوعه. لو فشل توليد XML ولم تُستدعَ هذي الدالة، المستند التالي يرث نفس
+ * "التجزئة السابقة" اللي ورثها هذا المستند (فجوة معروفة موروثة من نفس تسامح
+ * النظام الحالي مع فشل توليد XML، غير حصرية لإشعارات الدائن).
+ */
+async function commitChainHash(client, companyId, hash) {
+  await client.query(`UPDATE zatca_chain_state SET last_hash = $1 WHERE company_id = $2`, [hash, companyId]);
+}
+
+module.exports = { FIRST_INVOICE_HASH, canonicalizeForHash, computeInvoiceHash, nextChainInfo, commitChainHash };

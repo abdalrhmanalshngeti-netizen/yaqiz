@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { createCreditNote } = require('../services/creditNote.service');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
@@ -16,6 +17,7 @@ exports.list = async (req, res, next) => {
 };
 
 exports.create = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
     const { company_id } = req.user;
     const {
@@ -29,19 +31,23 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'النوع والمبلغ مطلوبان' });
     }
 
+    await client.query('BEGIN');
+
+    let linkedInvoice = null;
     if (linked_invoice_id) {
-      const { rows } = await db.query(`SELECT id FROM invoices WHERE id = $1 AND company_id = $2`, [linked_invoice_id, company_id]);
-      if (!rows[0]) return res.status(404).json({ success: false, message: 'الفاتورة المرتبطة غير موجودة' });
+      const { rows } = await client.query(`SELECT * FROM invoices WHERE id = $1 AND company_id = $2`, [linked_invoice_id, company_id]);
+      if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة المرتبطة غير موجودة' }); }
+      linkedInvoice = rows[0];
     }
     if (linked_purchase_id) {
-      const { rows } = await db.query(`SELECT id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
-      if (!rows[0]) return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' });
+      const { rows } = await client.query(`SELECT id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
+      if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' }); }
     }
 
-    const { rows: [seq] } = await db.query(`SELECT NEXTVAL('return_seq') AS n`);
+    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('return_seq') AS n`);
     const return_no = `RET-${String(seq.n).padStart(6, '0')}`;
 
-    const { rows: [ret] } = await db.query(`
+    const { rows: [ret] } = await client.query(`
       INSERT INTO returns
         (company_id, return_no, type, party_name, product_id, product_name, qty,
          base_amount, vat_amount, amount, reason, linked_invoice_id, linked_purchase_id,
@@ -54,8 +60,28 @@ exports.create = async (req, res, next) => {
         date || new Date().toISOString().slice(0, 10), req.user.sub,
         payment_method || null, cogs_reversal || 0]);
 
-    res.status(201).json({ success: true, data: ret });
-  } catch (err) { next(err); }
+    // إشعار دائن فعلي — فقط لمرتجع مبيعات مرتبط فعليًا بفاتورة صدرت (بدون فاتورة
+    // مرتبطة، ما فيه مستند رسمي نرجّع له، فلا نصطنع إشعارًا بلا مرجع حقيقي)
+    let creditNote = null;
+    if (type === 'sales' && linkedInvoice) {
+      creditNote = await createCreditNote(client, {
+        company_id, referenceInvoice: linkedInvoice, reason: 'return', reference_return_id: ret.id, user_id: req.user.sub,
+        items: [{
+          product_id: product_id || null, product_name: product_name || 'مرتجع',
+          qty: qty || 1, unit_price: qty ? (parseFloat(base_amount || 0) / qty) : parseFloat(base_amount || 0),
+          line_total: parseFloat(base_amount || 0), vat_amount: parseFloat(vat_amount || 0),
+        }],
+      });
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: ret, credit_note_no: creditNote?.note_no || null });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };
 
 exports.remove = async (req, res, next) => {

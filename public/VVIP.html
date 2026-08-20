@@ -12945,6 +12945,54 @@ function renderZatcaOnboardingBody(status) {
     </div>
     <div id="zatca-onboarding-msg" style="margin-top:12px;font-size:12px;"></div>
   `;
+
+  if (status === 'compliance_issued' || status === 'production_issued') {
+    box.innerHTML += `<div id="zatca-pending-wrap" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
+      <h4 style="font-weight:800;margin-bottom:4px;">📤 ${lang==='ar'?'مستندات بانتظار الإرسال للهيئة':'Documents pending submission'}</h4>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${lang==='ar'?'إرسال يدوي لكل مستند على حدة — الإصدار والتوقيع المحلي يتم تلقائيًا دائمًا، الإرسال الفعلي خطوة منفصلة.':'Manual per-document submission — local generation/signing always happens automatically; actual transmission is a separate step.'}</div>
+      <div id="zatca-pending-list" style="text-align:center;padding:12px;color:var(--text-muted);font-size:13px;">⟳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>
+    </div>`;
+    loadZatcaPendingDocuments();
+  }
+}
+
+async function loadZatcaPendingDocuments() {
+  const box = el('zatca-pending-list'); if (!box) return;
+  try {
+    const res = await window._cloudApiFetch('GET', '/api/zatca/pending');
+    const docs = res?.data || [];
+    if (!docs.length) {
+      box.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:13px;">✓ ${lang==='ar'?'لا توجد مستندات بانتظار الإرسال':'No documents pending'}</div>`;
+      return;
+    }
+    box.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">
+      ${docs.map(d => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;" id="zatca-doc-${d.doc_type}-${d.id}">
+          <div>
+            <span style="font-weight:800;font-size:13px;">${d.doc_type==='credit_note'?'📄 '+(lang==='ar'?'إشعار دائن':'Credit note'):'🧾 '+(lang==='ar'?'فاتورة':'Invoice')} ${sanitize(d.doc_no)}</span>
+            <div style="font-size:11px;color:var(--text-muted);">${fmtDate(d.date)} — ${fmtMoney(d.grand_total)}</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="submitZatcaDocument('${d.doc_type}', ${d.id})">📤 ${lang==='ar'?'إرسال الآن':'Submit now'}</button>
+        </div>`).join('')}
+    </div>`;
+  } catch (e) {
+    box.innerHTML = `<div style="color:var(--danger);font-size:12px;">${lang==='ar'?'تعذر تحميل القائمة':'Could not load list'}</div>`;
+  }
+}
+
+async function submitZatcaDocument(docType, id) {
+  const row = el(`zatca-doc-${docType}-${id}`);
+  const btn = row?.querySelector('button');
+  if (btn) { btn.disabled = true; btn.textContent = `⟳ ${lang==='ar'?'جاري الإرسال...':'Submitting...'}`; }
+  const path = docType === 'credit_note' ? `/api/zatca/credit-notes/${id}/submit` : `/api/zatca/invoices/${id}/submit`;
+  try {
+    const res = await window._cloudApiFetch('POST', path);
+    showToast(`✅ ${res?.message || (lang==='ar'?'تم الإرسال':'Submitted')}`, 'success');
+    loadZatcaPendingDocuments();
+  } catch (e) {
+    showToast(`❌ ${e?.message || (lang==='ar'?'فشل الإرسال':'Submission failed')}`, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = `📤 ${lang==='ar'?'إرسال الآن':'Submit now'}`; }
+  }
 }
 
 async function submitZatcaCompliance() {

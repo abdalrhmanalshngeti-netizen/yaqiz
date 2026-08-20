@@ -4,10 +4,11 @@ const branch = require('../services/branch.service');
 const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
 const { buildInvoiceXML } = require('../services/zatca.service');
-const { nextChainInfo, computeInvoiceHash } = require('../services/zatcaHash.service');
+const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
 const { generatePhase2QR } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
+const { createCreditNote } = require('../services/creditNote.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -229,6 +230,7 @@ exports.create = async (req, res, next) => {
 
       await client.query(`UPDATE invoices SET xml_content = $1, zatca_hash = $2, zatca_qr_phase2 = $3 WHERE id = $4`,
         [finalXml, invoiceHash, qrBase64, invoice.id]);
+      await commitChainHash(client, company_id, invoiceHash);
       invoice.xml_content = finalXml;
       invoice.zatca_hash = invoiceHash;
       invoice.zatca_qr_phase2 = qrBase64;
@@ -395,6 +397,15 @@ exports.cancel = async (req, res, next) => {
       }
     }
 
+    // إشعار دائن فعلي يوثّق الإلغاء (مستند مستقل مرجَّع للفاتورة، لا مجرد تغيير
+    // حالة صامت) — إلزامي حسب لوائح الفوترة الإلكترونية لأي فاتورة صدرت فعليًا
+    let creditNote = null;
+    if (items.length) {
+      creditNote = await createCreditNote(client, {
+        company_id: req.user.company_id, referenceInvoice: inv, items, reason: 'cancel', user_id: req.user.sub,
+      });
+    }
+
     // عكس رصيد العميل
     if (inv.customer_id) {
       await client.query(
@@ -404,13 +415,14 @@ exports.cancel = async (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json({ success: true });
+    res.json({ success: true, credit_note_no: creditNote?.note_no || null });
 
     logAudit({
       companyId: req.user.company_id, userId: req.user.sub, action: 'invoice_cancel',
       entityType: 'invoice', entityId: inv.id, ip: req.ip,
       oldValues: { status: inv.status }, newValues: { status: 'cancelled' },
       details: `إلغاء فاتورة ${inv.invoice_no} — ${Number(inv.grand_total).toFixed(2)} ر.س`
+        + (creditNote ? ` — إشعار دائن ${creditNote.note_no}` : '')
     });
 
   } catch (err) {
