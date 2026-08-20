@@ -3305,6 +3305,7 @@ function renderInvoicesList(sc) {
                     ${i.status!=='ملغاة'&&(i.status==='آجل'||i.status==='جزئي')?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="quickReceipt(${i.id})" title="${lang==='ar'?'تحصيل':'Collect'}">${icon('dollar-sign',13)}</button>`:''}
                     ${has('sales.create')&&i.status!=='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="cancelInvoice(${i.id})" title="${lang==='ar'?'إلغاء الفاتورة':'Cancel invoice'}">${icon('ban',13)}</button>`:''}
                     ${i.status==='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" onclick="showEntityAuditLog('invoice',${i.id},'${lang==='ar'?`سجل إلغاء ${i.invoice_no}`:`Cancellation log — ${i.invoice_no}`}')" title="${lang==='ar'?'من ألغاها ومتى؟':'Who cancelled it & when?'}">${icon('history',13)}</button>`:''}
+                    ${i.status==='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="showCreditNoteByInvoice(${i.id})" title="${lang==='ar'?'عرض إشعار الدائن':'View credit note'}">${icon('file-text',13)}</button>`:''}
                   </div>
                 </td>
               </tr>`;
@@ -3977,6 +3978,176 @@ function printSalesInvoice(id) {
   </div>
   ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${sanitize(inv.notes)}</div>`:''}
   <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+// ── إشعارات الدائن (Credit Notes) — تُنشأ تلقائيًا فقط عند إلغاء فاتورة أو
+// مرتجع مرتبط بفاتورة (creditNote.service.js بالسيرفر) — لا تُخزَّن محليًا
+// بقاعدة db.* زي باقي البيانات، فتُجلب من الـAPI مباشرة عند الطلب فقط ──
+async function showCreditNoteByInvoice(invoiceId) {
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/credit-notes?reference_invoice_id=${invoiceId}`);
+    const note = (res?.data || [])[0];
+    if (!note) { showToast(lang==='ar'?'لا يوجد إشعار دائن مرتبط بهذي الفاتورة':'No credit note linked to this invoice','error'); return; }
+    showCreditNoteModal(note.id);
+  } catch (e) { showToast(lang==='ar'?'تعذر جلب إشعار الدائن':'Could not load credit note','error'); }
+}
+
+async function showCreditNoteByReturn(returnId) {
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/credit-notes?reference_return_id=${returnId}`);
+    const note = (res?.data || [])[0];
+    if (!note) { showToast(lang==='ar'?'لا يوجد إشعار دائن مرتبط بهذا المرتجع':'No credit note linked to this return','error'); return; }
+    showCreditNoteModal(note.id);
+  } catch (e) { showToast(lang==='ar'?'تعذر جلب إشعار الدائن':'Could not load credit note','error'); }
+}
+
+async function showCreditNoteModal(id) {
+  let note;
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/credit-notes/${id}`);
+    note = res?.data;
+  } catch (e) { showToast(lang==='ar'?'تعذر جلب إشعار الدائن':'Could not load credit note','error'); return; }
+  if (!note) return;
+
+  const db = getDB(); const s = db.settings||{};
+  const qrData = generateZATCAQR(s, { created_at: `${String(note.date).slice(0,10)}T${note.issue_time||'00:00:00'}`, grand_total: Number(note.grand_total), vat_total: Number(note.vat_amount) });
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>📄 ${lang==='ar'?'إشعار دائن':'Credit Note'}</h3>
+        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      </div>
+      <div id="cn-receipt" style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;font-family:'Tajawal',sans-serif;">
+        <div style="text-align:center;border-bottom:2px dashed var(--border);padding-bottom:14px;margin-bottom:14px;">
+          <div style="font-size:20px;font-weight:900;color:#dc2626;">${sanitize(s.company_name)||'يقظ'}</div>
+          ${s.vat_number?`<div style="font-size:11px;color:#64748b;margin-top:2px;">الرقم الضريبي: <b>${sanitize(s.vat_number)}</b></div>`:''}
+          <div style="margin-top:8px;display:inline-block;background:#fee2e2;padding:4px 14px;border-radius:999px;font-size:11px;font-weight:800;color:#dc2626;">${lang==='ar'?'إشعار دائن':'Credit Note'}</div>
+        </div>
+        <div style="font-size:12px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
+            <span style="color:#64748b;">${lang==='ar'?'رقم الإشعار:':'Note #:'}</span><b>${note.note_no}</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
+            <span style="color:#64748b;">${lang==='ar'?'مرجع الفاتورة الأصلية:':'Original invoice:'}</span><b>${note.reference_invoice_no}</b>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
+            <span style="color:#64748b;">${lang==='ar'?'السبب:':'Reason:'}</span><span>${note.reason==='cancel'?(lang==='ar'?'إلغاء فاتورة':'Invoice cancellation'):(lang==='ar'?'مرتجع':'Return')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;${note.customer_name?'border-bottom:1px solid #f1f5f9;':''}">
+            <span style="color:#64748b;">${lang==='ar'?'التاريخ:':'Date:'}</span><span>${fmtDate(note.date)}</span>
+          </div>
+          ${note.customer_name?`<div style="display:flex;justify-content:space-between;padding:4px 0;">
+            <span style="color:#64748b;">${lang==='ar'?'العميل:':'Customer:'}</span><b>${sanitize(note.customer_name)}</b>
+          </div>`:''}
+        </div>
+        <div style="border-top:2px dashed var(--border);border-bottom:2px dashed var(--border);padding:10px 0;margin-bottom:12px;">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;font-size:10px;font-weight:800;color:#64748b;margin-bottom:6px;padding:0 2px;">
+            <span>${lang==='ar'?'الصنف':'Item'}</span><span style="text-align:center;">${lang==='ar'?'الكمية':'Qty'}</span><span style="text-align:end;">${lang==='ar'?'السعر':'Price'}</span><span style="text-align:end;">${lang==='ar'?'الإجمالي':'Total'}</span>
+          </div>
+          ${(note.items||[]).map(i=>`
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;font-size:12px;padding:5px 2px;border-bottom:1px dashed #f1f5f9;">
+            <span style="font-weight:700;">${sanitize(i.product_name)}</span>
+            <span style="text-align:center;">${i.qty}</span>
+            <span style="text-align:end;">${fmtMoney(i.unit_price)}</span>
+            <span style="text-align:end;font-weight:700;">${fmtMoney(i.line_total)}</span>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:13px;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;padding:3px 0;color:#64748b;">
+            <span>${lang==='ar'?'المجموع قبل الضريبة:':'Subtotal:'}</span><span>${fmtMoney(note.subtotal)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;color:#64748b;">
+            <span>${lang==='ar'?'ضريبة القيمة المضافة:':'VAT:'}</span><span>${fmtMoney(note.vat_amount)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid #dc2626;margin-top:4px;font-weight:900;font-size:16px;color:#dc2626;">
+            <span>${lang==='ar'?'إجمالي المبلغ الدائن:':'Total credited:'}</span><span>${fmtMoney(note.grand_total)}</span>
+          </div>
+        </div>
+        <div style="text-align:center;padding:12px 0;border-top:2px dashed var(--border);">
+          <canvas id="cn-qr" style="width:120px;height:120px;"></canvas>
+          <div style="font-size:10px;color:#64748b;margin-top:4px;">${lang==='ar'?'امسح رمز QR للتحقق':'Scan QR to verify'}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary btn-full" onclick="printCreditNote(${note.id})">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
+        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إغلاق':'Close'}</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>generateQRCanvas('cn-qr', qrData), 100);
+  refreshIcons();
+}
+
+async function printCreditNote(id) {
+  let note;
+  try {
+    const res = await window._cloudApiFetch('GET', `/api/credit-notes/${id}`);
+    note = res?.data;
+  } catch (e) { showToast(lang==='ar'?'تعذر جلب إشعار الدائن':'Could not load credit note','error'); return; }
+  if (!note) return;
+  const db=getDB(); const s=db.settings||{};
+  const win=window.open('','_blank','width=850,height=700');
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="UTF-8"><title>${note.note_no}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Tajawal',sans-serif;background:white;padding:24px;color:#0f172a;font-size:13px;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #dc2626;}
+    .company{font-size:20px;font-weight:900;color:#dc2626;}.company-sub{font-size:11px;color:#64748b;margin-top:3px;}
+    .inv-title{font-size:18px;font-weight:900;color:#dc2626;text-align:end;}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;}
+    .info-box{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
+    .info-label{font-size:10px;color:#64748b;font-weight:700;margin-bottom:3px;}
+    .info-val{font-weight:800;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+    th{background:#dc2626;color:white;padding:9px 10px;text-align:start;font-size:12px;}
+    td{padding:9px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;}
+    .totals-box{background:#f8fafc;padding:14px;border-radius:8px;border:1px solid #e2e8f0;max-width:280px;margin-${lang==='ar'?'right':'left'}:auto;}
+    .tot-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+    .tot-final{font-weight:900;font-size:18px;color:#dc2626;border-top:2px solid #dc2626;padding-top:8px;margin-top:4px;}
+    .footer{margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center;}
+    @media print{body{padding:8px;}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="company">${sanitize(s.company_name)||'يقظ'}</div>
+      ${s.vat_number?`<div class="company-sub">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}
+      <div class="company-sub">${sanitize(s.address)}</div>
+    </div>
+    <div style="text-align:end;">
+      <div class="inv-title">إشعار دائن</div>
+      <div style="font-size:13px;font-weight:700;margin-top:4px;">${note.note_no}</div>
+      <div style="font-size:11px;color:#64748b;">${new Date(note.date).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</div>
+    </div>
+  </div>
+  <div class="info-grid">
+    <div class="info-box"><div class="info-label">مرجع الفاتورة الأصلية</div><div class="info-val">${note.reference_invoice_no}</div></div>
+    <div class="info-box"><div class="info-label">السبب</div><div class="info-val">${note.reason==='cancel'?'إلغاء فاتورة':'مرتجع'}</div>
+      ${note.customer_name?`<div style="font-size:11px;color:#64748b;margin-top:4px;">العميل: ${sanitize(note.customer_name)}</div>`:''}
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+    <tbody>${(note.items||[]).map((i,idx)=>`<tr>
+      <td>${idx+1}</td><td style="font-weight:700;">${sanitize(i.product_name)}</td>
+      <td>${i.qty}</td><td>${fmtMoney(i.unit_price)}</td><td style="font-weight:800;">${fmtMoney(i.line_total)}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  <div style="display:flex;justify-content:flex-end;">
+    <div class="totals-box">
+      <div class="tot-row"><span>المجموع الجزئي:</span><span>${fmtMoney(note.subtotal)}</span></div>
+      <div class="tot-row"><span>ضريبة القيمة المضافة:</span><span>${fmtMoney(note.vat_amount)}</span></div>
+      <div class="tot-row tot-final"><span>إجمالي المبلغ الدائن:</span><span>${fmtMoney(note.grand_total)}</span></div>
+    </div>
+  </div>
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${s.vat_number||'-'} • ${note.note_no} • إشعار دائن مرجَّع للفاتورة ${note.reference_invoice_no}</div>
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -5368,6 +5539,7 @@ function renderCusContent() {
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(c.name)}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${escJsAttr(c.name)}')">${icon('printer',13)} PDF</button>
+          ${has('customers.manage')?`<button class="btn btn-sm btn-outline" onclick="showAddEntity('customer', ${c.id})">${icon('pencil',13)} ${t('edit')}</button>`:''}
           ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${escJsAttr(c.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
@@ -5443,6 +5615,7 @@ function renderSuppliers(c) {
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(s.name)}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
           <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${escJsAttr(s.name)}')">${icon('printer',13)} PDF</button>
+          ${has('suppliers.manage')?`<button class="btn btn-sm btn-outline" onclick="showAddEntity('supplier', ${s.id})">${icon('pencil',13)} ${t('edit')}</button>`:''}
           ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${escJsAttr(s.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
@@ -5464,33 +5637,43 @@ function renderSuppliers(c) {
   refreshIcons();
 }
 
-function showAddEntity(type) {
+function showAddEntity(type, id) {
   const mc = el('modal-container');
   const isCustomer = type==='customer';
+  const db = getDB();
+  const list = isCustomer ? db.customers : db.suppliers;
+  const existing = id ? list.find(x => x.id === id) : null;
+  const isEdit = !!existing;
   mc.innerHTML = `
   <div class="modal-bg" onclick="closeModal()">
     <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-head"><h3>${t('add')} ${isCustomer?t('customers'):t('suppliers')}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
-      <div style="margin-bottom:12px;"><label class="form-label">${t('name')} *</label><input class="input" id="ent-name" /></div>
-      <div style="margin-bottom:12px;"><label class="form-label">${t('phone')}</label><input class="input" id="ent-phone" /></div>
-      <div style="margin-bottom:12px;"><label class="form-label">${isCustomer?t('customerVat'):(lang==='ar'?'الرقم الضريبي':'VAT #')}</label><input class="input" id="ent-vat" /></div>
-      <div style="margin-bottom:16px;"><label class="form-label">${t('balance')}</label><input class="input" type="number" id="ent-bal" value="0" /></div>
+      <div class="modal-head"><h3>${isEdit?t('edit'):t('add')} ${isCustomer?t('customers'):t('suppliers')}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${t('name')} *</label><input class="input" id="ent-name" value="${sanitize(existing?.name||'')}" /></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${t('phone')}</label><input class="input" id="ent-phone" value="${sanitize(existing?.phone||'')}" /></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${isCustomer?t('customerVat'):(lang==='ar'?'الرقم الضريبي':'VAT #')}</label><input class="input" id="ent-vat" value="${sanitize(existing?.vat_num||'')}" /></div>
+      <div style="margin-bottom:16px;">
+        <label class="form-label">${t('balance')}</label>
+        ${isEdit
+          ? `<input class="input" type="number" value="${existing.balance||0}" disabled style="opacity:.6;" />
+             <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lang==='ar'?'الرصيد يتغيّر تلقائيًا من الفواتير والسندات — لتعديله يدويًا استخدم سند قبض/صرف.':'Balance changes automatically from invoices/vouchers — use a receipt/payment voucher to adjust it manually.'}</div>`
+          : `<input class="input" type="number" id="ent-bal" value="0" />`}
+      </div>
       ${isCustomer ? `
       <div style="margin:14px 0 10px;padding-top:12px;border-top:1px solid var(--border);">
         <div style="font-weight:800;font-size:12.5px;">📍 ${lang==='ar'?'العنوان (لفواتير ضريبية كاملة B2B — اختياري)':'Address (for full B2B tax invoices — optional)'}</div>
       </div>
       <div class="form-row" style="margin-bottom:12px;">
-        <div><label class="form-label">${lang==='ar'?'اسم الشارع':'Street'}</label><input class="input" id="ent-street" /></div>
-        <div><label class="form-label">${lang==='ar'?'رقم المبنى':'Building #'}</label><input class="input" id="ent-building" maxlength="4" /></div>
+        <div><label class="form-label">${lang==='ar'?'اسم الشارع':'Street'}</label><input class="input" id="ent-street" value="${sanitize(existing?.street_name||'')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'رقم المبنى':'Building #'}</label><input class="input" id="ent-building" maxlength="4" value="${sanitize(existing?.building_number||'')}" /></div>
       </div>
       <div class="form-row" style="margin-bottom:12px;">
-        <div><label class="form-label">${lang==='ar'?'الحي':'District'}</label><input class="input" id="ent-district" /></div>
-        <div><label class="form-label">${lang==='ar'?'المدينة':'City'}</label><input class="input" id="ent-city" /></div>
+        <div><label class="form-label">${lang==='ar'?'الحي':'District'}</label><input class="input" id="ent-district" value="${sanitize(existing?.district||'')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'المدينة':'City'}</label><input class="input" id="ent-city" value="${sanitize(existing?.city||'')}" /></div>
       </div>
-      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'الرمز البريدي':'Postal Code'}</label><input class="input" id="ent-postal" maxlength="5" style="max-width:200px;" /></div>
+      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'الرمز البريدي':'Postal Code'}</label><input class="input" id="ent-postal" maxlength="5" style="max-width:200px;" value="${sanitize(existing?.postal_code||'')}" /></div>
       ` : ''}
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-full" onclick="saveEntity('${type}')">${t('save')}</button>
+        <button class="btn btn-primary btn-full" onclick="saveEntity('${type}'${id?`, ${id}`:''})">${t('save')}</button>
         <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
       </div>
     </div>
@@ -5498,20 +5681,22 @@ function showAddEntity(type) {
   refreshIcons();
 }
 
-function saveEntity(type) {
+function saveEntity(type, id) {
   if (blockedByExpiredSubscription()) return;
   if (type==='customer' && !hasPlanPage('customers')) { showToast(lang==='ar'?'إدارة العملاء غير متاحة في الباقة الأساسية':'Customer management is not available on the Basic plan','error'); return; }
   const db = getDB();
   const isCustomer = type==='customer';
+  const isEdit = !!id;
   const name = (el('ent-name').value||'').trim();
   if(!name) { showToast(lang==='ar'?'الاسم مطلوب':'Name required','error'); return; }
 
   // منع تكرار نفس الاسم لعميل/مورد نشط — بدون هذا الفحص، إضافة نفس الاسم
   // مرتين تُنشئ سجلّين منفصلين تمامًا (رصيد وسجل مشتريات/مبيعات كل واحد
   // مستقل عن الآخر)، فتسديد أحدهما لا يؤثر إطلاقًا على الآخر رغم ظهورهما
-  // بنفس الاسم — يبدو للمستخدم وكأن السداد "ما أثّر بشيء"
+  // بنفس الاسم — يبدو للمستخدم وكأن السداد "ما أثّر بشيء" (نستثني السجل
+  // نفسه عند التعديل، وإلا يرفض حفظ نفس الاسم القديم بدون أي تغيير فعلي)
   const list = isCustomer ? db.customers : db.suppliers;
-  const dup = list.find(x => x.is_active!==false && (x.name||'').trim().toLowerCase()===name.toLowerCase());
+  const dup = list.find(x => x.is_active!==false && x.id!==id && (x.name||'').trim().toLowerCase()===name.toLowerCase());
   if (dup) {
     showToast(lang==='ar'
       ? `⚠️ ${isCustomer?'عميل':'مورد'} بهذا الاسم "${name}" موجود مسبقًا. لفتح حساب جديد منفصل بنفس الاسم، عطّل الحساب الحالي أولًا من قائمة ${isCustomer?'العملاء':'الموردين'}.`
@@ -5520,15 +5705,22 @@ function saveEntity(type) {
     return;
   }
 
-  const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0) };
-  if (isCustomer) {
-    data.street_name     = el('ent-street')?.value || '';
-    data.building_number = el('ent-building')?.value || '';
-    data.district         = el('ent-district')?.value || '';
-    data.city             = el('ent-city')?.value || '';
-    data.postal_code      = el('ent-postal')?.value || '';
+  const addressFields = isCustomer ? {
+    street_name:     el('ent-street')?.value || '',
+    building_number: el('ent-building')?.value || '',
+    district:        el('ent-district')?.value || '',
+    city:            el('ent-city')?.value || '',
+    postal_code:     el('ent-postal')?.value || '',
+  } : {};
+
+  if (isEdit) {
+    const existing = list.find(x => x.id === id);
+    if (!existing) return;
+    Object.assign(existing, { name, phone: el('ent-phone').value, vat_num: el('ent-vat').value, ...addressFields });
+  } else {
+    const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0), ...addressFields };
+    list.push(data);
   }
-  if(isCustomer) db.customers.push(data); else db.suppliers.push(data);
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
   if(isCustomer) renderCusContent();
   else { const _mc=el('page-content'); if(_mc) renderSuppliers(_mc); }
@@ -9560,7 +9752,10 @@ function renderReturnContent() {
           <td style="font-size:12px;">${sanitize(r.item)}</td>
           <td><span class="badge badge-amber">${sanitize(r.reason)}</span></td>
           <td style="font-weight:800;color:var(--danger);">${fmtMoney(r.amount)}</td>
-          ${has('returns.manage')?`<td><button class="icon-btn" style="width:28px;height:28px;" onclick="deleteReturn(${r.id})">${icon('trash-2',13)}</button></td>`:''}
+          ${has('returns.manage')?`<td style="display:flex;gap:4px;">
+            ${isSales&&r.linked_invoice_id?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" onclick="showCreditNoteByReturn(${r.id})" title="${lang==='ar'?'عرض إشعار الدائن':'View credit note'}">${icon('file-text',13)}</button>`:''}
+            <button class="icon-btn" style="width:28px;height:28px;" onclick="deleteReturn(${r.id})">${icon('trash-2',13)}</button>
+          </td>`:''}
         </tr>`).join('')}
       </tbody>
     </table></div>

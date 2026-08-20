@@ -2,9 +2,14 @@ const db = require('../config/db');
 
 exports.list = async (req, res, next) => {
   try {
+    const { reference_invoice_id, reference_return_id } = req.query;
+    const where = ['company_id = $1'];
+    const params = [req.user.company_id];
+    if (reference_invoice_id) { params.push(reference_invoice_id); where.push(`reference_invoice_id = $${params.length}`); }
+    if (reference_return_id)  { params.push(reference_return_id);  where.push(`reference_return_id = $${params.length}`); }
     const { rows } = await db.query(
-      `SELECT * FROM credit_notes WHERE company_id = $1 ORDER BY icv DESC NULLS LAST, id DESC LIMIT 2000`,
-      [req.user.company_id]
+      `SELECT * FROM credit_notes WHERE ${where.join(' AND ')} ORDER BY icv DESC NULLS LAST, id DESC LIMIT 2000`,
+      params
     );
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
