@@ -99,19 +99,29 @@ exports.create = async (req, res, next) => {
     // نرفض الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت لو الكمية غير
     // كافية بهذا المستودع تحديدًا (كان يسبب تضاربًا بين الدفاتر والمخزون الفعلي).
     // القفل (FOR UPDATE) يمنع تضارب السباق مع عملية بيع أخرى متزامنة على نفس الصنف.
-    const stockShortages = [];
+    // نجمع الكمية المطلوبة *لكل صنف* أولًا (بدل فحص كل سطر بمفرده) عشان لو نفس
+    // الصنف تكرر بأكثر من سطر بنفس الفاتورة، يُقاس مجموع الكميين معًا مقابل
+    // المتوفر فعليًا، لا كل سطر منفصل (كان يسمح ببيع أكثر من المخزون الفعلي).
+    // كذلك نقفل الأصناف بترتيب ثابت (حسب product_id) لمنع احتمال deadlock بين
+    // فاتورتين متزامنتين تحتويان نفس الصنفين بترتيب معكوس.
+    const requiredByProduct = new Map();
     for (const item of items) {
       if (!item.product_id) continue;
+      requiredByProduct.set(item.product_id, (requiredByProduct.get(item.product_id) || 0) + parseFloat(item.qty));
+    }
+    const stockShortages = [];
+    for (const product_id of [...requiredByProduct.keys()].sort((a, b) => a - b)) {
       const { rows: [prod] } = await client.query(
         `SELECT p.name, COALESCE(ps.qty, 0) AS qty
          FROM products p
          LEFT JOIN product_stock ps ON ps.product_id = p.id AND ps.warehouse_id = $3
          WHERE p.id = $1 AND p.company_id = $2 FOR UPDATE OF p`,
-        [item.product_id, company_id, resolvedWarehouseId]
+        [product_id, company_id, resolvedWarehouseId]
       );
       if (!prod) continue;
-      if (parseFloat(prod.qty) < parseFloat(item.qty)) {
-        stockShortages.push(`${prod.name} (المتوفر بهذا الفرع: ${prod.qty}، المطلوب: ${item.qty})`);
+      const requiredQty = requiredByProduct.get(product_id);
+      if (parseFloat(prod.qty) < requiredQty) {
+        stockShortages.push(`${prod.name} (المتوفر بهذا الفرع: ${prod.qty}، المطلوب: ${requiredQty})`);
       }
     }
     if (stockShortages.length) {
@@ -389,7 +399,7 @@ exports.cancel = async (req, res, next) => {
     // إرجاع المخزون — لنفس مستودع فرع الفاتورة وقت البيع (وليس فرع المستخدم
     // الحالي الذي قد يكون تغيّر منذ ذلك الحين)
     const { warehouse_id: cancelWarehouseId } =
-      await branch.resolveWarehouseForBranch(client, req.user.company_id, inv.branch_id);
+      await branch.resolveWarehouseForBranch(client, req.user.company_id, inv.branch_id, false);
     const { rows: items } = await client.query(
       `SELECT * FROM invoice_items WHERE invoice_id = $1`, [inv.id]
     );

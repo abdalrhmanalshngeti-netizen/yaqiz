@@ -1,7 +1,12 @@
 // يحل فرعًا (أو الفرع الرئيسي إن لم يُحدَّد) إلى مستودعه الوحيد الحالي —
 // نقطة موحّدة يستخدمها كل من المشتريات والفواتير والتعديل اليدوي للمخزون
 // بدل ما كل مسار يكرر نفس منطق الحل بنفسه.
-exports.resolveWarehouseForBranch = async (client, company_id, branch_id) => {
+//
+// requireActive=false تُستخدم فقط عند إرجاع مخزون لعملية ماضية (مثل إلغاء فاتورة)
+// حيث يجب استخدام نفس فرع/مستودع البيع الأصلي حتى لو أصبح الفرع غير نشط لاحقًا —
+// خلاف ذلك يصبح إلغاء أي فاتورة مرتبطة بفرع مُعطَّل مستحيلاً للأبد (المخزون يُخصم
+// وقت البيع من مستودع بعينه، فيجب إرجاعه لنفس المستودع بالضبط، لا لأي مستودع آخر)
+exports.resolveWarehouseForBranch = async (client, company_id, branch_id, requireActive = true) => {
   let bId = branch_id;
 
   if (!bId) {
@@ -13,14 +18,14 @@ exports.resolveWarehouseForBranch = async (client, company_id, branch_id) => {
     bId = main.id;
   } else {
     const { rows: [b] } = await client.query(
-      `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_active = true`,
+      `SELECT id FROM branches WHERE id = $1 AND company_id = $2` + (requireActive ? ` AND is_active = true` : ''),
       [bId, company_id]
     );
     if (!b) throw Object.assign(new Error('الفرع غير موجود'), { status: 404 });
   }
 
   const { rows: [wh] } = await client.query(
-    `SELECT id FROM warehouses WHERE branch_id = $1 AND is_active = true LIMIT 1`,
+    `SELECT id FROM warehouses WHERE branch_id = $1` + (requireActive ? ` AND is_active = true` : '') + ` LIMIT 1`,
     [bId]
   );
   if (!wh) throw Object.assign(new Error('لا يوجد مستودع لهذا الفرع'), { status: 400 });

@@ -1,10 +1,14 @@
-const db = require('../config/db');
+const db     = require('../config/db');
+const stock  = require('../services/stock.service');
+const branch = require('../services/branch.service');
 const { createCreditNote } = require('../services/creditNote.service');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
 // مزامنة العميل/المورد العامة الموجودة أصلاً (أي تغيّر بحقل .balance محلياً يُرسَل
 // كاملاً مع أي تحديث لبيانات العميل) — تكرار الخصم هنا يسبب احتسابه مرتين.
+// (هذا لا يشمل الكمية الفعلية بالمخزون — أدناه نُعيدها فعليًا لمرتجعات المبيعات
+// المرتبطة بصنف حقيقي، وإلا يبقى المخزون منقوصًا للأبد بعد أي مرتجع).
 
 exports.list = async (req, res, next) => {
   try {
@@ -59,6 +63,25 @@ exports.create = async (req, res, next) => {
         reason || '', linked_invoice_id || null, linked_purchase_id || null,
         date || new Date().toISOString().slice(0, 10), req.user.sub,
         payment_method || null, cogs_reversal || 0]);
+
+    // إرجاع الكمية فعليًا للمخزون — لنفس مستودع فرع الفاتورة الأصلية إن وُجدت
+    // (نفس المستودع اللي خُصم منه وقت البيع)، وإلا مستودع فرع المستخدم الحالي
+    if (type === 'sales' && product_id) {
+      try {
+        await client.query('SAVEPOINT sp_stock');
+        const { warehouse_id } = linkedInvoice
+          ? await branch.resolveWarehouseForBranch(client, company_id, linkedInvoice.branch_id, false)
+          : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
+        await stock.add(client, {
+          company_id, product_id, warehouse_id, qty: qty || 0,
+          reason: 'مرتجع مبيعات', source_type: 'return', source_id: ret.id,
+          reference: return_no, user_id: req.user.sub
+        });
+      } catch (stockErr) {
+        await client.query('ROLLBACK TO sp_stock');
+        console.warn(`stock restore skipped [${return_no}] product ${product_id}:`, stockErr.message);
+      }
+    }
 
     // إشعار دائن فعلي — فقط لمرتجع مبيعات مرتبط فعليًا بفاتورة صدرت (بدون فاتورة
     // مرتبطة، ما فيه مستند رسمي نرجّع له، فلا نصطنع إشعارًا بلا مرجع حقيقي)

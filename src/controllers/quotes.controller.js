@@ -1,5 +1,7 @@
 const db     = require('../config/db');
 const crypto = require('crypto');
+const stock  = require('../services/stock.service');
+const branch = require('../services/branch.service');
 const { buildInvoiceXML } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
@@ -168,6 +170,34 @@ exports.convert = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'العرض لا يحتوي على بنود' });
     }
 
+    // فرع/مستودع البائع — نفس منطق invoices.controller.js create()، وإلا تُسجَّل
+    // مبيعة حقيقية بلا خصم أي مخزون فعلي إطلاقًا
+    const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
+      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id);
+
+    const stockShortages = [];
+    for (const item of items) {
+      if (!item.product_id) continue;
+      const { rows: [prod] } = await client.query(
+        `SELECT p.name, COALESCE(ps.qty, 0) AS qty
+         FROM products p
+         LEFT JOIN product_stock ps ON ps.product_id = p.id AND ps.warehouse_id = $3
+         WHERE p.id = $1 AND p.company_id = $2 FOR UPDATE OF p`,
+        [item.product_id, company_id, resolvedWarehouseId]
+      );
+      if (!prod) continue;
+      if (parseFloat(prod.qty) < parseFloat(item.qty)) {
+        stockShortages.push(`${prod.name} (المتوفر بهذا الفرع: ${prod.qty}، المطلوب: ${item.qty})`);
+      }
+    }
+    if (stockShortages.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `الكمية غير كافية بالمخزون: ${stockShortages.join('، ')}`
+      });
+    }
+
     const { rows: [seqRow] } = await client.query(`SELECT nextval('invoice_seq') AS n`);
     const invoice_no = `INV-${String(seqRow.n).padStart(6, '0')}`;
 
@@ -183,14 +213,14 @@ exports.convert = async (req, res, next) => {
         (company_id, invoice_no, invoice_type, customer_id, customer_name, date, status,
          subtotal, discount_amount, vat_amount, grand_total, paid_amount,
          payment_method, notes, zatca_status, created_by,
-         zatca_uuid, icv, previous_invoice_hash, issue_time)
-      VALUES ($1,$2,'simplified',$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13)
+         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id)
+      VALUES ($1,$2,'simplified',$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13,$14)
       RETURNING *
     `, [company_id, invoice_no,
         quote.customer_id || null, quote.customer_name,
         quote.subtotal, quote.vat_amount, quote.grand_total,
         `محوّل من ${quote.quote_no}`, user_id,
-        zatcaUuid, icv, previousInvoiceHash, issueTimeStr]);
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
 
     const processedItems = items.map(item => ({
       ...item,
@@ -206,6 +236,27 @@ exports.convert = async (req, res, next) => {
       `, [invoice.id, item.product_id || null, item.product_name,
           item.qty, item.unit_price, item.line_total,
           item.vat_amount, i]);
+
+      if (item.product_id) {
+        try {
+          await client.query('SAVEPOINT sp_stock');
+          await stock.deduct(client, {
+            company_id, product_id: item.product_id, warehouse_id: resolvedWarehouseId, qty: item.qty,
+            reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
+            reference: invoice_no, user_id
+          });
+        } catch (stockErr) {
+          await client.query('ROLLBACK TO sp_stock');
+          console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
+        }
+      }
+    }
+
+    if (quote.customer_id) {
+      await client.query(
+        `UPDATE customers SET balance = balance + $1 WHERE id = $2`,
+        [quote.grand_total, quote.customer_id]
+      );
     }
 
     // ── توليد XML الفاتورة (المرحلة الثانية) — بنفس منطق invoices.controller.js

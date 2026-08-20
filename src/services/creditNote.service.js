@@ -59,13 +59,14 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     INSERT INTO credit_notes
       (company_id, note_no, reason, reference_invoice_id, reference_invoice_no, reference_return_id,
        customer_id, customer_name, customer_vat, date, subtotal, discount_amount, vat_amount, grand_total,
-       payment_method, notes, zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id, created_by)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+       payment_method, notes, zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id, created_by, invoice_type)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
     RETURNING *
   `, [company_id, note_no, reason, referenceInvoice.id, referenceInvoice.invoice_no, reference_return_id || null,
       referenceInvoice.customer_id || null, referenceInvoice.customer_name || null, referenceInvoice.customer_vat || null,
       subtotal, discount_amount, vat_amount, grand_total, referenceInvoice.payment_method || null, noteReason,
-      zatcaUuid, icv, previousInvoiceHash, issueTimeStr, referenceInvoice.branch_id || null, user_id]);
+      zatcaUuid, icv, previousInvoiceHash, issueTimeStr, referenceInvoice.branch_id || null, user_id,
+      referenceInvoice.invoice_type || 'simplified']);
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];

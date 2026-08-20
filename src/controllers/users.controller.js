@@ -216,10 +216,11 @@ exports.changePassword = async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(new_password, 12);
-    await db.query(
+    const { rowCount } = await db.query(
       `UPDATE users SET password_hash = $1 WHERE id = $2 AND company_id = $3`,
       [hash, req.params.id, req.user.company_id]
     );
+    if (!rowCount) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     res.json({ success: true });
   } catch (err) { next(err); }

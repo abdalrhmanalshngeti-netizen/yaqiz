@@ -15966,7 +15966,14 @@ async function runAISearchQuery(q) {
     const _vatOn  = _vatSt?.vat_enabled !== false && _vatSt?.vat_enabled !== 0;
     // إذا الفاتورة نفسها لم تُحسب فيها ضريبة (vat_total=0) أو الضريبة معطّلة → tax_rate=0
     const _invHasVat = _vatOn && (parseFloat(inv.vat_total)||0) > 0;
+    // نحل customer_id بالاسم وقت الدفع فعليًا (لا نخزّنه مسبقًا على الفاتورة
+    // المحلية) — بالضبط نفس أسلوب حل product_id بالأسفل: لو تحدَّد الاسم لعميل
+    // أُنشئ للتو بنفس الجلسة، يكون له بهذه اللحظة معرّف السيرفر الحقيقي أصلاً
+    // (العملاء تُزامَن قبل الفواتير بنفس تمريرة الدفع)، لا معرّفًا محليًا مؤقتًا
+    // قد يتغيّر لاحقًا (customer_id لا يُعاد ربطه تلقائيًا عند تبديل المعرّفات)
+    const _custMatch = (_liveDB.customers||[]).find(c => (c.name||'').trim().toLowerCase() === (inv.customer_name||'').trim().toLowerCase());
     return {
+      customer_id:   _custMatch?.id || null,
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
       invoice_type:  inv.invoice_type||'simplified',
@@ -16127,7 +16134,11 @@ async function runAISearchQuery(q) {
   }
 
   function quoteToAPI(q) {
+    // نفس أسلوب invToAPI أعلاه — حل customer_id بالاسم وقت الدفع، لا معرّف مخزَّن مسبقًا
+    const _liveDBq = getDB();
+    const _qCustMatch = (_liveDBq.customers||[]).find(c => (c.name||'').trim().toLowerCase() === (q.customer_name||'').trim().toLowerCase());
     return {
+      customer_id: _qCustMatch?.id || null,
       customer_name: q.customer_name || '',
       date: (q.created_at || new Date().toISOString()).slice(0, 10),
       valid_until: q.valid_until || null,
@@ -16506,6 +16517,38 @@ async function runAISearchQuery(q) {
     } catch(e) { /* ignore */ }
   }
 
+  // لو فشل دفع سجل معيّن (شبكة/سيرفر)، _snap كان أصلاً تحدَّث لنسخة newDB كاملة
+  // *قبل* محاولة الدفع (راجع _attemptSync) — فبدون هذا التصحيح، الفشل يُعامَل
+  // بصمت كأنه نجح، ولا تُعاد محاولة دفعه أبدًا بأي تمريرة لاحقة (فقدان بيانات
+  // صامت). نُعيد سجل هذا الكيان تحديدًا إلى قيمته بتمريرة المزامنة السابقة
+  // (oldRecord)، أو نحذفه من الـ snapshot كليًا لو كان إنشاءً جديدًا (oldRecord=null)
+  // — بقية الكيانات بنفس التمريرة التي نجحت فعليًا تبقى محدَّثة بالـ snapshot عاديًا.
+  function _revertSnapEntity(entityKey, id, oldRecord) {
+    try {
+      if (!_snap?.[entityKey]) return;
+      const idx = _snap[entityKey].findIndex(x => x.id === id);
+      if (oldRecord == null) {
+        if (idx >= 0) _snap[entityKey].splice(idx, 1);
+      } else if (idx >= 0) {
+        _snap[entityKey][idx] = JSON.parse(JSON.stringify(oldRecord));
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // نظير _revertSnapEntity لعمليات الحذف تحديدًا: newDB أصلاً لا يحتوي السجل
+  // (المستخدم حذفه محليًا)، و_snap اتحدَّث لنسخة newDB قبل محاولة حذفه من السيرفر
+  // أيضًا — فلو فشل طلب الحذف، لازم نُعيد السجل لـ_snap يدويًا (بعكس الاتجاه
+  // المعتاد) حتى تكتشف التمريرة القادمة إنه "لسه موجود بالسيرفر ويجب حذفه" وتعيد المحاولة
+  function _keepInSnap(entityKey, oldRecord) {
+    try {
+      if (!_snap) return;
+      if (!_snap[entityKey]) _snap[entityKey] = [];
+      if (!_snap[entityKey].find(x => x.id === oldRecord.id)) {
+        _snap[entityKey].push(JSON.parse(JSON.stringify(oldRecord)));
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   function _schedulSync(newDB) {
     if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); return; }
     setTimeout(() => _attemptSync(), 100);
@@ -16534,16 +16577,19 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create product', p.name);
           const res = await apiFetch('POST', '/api/products', productToAPI(p)).catch(e => { console.warn('product create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== p.id) _replaceLocalId('products', p.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== p.id) _replaceLocalId('products', p.id, res.data.id); }
+          else _revertSnapEntity('products', p.id, null);
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update product', p.name);
-          await apiFetch('PUT', `/api/products/${p.id}`, productToAPI(p)).catch(e => console.warn('product update:', e.message));
+          const ok = await apiFetch('PUT', `/api/products/${p.id}`, productToAPI(p)).then(()=>true).catch(e => { console.warn('product update:', e.message); return false; });
+          if (!ok) _revertSnapEntity('products', p.id, old);
         }
       }
       for (const old of prev.products || []) {
         if (!(newDB.products || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: deactivate product', old.name);
-          await apiFetch('DELETE', `/api/products/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/products/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('products', old);
         }
       }
 
@@ -16558,16 +16604,19 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== c.id) _replaceLocalId('customers', c.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== c.id) _replaceLocalId('customers', c.id, res.data.id); }
+          else _revertSnapEntity('customers', c.id, null);
         } else if (JSON.stringify(c) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update customer', c.name);
-          await apiFetch('PUT', `/api/customers/${c.id}`, body).catch(e => console.warn('customer update:', e.message));
+          const ok = await apiFetch('PUT', `/api/customers/${c.id}`, body).then(()=>true).catch(e => { console.warn('customer update:', e.message); return false; });
+          if (!ok) _revertSnapEntity('customers', c.id, old);
         }
       }
       for (const old of prev.customers || []) {
         if (!(newDB.customers || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: remove customer', old.name);
-          await apiFetch('DELETE', `/api/customers/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/customers/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('customers', old);
         }
       }
 
@@ -16580,16 +16629,19 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== s.id) _replaceLocalId('suppliers', s.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== s.id) _replaceLocalId('suppliers', s.id, res.data.id); }
+          else _revertSnapEntity('suppliers', s.id, null);
         } else if (JSON.stringify(s) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update supplier', s.name);
-          await apiFetch('PUT', `/api/suppliers/${s.id}`, body).catch(e => console.warn('supplier update:', e.message));
+          const ok = await apiFetch('PUT', `/api/suppliers/${s.id}`, body).then(()=>true).catch(e => { console.warn('supplier update:', e.message); return false; });
+          if (!ok) _revertSnapEntity('suppliers', s.id, old);
         }
       }
       for (const old of prev.suppliers || []) {
         if (!(newDB.suppliers || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: remove supplier', old.name);
-          await apiFetch('DELETE', `/api/suppliers/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/suppliers/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('suppliers', old);
         }
       }
 
@@ -16601,17 +16653,20 @@ async function runAISearchQuery(q) {
                        allowances: e.allowances || 0, status: e.status || 'active' };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create employee', e.name);
-          const res = await apiFetch('POST', '/api/employees', body).catch(e => { console.warn('employee create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== e.id) _replaceLocalId('employees', e.id, res.data.id);
+          const res = await apiFetch('POST', '/api/employees', body).catch(err => { console.warn('employee create:', err.message); return null; });
+          if (res?.data?.id) { if (res.data.id !== e.id) _replaceLocalId('employees', e.id, res.data.id); }
+          else _revertSnapEntity('employees', e.id, null);
         } else if (JSON.stringify(e) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update employee', e.name);
-          await apiFetch('PUT', `/api/employees/${e.id}`, body).catch(e => console.warn('employee update:', e.message));
+          const ok = await apiFetch('PUT', `/api/employees/${e.id}`, body).then(()=>true).catch(err => { console.warn('employee update:', err.message); return false; });
+          if (!ok) _revertSnapEntity('employees', e.id, old);
         }
       }
       for (const old of prev.employees || []) {
         if (!(newDB.employees || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: remove employee', old.name);
-          await apiFetch('DELETE', `/api/employees/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/employees/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('employees', old);
         }
       }
 
@@ -16646,6 +16701,8 @@ async function runAISearchQuery(q) {
                 if (_pur) { _pur.purchase_no = res.data.purchase_no; _origSaveDB(_db); }
               } catch {}
             }
+          } else {
+            _revertSnapEntity('purchases', p.id, null);
           }
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
           const _oldPaid = parseFloat(old.paid_amount||0);
@@ -16653,14 +16710,16 @@ async function runAISearchQuery(q) {
           if (_newPaid > _oldPaid + 0.01) {
             if (SYNC_LOG) console.log('→ API: purchase payment', p.vendor, _newPaid - _oldPaid);
             const _payAmt = Math.round((_newPaid - _oldPaid)*100)/100;
-            await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _payAmt })
-              .catch(e => console.warn('purchase payment:', e.message));
+            const ok = await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _payAmt })
+              .then(()=>true).catch(e => { console.warn('purchase payment:', e.message); return false; });
+            if (!ok) _revertSnapEntity('purchases', p.id, old);
           } else {
             if (SYNC_LOG) console.log('→ API: update purchase', p.vendor);
-            await apiFetch('PUT', `/api/purchases/${p.id}`, {
+            const ok = await apiFetch('PUT', `/api/purchases/${p.id}`, {
               supplier_name: p.vendor, description: p.description,
               amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0
-            }).catch(e => console.warn('purchase update:', e.message));
+            }).then(()=>true).catch(e => { console.warn('purchase update:', e.message); return false; });
+            if (!ok) _revertSnapEntity('purchases', p.id, old);
           }
         }
       }
@@ -16671,10 +16730,12 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create invoice', inv.invoice_no);
           const res = await apiFetch('POST', '/api/invoices', invToAPI(inv)).catch(e => { console.warn('invoice sync:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== inv.id) _replaceLocalId('invoices', inv.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== inv.id) _replaceLocalId('invoices', inv.id, res.data.id); }
+          else _revertSnapEntity('invoices', inv.id, null);
         } else if (old.status !== 'ملغاة' && inv.status === 'ملغاة') {
           if (SYNC_LOG) console.log('→ API: cancel invoice', inv.invoice_no);
-          await apiFetch('POST', `/api/invoices/${inv.id}/cancel`, { reason: 'إلغاء من الواجهة' }).catch(e => console.warn('invoice cancel:', e.message));
+          const ok = await apiFetch('POST', `/api/invoices/${inv.id}/cancel`, { reason: 'إلغاء من الواجهة' }).then(()=>true).catch(e => { console.warn('invoice cancel:', e.message); return false; });
+          if (!ok) _revertSnapEntity('invoices', inv.id, old);
         } else {
           // مزامنة تحصيل الدفعات — إذا زاد paid_amount
           const _oldPaid = parseFloat(old.paid_amount || 0);
@@ -16682,10 +16743,11 @@ async function runAISearchQuery(q) {
           if (_newPaid > _oldPaid + 0.01) {
             const _payAmt = Math.round((_newPaid - _oldPaid) * 100) / 100;
             if (SYNC_LOG) console.log('→ API: invoice payment', inv.invoice_no, _payAmt);
-            await apiFetch('POST', `/api/invoices/${inv.id}/payment`, {
+            const ok = await apiFetch('POST', `/api/invoices/${inv.id}/payment`, {
               amount: _payAmt,
               payment_method: inv.last_payment_method || 'نقدي'
-            }).catch(e => console.warn('invoice payment sync:', e.message));
+            }).then(()=>true).catch(e => { console.warn('invoice payment sync:', e.message); return false; });
+            if (!ok) _revertSnapEntity('invoices', inv.id, old);
           }
         }
       }
@@ -16695,8 +16757,9 @@ async function runAISearchQuery(q) {
         const stillExists = (newDB.invoices || []).find(i => i.id === old.id);
         if (!stillExists && old.status !== 'ملغاة' && old.id) {
           if (SYNC_LOG) console.log('→ API: cancel deleted invoice', old.invoice_no);
-          await apiFetch('POST', `/api/invoices/${old.id}/cancel`, { reason: 'حذف من الواجهة' })
-            .catch(e => console.warn('invoice delete-cancel sync:', e.message));
+          const ok = await apiFetch('POST', `/api/invoices/${old.id}/cancel`, { reason: 'حذف من الواجهة' })
+            .then(()=>true).catch(e => { console.warn('invoice delete-cancel sync:', e.message); return false; });
+          if (!ok) _keepInSnap('invoices', old);
         }
       }
 
@@ -16706,16 +16769,19 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create quote', q.quote_no);
           const res = await apiFetch('POST', '/api/quotes', quoteToAPI(q)).catch(e => { console.warn('quote create:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== q.id) _replaceLocalId('quotes', q.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== q.id) _replaceLocalId('quotes', q.id, res.data.id); }
+          else _revertSnapEntity('quotes', q.id, null);
         } else if (old.status !== q.status) {
           if (SYNC_LOG) console.log('→ API: update quote status', q.quote_no, q.status);
-          await apiFetch('PUT', `/api/quotes/${q.id}`, { status: q.status, notes: q.notes }).catch(e => console.warn('quote update:', e.message));
+          const ok = await apiFetch('PUT', `/api/quotes/${q.id}`, { status: q.status, notes: q.notes }).then(()=>true).catch(e => { console.warn('quote update:', e.message); return false; });
+          if (!ok) _revertSnapEntity('quotes', q.id, old);
         }
       }
       for (const old of prev.quotes || []) {
         if (!(newDB.quotes || []).find(i => i.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: delete quote', old.quote_no);
-          await apiFetch('DELETE', `/api/quotes/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/quotes/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('quotes', old);
         }
       }
 
@@ -16725,13 +16791,15 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: close period', cp.period_key);
           const res = await apiFetch('POST', '/api/closed-periods', closedPeriodToAPI(cp)).catch(e => { console.warn('closed period sync:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== cp.id) _replaceLocalId('closed_periods', cp.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== cp.id) _replaceLocalId('closed_periods', cp.id, res.data.id); }
+          else _revertSnapEntity('closed_periods', cp.id, null);
         }
       }
       for (const old of prev.closed_periods || []) {
         if (!(newDB.closed_periods || []).find(cp => cp.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: reopen period', old.period_key);
-          await apiFetch('DELETE', `/api/closed-periods/${old.id}`).catch(e => console.warn('closed period delete sync:', e.message));
+          const ok = await apiFetch('DELETE', `/api/closed-periods/${old.id}`).then(()=>true).catch(e => { console.warn('closed period delete sync:', e.message); return false; });
+          if (!ok) _keepInSnap('closed_periods', old);
         }
       }
 
@@ -16741,13 +16809,15 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create voucher', v.voucher_no);
           const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v)).catch(e => { console.warn('voucher sync:', e.message); return null; });
-          if (res?.data?.id && res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id);
+          if (res?.data?.id) { if (res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id); }
+          else _revertSnapEntity('receipts', v.id, null);
         }
       }
       for (const old of prev.receipts || []) {
         if (!(newDB.receipts || []).find(v => v.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: delete voucher', old.voucher_no);
-          await apiFetch('DELETE', `/api/vouchers/${old.id}`).catch(e => console.warn('voucher delete sync:', e.message));
+          const ok = await apiFetch('DELETE', `/api/vouchers/${old.id}`).then(()=>true).catch(e => { console.warn('voucher delete sync:', e.message); return false; });
+          if (!ok) _keepInSnap('receipts', old);
         }
       }
 
@@ -16770,17 +16840,21 @@ async function runAISearchQuery(q) {
               if (_obl) { delete _obl._pending; _origSaveDB(_db); }
             } catch(e) {}
             if (res.data.id !== o.id) _replaceLocalId('obligations', o.id, res.data.id);
+          } else {
+            _revertSnapEntity('obligations', o.id, null);
           }
         } else if (JSON.stringify(o) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update obligation', o.name);
-          await apiFetch('PUT', `/api/obligations/${o.id}`, body)
-            .catch(e => console.warn('obligation update:', e.message));
+          const ok = await apiFetch('PUT', `/api/obligations/${o.id}`, body)
+            .then(()=>true).catch(e => { console.warn('obligation update:', e.message); return false; });
+          if (!ok) _revertSnapEntity('obligations', o.id, old);
         }
       }
       for (const old of prev.obligations || []) {
         if (!(newDB.obligations || []).find(x => x.id === old.id) && !old._pending) {
           if (SYNC_LOG) console.log('→ API: delete obligation', old.name);
-          await apiFetch('DELETE', `/api/obligations/${old.id}`).catch(() => {});
+          const ok = await apiFetch('DELETE', `/api/obligations/${old.id}`).then(()=>true).catch(() => false);
+          if (!ok) _keepInSnap('obligations', old);
         }
       }
 

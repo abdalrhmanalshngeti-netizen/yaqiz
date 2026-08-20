@@ -1,5 +1,6 @@
-const db    = require('../config/db');
-const stock = require('../services/stock.service');
+const db     = require('../config/db');
+const stock  = require('../services/stock.service');
+const branch = require('../services/branch.service');
 const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
@@ -41,13 +42,15 @@ exports.getOne = async (req, res, next) => {
 };
 
 exports.create = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
     const { code, barcode, name, name_en, category_id, unit_id,
             buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم المنتج مطلوب' });
 
-    const { rows } = await db.query(`
+    await client.query('BEGIN');
+    const { rows: [product] } = await client.query(`
       INSERT INTO products
         (company_id, code, barcode, name, name_en, category_id, unit_id,
          buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes)
@@ -56,8 +59,28 @@ exports.create = async (req, res, next) => {
     `, [req.user.company_id, code, barcode, name, name_en, category_id, unit_id,
         buy_price || 0, sell_price || 0, qty || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes]);
 
-    res.status(201).json({ success: true, data: rows[0] });
-  } catch (err) { next(err); }
+    // إنشاء صف product_stock مبدئي بمستودع فرع المستخدم — بدونه أول عملية بيع
+    // بمستودع مُحدَّد ترى الكمية صفرًا رغم ظهورها بقائمة المنتجات (تُنشأ الصفوف
+    // كسولاً فقط عند أول حركة عبر stock.service.js، فتبقى الكمية الابتدائية معلّقة)
+    try {
+      const { warehouse_id } = await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
+      await client.query(
+        `INSERT INTO product_stock (company_id, product_id, warehouse_id, qty) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty = product_stock.qty + EXCLUDED.qty`,
+        [req.user.company_id, product.id, warehouse_id, qty || 0]
+      );
+    } catch (whErr) {
+      console.warn(`product_stock seed skipped for product ${product.id}:`, whErr.message);
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: product });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };
 
 exports.update = async (req, res, next) => {

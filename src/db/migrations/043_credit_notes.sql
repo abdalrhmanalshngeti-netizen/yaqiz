@@ -14,12 +14,22 @@ CREATE TABLE IF NOT EXISTS zatca_chain_state (
 );
 
 -- تعبئة أولية من آخر حالة فعلية بجدول الفواتير الحالي لكل شركة — يضمن استمرار
--- السلسلة بدون انقطاع للشركات الموجودة أصلًا وقت هذا التحديث
+-- السلسلة بدون انقطاع للشركات الموجودة أصلًا وقت هذا التحديث.
+-- last_icv = أعلى ICV فعلي (بغضّ النظر عن نجاح التجزئة) لأن العداد نفسه يجب أن
+-- يستمر تسلسليًا دون فجوات. last_hash يجب أن يُؤخذ من آخر فاتورة *لها تجزئة فعلية*
+-- تحديدًا — لو أُخذت من فاتورة أعلى ICV لكن فشل توليد XML لها (تجزئة NULL)، تنكسر
+-- السلسلة القانونية للفاتورة التالية فورًا (تبدأ من FIRST_INVOICE_HASH خطأً بدل
+-- تجزئة آخر فاتورة موثّقة فعليًا).
 INSERT INTO zatca_chain_state (company_id, last_icv, last_hash)
-SELECT DISTINCT ON (company_id) company_id, icv, zatca_hash
-FROM invoices
-WHERE icv IS NOT NULL
-ORDER BY company_id, icv DESC
+SELECT
+  a.company_id,
+  a.max_icv,
+  (SELECT i2.zatca_hash FROM invoices i2
+   WHERE i2.company_id = a.company_id AND i2.zatca_hash IS NOT NULL
+   ORDER BY i2.icv DESC LIMIT 1)
+FROM (
+  SELECT company_id, MAX(icv) AS max_icv FROM invoices WHERE icv IS NOT NULL GROUP BY company_id
+) a
 ON CONFLICT (company_id) DO NOTHING;
 
 CREATE SEQUENCE IF NOT EXISTS credit_note_seq START 1;
