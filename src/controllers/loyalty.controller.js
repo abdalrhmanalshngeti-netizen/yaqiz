@@ -56,7 +56,7 @@ exports.addPoints = async (req, res, next) => {
 
     const { rows: [row] } = await db.query(`
       INSERT INTO loyalty_points (company_id, customer_name, points, updated_at)
-      VALUES ($1,$2,$3,NOW())
+      VALUES ($1,$2,GREATEST(0,$3),NOW())
       ON CONFLICT (company_id, customer_name) DO UPDATE SET
         points = GREATEST(0, loyalty_points.points + $3), updated_at = NOW()
       RETURNING points

@@ -7611,11 +7611,23 @@ function getBankRecon(db) {
 
 // مزامنة حالة تسوية البنك بالسيرفر — بدون هذا كانت الميزة (والاستيراد المرتبط
 // بها) محلية بالكامل بلا أي حماية باقة فعلية (requireFeature('bank_recon') على
-// السيرفر يرفض 403 لأي باقة غير احترافية) ولا مزامنة بين الأجهزة إطلاقًا
+// السيرفر يرفض 403 لأي باقة غير احترافية) ولا مزامنة بين الأجهزة إطلاقًا.
+// علم "_bankReconDirty" يمنع _periodicDataPull (كل 60 ثانية) من استبدال تعديل
+// محلي لم يتأكد وصوله للسيرفر بعد ببيانات السيرفر القديمة بصمت (فقدان تعديل
+// حقيقي بلا أي إشعار للمستخدم) — يُرفع قبل محاولة الرفع، ويُنزَّل فقط بعد
+// تأكيد نجاحها فعليًا؛ فشل الرفع يبقيه مرفوعًا فيُعاد المحاولة بالنبضة الدورية القادمة
 function _syncBankRecon(db) {
-  if (window._apiReachable && window._cloudApiFetch) {
-    window._cloudApiFetch('PUT', '/api/bank-recon', getBankRecon(db)).catch(e=>console.warn('Bank recon sync:', e.message));
-  }
+  if (!(window._apiReachable && window._cloudApiFetch)) return;
+  const d = getDB(); d._bankReconDirty = true; saveDB(d);
+  window._cloudApiFetch('PUT', '/api/bank-recon', getBankRecon(db))
+    .then(() => { const d2 = getDB(); d2._bankReconDirty = false; saveDB(d2); })
+    .catch(e => console.warn('Bank recon sync:', e.message));
+}
+// نداء دوري بسيط لإعادة محاولة رفع تسوية بنك سبق أن فشلت — بلا هذا، فشل
+// شبكي عابر يترك التعديل "معلَّقًا" للأبد بلا أي محاولة رفع ثانية إطلاقًا
+function _retryBankReconIfDirty() {
+  const db = getDB();
+  if (db._bankReconDirty) _syncBankRecon(db);
 }
 
 // حركات الخزينة اللي فعليًا تمر على حساب البنك (نفس نطاق "الكشف البنكي"
@@ -11981,16 +11993,32 @@ function renderLoyalty(c) {
   refreshIcons();
 }
 
+// مزامنة الإعدادات/النقاط بالسيرفر — بلا هذا كان بالإمكان تفعيل الميزة محليًا
+// فقط (عبر أدوات المطوّر) بأي باقة بلا أي تحقق خلفي؛ الآن يرفضها السيرفر
+// صراحة (403) لأي باقة غير الاحترافية عبر requireFeature('loyalty').
+// علم "dirtyKey" يمنع _periodicDataPull (كل 60 ثانية) من استبدال تعديل محلي
+// لم يتأكد وصوله للسيرفر بعد ببيانات قديمة بصمت (فقدان تعديل حقيقي بلا إشعار)
+function _syncLoyalty(dirtyKey, method, path, body) {
+  if (!(window._apiReachable && window._cloudApiFetch)) return;
+  const d = getDB(); d[dirtyKey] = true; saveDB(d);
+  window._cloudApiFetch(method, path, body)
+    .then(() => { const d2 = getDB(); d2[dirtyKey] = false; saveDB(d2); })
+    .catch(e => console.warn('Loyalty sync:', e.message));
+}
+// إعادة محاولة دورية لإعدادات الولاء فقط (حالة كاملة يسهل إعادة رفعها كما
+// هي) — نقاط العملاء دلتا لحظية (فرق موجب/سالب) لا حالة كاملة محفوظة، فلا
+// يوجد "آخر قيمة" آمنة لإعادة إرسالها تلقائيًا لو فشل رفعها؛ أسوأ حالة هي
+// نقاط دفعة واحدة فاشلة الرفع تبقى محلية فقط حتى مزامنة تالية تُنشئ دفعة جديدة
+function _retryLoyaltySettingsIfDirty() {
+  const db = getDB();
+  if (db._loyaltySettingsDirty) _syncLoyalty('_loyaltySettingsDirty', 'PUT', '/api/loyalty/settings', db.loyalty_settings);
+}
+
 function saveLoyaltySettings() {
   const db=getDB();
   db.loyalty_settings={enabled:el('ly-enabled')?.checked||false,points_per_sar:Number(el('ly-pps')?.value||1),sar_per_point:Number(el('ly-spp')?.value||0.1)};
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الحفظ':'Saved'}`);renderPage();
-  // مزامنة فعلية بالسيرفر — بلا هذا كان بالإمكان تفعيل الميزة محليًا فقط (عبر
-  // أدوات المطوّر) بأي باقة بلا أي تحقق خلفي؛ الآن السيرفر يرفض الطلب صراحة
-  // (403) لأي باقة غير الاحترافية عبر requireFeature('loyalty')
-  if (window._apiReachable && window._cloudApiFetch) {
-    window._cloudApiFetch('PUT', '/api/loyalty/settings', db.loyalty_settings).catch(e=>console.warn('Loyalty settings sync:', e.message));
-  }
+  _syncLoyalty('_loyaltySettingsDirty', 'PUT', '/api/loyalty/settings', db.loyalty_settings);
 }
 
 function addLoyaltyPoints(customerName, amount) {
@@ -12002,9 +12030,7 @@ function addLoyaltyPoints(customerName, amount) {
   db.loyalty_points[customerName]=(db.loyalty_points[customerName]||0)+pts;
   saveDB(db);
   if(pts>0) showToast(`⭐ ${lang==='ar'?`${customerName} كسب ${pts} نقطة`:`${customerName} earned ${pts} points`}`);
-  if (pts && window._apiReachable && window._cloudApiFetch) {
-    window._cloudApiFetch('POST', '/api/loyalty/points', { customer_name:customerName, delta:pts }).catch(e=>console.warn('Loyalty points sync:', e.message));
-  }
+  if (pts) _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:customerName, delta:pts });
 }
 
 function showAddPointsModal() {
@@ -12032,9 +12058,7 @@ function saveManualPoints() {
   if(!db.loyalty_points)db.loyalty_points={};
   db.loyalty_points[cust]=(db.loyalty_points[cust]||0)+pts;
   saveDB(db);showToast(`✅ ${pts} ${lang==='ar'?'نقطة أضيفت لـ':'points added to'} ${cust}`);closeModal();renderPage();
-  if (window._apiReachable && window._cloudApiFetch) {
-    window._cloudApiFetch('POST', '/api/loyalty/points', { customer_name:cust, delta:pts }).catch(e=>console.warn('Loyalty points sync:', e.message));
-  }
+  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:cust, delta:pts });
 }
 
 function redeemPoints(customerName) {
@@ -12044,9 +12068,7 @@ function redeemPoints(customerName) {
   if(!confirm(lang==='ar'?`استرداد ${pts} نقطة بقيمة ${fmtMoney(val)} لـ ${customerName}؟`:`Redeem ${pts} points worth ${fmtMoney(val)} for ${customerName}?`))return;
   db.loyalty_points[customerName]=0;
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الاسترداد':'Redeemed'}: ${fmtMoney(val)}`);renderPage();
-  if (window._apiReachable && window._cloudApiFetch) {
-    window._cloudApiFetch('POST', '/api/loyalty/redeem', { customer_name:customerName }).catch(e=>console.warn('Loyalty redeem sync:', e.message));
-  }
+  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/redeem', { customer_name:customerName });
 }
 
 
@@ -16290,6 +16312,10 @@ async function runAISearchQuery(q) {
     try { await loadAllFromAPI(); } catch(e) { return; }
     if (!modalOpen && _SAFE_AUTOREFRESH_PAGES.includes(currentPage)) window.renderPage?.();
     window.refreshNavBadges?.();
+    // إعادة محاولة رفع أي حالة ولاء/تسوية بنك محلية سبق أن فشل رفعها —
+    // بلا هذا يبقى التعديل معلَّقًا محليًا للأبد لو فشلت محاولة الرفع الأصلية
+    window._retryLoyaltySettingsIfDirty?.();
+    window._retryBankReconIfDirty?.();
   }
   setInterval(_periodicDataPull, 60 * 1000);
 
@@ -16702,15 +16728,20 @@ async function runAISearchQuery(q) {
 
       // ── نظام الولاء: حالة موحّدة على مستوى الشركة كاملة — نستبدل بها القائمة
       //    المحلية بالكامل بثقة كاملة بالسيرفر (لا وجود إلا لو الباقة احترافية
-      //    فعليًا؛ 403 لأي باقة أخرى يعني loyaltyRes يبقى null فلا نغيّر شيء محليًا)
-      if (loyaltyRes?.success) {
+      //    فعليًا؛ 403 لأي باقة أخرى يعني loyaltyRes يبقى null فلا نغيّر شيء محليًا).
+      //    نتجاوز الاستبدال لو فيه تعديل محلي لم يتأكد وصوله للسيرفر بعد (dirty)
+      //    وإلا استبدال دوري كل 60 ثانية (_periodicDataPull) كان يمحو تعديلاً
+      //    حقيقيًا بصمت لو تأخّر رفعه أو فشل
+      if (loyaltyRes?.success && !db._loyaltySettingsDirty) {
         db.loyalty_settings = loyaltyRes.settings || { enabled:false, points_per_sar:1, sar_per_point:0.1 };
-        db.loyalty_points   = loyaltyRes.points || {};
+      }
+      if (loyaltyRes?.success && !db._loyaltyPointsDirty) {
+        db.loyalty_points = loyaltyRes.points || {};
       }
 
       // ── تسوية البنك: نفس مبدأ الولاء — حالة موحّدة، تُستبدَل بالكامل بثقة
-      //    بالسيرفر (غير متاحة إلا للباقة الاحترافية فعليًا)
-      if (bankReconRes?.success && bankReconRes.data) {
+      //    بالسيرفر (غير متاحة إلا للباقة الاحترافية فعليًا)، بنفس حماية "dirty"
+      if (bankReconRes?.success && bankReconRes.data && !db._bankReconDirty) {
         db.bank_recon = bankReconRes.data;
       }
 

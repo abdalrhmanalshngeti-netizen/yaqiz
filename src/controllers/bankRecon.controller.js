@@ -30,6 +30,11 @@ exports.update = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const { from, to, bankNetworkTotal, adjustments, importedLines } = req.body;
+    // نفرض شكل المصفوفات صراحةً قبل التخزين — قيمة غير مصفوفة تُخزَّن كـJSONB
+    // بلا مشكلة بالسيرفر، لكنها تكسر renderBankRecon() بالعميل (يفترض مصفوفة
+    // دائمًا) بشكل دائم لكل تحميل قادم لهذي الشركة إلى أن تُصحَّح يدويًا بقاعدة البيانات
+    const safeAdjustments  = Array.isArray(adjustments) ? adjustments : [];
+    const safeImportedLines = importedLines == null ? null : (Array.isArray(importedLines) ? importedLines : null);
 
     await db.query(`
       INSERT INTO bank_recon (company_id, from_date, to_date, bank_network_total, adjustments, imported_lines, updated_at)
@@ -42,8 +47,8 @@ exports.update = async (req, res, next) => {
       from || null,
       to || null,
       parseFloat(bankNetworkTotal) || 0,
-      JSON.stringify(adjustments || []),
-      importedLines === undefined ? null : JSON.stringify(importedLines),
+      JSON.stringify(safeAdjustments),
+      safeImportedLines === null ? null : JSON.stringify(safeImportedLines),
     ]);
 
     res.json({ success: true });
