@@ -774,6 +774,7 @@ function renderAIUsageTable(rows) {
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🧾 تفريغ</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">📄 تحليل</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">💬 أسئلة الشات</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🧮 أسئلة الأرصدة الافتتاحية</th>
           <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);">🎧 دعم فني</th>
           <th style="padding:10px 14px;"></th>
         </tr></thead>
@@ -786,6 +787,7 @@ function renderAIUsageTable(rows) {
             <td style="padding:10px 14px;text-align:center;color:${r.extract_count?'#c4b5fd':'var(--muted)'};">${r.extract_count?fmt(r.extract_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;color:${r.analyze_count?'#f9a8d4':'var(--muted)'};">${r.analyze_count?fmt(r.analyze_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};cursor:${r.assistant_count?'pointer':'default'};" ${r.assistant_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','assistant')"`:''}>${r.assistant_count?fmt(r.assistant_count)+' ›':'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.opening_balance_assistant_count?'#6ee7b7':'var(--muted)'};cursor:${r.opening_balance_assistant_count?'pointer':'default'};" ${r.opening_balance_assistant_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','opening_balance_assistant')"`:''}>${r.opening_balance_assistant_count?fmt(r.opening_balance_assistant_count)+' ›':'—'}</td>
             <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.support_chat_count?'#fb923c':'var(--muted)'};cursor:${r.support_chat_count?'pointer':'default'};" ${r.support_chat_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','support_chat')"`:''}>${r.support_chat_count?fmt(r.support_chat_count)+' ›':'—'}</td>
             <td></td>
           </tr>`).join('')}
@@ -798,8 +800,16 @@ function closeAIQuestionsModal() {
   document.getElementById('ai-questions-overlay')?.remove();
 }
 async function showAIQuestionsModal(companyId, companyName, feature) {
-  feature = feature === 'support_chat' ? 'support_chat' : 'assistant';
+  const ALLOWED_FEATURES = ['assistant', 'support_chat', 'opening_balance_assistant'];
+  feature = ALLOWED_FEATURES.includes(feature) ? feature : 'assistant';
   const isSupport = feature === 'support_chat';
+  const isOB      = feature === 'opening_balance_assistant';
+  const title = isSupport ? '🎧 محادثات الدعم الفني' : isOB ? '🧮 أسئلة الأرصدة الافتتاحية' : '💬 أسئلة الشات';
+  const subtitle = isSupport
+    ? 'كل محادثة مع بوت الدعم الفني، حتى لو العميل ما رفعها تذكرة لأن البوت حلّها بنفسه'
+    : isOB
+      ? 'أسئلة المستخدم لمساعد معالج الأرصدة الافتتاحية أثناء إعداد الحساب'
+      : 'السؤال مع إجابة الذكاء الاصطناعي عليه';
   closeAIQuestionsModal();
   const ov = document.createElement('div');
   ov.id = 'ai-questions-overlay';
@@ -807,8 +817,8 @@ async function showAIQuestionsModal(companyId, companyName, feature) {
   ov.innerHTML = `<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:center;justify-content:space-between;">
       <div>
-        <div style="font-size:18px;font-weight:900;color:#f0f4ff;">${isSupport?'🎧 محادثات الدعم الفني':'💬 أسئلة الشات'} — ${escHtml(companyName)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${isSupport?'كل محادثة مع بوت الدعم الفني، حتى لو العميل ما رفعها تذكرة لأن البوت حلّها بنفسه':'السؤال مع إجابة الذكاء الاصطناعي عليه'} (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
+        <div style="font-size:18px;font-weight:900;color:#f0f4ff;">${title} — ${escHtml(companyName)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subtitle} (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
       </div>
       <button onclick="closeAIQuestionsModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
     </div>
@@ -832,7 +842,7 @@ async function showAIQuestionsModal(companyId, companyName, feature) {
         <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:8px;">— بلا إجابة محفوظة (سؤال أقدم من هذا التحديث) —</div>
         `}
         <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid #1a2942;">👤 ${escHtml(r.full_name||r.username||'—')} · ${fmtD(r.created_at)}</div>
-      </div>`).join('') : `<div class="empty-state" style="padding:30px;">${isSupport?'لا توجد محادثات دعم فني مسجَّلة':'لا توجد أسئلة مسجَّلة'}</div>`;
+      </div>`).join('') : `<div class="empty-state" style="padding:30px;">${isSupport?'لا توجد محادثات دعم فني مسجَّلة':isOB?'لا توجد أسئلة أرصدة افتتاحية مسجَّلة':'لا توجد أسئلة مسجَّلة'}</div>`;
   } catch (e) {
     const body = document.getElementById('ai-questions-body');
     if (body) body.innerHTML = '<p style="color:var(--red);">خطأ في تحميل الأسئلة</p>';

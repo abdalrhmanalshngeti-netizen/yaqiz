@@ -510,7 +510,8 @@ exports.aiUsageCompanies = async (req, res, next) => {
         COUNT(*) FILTER (WHERE au.feature='extract')::int   AS extract_count,
         COUNT(*) FILTER (WHERE au.feature='analyze')::int   AS analyze_count,
         COUNT(*) FILTER (WHERE au.feature='assistant')::int AS assistant_count,
-        COUNT(*) FILTER (WHERE au.feature='support_chat')::int AS support_chat_count
+        COUNT(*) FILTER (WHERE au.feature='support_chat')::int AS support_chat_count,
+        COUNT(*) FILTER (WHERE au.feature='opening_balance_assistant')::int AS opening_balance_assistant_count
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
       LEFT JOIN ai_usage au ON au.company_id = c.id
@@ -521,8 +522,9 @@ exports.aiUsageCompanies = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// ── أسئلة شات (المساعد الذكي أو بوت الدعم الفني) وإجاباتها الفعلية لشركة
-// معيّنة — ?feature=assistant (افتراضي) أو ?feature=support_chat. الهدف:
+// ── أسئلة شات (المساعد الذكي أو بوت الدعم الفني أو شات الأرصدة الافتتاحية)
+// وإجاباتها الفعلية لشركة معيّنة — ?feature=assistant (افتراضي) أو
+// ?feature=support_chat أو ?feature=opening_balance_assistant. الهدف:
 // تجميع كل محادثة فعلية (حتى لو العميل ما رفعها تذكرة دعم أبدًا لأن البوت
 // حلّها بنفسه) كبيانات للمراجعة، بدل ما تضيع بمجرد إغلاق نافذة الشات — بلا
 // أي إشعار مصاحب (تخزين صامت)، بعكس التصعيد الصريح لتذكرة حقيقية اللي يبقى
@@ -530,7 +532,8 @@ exports.aiUsageCompanies = async (req, res, next) => {
 // (answer تطلع NULL) لأنها لم تُخزَّن وقتها.
 exports.aiUsageQuestions = async (req, res, next) => {
   try {
-    const feature = req.query.feature === 'support_chat' ? 'support_chat' : 'assistant';
+    const ALLOWED_FEATURES = ['assistant', 'support_chat', 'opening_balance_assistant'];
+    const feature = ALLOWED_FEATURES.includes(req.query.feature) ? req.query.feature : 'assistant';
     const { rows } = await db.query(`
       SELECT au.id, au.question, au.answer, au.created_at,
              u.username, u.full_name, u.role
