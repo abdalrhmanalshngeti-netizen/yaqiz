@@ -463,7 +463,8 @@ exports.setCompanyStatus = async (req, res, next) => {
     if (!['active', 'suspended', 'cancelled'].includes(status)) {
       return res.status(400).json({ success: false, message: 'حالة غير صالحة' });
     }
-    await db.query(`UPDATE companies SET status = $1 WHERE id = $2`, [status, req.params.id]);
+    const { rowCount } = await db.query(`UPDATE companies SET status = $1 WHERE id = $2`, [status, req.params.id]);
+    if (!rowCount) return res.status(404).json({ success: false, message: 'الشركة غير موجودة' });
 
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description, admin_id)
@@ -658,22 +659,24 @@ exports.setCompanyPlan = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'باقة غير صالحة' });
     }
 
+    let rowCount;
     if (expires_at) {
       const expDate = new Date(expires_at);
       if (isNaN(expDate.getTime())) {
         return res.status(400).json({ success: false, message: 'تاريخ انتهاء غير صالح' });
       }
-      await db.query(
+      ({ rowCount } = await db.query(
         `UPDATE companies SET plan = $1, subscription_expires_at = $2 WHERE id = $3`,
         [plan, expDate, req.params.id]
-      );
+      ));
     } else {
       const days = 30;
-      await db.query(
+      ({ rowCount } = await db.query(
         `UPDATE companies SET plan = $1, subscription_expires_at = NOW() + ($2 || ' days')::INTERVAL WHERE id = $3`,
         [plan, String(days), req.params.id]
-      );
+      ));
     }
+    if (!rowCount) return res.status(404).json({ success: false, message: 'الشركة غير موجودة' });
 
     await db.query(`
       INSERT INTO platform_log (event_type, company_id, description, admin_id)
@@ -792,15 +795,23 @@ exports.claimTicket = async (req, res, next) => {
     const actionEntry = JSON.stringify([{
       status: null, label: `استلام بواسطة ${actor}`, actor, at: new Date().toISOString()
     }]);
+    // نمنع استلام تذكرة مُستلَمة بالفعل من إداري آخر (تصادم نقرتين متزامنتين) —
+    // الشرط بذاته يمنع السباق ذرّيًا: أول UPDATE ينجح يجعل الشرط يفشل للثاني
     const { rows: [ticket] } = await db.query(`
       UPDATE support_tickets
       SET assigned_to = $1,
           status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
           actions = COALESCE(actions, '[]'::jsonb) || $2::jsonb
-      WHERE id = $3
+      WHERE id = $3 AND (assigned_to IS NULL OR assigned_to = $1)
       RETURNING *
     `, [req.admin.sub, actionEntry, req.params.id]);
-    if (!ticket) return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+    if (!ticket) {
+      const { rows: [existing] } = await db.query(`SELECT assigned_to FROM support_tickets WHERE id = $1`, [req.params.id]);
+      if (existing && existing.assigned_to) {
+        return res.status(409).json({ success: false, message: 'التذكرة مُستلَمة بالفعل من إداري آخر' });
+      }
+      return res.status(404).json({ success: false, message: 'التذكرة غير موجودة' });
+    }
     res.json({ success: true, data: ticket });
   } catch (err) { next(err); }
 };

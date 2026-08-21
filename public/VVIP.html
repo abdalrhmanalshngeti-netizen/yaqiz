@@ -6428,10 +6428,13 @@ function setAcctReportTab(tab) {
 }
 function renderAcctReportMainContent() {
   const mc=el('acct-report-content'); if(!mc) return;
-  if(acctReportTab==='trial_balance') renderTrialBalance(mc);
-  else if(acctReportTab==='balance')  renderBalanceSheet(mc);
-  else if(acctReportTab==='journal')  renderJournal(mc);
-  else if(acctReportTab==='accounts') renderAccounts(mc);
+  // نفس فحص hasPlanFeature عند كل استدعاء فعلي للعرض، لا فقط عند إظهار زر
+  // التبويب — استدعاء setAcctReportTab(...) مباشرة (مثلًا من console المتصفح)
+  // كان يتجاوز القيد لو الفحص موجود فقط بمستوى الأزرار
+  if(acctReportTab==='trial_balance' && hasPlanFeature('trial_balance')) renderTrialBalance(mc);
+  else if(acctReportTab==='balance' && hasPlanFeature('balance_sheet'))  renderBalanceSheet(mc);
+  else if(acctReportTab==='journal' && hasPlanFeature('journal'))  renderJournal(mc);
+  else if(acctReportTab==='accounts' && hasPlanFeature('balance_sheet')) renderAccounts(mc);
   else if(acctReportTab==='period_close' && getCurrentPlan()!=='basic') renderPeriodClosing(mc);
   else if(acctReportTab==='zakat')    renderZakatReport(mc);
   else if(acctReportTab==='statements') renderStatements(mc);
@@ -15834,6 +15837,13 @@ async function runAISearchQuery(q) {
 
   // ── رصيد الـ DB السابق للمقارنة ──────────────────────────
   let _snap = null;
+  // نسخة newDB الحيّة الجارية معالجتها بتمريرة _diffAndPush الحالية (إن وُجدت) —
+  // getDB() يُرجع نسخة جديدة مُفكَّكة (JSON.parse) بكل استدعاء، منفصلة تمامًا عن
+  // كائن newDB اللي تكرّر حلقات هذي التمريرة عليه، فتحديث السجلات المرتبطة داخل
+  // _replaceLocalId عبر getDB() لا ينعكس على newDB نفسه — لولا هذا المرجع، فاتورة
+  // وسند يُدفعان بنفس التمريرة (الفاتورة أولًا فتُستبدل معرّفها، ثم السند لاحقًا)
+  // كان السند يظل يقرأ المعرّف المحلي القديم للفاتورة رغم تحديثه بالتخزين الدائم
+  let _currentPassDB = null;
   window._apiReachable = false;
   let _apiReachable = false;
   let _syncBusy = false;
@@ -16504,16 +16514,32 @@ async function runAISearchQuery(q) {
   };
 
   // ── استبدال ID المحلي بـ UUID من قاعدة البيانات بعد الإنشاء ──
+  // يُحدَّث بثلاث نسخ معًا دائمًا: التخزين الدائم (getDB/_origSaveDB)، لقطة
+  // المقارنة (_snap)، ونسخة newDB الحيّة الجارية معالجتها بالتمريرة الحالية
+  // (_currentPassDB) — بدون الأخيرة، مستند يُدفع لاحقًا بنفس التمريرة (كسند
+  // مرتبط بفاتورة دُفعت للتو) يظل يقرأ من newDB القديم غير المحدَّث
   function _replaceLocalId(entity, localId, apiId) {
     try {
-      const db = getDB();
-      const items = db[entity] || [];
-      const idx = items.findIndex(i => i.id === localId);
-      if (idx >= 0) { items[idx].id = apiId; _origSaveDB(db); }
-      if (_snap?.[entity]) {
-        const si = _snap[entity].findIndex(i => i.id === localId);
-        if (si >= 0) _snap[entity][si].id = apiId;
+      const dbs = [getDB(), _snap, _currentPassDB].filter(Boolean);
+      for (const db of dbs) {
+        const items = db[entity] || [];
+        const idx = items.findIndex(i => i.id === localId);
+        if (idx >= 0) items[idx].id = apiId;
+
+        // تعميم الاستبدال على أي مستند آخر يخزّن مرجعًا لهذا الـid تحديدًا —
+        // بدونه يبقى سند/مرتجع أُنشئ وربط بفاتورة/مشترى بنفس جلسة إنشائه حاملاً
+        // معرّفًا محليًا انتهت صلاحيته فور استبداله هنا، فيُرسَل لاحقًا للسيرفر
+        // بمرجع خاطئ (قد يتصادم برقم مستند حقيقي آخر تمامًا بنفس الشركة)
+        if (entity === 'invoices' || entity === 'purchases') {
+          const linkField = entity === 'invoices' ? 'linked_invoice_id' : 'linked_purchase_id';
+          for (const v of db.receipts || []) { if (v[linkField] === localId) v[linkField] = apiId; }
+          const returnType = entity === 'invoices' ? 'sales' : 'purchases';
+          for (const r of db.returns || []) { if (r.type === returnType && r.linked_id === localId) r.linked_id = apiId; }
+        }
       }
+      // التخزين الدائم فقط يُكتب فعليًا لـlocalStorage — الأخريان (snap/currentPass)
+      // مجرد كائنات JS بالذاكرة يكفي تعديلها مباشرة بلا حفظ
+      _origSaveDB(dbs[0]);
     } catch(e) { /* ignore */ }
   }
 
@@ -16569,6 +16595,7 @@ async function runAISearchQuery(q) {
   async function _diffAndPush(newDB, prev) {
     if (_syncBusy) return;
     _syncBusy = true;
+    _currentPassDB = newDB;
     try {
 
       // ── Products: create / update / deactivate ──────────
@@ -16734,7 +16761,20 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create invoice', inv.invoice_no);
           const res = await apiFetch('POST', '/api/invoices', invToAPI(inv)).catch(e => { console.warn('invoice sync:', e.message); return null; });
-          if (res?.data?.id) { if (res.data.id !== inv.id) _replaceLocalId('invoices', inv.id, res.data.id); }
+          if (res?.data?.id) {
+            if (res.data.id !== inv.id) _replaceLocalId('invoices', inv.id, res.data.id);
+            // رقم الفاتورة الرسمي (متسلسل حسب ICV) يُنشئه السيرفر دائمًا بشكل
+            // مستقل عن الرقم المؤقت المولَّد محليًا وقت الإنشاء (نفس ما تفعله
+            // المشتريات أصلًا مع purchase_no) — لولا هذا التحديث يبقى الرقمان
+            // مختلفين للأبد بعد المزامنة
+            if (res.data.invoice_no) {
+              try {
+                const _db = getDB();
+                const _iv = _db.invoices.find(x => x.id === res.data.id);
+                if (_iv) { _iv.invoice_no = res.data.invoice_no; _origSaveDB(_db); }
+              } catch {}
+            }
+          }
           else _revertSnapEntity('invoices', inv.id, null);
         } else if (old.status !== 'ملغاة' && inv.status === 'ملغاة') {
           if (SYNC_LOG) console.log('→ API: cancel invoice', inv.invoice_no);
@@ -17010,8 +17050,20 @@ async function runAISearchQuery(q) {
         if (!sm._manual || typeof sm.id === 'string' || sm._serverId) continue;
         if (_prevMoves2.find(x => x.id === sm.id)) continue;
 
+        // نحل المنتج الحقيقي بالاسم وقت الدفع (لا بـsm.product_id المخزَّن) — نفس
+        // أسلوب حل customer_id/supplier_id: لو المنتج محلي لم يُزامَن بعد وقت
+        // تسجيل التسوية، معرّفه المحلي قد يتغيّر لاحقًا أو يتصادم مع منتج آخر
+        // فعليًا — استخدامه مباشرةً بمسار الـURL كان يعدّل مخزون منتج خاطئ تمامًا
+        const _ldbSm = getDB();
+        const _prodSm = _ldbSm.products.find(x => x.id === sm.product_id) || _ldbSm.products.find(x => x.name === sm.product_name);
+        if (!_prodSm) {
+          console.warn('stock move sync deferred: product not resolved yet', sm.product_name);
+          _revertSnapEntity('stock_moves', sm.id, null); // إعادة المحاولة بالتمريرة القادمة بدل تجاهله للأبد
+          continue;
+        }
+
         if (SYNC_LOG) console.log('→ API: manual stock move', sm.product_name, sm.type, sm.qty);
-        const res = await apiFetch('POST', `/api/products/${sm.product_id}/move`, {
+        const res = await apiFetch('POST', `/api/products/${_prodSm.id}/move`, {
           type: sm.type, qty: sm.qty, reason: sm.reason || '',
           source: sm.source || '', reference: sm.reference || 'MANUAL',
           warehouse_id: sm.warehouse_id || null
@@ -17032,6 +17084,7 @@ async function runAISearchQuery(q) {
 
     } finally {
       _syncBusy = false;
+      _currentPassDB = null;
     }
   }
 

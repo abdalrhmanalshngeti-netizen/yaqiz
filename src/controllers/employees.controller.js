@@ -297,6 +297,19 @@ exports.closeShift = async (req, res, next) => {
     );
     if (!shift) return res.status(404).json({ success: false, message: 'الوردية غير موجودة أو مغلقة' });
 
+    // موظف عادي يقفل وردية نفسه فقط — إغلاق وردية موظف آخر (وتلقين مبالغ درج
+    // مزوَّرة) يتطلب صلاحية إشرافية، بنفس تعميم الأدوار المستخدم بـlistShifts
+    if (shift.user_id !== req.user.sub) {
+      const perms = req.user.perms || [];
+      const canSeeAll = req.user.role === 'owner' || perms.includes('settings.view');
+      let allowed = canSeeAll;
+      if (!allowed && perms.includes('branch.manage')) {
+        const { rows: [u] } = await db.query(`SELECT branch_id FROM users WHERE id = $1`, [req.user.sub]);
+        allowed = !!u?.branch_id && u.branch_id === shift.branch_id;
+      }
+      if (!allowed) return res.status(403).json({ success: false, message: 'لا يمكنك إقفال وردية موظف آخر' });
+    }
+
     // جمع مبيعات الوردية — طرق الدفع تُحفظ بالعربي من الواجهة (نقدي/شبكة/تحويل/آجل)
     const { rows: [sales] } = await db.query(`
       SELECT

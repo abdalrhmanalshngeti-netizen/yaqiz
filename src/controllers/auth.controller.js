@@ -218,20 +218,25 @@ exports.redeemImpersonation = async (req, res, next) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, message: 'الكود مطلوب' });
 
-    const { rows } = await db.query(`
-      SELECT ic.code, ic.company_name, ic.created_by, ic.user_id,
-             u.username, u.full_name, u.role, u.permissions, u.pos_access, u.shift_enabled, u.company_id,
-             c.vat_number AS company_vat
-      FROM impersonation_codes ic
-      JOIN users u ON u.id = ic.user_id
-      JOIN companies c ON c.id = ic.company_id
-      WHERE ic.code = $1 AND ic.used = FALSE AND ic.expires_at > NOW()
+    // ادّعاء الكود ذرّيًا بشرط used=FALSE بنفس عبارة الـUPDATE — يمنع تصادم
+    // طلبين متزامنين (نقرة مزدوجة/إعادة إرسال) من الحصول على جلستي انتحال
+    // صالحتين من كود واحد لمرة واحدة (كان يحصل بفحص SELECT منفصل قبل UPDATE)
+    const { rows: claimed } = await db.query(`
+      UPDATE impersonation_codes SET used = TRUE
+      WHERE code = $1 AND used = FALSE AND expires_at > NOW()
+      RETURNING code, company_name, created_by, user_id, company_id
     `, [code]);
+    if (!claimed[0]) return res.status(404).json({ success: false, message: 'الكود غير صالح أو منتهي الصلاحية' });
 
-    const rec = rows[0];
-    if (!rec) return res.status(404).json({ success: false, message: 'الكود غير صالح أو منتهي الصلاحية' });
+    const { rows } = await db.query(`
+      SELECT u.username, u.full_name, u.role, u.permissions, u.pos_access, u.shift_enabled, u.company_id,
+             c.vat_number AS company_vat
+      FROM users u JOIN companies c ON c.id = u.company_id
+      WHERE u.id = $1 AND c.id = $2
+    `, [claimed[0].user_id, claimed[0].company_id]);
 
-    await db.query(`UPDATE impersonation_codes SET used = TRUE WHERE code = $1`, [code]);
+    const rec = { ...claimed[0], ...rows[0] };
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'المستخدم أو الشركة غير موجودة' });
 
     const token = jwt.sign(
       {

@@ -1261,6 +1261,10 @@ async function confirmImpersonate(){
 }
 
 async function setCoStatus(id,status){
+  if(status!=='active'){
+    const labels={suspended:'تعليق',cancelled:'إلغاء'};
+    if(!confirm(`متأكد إنك تبي ${labels[status]||status} حساب هذه الشركة؟ العميل بيُحظر فورًا من الدخول لكل شيء.`))return;
+  }
   try{
     await apiFetch(`/api/admin/companies/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
     toast('تم تحديث حالة الشركة','#34d399');
@@ -1453,6 +1457,10 @@ function renderCoModal(c){
 }
 
 async function coModalSetStatus(id,status){
+  if(status!=='active'){
+    const labels={suspended:'تعليق',cancelled:'إلغاء'};
+    if(!confirm(`متأكد إنك تبي ${labels[status]||status} حساب هذه الشركة؟ العميل بيُحظر فورًا من الدخول لكل شيء.`))return;
+  }
   try{
     await apiFetch(`/api/admin/companies/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
     const labels={active:'✅ تم تفعيل الحساب',suspended:'⏸ تم تعليق الحساب',cancelled:'🚫 تم إلغاء الحساب'};

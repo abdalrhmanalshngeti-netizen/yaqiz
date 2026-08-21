@@ -12,7 +12,7 @@ router.get ('/',                    can('customers.view'),   ctrl.list);
 router.post('/',                    can('customers.edit'), requireFeature('customers'), ctrl.create);
 router.get ('/:id',                 can('customers.view'),   ctrl.getOne);
 router.put ('/:id',                 can('customers.edit'), requireFeature('customers'), ctrl.update);
-router.delete('/:id',               can('customers.edit'),   ctrl.remove);
+router.delete('/:id',               can('customers.edit'), requireFeature('customers'), ctrl.remove);
 router.get ('/:id/statement',       can('customers.view'),   ctrl.statement);
 
 module.exports = router;
