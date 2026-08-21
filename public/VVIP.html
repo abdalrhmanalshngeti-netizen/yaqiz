@@ -692,6 +692,27 @@ function getDB() {
         if (!d.accounts.some(a=>a.code==='5150')) {
           d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5150', name:'رواتب وأجور', name_en:'Salaries & Wages', type:'مصروفات', is_group:false, parent:11 });
         }
+        if (!d.accounts.some(a=>a.code==='1500')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'1500', name:'الأصول الثابتة', name_en:'Fixed Assets', type:'أصول', is_group:false, parent:1 });
+        }
+        if (!d.accounts.some(a=>a.code==='2300')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'2300', name:'الالتزامات الدورية', name_en:'Periodic Obligations', type:'التزامات', is_group:false, parent:5 });
+        }
+        if (!d.accounts.some(a=>a.code==='2210')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'2210', name:'ضريبة المدخلات', name_en:'Input VAT', type:'التزامات', is_group:false, parent:5 });
+        }
+        if (!d.accounts.some(a=>a.code==='4200')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'4200', name:'مرتجعات المبيعات', name_en:'Sales Returns', type:'إيرادات', is_group:false, parent:9 });
+        }
+        if (!d.accounts.some(a=>a.code==='4900')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'4900', name:'إيرادات أخرى', name_en:'Other Income', type:'إيرادات', is_group:false, parent:9 });
+        }
+        if (!d.accounts.some(a=>a.code==='5300')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5300', name:'مرتجعات المشتريات', name_en:'Purchase Returns', type:'مصروفات', is_group:false, parent:11 });
+        }
+        if (!d.accounts.some(a=>a.code==='5900')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5900', name:'مصاريف أخرى', name_en:'Other Expenses', type:'مصروفات', is_group:false, parent:11 });
+        }
       }
       return d;
     }
@@ -730,15 +751,22 @@ function initDB() {
       { id:4,  code:'1300', name:'المخزون',               name_en:'Inventory',             type:'أصول',          is_group:false, parent:1 },
       { id:14, code:'1350', name:'بضاعة بالطريق',         name_en:'Goods in Transit',      type:'أصول',          is_group:false, parent:1 },
       { id:15, code:'5150', name:'رواتب وأجور',           name_en:'Salaries & Wages',      type:'مصروفات',       is_group:false, parent:11 },
+      { id:16, code:'1500', name:'الأصول الثابتة',        name_en:'Fixed Assets',          type:'أصول',          is_group:false, parent:1 },
       { id:5,  code:'2000', name:'الالتزامات',            name_en:'Liabilities',           type:'التزامات',      is_group:true,  parent:null },
       { id:6,  code:'2100', name:'الذمم الدائنة',         name_en:'Accounts Payable',      type:'التزامات',      is_group:false, parent:5 },
       { id:7,  code:'2200', name:'ضريبة القيمة المضافة',  name_en:'VAT Payable',           type:'التزامات',      is_group:false, parent:5 },
+      { id:18, code:'2210', name:'ضريبة المدخلات',        name_en:'Input VAT',             type:'التزامات',      is_group:false, parent:5 },
+      { id:17, code:'2300', name:'الالتزامات الدورية',    name_en:'Periodic Obligations',  type:'التزامات',      is_group:false, parent:5 },
       { id:8,  code:'3000', name:'حقوق الملكية',          name_en:'Equity',                type:'حقوق الملكية',  is_group:true,  parent:null },
       { id:9,  code:'4000', name:'الإيرادات',             name_en:'Revenue',               type:'إيرادات',       is_group:true,  parent:null },
       { id:10, code:'4100', name:'إيرادات المبيعات',      name_en:'Sales Revenue',         type:'إيرادات',       is_group:false, parent:9 },
+      { id:19, code:'4200', name:'مرتجعات المبيعات',      name_en:'Sales Returns',         type:'إيرادات',       is_group:false, parent:9 },
+      { id:20, code:'4900', name:'إيرادات أخرى',          name_en:'Other Income',          type:'إيرادات',       is_group:false, parent:9 },
       { id:11, code:'5000', name:'المصروفات',             name_en:'Expenses',              type:'مصروفات',       is_group:true,  parent:null },
       { id:12, code:'5100', name:'تكلفة البضاعة المباعة', name_en:'Cost of Goods Sold',    type:'مصروفات',       is_group:false, parent:11 },
       { id:13, code:'5200', name:'المصاريف التشغيلية',    name_en:'Operating Expenses',    type:'مصروفات',       is_group:false, parent:11 },
+      { id:21, code:'5300', name:'مرتجعات المشتريات',     name_en:'Purchase Returns',      type:'مصروفات',       is_group:false, parent:11 },
+      { id:22, code:'5900', name:'مصاريف أخرى',           name_en:'Other Expenses',        type:'مصروفات',       is_group:false, parent:11 },
     ],
     settings: {
       company_name: '',
@@ -750,7 +778,7 @@ function initDB() {
       plan: 'trial',
       plan_expires_at: null,
     },
-    nextId: { invoice:1, purchase:1, customer:1, supplier:1, product:1, user:1, treasury:1, account:14, employee:1, obligation:1, escalation:1, quote:1, return:1, shift:1 }
+    nextId: { invoice:1, purchase:1, customer:1, supplier:1, product:1, user:1, treasury:1, account:23, employee:1, obligation:1, escalation:1, quote:1, return:1, shift:1 }
   };
   saveDB(db);
   return db;
@@ -808,11 +836,11 @@ function getWarehouseStockQty(db, productId, warehouseId) {
 // حقل اختيار الفرع لنماذج المعاملات (شراء/فاتورة مبيعات عادية) — يظهر فقط
 // لو في أكثر من فرع نشط (يصير إجباريًا وقتها)، وإلا لا يظهر أي شيء ويُحل
 // الفرع الوحيد تلقائيًا بصمت — بلا أي احتكاك للشركات اللي عندها فرع واحد
-function branchFieldHtml(inputId, labelOverride) {
+function branchFieldHtml(inputId, labelOverride, selectedId) {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
   if (branches.length <= 1) return '';
-  const activeId = resolveActiveBranchId();
+  const activeId = selectedId || resolveActiveBranchId();
   return `<div style="margin-bottom:12px;"><label class="form-label">${labelOverride||(lang==='ar'?'الفرع / المستودع':'Branch / Warehouse')} <span style="color:#ef4444">*</span></label>
     <select class="select" id="${inputId}">
       ${branches.map(b=>`<option value="${b.id}" ${b.id===activeId?'selected':''}>${sanitize(b.name)}</option>`).join('')}
@@ -1119,8 +1147,8 @@ const PLAN_PAGES = {
 // الميزات الداخلية المتاحة لكل باقة
 const PLAN_FEATURES = {
   basic:   ['ai_assistant'],
-  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','journal','purchase_orders','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports'],
-  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports'],
+  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','trial_balance','journal','purchase_orders','ai_extract','ai_analyze','ai_assistant','bank_statement','extra_reports','period_close'],
+  pro:     ['employees','payroll','shifts','loyalty','import','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','ai_assistant','bank_statement','pricing_policy','extra_reports','period_close'],
   expired: [],
 }
 
@@ -6311,6 +6339,13 @@ function saveAccount() {
   if (!code || !name) { showToast(lang==='ar'?'❌ الرمز والاسم مطلوبان':'❌ Code and name required'); return; }
   if (!cat)           { showToast(lang==='ar'?'❌ اختر النوع الرئيسي':'❌ Choose main type'); return; }
   if (!subEl)         { showToast(lang==='ar'?'❌ اختر النوع الفرعي':'❌ Choose sub-type'); return; }
+  // منع تصادم الرمز مع حساب موجود فعليًا (نظامي أو أُنشئ سابقًا يدويًا) — بدون
+  // هذا الفحص، حساب جديد بنفس رمز حساب نظامي (مثلاً 5300) كان يندمج بصمت بنفس
+  // رصيده بكل التقارير (journalAccountBalances يُجمِّع حسب account_code فقط)
+  if (db.accounts.some(a => a.code === code)) {
+    showToast(lang==='ar'?`❌ الرمز ${code} مستخدَم بالفعل لحساب آخر — اختر رمزاً مختلفاً`:`❌ Code ${code} is already used by another account — choose a different one`);
+    return;
+  }
 
   const parent = db.accounts.find(a => a.is_group && a.parent == null && a.type === cat.type);
 
@@ -6399,7 +6434,7 @@ function renderAccountingReports(c) {
     hasPlanFeature('balance_sheet') && 'balance',
     hasPlanFeature('journal') && 'journal',
     hasPlanFeature('balance_sheet') && 'accounts',
-    getCurrentPlan()!=='basic' && (currentUser?.role==='owner'||has('accounts.close_period')) && 'period_close',
+    hasPlanFeature('period_close') && (currentUser?.role==='owner'||has('accounts.close_period')) && 'period_close',
     'zakat',
     'statements',
   ].filter(Boolean);
@@ -6412,7 +6447,7 @@ function renderAccountingReports(c) {
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='balance'?'active':''}" onclick="setAcctReportTab('balance')">🏦 ${lang==='ar'?'الميزانية':'Balance Sheet'}</button>`:''}
       ${hasPlanFeature('journal')?`<button class="tab-btn ${acctReportTab==='journal'?'active':''}" onclick="setAcctReportTab('journal')">📒 ${lang==='ar'?'القيود':'Journal'}</button>`:''}
       ${hasPlanFeature('balance_sheet')?`<button class="tab-btn ${acctReportTab==='accounts'?'active':''}" onclick="setAcctReportTab('accounts')">🌳 ${lang==='ar'?'شجرة الحسابات':'Accounts'}</button>`:''}
-      ${(getCurrentPlan()!=='basic'&&(currentUser?.role==='owner'||has('accounts.close_period')))?`<button class="tab-btn ${acctReportTab==='period_close'?'active':''}" onclick="setAcctReportTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
+      ${(hasPlanFeature('period_close')&&(currentUser?.role==='owner'||has('accounts.close_period')))?`<button class="tab-btn ${acctReportTab==='period_close'?'active':''}" onclick="setAcctReportTab('period_close')">🔒 ${lang==='ar'?'إقفال الفترات':'Period Closing'}</button>`:''}
       <button class="tab-btn ${acctReportTab==='zakat'?'active':''}" onclick="setAcctReportTab('zakat')">🕌 ${lang==='ar'?'الزكاة':'Zakat'}</button>
       <button class="tab-btn ${acctReportTab==='statements'?'active':''}" onclick="setAcctReportTab('statements')">📑 ${lang==='ar'?'الكشوفات':'Statements'}</button>
     </div>
@@ -6435,7 +6470,7 @@ function renderAcctReportMainContent() {
   else if(acctReportTab==='balance' && hasPlanFeature('balance_sheet'))  renderBalanceSheet(mc);
   else if(acctReportTab==='journal' && hasPlanFeature('journal'))  renderJournal(mc);
   else if(acctReportTab==='accounts' && hasPlanFeature('balance_sheet')) renderAccounts(mc);
-  else if(acctReportTab==='period_close' && getCurrentPlan()!=='basic') renderPeriodClosing(mc);
+  else if(acctReportTab==='period_close' && hasPlanFeature('period_close')) renderPeriodClosing(mc);
   else if(acctReportTab==='zakat')    renderZakatReport(mc);
   else if(acctReportTab==='statements') renderStatements(mc);
 }
@@ -7574,6 +7609,15 @@ function getBankRecon(db) {
   return db.bank_recon;
 }
 
+// مزامنة حالة تسوية البنك بالسيرفر — بدون هذا كانت الميزة (والاستيراد المرتبط
+// بها) محلية بالكامل بلا أي حماية باقة فعلية (requireFeature('bank_recon') على
+// السيرفر يرفض 403 لأي باقة غير احترافية) ولا مزامنة بين الأجهزة إطلاقًا
+function _syncBankRecon(db) {
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/bank-recon', getBankRecon(db)).catch(e=>console.warn('Bank recon sync:', e.message));
+  }
+}
+
 // حركات الخزينة اللي فعليًا تمر على حساب البنك (نفس نطاق "الكشف البنكي"
 // بصفحة الكشوفات — شبكة وتحويل بنكي، لا نقدي)
 function bankMoves(db, from, to) {
@@ -7765,7 +7809,7 @@ function setBankReconPeriod() {
   if(from>to){showToast(lang==='ar'?'تاريخ البداية بعد تاريخ النهاية':'From date is after to date','error');return;}
   const db=getDB(); const br=getBankRecon(db);
   br.from=from; br.to=to;
-  saveDB(db); renderPage();
+  saveDB(db); _syncBankRecon(db); renderPage();
 }
 
 function saveBankBalance() {
@@ -7773,7 +7817,7 @@ function saveBankBalance() {
   const val=Number(el('bank-bal-input')?.value||0);
   const db=getDB(); const br=getBankRecon(db);
   br.bankNetworkTotal=val;
-  saveDB(db);
+  saveDB(db); _syncBankRecon(db);
   showToast(`✅ ${lang==='ar'?'تم تحديث رصيد البنك':'Updated'}`); renderPage();
 }
 
@@ -7808,14 +7852,14 @@ function saveBankAdj() {
   if(!desc||!amount){showToast(lang==='ar'?'البيانات مطلوبة':'Required','error');return;}
   if(!br.adjustments)br.adjustments=[];
   br.adjustments.push({desc,amount,type:el('ba-type').value,date});
-  saveDB(db);
+  saveDB(db); _syncBankRecon(db);
   showToast(`✅ ${lang==='ar'?'تم':'Done'}`); closeModal(); renderPage();
 }
 
 function removeBankAdj(idx) {
   const db=getDB(); const br=getBankRecon(db);
   br.adjustments.splice(idx,1);
-  saveDB(db); renderPage();
+  saveDB(db); _syncBankRecon(db); renderPage();
 }
 
 // ============ BANK STATEMENT IMPORT + AUTO-MATCHING ============
@@ -7902,7 +7946,7 @@ function handleBankStatementAIImport(input) {
       }
       const db = getDB(); const br = getBankRecon(db);
       br.importedLines = parsed;
-      saveDB(db);
+      saveDB(db); _syncBankRecon(db);
       showToast(`✅ ${lang==='ar'?`تم استخراج ${parsed.length} حركة بالذكاء الاصطناعي — جاري المطابقة`:`Extracted ${parsed.length} transactions via AI — matching`}`);
       closeModal();
       renderPage();
@@ -7963,7 +8007,7 @@ function handleBankStatementImport(input) {
     }
     const db = getDB(); const br = getBankRecon(db);
     br.importedLines = parsed;
-    saveDB(db);
+    saveDB(db); _syncBankRecon(db);
     showToast(`✅ ${lang==='ar'?`تم استيراد ${parsed.length} سطر — جاري المطابقة`:`Imported ${parsed.length} lines — matching`}`);
     closeModal();
     renderPage();
@@ -8005,7 +8049,7 @@ function clearBankImport() {
   if(!confirm(lang==='ar'?'حذف الاستيراد الحالي والعودة للطريقة اليدوية؟':'Clear the current import and go back to manual mode?')) return;
   const db=getDB(); const br=getBankRecon(db);
   br.importedLines = null;
-  saveDB(db); renderPage();
+  saveDB(db); _syncBankRecon(db); renderPage();
 }
 
 // ============ USERS ============
@@ -9059,7 +9103,13 @@ function confirmObligationPayment(id, type, amount, method) {
   // ── قيد محاسبي مزدوج ─────────────────────────────────────
   if(!db.journal)db.journal=[];
   if(!db.nextId.journal)db.nextId.journal=1;
-  const _accCode={'إيجار':'5300','رواتب وتعويضات':'5100'}[o.category]||'5200';
+  // كل تصنيفات الالتزامات (إيجار/اتصالات/تأمين/صيانة/أخرى — راجع قائمة التصنيفات
+  // الفعلية بنموذج إضافة الالتزام) تُسجَّل بحساب المصاريف التشغيلية العام 5200،
+  // إذ لا يوجد حساب فرعي مخصص لكل تصنيف حاليًا. سابقًا كانت الخريطة تُحوِّل
+  // "إيجار" لحساب 5300 (المُستخدَم فعليًا لمرتجعات المشتريات بمكان آخر بالتطبيق)
+  // و"رواتب وتعويضات" لحساب 5100 (تكلفة البضاعة المباعة) — تصادم أكواد حقيقي
+  // كان يُدخل مبالغ الإيجار ضمن مرتجعات المشتريات ومبالغ الرواتب ضمن COGS
+  const _accCode='5200';
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`${lang==='ar'?'سداد التزام':'Obligation'}: ${o.name} — ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}`,
@@ -10050,7 +10100,7 @@ function _saveReturnActual(type, amount, linkedId) {
     if(cashPortion>0) purRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
     postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease');
     purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
-    purRetEntries.push({account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'credit', amount:vat});
+    purRetEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'credit', amount:vat});
     db.journal.push({
       id:db.nextId.journal++, date:new Date().toISOString(),
       description:`مرتجع مشتريات ${ret.return_no} — ${ret.party}`,
@@ -10152,7 +10202,7 @@ function deleteReturn(id){
       entries:[
         {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:r.amount},
         {account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'debit', amount:r.base_amount||0},
-        {account:lang==='ar'?'ضريبة القيمة المضافة':'Input VAT', account_code:'2200', side:'debit', amount:r.vat_amount||0}
+        {account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:r.vat_amount||0}
       ], ref:r.return_no});
   }
 
@@ -11935,6 +11985,12 @@ function saveLoyaltySettings() {
   const db=getDB();
   db.loyalty_settings={enabled:el('ly-enabled')?.checked||false,points_per_sar:Number(el('ly-pps')?.value||1),sar_per_point:Number(el('ly-spp')?.value||0.1)};
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الحفظ':'Saved'}`);renderPage();
+  // مزامنة فعلية بالسيرفر — بلا هذا كان بالإمكان تفعيل الميزة محليًا فقط (عبر
+  // أدوات المطوّر) بأي باقة بلا أي تحقق خلفي؛ الآن السيرفر يرفض الطلب صراحة
+  // (403) لأي باقة غير الاحترافية عبر requireFeature('loyalty')
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/loyalty/settings', db.loyalty_settings).catch(e=>console.warn('Loyalty settings sync:', e.message));
+  }
 }
 
 function addLoyaltyPoints(customerName, amount) {
@@ -11946,6 +12002,9 @@ function addLoyaltyPoints(customerName, amount) {
   db.loyalty_points[customerName]=(db.loyalty_points[customerName]||0)+pts;
   saveDB(db);
   if(pts>0) showToast(`⭐ ${lang==='ar'?`${customerName} كسب ${pts} نقطة`:`${customerName} earned ${pts} points`}`);
+  if (pts && window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('POST', '/api/loyalty/points', { customer_name:customerName, delta:pts }).catch(e=>console.warn('Loyalty points sync:', e.message));
+  }
 }
 
 function showAddPointsModal() {
@@ -11973,6 +12032,9 @@ function saveManualPoints() {
   if(!db.loyalty_points)db.loyalty_points={};
   db.loyalty_points[cust]=(db.loyalty_points[cust]||0)+pts;
   saveDB(db);showToast(`✅ ${pts} ${lang==='ar'?'نقطة أضيفت لـ':'points added to'} ${cust}`);closeModal();renderPage();
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('POST', '/api/loyalty/points', { customer_name:cust, delta:pts }).catch(e=>console.warn('Loyalty points sync:', e.message));
+  }
 }
 
 function redeemPoints(customerName) {
@@ -11982,6 +12044,9 @@ function redeemPoints(customerName) {
   if(!confirm(lang==='ar'?`استرداد ${pts} نقطة بقيمة ${fmtMoney(val)} لـ ${customerName}؟`:`Redeem ${pts} points worth ${fmtMoney(val)} for ${customerName}?`))return;
   db.loyalty_points[customerName]=0;
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الاسترداد':'Redeemed'}: ${fmtMoney(val)}`);renderPage();
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('POST', '/api/loyalty/redeem', { customer_name:customerName }).catch(e=>console.warn('Loyalty redeem sync:', e.message));
+  }
 }
 
 
@@ -14747,6 +14812,7 @@ const OB_GUIDE = {
     def: 'حقلان بس: «رصيد البنك» (المبلغ الموجود بحسابك البنكي) و«رصيد الصندوق» (الكاش الموجود فعليًا لديك). اجمع أرصدة كل حساباتك البنكية برقم واحد إذا كان عندك أكثر من حساب.',
     example: 'مثال: رصيد البنك 30,000 ريال + رصيد الصندوق 5,000 ريال = 35,000 ريال إجمالي',
     account: 'يذهب لحساب 1100 «النقدية والبنك» (مدين)',
+    not_included: 'لا تُدخل هنا أي مبلغ لعميل مدين لك (تلك خطوة العملاء) ولا أي مبلغ أنت مدين به لمورد (تلك خطوة الموردين) — هذا الحقل حصريًا ما تملكه فعليًا نقدًا أو بالبنك الآن، لا أكثر ولا أقل.',
     panel: 'إذا احتجت لاحقًا تفصيل كل حساب بنكي على حدة (أكثر من بنك)، تقدر تضيف حسابات بنكية إضافية من صفحة «الخزينة» بعد إكمال المعالج — الخطوة هنا بترصد فقط الإجمالي كنقطة بداية.',
   },
   products: {
@@ -14760,17 +14826,20 @@ const OB_GUIDE = {
     def: 'أضف كل عميل عليه مبلغ لك لم يسدده بعد (مبيعات سابقة قبل استخدامك يقظ). المصطلح المحاسبي لهذا الرقم «الذمم المدينة» — فلوس مستحقة لك على الغير.',
     example: 'مثال: متجر الأمل يدين لك بمبلغ 3,000 ريال',
     account: 'يذهب لحساب 1200 «الذمم المدينة» (مدين)',
+    not_included: 'لا تُدخل هنا كامل مبيعاتك التاريخية للعميل — فقط الجزء غير المُسدَّد حاليًا. عميل مسدّد حسابه بالكامل لا يُذكَر هنا إطلاقًا (لا رصيد له = لا داعي لإضافته).',
     panel: 'هذي الخطوة لا تظهر لك لو كان اشتراكك على الباقة الأساسية — إدارة العملاء متاحة فقط بباقتَي النمو والاحترافية.',
   },
   suppliers: {
     def: 'نفس فكرة خطوة العملاء لكن بالعكس: أضف كل مورد أنت مدين له بمبلغ لم تسدده بعد. المصطلح المحاسبي «الذمم الدائنة» — فلوس مستحقة عليك للغير.',
     example: 'مثال: مصنع النور مستحق له مبلغ 2,500 ريال',
     account: 'يذهب لحساب 2100 «الذمم الدائنة» (دائن)',
+    not_included: 'لا تُدخل هنا مورد سددت له كامل مستحقاته — فقط المبلغ المتبقي غير المسدَّد حاليًا. لا تُدخل هنا أيضًا أي التزام دوري ثابت (إيجار، اشتراكات) — لذلك خطوة مستقلة (الالتزامات الدورية).',
   },
   fixed_assets: {
     def: 'أي ممتلكات طويلة الأجل تستخدمها بنشاطك ولا تُباع كبضاعة عادية: سيارة توصيل، أجهزة كمبيوتر، معدات، عقار...',
     example: 'مثال: سيارة توصيل بقيمة دفترية حالية 25,000 ريال',
     account: 'يذهب لحساب 1500 «الأصول الثابتة» (مدين)',
+    not_included: 'لا تُدخل هنا أي بضاعة تُباع للعملاء (تلك خطوة المخزون) ولا أي أصل مستأجر لا تملكه فعليًا (لو تستأجر السيارة أو المعدات، لا تُدخلها هنا إطلاقًا — الملكية شرط أساسي).',
     panel: 'أدخل القيمة الدفترية الحالية للأصل (قيمته التقريبية اليوم)، وليس بالضرورة سعر شرائه الأصلي لو مضى عليه وقت طويل.',
   },
   obligations: {
@@ -14788,7 +14857,8 @@ const OB_GUIDE = {
   capital: {
     def: 'رأس المال = إجمالي الأصول − إجمالي الالتزامات. النظام يحسب لك رقمًا مقترحًا تلقائيًا بناءً على كل ما أدخلته بالخطوات السابقة.',
     example: 'مثال: أصول 67,000 − التزامات 6,500 = رأس مال مقترح 60,500 ريال',
-    account: 'يذهب لحساب 3000 «رأس المال الافتتاحي» (دائن)',
+    account: 'يذهب لحساب 3000 «رأس المال الافتتاحي» (دائن) — أو مدين لو كانت التزاماتك أكبر من أصولك (عجز حقيقي، حالة نادرة لكن ممكنة)',
+    not_included: 'هذا رقم يُحسَب تلقائيًا من بقية الخطوات — لا تكتب فيه مبلغًا عشوائيًا أو تخمينيًا. عدّله يدويًا فقط لو عندك رقم دقيق موثّق من مصدر خارجي (مثلًا ميزانية سلّمك إياها محاسبك السابق)؛ النظام دائمًا يضمن توازن القيد حتى لو عدّلته لرقم لا يطابق الحساب تمامًا.',
     panel: 'غيّر الرقم المقترح يدويًا فقط لو كان عندك رقم دقيق من مصدر خارجي (مثلًا ميزانية سلّمك إياها محاسبك السابق). بغير ذلك، اترك الرقم المقترح كما هو.',
   },
   review: {
@@ -14825,6 +14895,144 @@ function showOBGuidePanel() {
 }
 function closeOBGuidePanel() { el('ob-guide-panel')?.remove(); }
 
+const OB_STEP_TITLES = { cash:'💰 النقدية والبنك', products:'📦 المخزون', customers:'👥 العملاء', suppliers:'🏭 الموردون',
+  fixed_assets:'🏗️ الأصول الثابتة', obligations:'📋 الالتزامات الدورية', employees:'👨‍💼 الموظفون', capital:'💼 رأس المال', review:'✅ مراجعة وتأكيد' };
+
+// ============ مساعد ذكي مرافق لمعالج الأرصدة الافتتاحية ============
+// عمود جانبي ثابت (لا فقاعة عائمة بزاوية الشاشة زي المساعد العام) — يرحّب
+// بالمستخدم باسمه واسم منشأته، ويشرح كل خطوة تلقائيًا فور الوصول لها بالاعتماد
+// على محتوى OB_GUIDE أعلاه، ويقدر يجاوب على أي سؤال إضافي. مُعفى بالكامل وعمدًا
+// من حدود استخدام الذكاء الاصطناعي اليومية (endpoint منفصل كليًا عن /assistant).
+let _obChatMessages   = [];  // {role:'assistant'|'user', text, pending?}
+let _obChatApiHistory = [];  // {question, answer} — تُرسَل كـhistory للسياق
+let _obChatSeenSteps  = {};  // {stepKey:true} — شرح تلقائي مرة واحدة فقط بالجلسة
+
+function obChatWelcomeText() {
+  const name    = currentUser?.full_name || '';
+  const company = getDB().settings?.company_name || '';
+  return `أهلاً بك في منصة يقظ، يقظ نظام محاسبي يساعدك على إدارة أعمالك بسهولة. أهلاً بك ${name} وأهلاً بمنشأتك ${company} في منصة يقظ المحاسبية، يقظ أكثر من مجرد نظام محاسبي.`;
+}
+
+function obChatPushWelcome() {
+  if (_obChatMessages.length) return;
+  _obChatMessages.push({ role:'assistant', text: obChatWelcomeText() });
+}
+
+// نفس حسابات الإجماليات المستخدمة بخطوتي رأس المال والمراجعة (obStep8/obStep9)،
+// مبسّطة هنا لملخص مضغوط يُرسَل كسياق للمساعد فقط — لا تُستخدم لأي عرض بالواجهة
+function obChatDataSnapshot() {
+  const totalCash    = (_obData.cash_box||0)+(_obData.cash_bank||0);
+  const inventoryVal = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
+  const receivables  = _obData.customers.reduce((s,c)=>s+c.balance,0);
+  const fixedAssets  = _obData.fixed_assets.reduce((s,a)=>s+a.value,0);
+  const payables     = _obData.suppliers.reduce((s,x)=>s+x.balance,0);
+  const obligV       = _obData.obligations.reduce((s,o)=>s+o.amount,0);
+  return {
+    رصيد_النقدية: totalCash,
+    عدد_الأصناف: _obData.products.length, قيمة_المخزون: inventoryVal,
+    عدد_العملاء: _obData.customers.length, إجمالي_الذمم_المدينة: receivables,
+    عدد_الموردين: _obData.suppliers.length, إجمالي_الذمم_الدائنة: payables,
+    عدد_الأصول_الثابتة: _obData.fixed_assets.length, قيمة_الأصول_الثابتة: fixedAssets,
+    عدد_الالتزامات: _obData.obligations.length, إجمالي_الالتزامات: obligV,
+    عدد_الموظفين: _obData.employees.length,
+    رأس_المال_المُدخل: _obData.capital || null,
+  };
+}
+
+function obChatExplainStepIfNeeded() {
+  const key = _obActiveSteps()[_obStep-1];
+  if (!key || _obChatSeenSteps[key]) return;
+  _obChatSeenSteps[key] = true;
+  obChatSendProactive(key);
+}
+
+async function obChatSendProactive(key) {
+  _obChatMessages.push({ role:'assistant', text:null, pending:true });
+  const msgIdx = _obChatMessages.length - 1;
+  el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
+  obChatScrollToBottom();
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/ai/opening-balance-assistant', {
+      question: 'اشرح لي هذه الخطوة الحالية بأسلوب ودود ومختصر.',
+      context: { step_key:key, step_title:OB_STEP_TITLES[key]||key, step_guide:OB_GUIDE[key]||{}, ob_data_snapshot:obChatDataSnapshot(), is_proactive:true },
+      history: _obChatApiHistory.slice(-6),
+    });
+    const answer = res?.answer || (lang==='ar'?'تعذّر تحميل الشرح الآن.':'Could not load the explanation now.');
+    _obChatMessages[msgIdx] = { role:'assistant', text:answer };
+    _obChatApiHistory.push({ question:`[شرح تلقائي لخطوة: ${OB_STEP_TITLES[key]||key}]`, answer });
+  } catch (e) {
+    _obChatMessages[msgIdx] = { role:'assistant', text: lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.' };
+  }
+  el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
+  obChatScrollToBottom();
+}
+
+async function obChatSend() {
+  const inp = el('ob-chat-inp');
+  const question = (inp?.value||'').trim();
+  if (!question) return;
+  if (inp) inp.value = '';
+  const key = _obActiveSteps()[_obStep-1];
+  _obChatMessages.push({ role:'user', text:question });
+  _obChatMessages.push({ role:'assistant', text:null, pending:true });
+  const msgIdx = _obChatMessages.length - 1;
+  el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
+  obChatScrollToBottom();
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/ai/opening-balance-assistant', {
+      question,
+      context: { step_key:key, step_title:OB_STEP_TITLES[key]||key, step_guide:OB_GUIDE[key]||{}, ob_data_snapshot:obChatDataSnapshot() },
+      history: _obChatApiHistory.slice(-6),
+    });
+    const answer = res?.answer || (lang==='ar'?'تعذّر الحصول على رد الآن.':'Could not get a reply now.');
+    _obChatMessages[msgIdx] = { role:'assistant', text:answer };
+    _obChatApiHistory.push({ question, answer });
+  } catch (e) {
+    _obChatMessages[msgIdx] = { role:'assistant', text: lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.' };
+  }
+  el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
+  obChatScrollToBottom();
+}
+
+function renderOBChatMessagesHtml() {
+  return _obChatMessages.map(m => {
+    if (m.role === 'user') {
+      return `<div style="align-self:flex-end;max-width:88%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:9px 13px;border-radius:16px 16px 4px 16px;font-size:13px;line-height:1.6;word-break:break-word;margin-bottom:8px;margin-inline-start:auto;">${sanitize(m.text)}</div>`;
+    }
+    if (m.pending) {
+      return `<div style="align-self:flex-start;max-width:92%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:16px;color:var(--text-muted);font-size:20px;letter-spacing:4px;margin-bottom:8px;">●●●</div>`;
+    }
+    return `<div style="align-self:flex-start;max-width:92%;background:var(--bg);border:1px solid var(--border);padding:9px 13px;border-radius:16px 16px 16px 4px;font-size:13px;line-height:1.8;color:var(--text-main);word-break:break-word;margin-bottom:8px;">${sanitize(m.text||'').replace(/\n/g,'<br>')}</div>`;
+  }).join('');
+}
+
+function renderOBChatPanelHtml() {
+  return `<div style="display:flex;flex-direction:column;width:100%;max-width:340px;min-width:280px;align-self:stretch;max-height:calc(100vh - 40px);background:var(--card);border-radius:20px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);">
+    <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:16px 20px;color:#fff;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:22px;">🤖</span>
+        <div>
+          <div style="font-weight:900;font-size:14px;">${lang==='ar'?'مساعد الأرصدة الافتتاحية':'Opening Balances Assistant'}</div>
+          <div style="font-size:11px;opacity:.85;">${lang==='ar'?'اسألني عن أي خطوة':'Ask me about any step'}</div>
+        </div>
+      </div>
+    </div>
+    <div id="ob-chat-messages" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;min-height:220px;">
+      ${renderOBChatMessagesHtml()}
+    </div>
+    <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;">
+      <input id="ob-chat-inp" class="input" placeholder="${lang==='ar'?'اكتب سؤالك هنا...':'Type your question...'}"
+        style="flex:1;padding:8px 12px;font-size:13px;border-radius:10px;"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();obChatSend();}" />
+      <button onclick="obChatSend()" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:18px;flex-shrink:0;">↑</button>
+    </div>
+  </div>`;
+}
+
+function obChatScrollToBottom() {
+  setTimeout(() => { const m = el('ob-chat-messages'); if (m) m.scrollTop = m.scrollHeight; }, 60);
+}
+
 // خطوات المعالج مبنية على حدود الباقة — الباقة الأساسية بدون عملاء أو التزامات دورية
 const _OB_ALL_STEPS = ['cash','products','customers','suppliers','fixed_assets','obligations','employees','capital','review'];
 // عند "تعديل" أرصدة سبق حفظها فعليًا (وليس أول تعبئة)، نستبعد المنتجات/الموظفين/
@@ -14838,11 +15046,13 @@ function _obActiveSteps() {
   return _OB_ALL_STEPS.filter(s =>
     (s!=='customers'   || hasPlanPage('customers')) &&
     (s!=='obligations' || hasPlanPage('obligations')) &&
+    (s!=='employees'   || hasPlanPage('employees')) &&
     (!_obEditMode || !['products','employees','obligations'].includes(s))
   );
 }
 function _obStepCount() { return _obActiveSteps().length; }
 let _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
+let _obImportStaging = []; // {name, qty, buy_price, sell_price} — صفوف مؤقتة قبل التأكيد بخطوة المخزون
 
 function checkOpeningBalances() {
   if (!currentUser || currentUser.role !== 'owner') return;
@@ -14865,7 +15075,12 @@ function showOpeningBalancesWizard(editMode) {
   // حتى لا تدخل في حساب القيود الافتتاحية رغم إخفاء خطواتها من المعالج
   if (!hasPlanPage('customers'))   _obData.customers = [];
   if (!hasPlanPage('obligations')) _obData.obligations = [];
+  if (!hasPlanPage('employees'))   _obData.employees = [];
+  _obImportStaging = [];
+  _obChatMessages = []; _obChatApiHistory = []; _obChatSeenSteps = {};
+  obChatPushWelcome();
   renderOBWizard();
+  obChatExplainStepIfNeeded();
 }
 
 function obReadStep() {
@@ -14875,12 +15090,14 @@ function obReadStep() {
     _obData.cash_bank = parseFloat(el('ob-cash-bank')?.value||0)||0;
   } else if (key==='capital') {
     _obData.capital = parseFloat(el('ob-capital')?.value||0)||0;
+  } else if (key==='products') {
+    _obData.branch_id = readBranchField('ob-branch');
   }
 }
 
-function obNextStep() { obReadStep(); if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); } }
-function obSkipStep()  { if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); } }
-function obPrevStep()  { obReadStep(); if (_obStep > 1) { _obStep--; renderOBWizard(); } }
+function obNextStep() { obReadStep(); if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); obChatExplainStepIfNeeded(); } }
+function obSkipStep()  { if (_obStep < _obStepCount()) { _obStep++; renderOBWizard(); obChatExplainStepIfNeeded(); } }
+function obPrevStep()  { obReadStep(); if (_obStep > 1) { _obStep--; renderOBWizard(); obChatExplainStepIfNeeded(); } }
 
 function obSkipWizard() {
   if (!confirm('هل تريد تخطّي الأرصدة الافتتاحية الآن؟ يمكنك إضافتها لاحقاً من الإعدادات.')) return;
@@ -14903,11 +15120,127 @@ function obAddProduct() {
   const buy  = parseFloat(el('ob-p-buy')?.value||0)||0;
   const sell = parseFloat(el('ob-p-sell')?.value||0)||0;
   if (!name || qty<=0) { showToast('أدخل اسم الصنف والكمية','error'); return; }
-  _obData.products.push({ name, qty, buy_price:buy, sell_price:sell });
+  // نحفظ اختيار الفرع الحالي بالنموذج قبل إعادة رسم الخطوة، وإلا يرجع القائمة
+  // المنسدلة تعرض الفرع الافتراضي بدل اختيار المستخدم الفعلي (renderOBStepContent
+  // يبني select جديدًا من _obData.branch_id، اللي ما يتحدّث إلا بـobReadStep عادة)
+  _obData.branch_id = readBranchField('ob-branch');
+  // كل صنف يحمل فرعه الخاص وقت إضافته — لا نعتمد على _obData.branch_id وحده
+  // بوقت الحفظ النهائي، وإلا تنهار كل الدفعات على آخر فرع مُختار بالشاشة (راجع
+  // نفس المنطق بـobImportCommitStaging لاستيراد الإكسل/الذكاء الاصطناعي)
+  _obData.products.push({ name, qty, buy_price:buy, sell_price:sell, branch_id:_obData.branch_id });
   el('ob-p-name').value=''; el('ob-p-qty').value='1'; el('ob-p-buy').value=''; el('ob-p-sell').value='';
   el('ob-step-content').innerHTML = renderOBStepContent(); el('ob-p-name')?.focus(); refreshIcons();
 }
-function obRemoveProduct(i) { _obData.products.splice(i,1); el('ob-step-content').innerHTML=renderOBStepContent(); refreshIcons(); }
+function obRemoveProduct(i) {
+  _obData.branch_id = readBranchField('ob-branch');
+  _obData.products.splice(i,1); el('ob-step-content').innerHTML=renderOBStepContent(); refreshIcons();
+}
+
+function _fileToBase64Raw(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(String(e.target.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function obImportExcelChange(input) {
+  const file = input.files[0]; if (!file) return;
+  const status = el('ob-import-status');
+  if (status) status.innerHTML = `<div style="text-align:center;padding:10px;color:var(--text-muted);font-size:12px;">⏳ ${lang==='ar'?'جاري القراءة...':'Reading...'}</div>`;
+  if (typeof XLSX === 'undefined') {
+    if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${lang==='ar'?'مكتبة Excel غير محملة':'Excel library not loaded'}</div>`;
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      const rows = data.slice(1).filter(r=>r.some(c=>String(c).trim()));
+      const items = rows.filter(r=>r[0]).map(r=>({
+        name: String(r[0]||'').trim(),
+        qty: Number(r[1])||0,
+        buy_price: Number(r[2])||0,
+        sell_price: Number(r[3])||0,
+      })).filter(it=>it.name);
+      if (!items.length) {
+        if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${lang==='ar'?'لم يتم العثور على أي صنف بالملف':'No items found in the file'}</div>`;
+        return;
+      }
+      _obImportStaging.push(...items);
+      _obData.branch_id = readBranchField('ob-branch');
+      if (status) status.innerHTML = '';
+      el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
+      showToast(`✅ ${lang==='ar'?`تم استيراد ${items.length} صنف — راجعها قبل الإضافة`:`Imported ${items.length} items — review before adding`}`);
+    } catch (err) {
+      if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${sanitize(err?.message||(lang==='ar'?'تعذّرت قراءة الملف':'Could not read file'))}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+async function obImportAIChange(input) {
+  const file = input.files[0]; if (!file) return;
+  const status = el('ob-import-status');
+  if (status) status.innerHTML = `<div style="text-align:center;padding:10px;color:var(--text-muted);font-size:12px;">🤖 ${lang==='ar'?'جاري قراءة الملف بالذكاء الاصطناعي... قد يستغرق بضع ثوانٍ':'Reading with AI... this may take a few seconds'}</div>`;
+  try {
+    const isPDF = file.type==='application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const body = isPDF
+      ? { pdf_base64: await _fileToBase64Raw(file) }
+      : { image_base64: await _resizeImage(file), mime_type: 'image/jpeg' };
+    const res = await window._cloudApiFetch('POST', '/api/ai/extract-inventory', body);
+    if (!res?.success) {
+      if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${sanitize(res?.message||(lang==='ar'?'فشل الاستخراج':'Extraction failed'))}</div>`;
+      return;
+    }
+    const items = (res.items||[]).map(it=>({
+      name: String(it.name||'').trim(),
+      qty: Number(it.qty)||0,
+      buy_price: Number(it.buy_price)||0,
+      sell_price: Number(it.sell_price)||0,
+    })).filter(it=>it.name);
+    if (!items.length) {
+      if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${lang==='ar'?'ما قدر الذكاء الاصطناعي يقرأ أي صنف من الملف — جرّب صورة أوضح':'AI could not read any items — try a clearer file'}</div>`;
+      return;
+    }
+    _obImportStaging.push(...items);
+    _obData.branch_id = readBranchField('ob-branch');
+    if (status) status.innerHTML = '';
+    el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
+    showToast(`✅ ${lang==='ar'?`تم استخراج ${items.length} صنف بالذكاء الاصطناعي — راجعها قبل الإضافة`:`Extracted ${items.length} items via AI — review before adding`}`);
+  } catch (err) {
+    if (status) status.innerHTML = `<div style="background:#fee2e2;padding:10px;border-radius:8px;color:var(--danger);font-size:12px;">⚠️ ${sanitize(err?.message||(lang==='ar'?'خطأ أثناء الاستخراج':'Extraction error'))}</div>`;
+  }
+  input.value = '';
+}
+
+function obImportStagingEdit(i, field, value) {
+  if (!_obImportStaging[i]) return;
+  _obImportStaging[i][field] = (field==='name') ? value : (Number(value)||0);
+}
+function obImportRemoveStagingRow(i) {
+  _obImportStaging.splice(i,1);
+  el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
+}
+function obImportClearStaging() {
+  _obImportStaging = [];
+  el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
+}
+function obImportCommitStaging() {
+  _obData.branch_id = readBranchField('ob-branch');
+  const valid = _obImportStaging.filter(it=>it.name && it.qty>0);
+  if (!valid.length) { showToast(lang==='ar'?'⚠️ لا توجد أصناف صالحة (تحتاج اسم وكمية أكبر من صفر)':'⚠️ No valid items (need name and qty > 0)','error'); return; }
+  // كل عنصر مستورَد يحمل فرع الدفعة الحالية بالضبط — يسمح باستيراد دفعات
+  // متتالية لفروع مختلفة بنفس جلسة المعالج قبل الحفظ النهائي (راجع obAddProduct)
+  _obData.products.push(...valid.map(it => ({ ...it, branch_id:_obData.branch_id })));
+  _obImportStaging = [];
+  el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
+  showToast(`✅ ${lang==='ar'?`تمت إضافة ${valid.length} صنف للمخزون`:`Added ${valid.length} items to inventory`}`);
+}
 
 function obAddCustomer() {
   const name    = (el('ob-c-name')?.value||'').trim();
@@ -14969,7 +15302,7 @@ function renderOBWizard() {
   const curKey = active[_obStep-1];
   const mc = el('modal-container');
   if (!mc) return;
-  mc.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 16px;">'
+  mc.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:16px;overflow-y:auto;padding:20px 16px;">'
     +'<div style="background:var(--card);border-radius:20px;width:100%;max-width:700px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);margin:auto;">'
     +'<div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);padding:22px 28px;color:#fff;">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
@@ -14987,8 +15320,11 @@ function renderOBWizard() {
     +'<div style="padding:14px 28px 22px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);">'
     +'<div>'+(_obStep>1?'<button class="btn btn-outline" onclick="obPrevStep()">← السابق</button>':'<button class="btn btn-outline" style="color:var(--text-muted);" onclick="obSkipWizard()">تخطّ الآن</button>')+'</div>'
     +'<div style="display:flex;gap:8px;">'+(_obStep<stepCount?'<button class="btn btn-outline" onclick="obSkipStep()">تخطّ</button><button class="btn btn-primary" onclick="obNextStep()">التالي →</button>':'<button class="btn btn-primary" style="padding:10px 32px;font-size:14px;" onclick="obSaveAll()">✓ حفظ والبدء الآن</button>')+'</div>'
-    +'</div></div></div>';
+    +'</div></div>'
+    +renderOBChatPanelHtml()
+    +'</div>';
   refreshIcons();
+  obChatScrollToBottom();
 }
 
 function renderOBStepContent() {
@@ -15019,9 +15355,33 @@ function obStep1() {
 function obStep2() {
   const total = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
   const rows  = _obData.products.map((p,i)=>'<tr><td><b>'+p.name+'</b></td><td>'+p.qty+'</td><td>'+fmtMoney(p.buy_price)+'</td><td>'+fmtMoney(p.sell_price)+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(p.qty*p.buy_price)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveProduct('+i+')">✕</button></td></tr>').join('');
+  const stagingRows = _obImportStaging.map((it,i)=>
+    '<tr>'
+    +'<td><input class="input" style="font-size:12px;padding:4px 6px;" value="'+sanitize(it.name)+'" onchange="obImportStagingEdit('+i+',\'name\',this.value)" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:70px;" value="'+it.qty+'" onchange="obImportStagingEdit('+i+',\'qty\',this.value)" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.buy_price+'" onchange="obImportStagingEdit('+i+',\'buy_price\',this.value)" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.sell_price+'" onchange="obImportStagingEdit('+i+',\'sell_price\',this.value)" /></td>'
+    +'<td><button class="icon-btn" style="width:26px;height:26px;" onclick="obImportRemoveStagingRow('+i+')">✕</button></td>'
+    +'</tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أضف كل صنف في مخزونك الحالي مع كميته وأسعاره.</p>'
     +obGuideBlock('products')
+    +branchFieldHtml('ob-branch', lang==='ar'?'الفرع الذي سيُضاف له مخزون هذه الخطوة':'Branch to add this stock to', _obData.branch_id)
+    +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;">'+(lang==='ar'?'أو استورد دفعة كاملة بدلاً من الإدخال يدويًا:':'Or import a whole batch instead of entering manually:')+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">📊 '+(lang==='ar'?'استيراد من Excel':'Import from Excel')+'<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="obImportExcelChange(this)" /></label>'
+    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">🤖 '+(lang==='ar'?'تفريغ بالذكاء الاصطناعي (PDF/صورة)':'AI extract (PDF/image)')+'<input type="file" accept=".pdf,image/*" style="display:none;" onchange="obImportAIChange(this)" /></label>'
+    +'</div>'
+    +'<div id="ob-import-status"></div>'
+    +(_obImportStaging.length>0
+      ? '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl" style="font-size:12px;"><thead><tr><th>'+(lang==='ar'?'الصنف':'Item')+'</th><th>'+(lang==='ar'?'الكمية':'Qty')+'</th><th>'+(lang==='ar'?'سعر الشراء':'Buy')+'</th><th>'+(lang==='ar'?'سعر البيع':'Sell')+'</th><th></th></tr></thead><tbody>'+stagingRows+'</tbody></table></div>'
+        +'<div style="display:flex;gap:8px;margin-top:8px;">'
+        +'<button class="btn btn-primary" style="font-size:12px;" onclick="obImportCommitStaging()">✓ '+(lang==='ar'?'إضافة الكل للمخزون':'Add all to inventory')+'</button>'
+        +'<button class="btn btn-outline" style="font-size:12px;" onclick="obImportClearStaging()">'+(lang==='ar'?'إلغاء':'Cancel')+'</button>'
+        +'</div>'
+      : '')
+    +'</div>'
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:end;">'
     +'<div><label class="form-label" style="font-size:11px;">اسم الصنف *</label><input class="input" id="ob-p-name" placeholder="مثال: زيت زيتون" onkeydown="if(event.key===\'Enter\')obAddProduct()" /></div>'
@@ -15140,7 +15500,7 @@ function obStep8() {
     + _obData.customers.reduce((s,c)=>s+c.balance,0)
     + _obData.fixed_assets.reduce((s,a)=>s+a.value,0);
   const totalLiab  = _obData.suppliers.reduce((s,x)=>s+x.balance,0)+_obData.obligations.reduce((s,o)=>s+o.amount,0);
-  const suggested  = Math.max(0, totalAssets - totalLiab);
+  const suggested  = totalAssets - totalLiab;
   const capVal     = _obData.capital || suggested || '';
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">رأس المال هو المبلغ الذي استثمرته في المنشأة من مالك الخاص.</p>'
@@ -15169,7 +15529,7 @@ function obStep9() {
   const obligV       = _obData.obligations.reduce((s,o)=>s+o.amount,0);
   const totalAssets  = totalCash+inventoryVal+receivables+fixedAssets;
   const totalLiab    = payables+obligV;
-  const capital      = _obData.capital || Math.max(0,totalAssets-totalLiab);
+  const capital      = _obData.capital || (totalAssets-totalLiab);
   const totalSal     = _obData.employees.reduce((s,e)=>s+e.salary,0);
 
   const row  = (lbl,val,color)=>'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="color:var(--text-muted);">'+lbl+'</span><span style="font-weight:700;'+(color?'color:'+color:'')+'">' +fmtMoney(val)+'</span></div>';
@@ -15233,7 +15593,6 @@ function obSaveAll() {
   const fixedAssets  = _obData.fixed_assets.reduce((s,a)=>s+a.value,0);
   const payables     = _obData.suppliers.reduce((s,x)=>s+x.balance,0);
   const obligV       = _obData.obligations.reduce((s,o)=>s+o.amount,0);
-  const capital      = _obData.capital || Math.max(0,(totalCash+inventoryVal+receivables+fixedAssets)-(payables+obligV));
 
   // الخزينة — عند التعديل نطرح مساهمة الرصيد الافتتاحي القديم أولًا قبل إضافة الجديد
   if (!db.treasury) db.treasury = { balance:0, moves:[] };
@@ -15241,13 +15600,23 @@ function obSaveAll() {
   if (isEdit) {
     const oldTotalCash = (oldData.cash_box||0)+(oldData.cash_bank||0);
     if (oldTotalCash > 0) db.treasury.balance = Math.round((db.treasury.balance - oldTotalCash) * 100) / 100;
-    const oldMoveIdx = db.treasury.moves.findIndex(m => m.reference==='OPENING');
-    if (oldMoveIdx >= 0) db.treasury.moves.splice(oldMoveIdx, 1);
+    // حذف كل حركات الرصيد الافتتاحي القديمة (قد تكون حركة واحدة قديمة النمط
+    // قبل هذا الإصلاح، أو حركتان منفصلتان نقدي/بنك بعده) — لا نكتفي بأول تطابق
+    db.treasury.moves = db.treasury.moves.filter(m => m.reference !== 'OPENING');
+  }
+  // حركتان منفصلتان بدل حركة مدمجة واحدة — بلا method تُحتسَب "نقدي" تلقائيًا
+  // بصفحة الخزينة (isBankTreasuryMethod)، وبـmethod:'تحويل' تُحتسَب "بنك" بشكل
+  // صحيح؛ بدون هذا الفصل كانت كل النقدية/البنك تُحتسَب "نقدي" بالكامل
+  if (_obData.cash_box > 0) {
+    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_box,
+      description:'رصيد افتتاحي — نقدية', reference:'OPENING', date:new Date().toISOString() });
+  }
+  if (_obData.cash_bank > 0) {
+    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_bank,
+      method:'تحويل', description:'رصيد افتتاحي — بنك', reference:'OPENING', date:new Date().toISOString() });
   }
   if (totalCash > 0) {
     db.treasury.balance = Math.round((db.treasury.balance + totalCash) * 100) / 100;
-    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:totalCash,
-      description:'رصيد افتتاحي — نقدية وبنك', reference:'OPENING', date:new Date().toISOString() });
   }
 
   // المنتجات/الموظفون/الالتزامات — تُنشأ مرة واحدة فقط بأول تعبئة. بعدها تصير
@@ -15255,31 +15624,41 @@ function obSaveAll() {
   // صفحاتها الخاصة، لا من إعادة تشغيل هذا المعالج — لذلك تُستبعد خطواتها أصلًا
   // من الواجهة بوضع التعديل (_obActiveSteps)، ونتجنب هنا إعادة إنشائها مكرَّرة
   if (!isEdit) {
-    // المنتجات — الكمية الافتتاحية تُنسب لمستودع الفرع النشط (البوابة الإجبارية
-    // تضمن وجود فرع/مستودع دائمًا قبل الوصول لهذا المعالج)
+    // المنتجات — الكمية الافتتاحية تُنسب لمستودع الفرع المُختار صراحةً بهذه الخطوة
+    // (لو الشركة عندها أكثر من فرع)، وإلا فرع المستخدم النشط كما كان سابقًا
     if (!db.products) db.products = [];
     if (!db.nextId.product) db.nextId.product = 1;
-    const _obWarehouseId = resolveActiveWarehouseId();
+    // فرع احتياطي فقط لو المنتج (نادرًا) بلا branch_id خاص به — بيانات قديمة
+    // أو مسار لم يمرّ بـobAddProduct/obImportCommitStaging
+    const _obFallbackBranchId = _obData.branch_id || resolveActiveBranchId();
     _obData.products.forEach(p => {
       const pid = nextId(db,'product');
-      db.products.push({ id:pid, code:'OB-'+pid, name:p.name, category:'بضاعة',
-        buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0, created_at:new Date().toISOString() });
+      // كل منتج يحمل فرعه الخاص المُسجَّل وقت إضافته — لا فرعًا واحدًا مشتركًا
+      // لكل المنتجات، وإلا تنهار دفعات الاستيراد المتعددة لفروع مختلفة على آخر
+      // فرع مُختار بالشاشة وقت الحفظ (راجع obAddProduct/obImportCommitStaging)
+      const pBranchId    = p.branch_id || _obFallbackBranchId;
+      const pWarehouseId = resolveWarehouseIdForBranch(db, pBranchId);
+      db.products.push({ id:pid, code:'OB-'+pid, name:p.name, category:'بضاعة', unit:'قطعة',
+        buy_price:p.buy_price, sell_price:p.sell_price, qty:p.qty, min_qty:0,
+        branch_id:pBranchId, created_at:new Date().toISOString() });
       // p.qty الإجمالي انضبط أعلاه مباشرة عند الإنشاء — هنا فقط نسجّل نصيب
-      // المستودع النشط منها بدون مضاعفتها (لا نستخدم mutateWarehouseStock هنا)
-      if (p.qty && _obWarehouseId) {
+      // المستودع المختار منها بدون مضاعفتها (لا نستخدم mutateWarehouseStock هنا)
+      if (p.qty && pWarehouseId) {
         if (!db.productStock) db.productStock = {};
         if (!db.productStock[pid]) db.productStock[pid] = {};
-        db.productStock[pid][_obWarehouseId] = p.qty;
+        db.productStock[pid][pWarehouseId] = p.qty;
       }
     });
 
-    // الموظفون
-    if (!db.employees) db.employees = [];
-    if (!db.nextId.employee) db.nextId.employee = 1;
-    _obData.employees.forEach(e => {
-      db.employees.push({ id:nextId(db,'employee'), name:e.name, job_title:e.job_title, salary:e.salary,
-        hire_date:new Date().toISOString().slice(0,10), active:true, created_at:new Date().toISOString() });
-    });
+    // الموظفون — غير متاحة في الباقة الأساسية
+    if (hasPlanPage('employees')) {
+      if (!db.employees) db.employees = [];
+      if (!db.nextId.employee) db.nextId.employee = 1;
+      _obData.employees.forEach(e => {
+        db.employees.push({ id:nextId(db,'employee'), name:e.name, job_title:e.job_title, salary:e.salary,
+          hire_date:new Date().toISOString().slice(0,10), active:true, created_at:new Date().toISOString() });
+      });
+    }
 
     // الالتزامات — غير متاحة في الباقة الأساسية
     if (hasPlanPage('obligations')) {
@@ -15340,7 +15719,18 @@ function obSaveAll() {
   if (fixedAssets>0)  jEntries.push({ account:'الأصول الثابتة',      account_code:'1500', side:'debit',  amount:fixedAssets  });
   if (payables>0)     jEntries.push({ account:'الذمم الدائنة',       account_code:'2100', side:'credit', amount:payables     });
   if (obligV>0)       jEntries.push({ account:'الالتزامات الدورية',  account_code:'2300', side:'credit', amount:obligV       });
-  if (capital>0)      jEntries.push({ account:'رأس المال الافتتاحي', account_code:'3000', side:'credit', amount:capital      });
+  // رأس المال هو الرقم المتبقي (residual) محاسبيًا بالتعريف — نحسبه هنا من
+  // مجاميع المدين/الدائن الفعلية مباشرة بدل الثقة بـ_obData.capital المُدخَل
+  // يدويًا، حتى لو المستخدم غيّره لرقم لا يطابق (رصيد+مخزون+ذمم+أصول)−(ذمم+التزامات)
+  // بالضبط — يضمن مدين=دائن دائمًا مهما كُتب بحقل رأس المال. لو الالتزامات أكبر
+  // من الأصول (عجز حقيقي)، يُنشَر كمدين على 3000 بدل تصفيره صامتًا
+  const debitSum    = totalCash + receivables + inventoryVal + fixedAssets;
+  const creditSum   = payables + obligV;
+  const capitalPlug = Math.round((debitSum - creditSum) * 100) / 100;
+  if (Math.abs(capitalPlug) > 0.01) {
+    if (capitalPlug > 0) jEntries.push({ account:'رأس المال الافتتاحي', account_code:'3000', side:'credit', amount:capitalPlug });
+    else jEntries.push({ account:'رأس المال الافتتاحي', account_code:'3000', side:'debit', amount:Math.abs(capitalPlug) });
+  }
   if (jEntries.length > 0) {
     db.journal.push({ id:nextId(db,'journal'), date:new Date().toISOString(),
       description:'قيود افتتاحية — أرصدة بداية النشاط', entries:jEntries, ref:'OPENING' });
@@ -16057,7 +16447,8 @@ async function runAISearchQuery(q) {
       buy_price: parseFloat(p.buy_price)||0,
       sell_price: parseFloat(p.sell_price)||0,
       qty: parseFloat(p.qty)||0, min_qty: parseFloat(p.min_qty)||0,
-      tax_rate: parseFloat(p.tax_rate)||15, notes: p.notes||''
+      tax_rate: parseFloat(p.tax_rate)||15, notes: p.notes||'',
+      ...(p.branch_id ? { branch_id: p.branch_id } : {})
     };
   }
 
@@ -16180,7 +16571,7 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
     try {
-      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes, branchesRes, warehousesRes, stockByWhRes] = await Promise.all([
+      const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes, branchesRes, warehousesRes, stockByWhRes, loyaltyRes, bankReconRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all').catch(() => null),
         apiFetch('GET', '/api/customers?active=all').catch(() => null),
         apiFetch('GET', '/api/suppliers?active=all').catch(() => null),
@@ -16205,6 +16596,8 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/branches').catch(() => null),
         apiFetch('GET', '/api/warehouses').catch(() => null),
         apiFetch('GET', '/api/products/stock-by-warehouse').catch(() => null),
+        apiFetch('GET', '/api/loyalty').catch(() => null),
+        apiFetch('GET', '/api/bank-recon').catch(() => null),
       ]);
 
       const db = getDB();
@@ -16305,6 +16698,20 @@ async function runAISearchQuery(q) {
           id: 'srv-' + row.id, period_type: row.period_type, period_key: row.period_key,
           closed_by_name: row.closed_by_name || '', created_at: row.created_at, _serverId: row.id,
         }));
+      }
+
+      // ── نظام الولاء: حالة موحّدة على مستوى الشركة كاملة — نستبدل بها القائمة
+      //    المحلية بالكامل بثقة كاملة بالسيرفر (لا وجود إلا لو الباقة احترافية
+      //    فعليًا؛ 403 لأي باقة أخرى يعني loyaltyRes يبقى null فلا نغيّر شيء محليًا)
+      if (loyaltyRes?.success) {
+        db.loyalty_settings = loyaltyRes.settings || { enabled:false, points_per_sar:1, sar_per_point:0.1 };
+        db.loyalty_points   = loyaltyRes.points || {};
+      }
+
+      // ── تسوية البنك: نفس مبدأ الولاء — حالة موحّدة، تُستبدَل بالكامل بثقة
+      //    بالسيرفر (غير متاحة إلا للباقة الاحترافية فعليًا)
+      if (bankReconRes?.success && bankReconRes.data) {
+        db.bank_recon = bankReconRes.data;
       }
 
       // ── سندات القبض والصرف: اسحب أي سند سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──

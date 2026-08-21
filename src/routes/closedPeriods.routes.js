@@ -7,7 +7,7 @@ const { loginLimiter } = require('../middleware/rateLimiter');
 
 router.use(auth);
 
-router.get   ('/',              can('accounts.close_period'), ctrl.list);
+router.get   ('/',              can('accounts.close_period'), requireFeature('period_close'), ctrl.list);
 router.post  ('/',              can('accounts.close_period'), requireFeature('period_close'), ctrl.create);
 router.delete('/:id',           can('accounts.close_period'), requireFeature('period_close'), ctrl.remove);
 

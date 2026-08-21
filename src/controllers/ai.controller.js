@@ -43,6 +43,11 @@ const ASSISTANT_DAILY = { basic: 5,   growth: 20,  pro: 150 };
 // استخراج كشف حساب بنكي بالذكاء الاصطناعي — حد شهري منفصل عن تفريغ الفواتير
 // العادي، وغير متاح على الباقة الأساسية والنمو إطلاقًا (تسوية البنك نفسها Pro فقط)
 const BANK_STMT_EXTRACT_LIMITS = { basic: 0, growth: 0, pro: 10 };
+// استيراد قائمة مخزون بالذكاء الاصطناعي (معالج الأرصدة الافتتاحية) — حد شهري
+// منفصل تمامًا عن تفريغ الفواتير العادي، لكن متاح بكل الباقات بما فيها الأساسية
+// (بعكس كشف الحساب البنكي أعلاه) لأن خطوة المخزون بالمعالج تظهر لكل الباقات —
+// تقييده كليًا بالأساسية يحرم أول تجربة إعداد حساب من الميزة وقت الحاجة لها أكثر شي
+const EXTRACT_INVENTORY_LIMITS = { basic: 5, growth: 15, pro: 40 };
 
 async function getPlan(company_id) {
   const { rows: [co] } = await db.query(
@@ -167,6 +172,65 @@ exports.extractBankStatement = async (req, res, next) => {
     res.json({
       success: true,
       transactions: parsed.transactions,
+      usage: { used: used + 1, limit },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في الذكاء الاصطناعي' });
+  }
+};
+
+// POST /api/ai/extract-inventory — استيراد مخزون بالذكاء الاصطناعي (PDF/صورة)
+// لخطوة المخزون بمعالج الأرصدة الافتتاحية. مسقَّف حسب الباقة (تكلفة API حقيقية
+// لكل نداء) لكن غير مقفول على أي باقة إطلاقًا — راجع تعليق EXTRACT_INVENTORY_LIMITS
+exports.extractInventory = async (req, res, next) => {
+  try {
+    const { company_id } = req.user;
+    const { image_base64, pdf_base64 } = req.body;
+    if (!image_base64 && !pdf_base64) {
+      return res.status(400).json({ success: false, message: 'image_base64 أو pdf_base64 مطلوب' });
+    }
+
+    const plan  = await getPlan(company_id);
+    const limit = EXTRACT_INVENTORY_LIMITS[plan] ?? 0;
+
+    if (limit === 0) {
+      return res.status(403).json({
+        success: false,
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message: 'استيراد المخزون بالذكاء الاصطناعي غير متاح لباقتك الحالية.',
+        current_plan: plan,
+      });
+    }
+
+    const used = await getMonthlyUsage(company_id, 'extract_inventory');
+    if (used >= limit) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_LIMIT_REACHED',
+        message: `وصلت للحد الأقصى لاستيراد المخزون بالذكاء الاصطناعي هذا الشهر (${limit} ${limit===1?'مرة':'مرات'}). سيتجدد الحد أول الشهر القادم.`,
+        used, limit,
+      });
+    }
+
+    let result;
+    if (pdf_base64) {
+      const pdfBuffer = Buffer.from(pdf_base64, 'base64');
+      result = await ai.extractInventoryFromPDF(pdfBuffer);
+    } else {
+      result = await ai.extractInventoryFromImages([image_base64]);
+    }
+    await logUsage(company_id, 'extract_inventory', result.tokens_in, result.tokens_out, req.user.sub);
+
+    let parsed = null;
+    try { parsed = JSON.parse(cleanJSON(result.content)); } catch { /* fallback */ }
+
+    if (!parsed || !Array.isArray(parsed.items)) {
+      return res.status(422).json({ success: false, message: 'تعذّرت قراءة قائمة المخزون — حاول برفع ملف أوضح' });
+    }
+
+    res.json({
+      success: true,
+      items: parsed.items,
       usage: { used: used + 1, limit },
     });
   } catch (err) {
@@ -343,6 +407,41 @@ exports.assistant = async (req, res, next) => {
   }
 };
 
+// مساعد مرافق لمعالج "الأرصدة الافتتاحية" فقط — مُعفى بالكامل وعمدًا من أي حدّ
+// يومي/شهري أو باقة (بعكس 'assistant' أعلاه): استخدامه محدود بطبيعته (owner فقط،
+// أثناء إعداد الحساب لمرة واحدة أو تعديل نادر لاحقًا)، ومحكوم بمحتوى step_guide
+// المُرسَل من العميل (OB_GUIDE) لا استكشافًا حرًا لبيانات الشركة المالية الكاملة —
+// لذلك لا حاجة لـscopeAIContext() هنا (مصمَّمة لتصفية بيانات محفوظة حسب صلاحية
+// الموظف؛ هذا المسار owner-only أصلًا عبر بوابة المعالج بالواجهة). نسجّل الاستخدام
+// فقط لغرض التدقيق بلوحة الإدارة، بلا أي فحص حدّ أو رفض 403.
+// حدود كل باقة بمعالج الأرصدة الافتتاحية — تُرسَل للمساعد الذكي كسياق موثوق من
+// السيرفر (لا نعتمد على أي قيمة "plan" قد يرسلها العميل بالطلب، لضمان دقتها)
+const OB_PLAN_LIMITS = {
+  basic:  { customers: false, obligations: false, employees: false },
+  growth: { customers: true,  obligations: true,  employees: true  },
+  pro:    { customers: true,  obligations: true,  employees: true  },
+};
+
+exports.openingBalanceAssistant = async (req, res, next) => {
+  try {
+    const { company_id } = req.user;
+    const { question, history } = req.body;
+    const context = req.body.context && typeof req.body.context === 'object' ? req.body.context : {};
+    if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
+
+    const plan = await getPlan(company_id);
+    context.company_plan = plan;
+    context.plan_step_availability = OB_PLAN_LIMITS[plan] || OB_PLAN_LIMITS.basic;
+
+    const result = await ai.askOpeningBalanceAssistant(question, context, Array.isArray(history) ? history : []);
+    await logUsage(company_id, 'opening_balance_assistant', result.tokens_in, result.tokens_out, req.user.sub, question, result.content);
+
+    res.json({ success: true, answer: result.content });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'خطأ في مساعد الأرصدة الافتتاحية' });
+  }
+};
+
 // بوت الدعم الفني — عام لكل الباقات (مو ميزة مدفوعة، الهدف تقليل تذاكر
 // الدعم البشري لا تقييدها)، حد يومي سخي فقط لمنع إساءة الاستخدام
 const SUPPORT_CHAT_DAILY = 20;
@@ -383,20 +482,22 @@ exports.usage = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const plan = await getPlan(company_id);
-    const [extractUsed, analyzeUsed, assistantDaily, bankStmtUsed] = await Promise.all([
+    const [extractUsed, analyzeUsed, assistantDaily, bankStmtUsed, inventoryUsed] = await Promise.all([
       getMonthlyUsage(company_id, 'extract'),
       getMonthlyUsage(company_id, 'analyze'),
       getDailyUsage(company_id, 'assistant'),
       getMonthlyUsage(company_id, 'extract_bank'),
+      getMonthlyUsage(company_id, 'extract_inventory'),
     ]);
     res.json({
       success: true,
       plan,
       usage: {
-        extract:      { used: extractUsed,   limit: EXTRACT_LIMITS[plan]   ?? 0 },
-        analyze:      { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]   ?? 0 },
-        assistant:    { used: assistantDaily, limit: ASSISTANT_DAILY[plan] ?? 0, period: 'daily' },
-        extract_bank: { used: bankStmtUsed,  limit: BANK_STMT_EXTRACT_LIMITS[plan] ?? 0 },
+        extract:           { used: extractUsed,   limit: EXTRACT_LIMITS[plan]   ?? 0 },
+        analyze:           { used: analyzeUsed,   limit: ANALYZE_LIMITS[plan]   ?? 0 },
+        assistant:         { used: assistantDaily, limit: ASSISTANT_DAILY[plan] ?? 0, period: 'daily' },
+        extract_bank:      { used: bankStmtUsed,  limit: BANK_STMT_EXTRACT_LIMITS[plan] ?? 0 },
+        extract_inventory: { used: inventoryUsed, limit: EXTRACT_INVENTORY_LIMITS[plan] ?? 0 },
       },
     });
   } catch (err) { next(err); }

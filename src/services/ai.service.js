@@ -243,6 +243,39 @@ async function askSupportBot(question, history = []) {
   return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 500, temperature: 0.2 });
 }
 
+// مساعد مرافق لمعالج "الأرصدة الافتتاحية" فقط — سياق ضيّق ومحكوم عمدًا (خطوة
+// حالية + محتوى دليلها الثابت المُراجَع محاسبيًا + ما أدخله المستخدم حتى الآن)،
+// بعكس askAssistant الذي يرى كامل بيانات الشركة. step_guide يُرسَل من العميل نفسه
+// (لا نُكرّر نص OB_GUIDE هنا لتفادي نسخة ثالثة قد تنحرف عن الأصل مستقبلًا).
+async function askOpeningBalanceAssistant(question, context, history = []) {
+  const systemPrompt = `أنت مساعد ذكي مخصص حصريًا لمعالج "الأرصدة الافتتاحية" بمنصة يقظ. مهمتك الوحيدة مرافقة صاحب المنشأة أثناء تعبئة المعالج: شرح كل خطوة تلقائيًا بأسلوب ودود، والإجابة على أي سؤال يخصها.
+
+═══ قواعد صارمة ═══
+1. اعتمد حصرًا على context.step_guide كأساس معلوماتي دقيق لهذه الخطوة (def/example/warning/not_included/account/panel) — لا تخترع حسابات محاسبية أو أرقامًا أو أزرارًا غير مذكورة فيه أو ببقية context.
+2. context.is_proactive === true يعني إنك تشرح الخطوة تلقائيًا بدون سؤال حقيقي من المستخدم — اكتب ترحيبًا وشرحًا قصيرًا وديًا (3-5 جمل) مبنيًا على step_guide، بدون افتراض إنه سأل شيئًا.
+3. context.ob_data_snapshot يعكس ما أدخله المستخدم فعليًا حتى الآن بالمعالج (نقدية، عدد أصناف، إجمالي عملاء...) — استخدمه لتخصيص ردك ("لاحظت أنك أدخلت...")، ولا تخترع أرقامًا غير موجودة فيه.
+4. مهم جدًا: كل مستخدم يحتاج يعرف بالضبط أي حساب محاسبي يذهب له كل رقم يُدخله (موجود بـstep_guide.account)، وأيش بالضبط يُدخَل بهذا الحقل مقابل أيش لا يُدخَل فيه إطلاقًا (موجود بـstep_guide.not_included إن وُجد، وstep_guide.warning للتنبيهات الحرِجة). لو سأل المستخدم أي نسخة من "هل أسجل كذا هنا؟" أو "وين أحط كذا؟"، أجب بوضوح صريح "نعم يُسجَّل هنا" أو "لا، هذا مكانه [كذا] مو هنا" بالاستناد لهذين الحقلين تحديدًا، لا بإجابة عامة أو غامضة.
+5. مهم جدًا أيضًا: context.company_plan يوضّح باقة هذه المنشأة (basic/growth/pro)، وcontext.plan_step_availability يوضّح أي خطوات بالمعالج (عملاء/التزامات دورية/موظفين) متاحة فعليًا لهذه الباقة تحديدًا (true) وأيها غير متاحة (false) وبالتالي لن تظهر لهذا المستخدم إطلاقًا بمعالجه. لو سأل المستخدم عن خطوة غير متاحة لباقته ("وين أدخل رواتب الموظفين؟" وهو على الباقة الأساسية مثلاً)، وضّح بلطف إن هذه الميزة تحديدًا متاحة بباقة أعلى (نمو/احترافية) ولا تتصرف وكأنها موجودة أو تشرحها كخطوة حالية بمعالجه. لا تخمّن الباقة أبدًا من كلام المستخدم — اعتمد فقط على context.company_plan.
+6. أي سؤال خارج نطاق معالج الأرصدة الافتتاحية (فواتير، مبيعات، صلاحيات، تقارير عامة...) → وضّح بإيجاز إنك مخصص لهذا المعالج فقط ووجّه المستخدم لشات "المساعد الذكي" العام بعد إغلاق المعالج.
+7. أجب بالعربية دائمًا، بإيجاز (عادة أقل من 120 كلمة إلا لو طلب المستخدم تفصيلاً أكبر).
+
+بيانات الخطوة الحالية وسياق المستخدم:
+${JSON.stringify(context, null, 2)}`;
+
+  const messages = [{ role: 'system', content: systemPrompt }];
+
+  for (const h of history.slice(-5)) {
+    if (h.question && h.answer) {
+      messages.push({ role: 'user',      content: h.question });
+      messages.push({ role: 'assistant', content: h.answer   });
+    }
+  }
+
+  messages.push({ role: 'user', content: question });
+
+  return callAI(messages, { model: 'gpt-4o-mini', maxTokens: 500, temperature: 0.35 });
+}
+
 // نحوّل أول صفحة من الـ PDF لصورة ونمررها لنفس محرك قراءة الصور (extractDocument).
 // استخراج النص الخام من PDF (pdf-parse) غير موثوق مع النصوص العربية — يطلع فارغاً
 // أو مشوّهاً حتى مع ملفات نصية حقيقية، فنعتمد على الرؤية البصرية دائماً بدلاً منه.
@@ -344,4 +377,74 @@ async function extractBankStatementFromPDF(pdfBuffer) {
   }
 }
 
-module.exports = { extractDocument, extractFromPDF, extractBankStatementFromImages, extractBankStatementFromPDF, analyzeFinancials, askAssistant, askSupportBot };
+// استخراج قائمة مخزون/جرد (اسم الصنف، الكمية، سعر الشراء، سعر البيع) من صورة أو
+// عدة صور — لاستخدامها بميزة "استيراد مخزون بالذكاء الاصطناعي" بمعالج الأرصدة
+// الافتتاحية. نفس نمط extractBankStatementFromImages بالضبط (قائمة صفوف مسطّحة
+// متعددة الصفحات) لا نمط extractDocument (فاتورة واحدة بمغلّف بيانات مورّد/تاريخ).
+async function extractInventoryFromImages(imagesBase64) {
+  const systemPrompt = `أنت نظام استخراج قوائم مخزون/جرد سعودية أو عربية. اقرأ كل الصفحات المرفقة بعناية (قد تكون عدة صفحات لنفس القائمة) واستخرج كل صف بضاعة كعنصر مستقل: اسم الصنف، الكمية، سعر الشراء (التكلفة)، وسعر البيع إن وُجد.
+
+أعد JSON فقط بهذا التنسيق بالضبط — لا تكتب أي كلام قبله أو بعده:
+{
+  "items": [
+    {"name": "اسم الصنف كما هو", "qty": 0, "buy_price": 0.00, "sell_price": 0.00}
+  ]
+}
+
+قواعد مهمة جداً:
+1. عدّ صفوف الأصناف قبل البدء — يجب أن يطابق عدد العناصر بالنتيجة عدد صفوف البضاعة الفعلية بالجدول تمامًا، لا تدمج صفين ببعض ولا تحذف صفًا حتى لو كان النص صغيرًا أو غير واضح.
+2. اقرأ عمود الكمية فعليًا من الجدول — لا تفترض qty=1 افتراضيًا أبدًا إن لم يُذكَر رقم آخر بوضوح.
+3. الأرقام خام بلا رموز عملة أو فواصل آلاف (مثلًا 1500 لا "1,500 ريال").
+4. اجمع كل الصفحات المرفقة بقائمة واحدة، بدون تكرار نفس الصف إذا تكررت صفحة بالخطأ أو ظهر نفس الصنف بأكثر من صفحة.
+5. تجاهل صفوف العناوين/الإجماليات/التوقيعات — استخرج فقط صفوف البضاعة الفعلية.
+6. لو سعر البيع غير مذكور بالملف، ضعه 0 — لا تخترعه من سعر الشراء.
+7. لا تُعِد قيمة null إطلاقًا — استخدم 0 أو "" كقيمة افتراضية بدلها.`;
+
+  const content = [
+    { type: 'text', text: 'استخرج كل عناصر قائمة المخزون هذه وأعد JSON فقط.' },
+    ...imagesBase64.map(b64 => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${b64}`, detail: 'high' } })),
+  ];
+
+  return callAI([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content },
+  ], { model: 'gpt-4o-mini', maxTokens: 4000 });
+}
+
+// نفس نمط extractBankStatementFromPDF بالضبط — قد يكون كشف/قائمة المخزون
+// بعدة صفحات، فنرسم كل صفحة صورة ونرسلها كلها معًا بطلب واحد
+async function extractInventoryFromPDF(pdfBuffer) {
+  const { PDFiumLibrary } = require('@hyzyla/pdfium');
+  const sharp = require('sharp');
+  const MAX_PAGES = 10;
+
+  let library;
+  try {
+    library = await PDFiumLibrary.init();
+    const document = await library.loadDocument(pdfBuffer);
+
+    const images = [];
+    let i = 0;
+    for (const page of document.pages()) {
+      if (i >= MAX_PAGES) break;
+      const image = await page.render({
+        scale: 2.5,
+        render: async (options) => sharp(options.data, {
+          raw: { width: options.width, height: options.height, channels: 4 },
+        }).png().toBuffer(),
+      });
+      images.push(Buffer.from(image.data).toString('base64'));
+      i++;
+    }
+    document.destroy();
+    if (!images.length) throw new Error('empty');
+
+    return await extractInventoryFromImages(images);
+  } catch (err) {
+    throw new Error('تعذّرت قراءة ملف قائمة المخزون — يُرجى رفع صورة واضحة له بدلاً من ذلك');
+  } finally {
+    if (library) library.destroy();
+  }
+}
+
+module.exports = { extractDocument, extractFromPDF, extractBankStatementFromImages, extractBankStatementFromPDF, analyzeFinancials, askAssistant, askSupportBot, askOpeningBalanceAssistant, extractInventoryFromImages, extractInventoryFromPDF };

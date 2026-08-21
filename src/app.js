@@ -97,6 +97,8 @@ app.use('/api/returns',       require('./routes/returns.routes'));
 app.use('/api/purchase-orders', require('./routes/purchaseOrders.routes'));
 app.use('/api/vouchers',      require('./routes/vouchers.routes'));
 app.use('/api/closed-periods', require('./routes/closedPeriods.routes'));
+app.use('/api/loyalty',       require('./routes/loyalty.routes'));
+app.use('/api/bank-recon',    require('./routes/bankRecon.routes'));
 app.use('/api/activity-log',  require('./routes/activityLog.routes'));
 app.use('/api/settings',      require('./routes/settings.routes'));
 app.use('/api/branches',      require('./routes/branches.routes'));

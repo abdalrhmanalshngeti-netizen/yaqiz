@@ -1,9 +1,15 @@
 const db = require('../config/db');
 
+// ملاحظة: بعض المفاتيح هنا (trial_balance/bank_statement/extra_reports/ai_assistant)
+// غير مُستخدَمة فعليًا بأي requireFeature() بمسار خلفي حاليًا (تلك التقارير
+// تُحسَب بالكامل من بيانات مُزامَنة بالعميل بلا نقطة تحقق خلفية مخصصة، ai_assistant
+// يُحكَم بسقف يومي بديل بدل حظر كامل) — أُبقيت متطابقة مع PLAN_FEATURES بالواجهة
+// (VVIP.html) فقط لمنع "لغم" مستقبلي: لو أُضيف requireFeature() لأحدها لاحقًا
+// بدون تحديث هذي القائمة، سيُحظَر خطأً عن باقة يُفترض أنها مخوَّلة له فعليًا
 const PLAN_FEATURES = {
-  basic:   [],
-  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','customers','period_close','obligations','purchase_orders'],
-  pro:     ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','ai_assistant','customers','obligations','pricing_policy','period_close','quotes'],
+  basic:   ['ai_assistant'],
+  growth:  ['employees','payroll','shifts','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','customers','period_close','obligations','purchase_orders','journal','trial_balance','bank_statement','extra_reports','ai_assistant'],
+  pro:     ['employees','payroll','shifts','loyalty','import','activity_log','cashflow','custom_period','stock_moves','admin_expenses','ai_extract','ai_analyze','journal','income_statement','balance_sheet','trial_balance','bank_recon','aging_report','purchase_orders','period_compare','ai_assistant','customers','obligations','pricing_policy','period_close','quotes','bank_statement','extra_reports'],
   expired: [],
 };
 
