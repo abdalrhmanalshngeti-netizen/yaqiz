@@ -6,7 +6,7 @@ const QRCode = require('qrcode');
 const db     = require('../config/db');
 const { sendMail, resetPasswordTemplate } = require('../services/email.service');
 
-const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate'];
+const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate', 'ai_usage'];
 
 // ينشئ جلسة كاملة (سطر admin_sessions + توكن نهائي) — يُستدعى من تسجيل الدخول
 // المباشر (بدون 2FA) ومن تأكيد رمز 2FA على حد سواء
