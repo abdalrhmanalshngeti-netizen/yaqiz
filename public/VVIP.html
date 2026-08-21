@@ -16676,9 +16676,13 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create purchase', p.vendor);
           const _ldb2 = getDB();
-          const _sup2 = p.supplier_id
-            ? _ldb2.suppliers.find(s => s.id === p.supplier_id)
-            : _ldb2.suppliers.find(s => s.name.trim().toLowerCase() === (p.vendor||'').trim().toLowerCase());
+          // نحل supplier_id بالاسم دائمًا وقت الدفع فعليًا (لا نثق بـp.supplier_id
+          // المخزَّن) — نفس أسلوب حل customer_id بالفواتير/عروض الأسعار: لو المورد
+          // أُنشئ محليًا ثم استُبدل معرّفه الحقيقي عبر _replaceLocalId، تبقى قيمة
+          // p.supplier_id المخزَّنة قديمة، ولأن أرقام المعرّفات المحلية تبدأ من ١
+          // بكل شركة قد تتطابق صدفة مع معرّف سيرفر حقيقي لمورد آخر تمامًا (تضارب
+          // صامت يربط المشترى بمورد خاطئ)، لا مجرد "غير موجود"
+          const _sup2 = _ldb2.suppliers.find(s => (s.name||'').trim().toLowerCase() === (p.vendor||'').trim().toLowerCase());
           const res = await apiFetch('POST', '/api/purchases', {
             supplier_id:   _sup2?.id || null,
             supplier_name: p.vendor, description: p.description,
