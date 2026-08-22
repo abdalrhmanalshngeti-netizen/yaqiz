@@ -228,30 +228,41 @@ exports.convert = async (req, res, next) => {
       vat_amount: parseFloat(item.line_total) * 0.15,
     }));
 
+    // تجميع تكلفة البضاعة المباعة فعليًا (FIFO حقيقي عبر stock.deduct) — كانت
+    // هذي الدالة لا تكتب cogs_total إطلاقًا (تبقى 0 دائمًا)، بعكس إنشاء فاتورة
+    // عادية بـinvoices.controller.js
+    let cogsTotal = 0;
     for (let i = 0; i < processedItems.length; i++) {
       const item = processedItems[i];
-      await client.query(`
-        INSERT INTO invoice_items
-          (invoice_id, product_id, product_name, qty, unit_price, discount, line_total, vat_amount, sort_order)
-        VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8)
-      `, [invoice.id, item.product_id || null, item.product_name,
-          item.qty, item.unit_price, item.line_total,
-          item.vat_amount, i]);
+      let itemUnitCost = null;
 
       if (item.product_id) {
         try {
           await client.query('SAVEPOINT sp_stock');
-          await stock.deduct(client, {
+          const { totalCost, unitCostAvg } = await stock.deduct(client, {
             company_id, product_id: item.product_id, warehouse_id: resolvedWarehouseId, qty: item.qty,
             reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
             reference: invoice_no, user_id
           });
+          cogsTotal += totalCost;
+          itemUnitCost = unitCostAvg;
         } catch (stockErr) {
           await client.query('ROLLBACK TO sp_stock');
           console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
         }
       }
+
+      await client.query(`
+        INSERT INTO invoice_items
+          (invoice_id, product_id, product_name, qty, unit_price, discount, line_total, vat_amount, sort_order, unit_cost)
+        VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,$9)
+      `, [invoice.id, item.product_id || null, item.product_name,
+          item.qty, item.unit_price, item.line_total,
+          item.vat_amount, i, itemUnitCost]);
     }
+    cogsTotal = Math.round(cogsTotal * 100) / 100;
+    await client.query(`UPDATE invoices SET cogs_total = $1 WHERE id = $2`, [cogsTotal, invoice.id]);
+    invoice.cogs_total = cogsTotal;
 
     if (quote.customer_id) {
       await client.query(

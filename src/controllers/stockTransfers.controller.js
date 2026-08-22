@@ -86,13 +86,17 @@ exports.create = async (req, res, next) => {
       );
       if (!prod) continue;
 
-      await stock.deduct(client, {
+      // نحافظ على تكلفة الدفعة عبر النقل — الوجهة تستلم بضاعة بنفس التكلفة
+      // الفعلية اللي خرجت فيها من المصدر (متوسط مرجَّح لو غطت أكثر من طبقة)،
+      // لا بسعر شراء افتراضي منفصل
+      const { unitCostAvg } = await stock.deduct(client, {
         company_id, product_id: item.product_id, warehouse_id: from_warehouse_id, qty: item.qty,
         reason: `نقل بضاعة إلى مستودع آخر`, source_type: 'transfer', source_id: transfer.id,
         reference: transfer_no, user_id
       });
       await stock.add(client, {
         company_id, product_id: item.product_id, warehouse_id: to_warehouse_id, qty: item.qty,
+        unit_cost: unitCostAvg,
         reason: `نقل بضاعة من مستودع آخر`, source_type: 'transfer', source_id: transfer.id,
         reference: transfer_no, user_id
       });

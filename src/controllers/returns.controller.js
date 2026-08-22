@@ -75,8 +75,18 @@ exports.create = async (req, res, next) => {
         const { warehouse_id } = linkedInvoice
           ? await branch.resolveWarehouseForBranch(client, company_id, linkedInvoice.branch_id, false)
           : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
+        // نُرجع البضاعة بنفس تكلفتها الأصلية وقت البيع (invoice_items.unit_cost)
+        // لو مرتبطة بفاتورة حقيقية — لا بسعر الشراء الحالي (قد يكون تغيّر)
+        let unitCost;
+        if (linkedInvoice) {
+          const { rows: [origItem] } = await client.query(
+            `SELECT unit_cost FROM invoice_items WHERE invoice_id = $1 AND product_id = $2 LIMIT 1`,
+            [linkedInvoice.id, product_id]
+          );
+          unitCost = origItem?.unit_cost ?? undefined;
+        }
         await stock.add(client, {
-          company_id, product_id, warehouse_id, qty: qty || 0,
+          company_id, product_id, warehouse_id, qty: qty || 0, unit_cost: unitCost,
           reason: 'مرتجع مبيعات', source_type: 'return', source_id: ret.id,
           reference: return_no, user_id: req.user.sub
         });
@@ -98,11 +108,16 @@ exports.create = async (req, res, next) => {
       const { warehouse_id } = linkedPurchase
         ? await branch.resolveWarehouseForBranch(client, company_id, linkedPurchase.branch_id, false)
         : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
-      await stock.deduct(client, {
+      // تكلفة العكس الحقيقية (FIFO) من stock.deduct نفسها — لا القيمة المُرسَلة
+      // من الـclient بلا أي تحقق
+      const { totalCost } = await stock.deduct(client, {
         company_id, product_id, warehouse_id, qty: qty || 0,
         reason: 'مرتجع مشتريات', source_type: 'return', source_id: ret.id,
         reference: return_no, user_id: req.user.sub
       });
+      const realCogsReversal = Math.round(totalCost * 100) / 100;
+      await client.query(`UPDATE returns SET cogs_reversal = $1 WHERE id = $2`, [realCogsReversal, ret.id]);
+      ret.cogs_reversal = realCogsReversal;
     }
 
     // إشعار دائن فعلي — فقط لمرتجع مبيعات مرتبط فعليًا بفاتورة صدرت (بدون فاتورة

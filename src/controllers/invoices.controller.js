@@ -71,8 +71,11 @@ exports.create = async (req, res, next) => {
     const {
       customer_id, customer_name, customer_vat, invoice_type,
       date, due_date, items = [], discount_type, discount_value,
-      payment_method, notes, cogs_total
+      payment_method, notes
     } = req.body;
+    // cogs_total لم يعد يُقبَل من الـclient إطلاقًا — كان تمريرًا مباشرًا بلا
+    // أي تحقق، والسيرفر الآن مصدر الحقيقة الوحيد (عبر stock.deduct وطبقات
+    // stock_lots)؛ يُحسَب فعليًا بعد خصم المخزون أدناه وتُحدَّث به الفاتورة
 
     if (!items.length) {
       await client.query('ROLLBACK');
@@ -174,35 +177,43 @@ exports.create = async (req, res, next) => {
         customer_id, customer_name, customer_vat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
         taxable, vat_amount, grand, payment_method, notes, user_id,
-        parseFloat(cogs_total) || 0,
+        0, // cogs_total الحقيقي يُحسَب أدناه بعد خصم المخزون فعليًا، ثم يُحدَّث
         zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
 
-    // ── إدراج البنود + خصم المخزون ────────────
+    // ── إدراج البنود + خصم المخزون (FIFO حقيقي عبر stock.deduct) ──────────
+    let cogsTotal = 0;
     for (let i = 0; i < processedItems.length; i++) {
       const item = processedItems[i];
-      await client.query(`
-        INSERT INTO invoice_items
-          (invoice_id, product_id, product_name, product_code,
-           qty, unit_price, discount, line_total, vat_amount, sort_order)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      `, [invoice.id, item.product_id, item.product_name, item.product_code,
-          item.qty, item.unit_price, item.discount || 0,
-          item.line_total, item.vat_amount, i]);
+      let itemUnitCost = null;
 
       if (item.product_id) {
         try {
           await client.query('SAVEPOINT sp_stock');
-          await stock.deduct(client, {
+          const { totalCost, unitCostAvg } = await stock.deduct(client, {
             company_id, product_id: item.product_id, warehouse_id: resolvedWarehouseId, qty: item.qty,
             reason: 'بيع', source_type: 'invoice', source_id: invoice.id,
             reference: invoice_no, user_id
           });
+          cogsTotal += totalCost;
+          itemUnitCost = unitCostAvg;
         } catch (stockErr) {
           await client.query('ROLLBACK TO sp_stock');
           console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
         }
       }
+
+      await client.query(`
+        INSERT INTO invoice_items
+          (invoice_id, product_id, product_name, product_code,
+           qty, unit_price, discount, line_total, vat_amount, sort_order, unit_cost)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      `, [invoice.id, item.product_id, item.product_name, item.product_code,
+          item.qty, item.unit_price, item.discount || 0,
+          item.line_total, item.vat_amount, i, itemUnitCost]);
     }
+    cogsTotal = Math.round(cogsTotal * 100) / 100;
+    await client.query(`UPDATE invoices SET cogs_total = $1 WHERE id = $2`, [cogsTotal, invoice.id]);
+    invoice.cogs_total = cogsTotal;
 
     // ── توليد XML الفاتورة (المرحلة الثانية) وحساب تجزئتها لسلسلة KSA-13 ──────
     // لا نمنع إنشاء الفاتورة إن كانت بيانات البائع المُهيكلة ناقصة (شركات قديمة
@@ -406,8 +417,11 @@ exports.cancel = async (req, res, next) => {
     );
     for (const item of items) {
       if (item.product_id) {
+        // نُرجع المخزون بنفس تكلفته الأصلية وقت البيع (invoice_items.unit_cost)
+        // لا بسعر الشراء الحالي — قد يكون تغيّر كليًا منذ ذلك الحين
         await stock.add(client, {
           company_id: req.user.company_id, product_id: item.product_id, warehouse_id: cancelWarehouseId, qty: item.qty,
+          unit_cost: item.unit_cost,
           reason: 'مرتجع — إلغاء فاتورة', source_type: 'invoice_cancel', source_id: inv.id,
           reference: inv.invoice_no, user_id: req.user.sub
         });

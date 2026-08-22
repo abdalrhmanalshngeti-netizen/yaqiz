@@ -245,7 +245,7 @@ exports.manualMove = async (req, res, next) => {
 
     let move;
     if (type === 'in')  move = await stock.add(client, args);
-    if (type === 'out') move = await stock.deduct(client, args);
+    if (type === 'out') { const r = await stock.deduct(client, args); move = r.move; }
 
     await client.query('COMMIT');
     res.json({ success: true, data: move });

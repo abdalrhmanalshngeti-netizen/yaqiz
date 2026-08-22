@@ -6805,7 +6805,10 @@ function zakatFigures(db, asOf) {
     const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
     return s+Math.max(0,inv-rcv);
   },0);
-  const inventoryVal = db.products.reduce((s,p)=>s+(p.qty||0)*(p.cost_price||p.sell_price||0),0);
+  // p.cost_price غير مُعرَّف على أي منتج إطلاقًا (لا مكان يضبطه)، فكان
+  // يسقط دائمًا لـp.sell_price — يقيّم المخزون بسعر البيع لا التكلفة،
+  // ويُضخّم وعاء الزكاة فعليًا
+  const inventoryVal = db.products.reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
   const payables = db.suppliers.reduce((s,su)=>{
     const pur = db.purchases.filter(p=>p.vendor===su.name && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
     const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
@@ -17365,6 +17368,42 @@ async function runAISearchQuery(q) {
                 const _db = getDB();
                 const _iv = _db.invoices.find(x => x.id === res.data.id);
                 if (_iv) { _iv.invoice_no = res.data.invoice_no; _origSaveDB(_db); }
+              } catch {}
+            }
+            // تكلفة البضاعة المباعة الحقيقية (FIFO) تُحسَب بالسيرفر من طبقات
+            // stock_lots الفعلية — قد تختلف عن التقدير الفوري المحلي
+            // (fifoDeduct على مصفوفة lots المحلية، اللي تُمحى كل مزامنة دورية
+            // أصلًا). بدل تعديل قيد اليومية الأصلي المنشور فورًا وقت البيع
+            // (تاريخ محاسبي، لا يُعدَّل)، ننشر قيدًا تصحيحيًا صغيرًا بالفرق —
+            // نفس مبدأ قيد التسوية المحاسبي المعتاد
+            if (res.data.cogs_total !== undefined) {
+              try {
+                const _db3 = getDB();
+                const _iv3 = _db3.invoices.find(x => x.id === res.data.id);
+                if (_iv3) {
+                  const localCogs = parseFloat(_iv3.cogs_total || 0);
+                  const serverCogs = parseFloat(res.data.cogs_total || 0);
+                  const diff = Math.round((serverCogs - localCogs) * 100) / 100;
+                  _iv3.cogs_total = serverCogs;
+                  if (Math.abs(diff) > 0.01) {
+                    if (!_db3.journal) _db3.journal = [];
+                    if (!_db3.nextId.journal) _db3.nextId.journal = 1;
+                    const absDiff = Math.abs(diff);
+                    _db3.journal.push({
+                      id: _db3.nextId.journal++, date: new Date().toISOString(),
+                      description: `${lang==='ar'?'قيد تصحيحي — تكلفة بضاعة مباعة فعلية (FIFO) للفاتورة':'Correcting entry — actual FIFO COGS for invoice'} ${_iv3.invoice_no}`,
+                      entries: diff > 0 ? [
+                        {account: lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount: absDiff},
+                        {account: lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount: absDiff},
+                      ] : [
+                        {account: lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount: absDiff},
+                        {account: lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'credit', amount: absDiff},
+                      ],
+                      ref: `COGS-FIX-${_iv3.invoice_no}`
+                    });
+                  }
+                  _origSaveDB(_db3);
+                }
               } catch {}
             }
           }

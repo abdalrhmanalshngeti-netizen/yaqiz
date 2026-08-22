@@ -189,7 +189,11 @@ exports.balanceSheet = async (req, res, next) => {
     const [cash, receivables, inventory, payables] = await Promise.all([
       db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM treasury_accounts WHERE company_id=$1 AND is_active=true`, [cid]),
       db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM customers WHERE company_id=$1 AND balance > 0`, [cid]),
-      db.query(`SELECT COALESCE(SUM(qty * buy_price),0) AS amount FROM products WHERE company_id=$1 AND is_active=true`, [cid]),
+      // تقييم FIFO حقيقي من طبقات التكلفة الفعلية المتبقية — بدل تقريب
+      // "الكمية الحالية × آخر سعر شراء" اللي يتجاهل طبقات التكلفة الأقدم كليًا
+      db.query(`SELECT COALESCE(SUM(sl.qty_remaining * sl.unit_cost),0) AS amount
+                FROM stock_lots sl JOIN products p ON p.id = sl.product_id
+                WHERE sl.company_id=$1 AND sl.qty_remaining > 0 AND p.is_active=true`, [cid]),
       db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM suppliers WHERE company_id=$1 AND balance > 0`, [cid]),
     ]);
 
