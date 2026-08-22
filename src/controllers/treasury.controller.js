@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 // طرق الدفع التي تُقيَّد على الحساب البنكي بدل الصندوق النقدي
 const BANK_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
@@ -248,8 +249,8 @@ exports.createVoucher = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'النوع والمبلغ والحساب مطلوبة' });
     }
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('voucher_seq') AS n`);
-    const voucher_no = `${type === 'receipt' ? 'RCP' : 'PAY'}-${String(seq.n).padStart(6, '0')}`;
+    const vchSeqN = await nextDocNumber(client, req.user.company_id, 'voucher');
+    const voucher_no = `${type === 'receipt' ? 'RCP' : 'PAY'}-${String(vchSeqN).padStart(6, '0')}`;
 
     // تحديث رصيد الخزينة
     const { rows: [acct] } = await client.query(

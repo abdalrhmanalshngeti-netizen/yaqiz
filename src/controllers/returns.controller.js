@@ -2,6 +2,7 @@ const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { createCreditNote } = require('../services/creditNote.service');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
@@ -50,8 +51,8 @@ exports.create = async (req, res, next) => {
       linkedPurchase = rows[0];
     }
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('return_seq') AS n`);
-    const return_no = `RET-${String(seq.n).padStart(6, '0')}`;
+    const retSeqN = await nextDocNumber(client, company_id, 'return');
+    const return_no = `RET-${String(retSeqN).padStart(6, '0')}`;
 
     const { rows: [ret] } = await client.query(`
       INSERT INTO returns

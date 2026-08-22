@@ -11,6 +11,7 @@ const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaH
 const { buildXadesSignature, embedSignature } = require('./zatcaSign.service');
 const { generatePhase2QR } = require('./zatcaQR.service');
 const zatcaOnboarding = require('./zatcaOnboarding.service');
+const { nextDocNumber } = require('./docNumber.service');
 
 /**
  * @param {object} client - عميل قاعدة بيانات ضمن معاملة قائمة (BEGIN سابق)
@@ -44,8 +45,8 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     grand_total      = subtotal + vat_amount;
   }
 
-  const { rows: [seq] } = await client.query(`SELECT NEXTVAL('credit_note_seq') AS n`);
-  const note_no = `CN-${String(seq.n).padStart(6, '0')}`;
+  const cnSeqN = await nextDocNumber(client, company_id, 'credit_note');
+  const note_no = `CN-${String(cnSeqN).padStart(6, '0')}`;
 
   const zatcaUuid = crypto.randomUUID();
   const { icv, previousInvoiceHash } = await nextChainInfo(client, company_id);

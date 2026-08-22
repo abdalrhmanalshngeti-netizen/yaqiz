@@ -1,5 +1,6 @@
 const db     = require('../config/db');
 const crypto = require('crypto');
+const { nextDocNumber } = require('../services/docNumber.service');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { buildInvoiceXML } = require('../services/zatca.service');
@@ -71,8 +72,8 @@ exports.create = async (req, res, next) => {
     const vat_amount   = subtotal * (parseFloat(vat_rate ?? 15) / 100);
     const grand_total  = subtotal + vat_amount;
 
-    const { rows: [seqRow] } = await client.query(`SELECT nextval('quote_seq') AS n`);
-    const quote_no = `QUO-${String(seqRow.n).padStart(6, '0')}`;
+    const quoteSeqN = await nextDocNumber(client, company_id, 'quote');
+    const quote_no = `QUO-${String(quoteSeqN).padStart(6, '0')}`;
 
     const { rows: [quote] } = await client.query(`
       INSERT INTO quotes
@@ -198,8 +199,8 @@ exports.convert = async (req, res, next) => {
       });
     }
 
-    const { rows: [seqRow] } = await client.query(`SELECT nextval('invoice_seq') AS n`);
-    const invoice_no = `INV-${String(seqRow.n).padStart(6, '0')}`;
+    const invSeqN = await nextDocNumber(client, company_id, 'invoice');
+    const invoice_no = `INV-${String(invSeqN).padStart(6, '0')}`;
 
     // فاتورة محوّلة من عرض سعر تبقى جزءًا من نفس سلسلة ICV/PIH الموحّدة —
     // بدون هذا كانت تُترك بلا UUID/ICV/تجزئة إطلاقًا فتنكسر تسلسل السلسلة

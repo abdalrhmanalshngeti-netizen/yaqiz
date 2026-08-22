@@ -1,5 +1,6 @@
 const db     = require('../config/db');
 const branch = require('../services/branch.service');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 // حقول قائمة الموظفين — تُستثنى national_id وiqama_no وiban من قائمة الكل
 const LIST_FIELDS = `id, company_id, employee_no, name, position, department,
@@ -137,13 +138,14 @@ exports.generatePayroll = async (req, res, next) => {
       [req.user.company_id]
     );
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('payroll_seq') AS n`);
     const payroll_prefix = `PAY-${year}${String(month).padStart(2,'0')}`;
-    const seqBase = Number(seq.n);
 
     const created = [];
     for (let i = 0; i < employees.length; i++) {
       const emp = employees[i];
+      // عدّاد مستقل لكل شركة — رقم واحد لكل موظف بنفس المعاملة (بدل حجز كتلة
+      // أرقام مرة واحدة من تسلسل عام مشترك بين كل الشركات)
+      const payrollSeqN = await nextDocNumber(client, req.user.company_id, 'payroll');
       const override = overrides.find(o => o.employee_id === emp.id) || {};
       const overtime   = parseFloat(override.overtime   || 0);
       const deductions = parseFloat(override.deductions || 0);
@@ -158,7 +160,7 @@ exports.generatePayroll = async (req, res, next) => {
            gosi_employee, gosi_employer, net_salary, status, created_by)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft',$13)
         RETURNING *
-      `, [req.user.company_id, `${payroll_prefix}-${String(seqBase + i).padStart(6,'0')}`,
+      `, [req.user.company_id, `${payroll_prefix}-${String(payrollSeqN).padStart(6,'0')}`,
           month, year, emp.id,
           emp.salary, emp.allowances, overtime, deductions,
           gosi_emp, gosi_er, net, req.user.sub]);

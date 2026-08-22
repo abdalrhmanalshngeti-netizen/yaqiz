@@ -1,5 +1,6 @@
 const db    = require('../config/db');
 const stock = require('../services/stock.service');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -67,8 +68,8 @@ exports.create = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'مستودع غير موجود' });
     }
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('transfer_seq') AS n`);
-    const transfer_no = `TRF-${String(seq.n).padStart(6, '0')}`;
+    const trfSeqN = await nextDocNumber(client, company_id, 'transfer');
+    const transfer_no = `TRF-${String(trfSeqN).padStart(6, '0')}`;
 
     const { rows: [transfer] } = await client.query(`
       INSERT INTO stock_transfers (company_id, transfer_no, from_warehouse_id, to_warehouse_id, notes, created_by)

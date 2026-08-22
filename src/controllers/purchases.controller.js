@@ -1,6 +1,7 @@
 const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -98,8 +99,8 @@ exports.create = async (req, res, next) => {
     const remaining   = isPaid ? 0 : total;
     const purchStatus = isPaid ? 'paid' : 'unpaid';
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('purchase_seq') AS n`);
-    const purchase_no = `PUR-${String(seq.n).padStart(6, '0')}`;
+    const purSeqN = await nextDocNumber(client, company_id, 'purchase');
+    const purchase_no = `PUR-${String(purSeqN).padStart(6, '0')}`;
 
     const { rows: [purchase] } = await client.query(`
       INSERT INTO purchases

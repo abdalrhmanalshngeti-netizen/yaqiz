@@ -9,6 +9,7 @@ const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.s
 const { generatePhase2QR } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { createCreditNote } = require('../services/creditNote.service');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -148,9 +149,9 @@ exports.create = async (req, res, next) => {
     const vat_amount  = subtotal > 0 ? rawItemVat * (taxable / subtotal) : 0;
     const grand       = taxable + vat_amount;
 
-    // ── رقم الفاتورة ──────────────────────────
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('invoice_seq') AS n`);
-    const invoice_no = `INV-${String(seq.n).padStart(6, '0')}`;
+    // ── رقم الفاتورة — عدّاد مستقل لكل شركة (لا تسلسل عام مشترك) ──────────
+    const invSeqN = await nextDocNumber(client, company_id, 'invoice');
+    const invoice_no = `INV-${String(invSeqN).padStart(6, '0')}`;
 
     // ── معرّفات المرحلة الثانية للفوترة الإلكترونية (ZATCA): UUID فريد،
     // عداد تسلسلي (ICV)، وتجزئة الفاتورة السابقة بالسلسلة — nextChainInfo تقفل

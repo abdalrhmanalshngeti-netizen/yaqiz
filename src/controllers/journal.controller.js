@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 // يحدد نوع الحساب الافتراضي لأي كود غير معروف بالاعتماد على الرقم الأول
 // (1=أصول، 2=التزامات، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات) — احتياطي فقط
@@ -67,8 +68,8 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'القيد غير متوازن — المدين لا يساوي الدائن' });
     }
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('entry_seq') AS n`);
-    const entry_no = `JE-${String(seq.n).padStart(6, '0')}`;
+    const jeSeqN = await nextDocNumber(client, req.user.company_id, 'entry');
+    const entry_no = `JE-${String(jeSeqN).padStart(6, '0')}`;
 
     const { rows: [entry] } = await client.query(
       `INSERT INTO journal_entries (company_id, entry_no, description, reference, date, created_by)

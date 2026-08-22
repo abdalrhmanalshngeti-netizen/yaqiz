@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { nextDocNumber } = require('../services/docNumber.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -31,8 +32,8 @@ exports.create = async (req, res, next) => {
     }
     const grand_total = items.reduce((s, i) => s + (parseFloat(i.total ?? i.line_total) || 0), 0);
 
-    const { rows: [seq] } = await client.query(`SELECT NEXTVAL('po_seq') AS n`);
-    const po_no = `PO-${new Date().getFullYear()}-${String(seq.n).padStart(4, '0')}`;
+    const poSeqN = await nextDocNumber(client, req.user.company_id, 'po');
+    const po_no = `PO-${new Date().getFullYear()}-${String(poSeqN).padStart(4, '0')}`;
 
     const { rows: [po] } = await client.query(`
       INSERT INTO purchase_orders (company_id, po_no, supplier_name, date, expected_date, status, subtotal, vat_amount, grand_total, notes, created_by)
