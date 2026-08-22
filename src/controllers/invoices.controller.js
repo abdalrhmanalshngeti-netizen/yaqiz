@@ -367,10 +367,16 @@ exports.addPayment = async (req, res, next) => {
     // تسجيل حركة خزينة
     if (account_id) {
       const { rows: [acct] } = await client.query(
-        `SELECT balance FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
+        `SELECT balance, branch_id FROM treasury_accounts WHERE id = $1 AND company_id = $2 FOR UPDATE`,
         [account_id, req.user.company_id]
       );
       if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'حساب الخزينة غير موجود' }); }
+      // حساب مخصَّص لفرع آخر غير فرع هذي الفاتورة — رفض بدل تسجيل تحصيل على
+      // صندوق فرع لا يخصها (حساب مشترك بلا فرع (branch_id فارغ، مثل البنكي) مسموح دائمًا)
+      if (acct.branch_id && inv.branch_id && acct.branch_id !== inv.branch_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'حساب الخزينة المُحدَّد يخص فرعًا آخر غير فرع الفاتورة' });
+      }
       const newBal = parseFloat(acct.balance) + paying;
       await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, account_id]);
       await client.query(`

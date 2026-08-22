@@ -2979,7 +2979,7 @@ function doCheckout() {
   // treasury
   if(posPayment!=='آجل'){
     db.treasury.balance+=total;
-    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:total,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:posPayment});
+    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:total,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:posPayment,branch_id:activeBranchId});
   }
   // Journal entry: Dr. Cash / Cr. Sales Revenue + Cr. VAT
   if(!db.journal)db.journal=[];
@@ -3434,7 +3434,8 @@ function cancelInvoice(id) {
     db.treasury.moves.unshift({
       id:nextId(db,'treasury'), type:'out', amount:paidAmt,
       description:`إلغاء فاتورة ${inv.invoice_no} — استرداد للعميل`,
-      reference:'CANCEL-'+inv.invoice_no, date:new Date().toISOString(), method:inv.payment_method
+      reference:'CANCEL-'+inv.invoice_no, date:new Date().toISOString(), method:inv.payment_method,
+      branch_id:inv.branch_id
     });
   }
 
@@ -3934,7 +3935,7 @@ function _saveNewInvoiceActual(printAfter) {
   // treasury
   if(partialPaid>0){
     db.treasury.balance+=partialPaid;
-    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:partialPaid,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:payment});
+    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:partialPaid,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:payment,branch_id:activeBranchId});
   }
 
   // Journal entry
@@ -4804,7 +4805,7 @@ function _saveGoodsPurchaseActual() {
   if(paidNow>0){
     db.treasury.balance-=paidNow;
     db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:paidNow,
-      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment});
+      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment,branch_id:_activeBranchId});
   }
 
   // Journal entry — يُدين "بضاعة بالطريق" مؤقتاً وليس "المخزون" مباشرة، لأن الكمية لم
@@ -5092,7 +5093,7 @@ function savePurchase(purchase_type) {
   // Treasury
   db.treasury.balance -= p.total;
   db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:p.total,
-    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString(),method:p.payment_method});
+    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString(),method:p.payment_method,branch_id:resolveActiveBranchId()});
 
   // Journal entry: Dr. Expense + Dr. Input VAT / Cr. Cash
   if(!db.journal)db.journal=[];
@@ -5841,9 +5842,12 @@ function isBankTreasuryMethod(method) {
 }
 // يحسب رصيد الصندوق النقدي ورصيد البنك من حركات الخزينة حسب طريقة الدفع
 // (الحركات القديمة بدون طريقة دفع محفوظة تُحتسب على الصندوق النقدي افتراضياً)
-function computeCashBankSplit() {
+// branchId مُحدَّد: يقتصر على حركات هذا الفرع + الحركات المشتركة (بلا فرع،
+// كالحساب البنكي — يبقى مشتركًا على مستوى الشركة عمدًا). بلا معامل: كل الحركات
+// (نفس السلوك السابق تمامًا — توافق رجعي لأي استدعاء آخر لهذي الدالة)
+function computeCashBankSplit(branchId) {
   const db = getDB();
-  const moves = db.treasury?.moves || [];
+  const moves = (db.treasury?.moves || []).filter(m => !branchId || m.branch_id === branchId || !m.branch_id);
   let cash = 0, bank = 0;
   for (const m of moves) {
     const amt = m.type === 'in' ? m.amount : -m.amount;
@@ -5852,8 +5856,40 @@ function computeCashBankSplit() {
   return { cash: Math.round(cash*100)/100, bank: Math.round(bank*100)/100 };
 }
 
+let trBranchFilter = 'total';
+function setTrBranchFilter(val) { trBranchFilter = val; renderPage(); }
+
 function renderTreasury(c) {
   const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  const isOwner = currentUser?.role === 'owner';
+  const multiBranch = branches.length > 1;
+
+  // نطاق العرض: null = التوتال (كل الفروع مع بعض). الأونر يقدر يختار (توتال
+  // أو فرع معيّن)، غيره مقصور تلقائيًا على فرعه فقط بلا أي خيار للتبديل —
+  // نفس مبدأ renderInventoryInner() بالضبط
+  let scopeBranchId = null;
+  if (multiBranch) {
+    if (!isOwner) {
+      scopeBranchId = resolveActiveBranchId();
+    } else if (trBranchFilter !== 'total') {
+      scopeBranchId = Number(trBranchFilter);
+    }
+  }
+
+  const scopedMoves = scopeBranchId
+    ? db.treasury.moves.filter(m => m.branch_id === scopeBranchId || !m.branch_id)
+    : db.treasury.moves;
+  const scopedBalance = scopeBranchId
+    ? scopedMoves.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
+    : db.treasury.balance;
+
+  const tabsHtml = (isOwner && multiBranch) ? `
+    <div class="tabs" style="margin-bottom:12px;">
+      <button class="tab-btn ${trBranchFilter==='total'?'active':''}" onclick="setTrBranchFilter('total')">${lang==='ar'?'الكل (توتال)':'All (Total)'}</button>
+      ${branches.map(b=>`<button class="tab-btn ${trBranchFilter===String(b.id)?'active':''}" onclick="setTrBranchFilter('${b.id}')">${sanitize(b.name)}</button>`).join('')}
+    </div>` : '';
+
   c.innerHTML = `
   <div>
     <div class="page-header">
@@ -5863,17 +5899,18 @@ function renderTreasury(c) {
         <button class="btn btn-danger" onclick="showTreasuryMove('out')">${icon('arrow-up',16)} ${t('withdraw')}</button>
       </div>`:''}
     </div>
-    ${(()=>{ const split = computeCashBankSplit(); return `
+    ${tabsHtml}
+    ${(()=>{ const split = computeCashBankSplit(scopeBranchId); return `
     <div id="tr-stats-grid" class="stats-grid">
-      <div class="stat-card"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(db.treasury.balance)}</div></div>
+      <div class="stat-card"><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(scopedBalance)}</div></div>
       <div class="stat-card"><div class="stat-icon">${icon('banknote',22)}</div><div class="stat-label">${lang==='ar'?'الصندوق النقدي':'Cash'}</div><div class="stat-value">${fmtMoney(split.cash)}</div></div>
       <div class="stat-card"><div class="stat-icon blue">${icon('landmark',22)}</div><div class="stat-label">${lang==='ar'?'الحساب البنكي':'Bank'}</div><div class="stat-value">${fmtMoney(split.bank)}</div></div>
-      <div class="stat-card"><div class="stat-icon">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الوارد':'Total In'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0))}</div></div>
-      <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الصادر':'Total Out'}</div><div class="stat-value">${fmtMoney(db.treasury.moves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0))}</div></div>
+      <div class="stat-card"><div class="stat-icon">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الوارد':'Total In'}</div><div class="stat-value">${fmtMoney(scopedMoves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0))}</div></div>
+      <div class="stat-card"><div class="stat-icon red">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'إجمالي الصادر':'Total Out'}</div><div class="stat-value">${fmtMoney(scopedMoves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0))}</div></div>
     </div>`; })()}
     <div id="tr-table" class="card"><div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('date')}</th><th>${t('type')}</th><th>${t('description')}</th><th>${t('reference')}</th><th>${t('amount')}</th></tr></thead>
-      <tbody>${[...db.treasury.moves].map(m=>`<tr>
+      <tbody>${[...scopedMoves].map(m=>`<tr>
         <td>${fmtDate(m.date)}</td>
         <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
         <td>${sanitize(m.description)}</td><td>${sanitize(m.reference)||'-'}</td>
@@ -5915,7 +5952,7 @@ function saveTreasuryMove(type) {
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
-  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),method:el('tr-method')?.value||'نقدي',_manual:true};
+  const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),method:el('tr-method')?.value||'نقدي',_manual:true,branch_id:resolveActiveBranchId()};
   db.treasury.moves.unshift(m);
   db.treasury.balance += type==='in'?amount:-amount;
 
@@ -8893,6 +8930,8 @@ function _paySalaryActual(id) {
   if(!db.treasury) db.treasury={balance:0,moves:[]};
   if(!db.treasury.moves) db.treasury.moves=[];
   db.treasury.balance=Math.round((db.treasury.balance-amount)*100)/100;
+  // الرواتب تُصرَف من الصندوق الرئيسي للشركة دائمًا (بلا فرع مُحدَّد) —
+  // لا مفهوم فرع للموظف/الراتب أصلًا بالنظام، ودفع الرواتب عادة مركزي
   db.treasury.moves.unshift({
     id:nextId(db,'treasury'), type:'out', amount,
     description:`راتب: ${e.name}${notes?' — '+notes:''}`,
@@ -9543,7 +9582,8 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     description: `${voucher.voucher_no}: ${voucher.party}`,
     reference: voucher.ref||voucher.voucher_no,
     date: new Date().toISOString(),
-    method: voucher.method
+    method: voucher.method,
+    branch_id: resolveActiveBranchId()
   });
 
   // 2. تطبيق سند القبض على فواتير العميل
@@ -10084,7 +10124,8 @@ function _saveReturnActual(type, amount, linkedId) {
     db.treasury.moves.unshift({
       id:nextId(db,'treasury'), type:tType, amount:cashPortion,
       description:`مرتجع ${isSales?'مبيعات':'مشتريات'} ${ret.return_no}: ${ret.party}`,
-      reference:ret.return_no, date:new Date().toISOString(), method:retMethod
+      reference:ret.return_no, date:new Date().toISOString(), method:retMethod,
+      branch_id: linkedRec?.branch_id || resolveActiveBranchId()
     });
     if (isSales) updateShiftOnReturn(cashPortion, retMethod);
   }
@@ -10202,8 +10243,12 @@ function deleteReturn(id){
   // 1. Reverse treasury — فقط على الجزء اللي فعلاً تحرّك نقديًا وقت المرتجع
   if (cashPortion>0) {
     db.treasury.balance+=isSales?cashPortion:-cashPortion;
+    // نفس منطق فرع المرتجع الأصلي وقت إنشائه (فرع الفاتورة/فاتورة الشراء
+    // المرتبطة، وإلا الفرع النشط حاليًا كتوافق رجعي)
+    const _revLinkedRec = r.linked_id ? (isSales ? db.invoices.find(i=>i.id===r.linked_id) : db.purchases.find(p=>p.id===r.linked_id)) : null;
     db.treasury.moves.unshift({id:nextId(db,'treasury'),type:isSales?'in':'out',amount:cashPortion,
-      description:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString(),method:r.payment_method});
+      description:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString(),method:r.payment_method,
+      branch_id:_revLinkedRec?.branch_id || resolveActiveBranchId()});
   }
   // 2. Reverse stock (ونحافظ على دقة تكلفة FIFO بدل تعديل qty بس)
   if(r.product_id && r.qty>0){
@@ -13882,7 +13927,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
 
   // Update treasury
   db.treasury.balance += amount;
-  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount,description:`${voucher.voucher_no}: ${voucher.party}`,reference:inv.invoice_no,date:new Date().toISOString(),method:voucher.method});
+  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount,description:`${voucher.voucher_no}: ${voucher.party}`,reference:inv.invoice_no,date:new Date().toISOString(),method:voucher.method,branch_id:inv.branch_id});
 
   // Update invoice status
   const prevStatus = inv.status;
@@ -13993,7 +14038,7 @@ function saveQuickPayPurchase(purchaseId) {
 
   // تحديث الخزينة
   db.treasury.balance -= amount;
-  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount,description:`${voucher.voucher_no}: ${p.vendor}`,reference:p.invoice_no||'',date:new Date().toISOString(),method:voucher.method});
+  db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount,description:`${voucher.voucher_no}: ${p.vendor}`,reference:p.invoice_no||'',date:new Date().toISOString(),method:voucher.method,branch_id:p.branch_id});
 
   // تحديث الفاتورة
   p.paid_amount = Math.round(((p.paid_amount||0)+amount)*100)/100;
@@ -15788,11 +15833,11 @@ function obSaveAll() {
   // صحيح؛ بدون هذا الفصل كانت كل النقدية/البنك تُحتسَب "نقدي" بالكامل
   if (_obData.cash_box > 0) {
     db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_box,
-      description:'رصيد افتتاحي — نقدية', reference:'OPENING', date:new Date().toISOString() });
+      description:'رصيد افتتاحي — نقدية', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
   }
   if (_obData.cash_bank > 0) {
     db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_bank,
-      method:'تحويل', description:'رصيد افتتاحي — بنك', reference:'OPENING', date:new Date().toISOString() });
+      method:'تحويل', description:'رصيد افتتاحي — بنك', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
   }
   if (totalCash > 0) {
     db.treasury.balance = Math.round((db.treasury.balance + totalCash) * 100) / 100;
@@ -16803,6 +16848,9 @@ async function runAISearchQuery(q) {
         const defaultAcc = treas.data.find(a => a.is_default) || treas.data[0];
         db.treasury = db.treasury || {};
         db.treasury._defaultAccountId = defaultAcc.id;
+        // قائمة الحسابات (تحمل branch_id لكل حساب) — تُستخدم لعرض/فلترة صفحة
+        // الخزينة حسب الفرع
+        db.treasury.accounts = treas.data;
         // الرصيد الإجمالي = مجموع كل حسابات الخزينة (الصندوق النقدي + الحساب البنكي...)
         const _srvBal = treas.data.reduce((s, a) => s + (parseFloat(a.balance) || 0), 0);
         const _locBal = parseFloat(db.treasury.balance) || 0;
@@ -16827,6 +16875,7 @@ async function runAISearchQuery(q) {
             reference: row.reference || '',
             date: row.created_at,
             method: row.payment_method || undefined,
+            branch_id: row.account_branch_id || null,
             _serverId: row.id,
           }));
         if (_fromServer.length) {
@@ -17564,7 +17613,7 @@ async function runAISearchQuery(q) {
           const res = await apiFetch('POST', '/api/treasury/move', {
             type: m.type, amount: m.amount,
             description: m.description || '', reference: m.reference || '',
-            payment_method: m.method || null
+            payment_method: m.method || null, branch_id: m.branch_id || null
           }).catch(e => { console.warn('treasury move sync:', e.message); return null; });
 
           if (res?.data?.id) {

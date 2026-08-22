@@ -1,11 +1,17 @@
 const db = require('../config/db');
+const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 
 // طرق الدفع التي تُقيَّد على الحساب البنكي بدل الصندوق النقدي
 const BANK_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
 
-// يختار حساب الخزينة المناسب (كاش/بنك) حسب طريقة الدفع، مع رجوع آمن للحساب الافتراضي
-async function resolveTreasuryAccount(client, companyId, paymentMethod) {
+// يختار حساب الخزينة المناسب (كاش/بنك) حسب طريقة الدفع والفرع، مع رجوع آمن
+// للحساب الافتراضي. البنكي يبقى مشتركًا على مستوى الشركة عمدًا (لا صندوق
+// بنكي منفصل لكل فرع). النقدي يُوجَّه أولًا لصندوق الفرع نفسه — بغض النظر
+// عن is_default (كل صناديق الفروع غير الأول تُنشأ بـis_default=false، فهذا
+// العلم لم يعد يميّز "صندوق الفرع الصحيح" بعد تفعيل تعدد الفروع، فقط يميّز
+// "الحساب الاحتياطي لشركة بفرع واحد أو فرع بلا صندوق خاص")
+async function resolveTreasuryAccount(client, companyId, paymentMethod, branchId) {
   const wantsBank = paymentMethod && BANK_METHODS.includes(String(paymentMethod).trim());
   if (wantsBank) {
     const { rows: [bankAcct] } = await client.query(
@@ -13,6 +19,13 @@ async function resolveTreasuryAccount(client, companyId, paymentMethod) {
       [companyId]
     );
     if (bankAcct) return bankAcct;
+  }
+  if (branchId) {
+    const { rows: [branchAcct] } = await client.query(
+      `SELECT * FROM treasury_accounts WHERE company_id = $1 AND branch_id = $2 AND type = 'cash' AND is_active = true LIMIT 1`,
+      [companyId, branchId]
+    );
+    if (branchAcct) return branchAcct;
   }
   const { rows: [defaultAcct] } = await client.query(
     `SELECT * FROM treasury_accounts WHERE company_id = $1 AND is_default = true LIMIT 1`,
@@ -37,8 +50,17 @@ exports.createAccount = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { name, type, bank_name, account_number, iban, balance, is_default } = req.body;
+    const { name, type, bank_name, account_number, iban, balance, is_default, branch_id } = req.body;
     if (!name) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'اسم الحساب مطلوب' }); }
+
+    // ربط الحساب بفرع مُحدَّد — owner فقط (مثلاً حساب بنكي مخصَّص لفرع لاحقًا)
+    let safeBranchId = null;
+    if (branch_id) {
+      if (req.user.role !== 'owner') { await client.query('ROLLBACK'); return res.status(403).json({ success: false, message: 'ربط حساب بفرع للمالك فقط' }); }
+      const { rows: [b] } = await client.query(`SELECT id FROM branches WHERE id = $1 AND company_id = $2`, [branch_id, req.user.company_id]);
+      if (!b) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفرع غير موجود' }); }
+      safeBranchId = branch_id;
+    }
 
     if (is_default) {
       await client.query(`UPDATE treasury_accounts SET is_default = false WHERE company_id = $1`, [req.user.company_id]);
@@ -46,10 +68,10 @@ exports.createAccount = async (req, res, next) => {
 
     const { rows } = await client.query(`
       INSERT INTO treasury_accounts
-        (company_id, name, type, bank_name, account_number, iban, balance, is_default)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (company_id, name, type, bank_name, account_number, iban, balance, is_default, branch_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING *
-    `, [req.user.company_id, name, type || 'cash', bank_name, account_number, iban, balance || 0, !!is_default]);
+    `, [req.user.company_id, name, type || 'cash', bank_name, account_number, iban, balance || 0, !!is_default, safeBranchId]);
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: rows[0] });
@@ -63,7 +85,16 @@ exports.createAccount = async (req, res, next) => {
 
 exports.updateAccount = async (req, res, next) => {
   try {
-    const { name, bank_name, account_number, iban, is_default, is_active } = req.body;
+    const { name, bank_name, account_number, iban, is_default, is_active, branch_id } = req.body;
+
+    if (branch_id !== undefined && req.user.role !== 'owner') {
+      return res.status(403).json({ success: false, message: 'ربط حساب بفرع للمالك فقط' });
+    }
+    if (branch_id) {
+      const { rows: [b] } = await db.query(`SELECT id FROM branches WHERE id = $1 AND company_id = $2`, [branch_id, req.user.company_id]);
+      if (!b) return res.status(404).json({ success: false, message: 'الفرع غير موجود' });
+    }
+
     if (is_default) {
       await db.query(`UPDATE treasury_accounts SET is_default = false WHERE company_id = $1`, [req.user.company_id]);
     }
@@ -74,11 +105,13 @@ exports.updateAccount = async (req, res, next) => {
         account_number = COALESCE($3, account_number),
         iban           = COALESCE($4, iban),
         is_default     = COALESCE($5, is_default),
-        is_active      = COALESCE($6, is_active)
-      WHERE id = $7 AND company_id = $8
+        is_active      = COALESCE($6, is_active),
+        branch_id      = CASE WHEN $9 THEN $7 ELSE branch_id END
+      WHERE id = $8 AND company_id = $10
       RETURNING *
     `, [name, bank_name, account_number, iban, is_default, is_active,
-        req.params.id, req.user.company_id]);
+        branch_id === undefined ? null : branch_id, req.params.id,
+        branch_id !== undefined, req.user.company_id]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'الحساب غير موجود' });
     res.json({ success: true, data: rows[0] });
@@ -145,7 +178,9 @@ exports.addMove = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
     }
 
-    const acct = await resolveTreasuryAccount(client, req.user.company_id, payment_method);
+    const { branch_id: resolvedBranchId } =
+      await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
+    const acct = await resolveTreasuryAccount(client, req.user.company_id, payment_method, resolvedBranchId);
     if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' }); }
 
     const newBal = type === 'in'
@@ -181,7 +216,7 @@ exports.listMoves = async (req, res, next) => {
     if (to)         { where.push(`tm.created_at <= $${idx++}`); params.push(to); }
 
     const { rows } = await db.query(`
-      SELECT tm.*, ta.name AS account_name, u.full_name AS created_by_name
+      SELECT tm.*, ta.name AS account_name, ta.branch_id AS account_branch_id, u.full_name AS created_by_name
       FROM treasury_moves tm
       LEFT JOIN treasury_accounts ta ON ta.id = tm.account_id
       LEFT JOIN users u ON u.id = tm.created_by
