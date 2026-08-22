@@ -16742,7 +16742,11 @@ async function runAISearchQuery(q) {
 
   function voucherToAPI(v) {
     return {
-      voucher_no: v.voucher_no, type: v.type, party_type: v.party_type || null,
+      // voucher_no لم يعد يُرسَل — يُولَّد بالسيرفر حصريًا الآن (عدّاد مستقل
+      // لكل شركة)؛ client_local_id يميّز إعادة إرسال نفس الطلب (استجابة ضاعت
+      // بالشبكة) بدل الاعتماد على رقم السند المحلي القديم
+      client_local_id: v.id,
+      type: v.type, party_type: v.party_type || null,
       party_name: v.party || '', amount: parseFloat(v.amount) || 0,
       payment_method: v.method || null, description: v.description || '',
       reference: v.ref || '', linked_invoice_id: v.linked_invoice_id || null,
@@ -17485,7 +17489,18 @@ async function runAISearchQuery(q) {
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create voucher', v.voucher_no);
           const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v)).catch(e => { console.warn('voucher sync:', e.message); return null; });
-          if (res?.data?.id) { if (res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id); }
+          if (res?.data?.id) {
+            if (res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id);
+            // رقم السند الرسمي (عدّاد مستقل لكل شركة بالسيرفر) يختلف عن الرقم
+            // المؤقت المولَّد محليًا وقت الإنشاء — نفس مبدأ تصحيح رقم الفاتورة
+            if (res.data.voucher_no) {
+              try {
+                const _db = getDB();
+                const _rv = _db.receipts.find(x => x.id === res.data.id);
+                if (_rv) { _rv.voucher_no = res.data.voucher_no; _origSaveDB(_db); }
+              } catch {}
+            }
+          }
           else _revertSnapEntity('receipts', v.id, null);
         }
       }
