@@ -9,8 +9,19 @@
 // الدالة تتقبّله كمعامل اختياري وتضعه فارغًا إن لم يتوفر، مع تنبيه بالسجلّ.
 
 function tlv(tag, valueBuffer) {
-  const len = Buffer.from([valueBuffer.length]);
-  return Buffer.concat([Buffer.from([tag]), len, valueBuffer]);
+  let vb = valueBuffer;
+  if (vb.length > 255) {
+    // طول TLV بايت واحد فقط (0-255) — بلا هذا القص كان الطول الفعلي يُلتف
+    // (modulo 256) بصمت، فيُنتج TLV تالفًا لأي قيمة تتجاوز 255 بايت (مثلاً
+    // اسم شركة طويل جدًا بالعربي) بدل قص واضح موثّق بالسجلّ
+    vb = vb.subarray(0, 255);
+    while (vb.length > 0 && (vb[vb.length - 1] & 0xC0) === 0x80) {
+      vb = vb.subarray(0, vb.length - 1); // تراجع لحد حرف UTF-8 صحيح لو انقطع بمنتصف حرف متعدد البايتات
+    }
+    console.warn(`zatcaQR: TLV tag ${tag} value truncated from ${valueBuffer.length} to ${vb.length} bytes (255-byte TLV limit)`);
+  }
+  const len = Buffer.from([vb.length]);
+  return Buffer.concat([Buffer.from([tag]), len, vb]);
 }
 
 /**

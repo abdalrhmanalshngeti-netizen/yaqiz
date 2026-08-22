@@ -59,7 +59,7 @@ exports.create = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { company_id, sub: user_id } = req.user;
-    const { customer_id, customer_name, date, valid_until, notes, status, items = [] } = req.body;
+    const { customer_id, customer_name, date, valid_until, notes, status, items = [], vat_rate } = req.body;
 
     let subtotal = 0;
     const processedItems = items.map((item, idx) => {
@@ -68,7 +68,7 @@ exports.create = async (req, res, next) => {
       subtotal += line_total;
       return { ...item, line_total, sort_order: idx };
     });
-    const vat_amount   = subtotal * 0.15;
+    const vat_amount   = subtotal * (parseFloat(vat_rate ?? 15) / 100);
     const grand_total  = subtotal + vat_amount;
 
     const { rows: [seqRow] } = await client.query(`SELECT nextval('quote_seq') AS n`);

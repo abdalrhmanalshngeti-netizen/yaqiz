@@ -735,9 +735,12 @@ async function loadCompaniesForStaff(){
 }
 
 // ── Plans ──────────────────────────────────────────────
+// نفس الأسعار الفعلية بـPLAN_PRICES.monthly في payments.controller.js —
+// كانت هذي القيم قديمة (149/299) من تسعير سابق، فيُقلَّل الإيراد الشهري
+// المعروض هنا فعليًا عن الحقيقي
 const PLAN_META = {
-  basic:  { label:'أساسي',      color:'var(--green)',  price:149, icon:'📗' },
-  growth: { label:'نمو',        color:'var(--blue)',   price:299, icon:'📘' },
+  basic:  { label:'أساسي',      color:'var(--green)',  price:199, icon:'📗' },
+  growth: { label:'نمو',        color:'var(--blue)',   price:349, icon:'📘' },
   pro:    { label:'احترافي',    color:'var(--purple)', price:499, icon:'📙' },
 };
 
@@ -2248,7 +2251,9 @@ function escHtml(s){
 function getCostParams(){return{server:parseFloat($('cost-server').value)||0,perInv:parseFloat($('cost-inv').value)||0,perUser:parseFloat($('cost-user').value)||0};}
 function calcCosts(companies){
   const p=getCostParams();
-  const rows=companies.map(c=>({...c,varCost:n(c.invoice_count)*p.perInv+n(c.user_count)*p.perUser}));
+  // شهر تقويمي حالي فقط (monthly_invoice_count) لا كل فواتير عمر الشركة —
+  // وإلا شركة قديمة نشطة تظهر بتكلفة "شهرية" مُضخَّمة بمقدار سنوات كاملة
+  const rows=companies.map(c=>({...c,varCost:n(c.monthly_invoice_count)*p.perInv+n(c.user_count)*p.perUser}));
   const totalVar=rows.reduce((s,r)=>s+r.varCost,0);
   const totalCost=p.server+totalVar;
   return rows.map(r=>{
@@ -2265,7 +2270,7 @@ function renderCostSection(companies){
   const totalVar=rows.reduce((s,r)=>s+r.varCost,0);
   const totalCost=p.server+totalVar;
   const totalUsers=rows.reduce((s,r)=>s+n(r.user_count),0);
-  const totalInv=rows.reduce((s,r)=>s+n(r.invoice_count),0);
+  const totalInv=rows.reduce((s,r)=>s+n(r.monthly_invoice_count),0);
   $('cost-total-val').textContent=fmtSAR(totalCost)+' ر.س';
   const top10=rows.slice(0,10);
   if(_costChart) _costChart.destroy();
@@ -2276,13 +2281,13 @@ function renderCostSection(companies){
     </div>
     <div class="cost-table-wrap">
       <table class="cost-table">
-        <thead><tr><th>#</th><th>الشركة</th><th>مستخدمون</th><th>فواتير</th><th>التكلفة المتغيرة</th><th>إجمالي</th><th>%</th></tr></thead>
+        <thead><tr><th>#</th><th>الشركة</th><th>مستخدمون</th><th>فواتير الشهر</th><th>التكلفة المتغيرة</th><th>إجمالي</th><th>%</th></tr></thead>
         <tbody>
           ${rows.map((r,i)=>`<tr>
             <td style="font-weight:800;color:var(--muted)">${i+1}</td>
             <td style="font-weight:800;color:#f0f4ff;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.name)}</td>
             <td style="color:#93c5fd">${fmt(r.user_count)}</td>
-            <td style="color:#6ee7b7">${fmt(r.invoice_count)}</td>
+            <td style="color:#6ee7b7">${fmt(r.monthly_invoice_count)}</td>
             <td style="color:var(--muted)">${fmtSAR(r.varCost)}</td>
             <td style="font-weight:900;color:#fbbf24">${fmtSAR(r.cost)} ر.س</td>
             <td><div style="font-weight:800">${r.pct.toFixed(1)}%</div><div class="cost-bar-inline" style="width:${Math.min(r.pct*2,100)}%"></div></td>

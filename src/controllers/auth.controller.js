@@ -318,6 +318,17 @@ exports.updateCompany = async (req, res, next) => {
     }
     const { company_name, vat_number, cr_number, address, city, contact_phone, contact_email,
             street_name, building_number, district, postal_code, country_code } = req.body;
+
+    // صيغة العنوان الوطني (رقم المبنى/الرمز البريدي) مطلوبة بمعيار سبل السعودي
+    // ولازمة لتوليد QR فاتورة صحيح بالمرحلة الثانية — نتحقق منها هنا كخط دفاع
+    // أخير حتى لو تجاوز طلب مباشر للـ API التحقق الموجود بالواجهة
+    if (building_number !== undefined && building_number !== null && building_number !== '' && !/^\d{4}$/.test(String(building_number))) {
+      return res.status(400).json({ success: false, message: 'رقم المبنى يجب أن يكون 4 أرقام بالضبط' });
+    }
+    if (postal_code !== undefined && postal_code !== null && postal_code !== '' && !/^\d{5}$/.test(String(postal_code))) {
+      return res.status(400).json({ success: false, message: 'الرمز البريدي يجب أن يكون 5 أرقام بالضبط' });
+    }
+
     await db.query(`
       UPDATE companies SET
         name            = COALESCE($1, name),

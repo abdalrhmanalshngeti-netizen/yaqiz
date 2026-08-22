@@ -476,6 +476,12 @@ exports.setCompanyStatus = async (req, res, next) => {
 };
 
 // ── تحليل التكلفة لكل الشركات ────────────────────────────
+// invoice_count/total_revenue تبقى إجمالية (طول عمر الشركة) — نفس هذا الرد
+// يُستخدم أيضًا بجدول "الشركات" العام كمؤشر نشاط تاريخي، فتحويلها لشهرية
+// كان سيكسر ذاك الجدول. بدلها أضفنا monthly_invoice_count/monthly_revenue
+// (الشهر التقويمي الحالي تحديدًا) خصيصًا لحاسبة "تحليل التكلفة" اللي تعرض
+// نتيجتها كتقدير "ر.س/شهر" متكرر — عدّ كل فواتير عمر الشركة هناك كان يُضخّم
+// تكلفة أي شركة قديمة نشطة بصورة كبيرة وخاطئة
 exports.costAnalysis = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
@@ -486,7 +492,9 @@ exports.costAnalysis = async (req, res, next) => {
         EXISTS(SELECT 1 FROM subscriptions s WHERE s.company_id = c.id) AS has_paid,
         COUNT(DISTINCT u.id) FILTER (WHERE u.is_super_admin = false)::int AS user_count,
         COUNT(DISTINCT i.id)::int AS invoice_count,
-        COALESCE(SUM(i.grand_total), 0)::numeric AS total_revenue
+        COALESCE(SUM(i.grand_total), 0)::numeric AS total_revenue,
+        COUNT(DISTINCT i.id) FILTER (WHERE i.created_at >= date_trunc('month', now()))::int AS monthly_invoice_count,
+        COALESCE(SUM(i.grand_total) FILTER (WHERE i.created_at >= date_trunc('month', now())), 0)::numeric AS monthly_revenue
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
       LEFT JOIN invoices i ON i.company_id = c.id
@@ -629,6 +637,9 @@ exports.impersonate = async (req, res, next) => {
 };
 
 // ── إحصائيات الباقات ─────────────────────────────────────
+// ملاحظة: مقصورة على status='active' فقط — شركة مُعلَّقة أو مُلغاة لا تدفع
+// اشتراكًا فعليًا، فاحتسابها ضمن قائمة الباقات كان يُضخّم الإيراد الشهري
+// المتكرر (MRR) المعروض بلوحة "الباقات والإيرادات" بإيراد وهمي غير حقيقي
 exports.getPlans = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
@@ -639,6 +650,7 @@ exports.getPlans = async (req, res, next) => {
       FROM companies c
       LEFT JOIN users u ON u.company_id = c.id
       LEFT JOIN invoices i ON i.company_id = c.id
+      WHERE c.status = 'active'
       GROUP BY c.id
       ORDER BY c.created_at DESC
     `);

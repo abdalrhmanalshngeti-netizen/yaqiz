@@ -136,6 +136,18 @@ exports.update = async (req, res, next) => {
         [req.body.branch_id || null, req.params.id, req.user.company_id]);
     }
 
+    // إلغاء صلاحية الكاشير (أو تعطيل الوردية) وعنده وردية مفتوحة حاليًا يُتيمها
+    // للأبد — بلا أي مسار بالواجهة لإقفالها لاحقًا (نفس مبدأ حظر تغيير الفرع أعلاه)
+    if (pos_access === false || shift_enabled === false) {
+      const { rows: [openShift] } = await db.query(
+        `SELECT id FROM shifts WHERE user_id = $1 AND company_id = $2 AND status = 'open'`,
+        [req.params.id, req.user.company_id]
+      );
+      if (openShift) {
+        return res.status(400).json({ success: false, message: 'لا يمكن إلغاء صلاحية الكاشير لموظف عنده وردية مفتوحة حاليًا — يجب إقفال الوردية أولًا' });
+      }
+    }
+
     const { rows } = await db.query(`
       UPDATE users SET
         full_name     = COALESCE($1, full_name),

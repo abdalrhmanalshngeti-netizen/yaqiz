@@ -43,9 +43,11 @@ exports.create = async (req, res, next) => {
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة المرتبطة غير موجودة' }); }
       linkedInvoice = rows[0];
     }
+    let linkedPurchase = null;
     if (linked_purchase_id) {
-      const { rows } = await client.query(`SELECT id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
+      const { rows } = await client.query(`SELECT id, branch_id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' }); }
+      linkedPurchase = rows[0];
     }
 
     const { rows: [seq] } = await client.query(`SELECT NEXTVAL('return_seq') AS n`);
@@ -81,6 +83,25 @@ exports.create = async (req, res, next) => {
         await client.query('ROLLBACK TO sp_stock');
         console.warn(`stock restore skipped [${return_no}] product ${product_id}:`, stockErr.message);
       }
+    }
+
+    // مرتجع مشتريات — يُخرِج الكمية فعليًا من نفس مستودع فرع فاتورة الشراء
+    // الأصلية إن وُجدت (نفس المستودع اللي زيدت فيه وقت الشراء)، وإلا مستودع
+    // فرع المستخدم الحالي. بعكس مرتجع المبيعات أعلاه (إضافة، لا تفشل أبدًا
+    // بسبب كمية)، هذا خصم فعلي — لو تجاوزت الكمية المرتجعة الرصيد الفعلي
+    // بالمستودع، نرفض العملية بالكامل بدل تسجيل مرتجع/قيد محاسبي لمخزون غير
+    // موجود فعليًا (كان قبل هذا الإصلاح لا يُنفَّذ هذا الفرع إطلاقًا — أي مرتجع
+    // مشتريات ما كان يُنقِص المخزون بالسيرفر أبدًا، ويعود الرقم القديم بصمت
+    // بأول مزامنة دورية تالية رغم ظهور المرتجع "ناجحًا" بالواجهة)
+    if (type === 'purchases' && product_id) {
+      const { warehouse_id } = linkedPurchase
+        ? await branch.resolveWarehouseForBranch(client, company_id, linkedPurchase.branch_id, false)
+        : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
+      await stock.deduct(client, {
+        company_id, product_id, warehouse_id, qty: qty || 0,
+        reason: 'مرتجع مشتريات', source_type: 'return', source_id: ret.id,
+        reference: return_no, user_id: req.user.sub
+      });
     }
 
     // إشعار دائن فعلي — فقط لمرتجع مبيعات مرتبط فعليًا بفاتورة صدرت (بدون فاتورة

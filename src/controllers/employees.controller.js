@@ -311,6 +311,8 @@ exports.closeShift = async (req, res, next) => {
     }
 
     // جمع مبيعات الوردية — طرق الدفع تُحفظ بالعربي من الواجهة (نقدي/شبكة/تحويل/آجل)
+    // ومحصورة بفرع الوردية نفسه، وإلا مبيعات فروع أخرى لنفس الموظف (لو نقل
+    // بينها بنفس الفترة) تدخل بالخطأ ضمن تسوية وردية هذا الفرع تحديدًا
     const { rows: [sales] } = await db.query(`
       SELECT
         COALESCE(SUM(CASE WHEN payment_method IN ('نقدي','cash') THEN grand_total ELSE 0 END),0) AS cash,
@@ -320,7 +322,8 @@ exports.closeShift = async (req, res, next) => {
         COUNT(*) AS cnt
       FROM invoices
       WHERE created_by = $1 AND created_at >= $2 AND company_id = $3
-    `, [shift.user_id, shift.start_time, req.user.company_id]);
+        AND branch_id IS NOT DISTINCT FROM $4
+    `, [shift.user_id, shift.start_time, req.user.company_id, shift.branch_id]);
 
     await db.query(`
       UPDATE shifts SET
