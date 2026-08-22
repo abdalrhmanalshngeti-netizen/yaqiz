@@ -1,6 +1,7 @@
 const db     = require('../config/db');
 const crypto = require('crypto');
 const { nextDocNumber } = require('../services/docNumber.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { buildInvoiceXML } = require('../services/zatca.service');
@@ -85,7 +86,7 @@ exports.create = async (req, res, next) => {
         quote_no,
         customer_id || null,
         customer_name || '',
-        date || new Date().toISOString().slice(0, 10),
+        date || todayLocalDateStr(),
         valid_until || null,
         STATUS_EN[status] || status || 'draft',
         subtotal, vat_amount, grand_total,

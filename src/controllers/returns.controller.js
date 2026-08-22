@@ -3,6 +3,7 @@ const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
@@ -64,7 +65,7 @@ exports.create = async (req, res, next) => {
     `, [company_id, return_no, type, party_name || '', product_id || null,
         product_name || '', qty || 0, base_amount || 0, vat_amount || 0, amount,
         reason || '', linked_invoice_id || null, linked_purchase_id || null,
-        date || new Date().toISOString().slice(0, 10), req.user.sub,
+        date || todayLocalDateStr(), req.user.sub,
         payment_method || null, cogs_reversal || 0]);
 
     // إرجاع الكمية فعليًا للمخزون — لنفس مستودع فرع الفاتورة الأصلية إن وُجدت

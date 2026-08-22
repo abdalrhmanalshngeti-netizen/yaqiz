@@ -1,9 +1,10 @@
 const db = require('../config/db');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 exports.dashboard = async (req, res, next) => {
   try {
     const cid = req.user.company_id;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalDateStr();
     const monthStart = today.slice(0, 7) + '-01';
 
     const [sales, purchases, treasury, lowStock, overdueInv] = await Promise.all([

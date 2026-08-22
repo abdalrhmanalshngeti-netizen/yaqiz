@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { nextDocNumber } = require('../services/docNumber.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 // يحدد نوع الحساب الافتراضي لأي كود غير معروف بالاعتماد على الرقم الأول
 // (1=أصول، 2=التزامات، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات) — احتياطي فقط
@@ -75,7 +76,7 @@ exports.create = async (req, res, next) => {
       `INSERT INTO journal_entries (company_id, entry_no, description, reference, date, created_by)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [req.user.company_id, entry_no, description || '', ref || null,
-       (date ? new Date(date) : new Date()).toISOString().slice(0, 10), req.user.sub]
+       date || todayLocalDateStr(), req.user.sub]
     );
 
     for (const e of entries) {

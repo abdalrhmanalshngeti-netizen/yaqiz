@@ -1,6 +1,7 @@
 const db     = require('../config/db');
 const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 // حقول قائمة الموظفين — تُستثنى national_id وiqama_no وiban من قائمة الكل
 const LIST_FIELDS = `id, company_id, employee_no, name, position, department,
@@ -192,7 +193,7 @@ exports.markPayrollPaid = async (req, res, next) => {
 
     await client.query(`
       UPDATE payroll SET status='paid', payment_date=$1, account_id=$2 WHERE id=$3
-    `, [payment_date || new Date().toISOString().slice(0,10), account_id, p.id]);
+    `, [payment_date || todayLocalDateStr(), account_id, p.id]);
 
     if (account_id) {
       const { rows: [acct] } = await client.query(
