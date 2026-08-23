@@ -861,6 +861,16 @@ function mutateWarehouseStock(db, productId, warehouseId, delta) {
 function getWarehouseStockQty(db, productId, warehouseId) {
   return db.productStock?.[productId]?.[warehouseId] ?? 0;
 }
+// نفس أثر mutateWarehouseStock على db.productStock فقط، بدون لمس p.qty —
+// يُستخدَم لما p.qty يكون مُدار سلفًا بمنطق FIFO مخصَّص (راجع deleteReturn)
+// حتى لا يُطبَّق نفس التغيير على الكمية الإجمالية مرتين
+function adjustWarehouseStockMapOnly(db, productId, warehouseId, delta) {
+  if (!warehouseId) return;
+  if (!db.productStock) db.productStock = {};
+  if (!db.productStock[productId]) db.productStock[productId] = {};
+  const cur = db.productStock[productId][warehouseId] || 0;
+  db.productStock[productId][warehouseId] = Math.round((cur + delta) * 1000) / 1000;
+}
 // كمية الصنف الفعلية بفرع المستخدم النشط حاليًا — نفس مبدأ renderInventoryInner():
 // شركة بفرع واحد (أو بلا مستودع محلول) تعتمد على p.qty الإجمالي مباشرة، وشركة
 // متعددة الفروع تُقصَر تحديدًا على مخزون فرعها الحالي، لا إجمالي كل الفروع
@@ -4796,7 +4806,14 @@ function showAddGoodsPurchase(keepItems) {
       <div style="font-weight:800;font-size:13px;margin-bottom:8px;">📋 ${lang==='ar'?'الأصناف:':'Items:'}</div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:4px;">
         <input class="input" id="gp-iname" placeholder="${lang==='ar'?'اسم الصنف':'Item name'}" list="gp-prod-list" />
-        <datalist id="gp-prod-list">${db.products.map(p=>`<option value="${sanitize(p.name)}" data-price="${p.buy_price}">`).join('')}</datalist>
+        <datalist id="gp-prod-list">${(()=>{
+          // لو اسم صنف مكرَّر بين منتجين، نميّز خيار القائمة بإضافة الكود —
+          // بدونه المستخدم يشوف نفس الاسم مرتين بلا طريقة للتفريق، وأي طباعة
+          // بالاسم المجرَّد تربط دائمًا بأول منتج مطابق بالمصادفة
+          const nameCounts = {};
+          db.products.forEach(p=>{ nameCounts[p.name]=(nameCounts[p.name]||0)+1; });
+          return db.products.map(p=>`<option value="${sanitize(nameCounts[p.name]>1 ? `${p.name} (${p.code})` : p.name)}" data-price="${p.buy_price}">`).join('');
+        })()}</datalist>
         <input class="input" type="number" id="gp-iqty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" min="1" oninput="calcGPLine()" />
         <div>
           <input class="input" type="number" id="gp-iunit" value="0" placeholder="${lang==='ar'?'سعر الحبة (ق.ض)':'Unit Price (ex-VAT)'}" oninput="calcGPLine()" />
@@ -4863,13 +4880,19 @@ function calcGPLine() {
 }
 
 function addGPItem() {
-  const name=el('gp-iname')?.value?.trim();
+  const rawName=el('gp-iname')?.value?.trim();
   const qty=Number(el('gp-iqty')?.value||1);
   const price=Number(el('gp-iunit')?.value||0);
-  if(!name){showToast(lang==='ar'?'أدخل اسم الصنف':'Enter item name','error');return;}
+  if(!rawName){showToast(lang==='ar'?'أدخل اسم الصنف':'Enter item name','error');return;}
   if(!qty||!price){showToast(lang==='ar'?'أدخل الكمية والسعر':'Enter qty and price','error');return;}
-  // auto-fill price from product
-  const db=getDB(); const prod=db.products.find(p=>p.name===name);
+  // auto-fill price from product — لو المستخدم اختار خيار "الاسم (الكود)" المميَّز
+  // من القائمة (يظهر فقط لو الاسم مكرَّر)، نحل المنتج بالكود الدقيق أولًا؛ وإلا
+  // نطابق بالاسم المجرَّد كخيار احتياطي (نفس السلوك السابق لو الاسم غير مكرَّر)
+  const db=getDB();
+  const codeMatch = rawName.match(/^(.*)\s+\(([^()]+)\)$/);
+  let prod = codeMatch ? db.products.find(p=>p.code===codeMatch[2] && p.name===codeMatch[1]) : null;
+  const name = codeMatch && prod ? codeMatch[1] : rawName;
+  if (!prod) prod = db.products.find(p=>p.name===name);
   const _gpVatOn2 = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
   const lineTotal=Math.round(qty*price*100)/100;
   _goodsItems.push({name,qty,price,line_total:lineTotal,vat:_gpVatOn2?Math.round(lineTotal*0.15*100)/100:0,product_id:prod?.id||null});
@@ -7644,19 +7667,28 @@ function renderCashFlow(db, d, periodFilter, period) {
 
   // صافي كل حركات الخزينة الفعلية بالفترة — المرجع الوحيد الموثوق لمقدار
   // التغيّر الحقيقي بالرصيد. التصنيف أعلاه (سندات/بيع وشراء نقدي مباشر) يغطي
-  // أكثر المسارات شيوعًا بس مو كلها — رواتب، حركات خزينة يدوية، تحصيل/سداد
-  // التزامات، والجزء النقدي من المرتجعات كلها تحرّك الخزينة فعليًا بدون ما
-  // تظهر بأي من المجموعتين أعلاه. الفرق بين الصافي الفعلي والمصنَّف يُعرَض
-  // صراحة كبند "حركات أخرى" بدل ما يختفي بصمت ويسبب تعارضًا مع رصيد الخزينة الحقيقي
+  // أكثر المسارات شيوعًا بس مو كلها — رواتب، حركات خزينة يدوية، والجزء النقدي
+  // من المرتجعات كلها تحرّك الخزينة فعليًا بدون ما تظهر بأي من المجموعتين أعلاه.
   const allMovesInPeriod = (db.treasury.moves||[]).filter(m => period==='all' || periodFilter(m));
   const actualNetChange = Math.round(allMovesInPeriod.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)*100)/100;
-  const categorizedNet = (cashIn_receipts + cashIn_direct) - (cashOut_vouchers + cashOut_purchases);
+
+  // سداد الالتزامات (OBL-*) يُسجَّل بالخزينة بأي وسيلة دفع (نقدي/شبكة/تحويل)،
+  // لكنه لا يظهر ببند "مشتريات نقدية مباشرة" أعلاه لأن شرطه يقتصر على
+  // payment_method==='نقدي' — بدون بند مستقل هنا كان يختفي كليًا من التصنيف
+  // ويُحتسَب ضمن "حركات أخرى" المبهم رغم أن مصدره معروف بالضبط (مرجع OBL-)
+  const obligationMoves = allMovesInPeriod.filter(m => (m.reference||'').startsWith('OBL-'));
+  const cashOut_obligations = obligationMoves.filter(m=>m.type==='out').reduce((s,m)=>s+m.amount,0);
+  const cashIn_obligations  = obligationMoves.filter(m=>m.type==='in').reduce((s,m)=>s+m.amount,0);
+
+  // الفرق بين الصافي الفعلي والمصنَّف (بعد إضافة الالتزامات) يُعرَض صراحة كبند
+  // "حركات أخرى" بدل ما يختفي بصمت ويسبب تعارضًا مع رصيد الخزينة الحقيقي
+  const categorizedNet = (cashIn_receipts + cashIn_direct + cashIn_obligations) - (cashOut_vouchers + cashOut_purchases + cashOut_obligations);
   const otherNet = Math.round((actualNetChange - categorizedNet)*100)/100;
   const cashIn_other  = Math.max(0, otherNet);
   const cashOut_other = Math.max(0, -otherNet);
 
-  const totalCashIn       = cashIn_receipts + cashIn_direct + cashIn_other;
-  const totalCashOut      = cashOut_vouchers + cashOut_purchases + cashOut_other;
+  const totalCashIn       = cashIn_receipts + cashIn_direct + cashIn_obligations + cashIn_other;
+  const totalCashOut      = cashOut_vouchers + cashOut_purchases + cashOut_obligations + cashOut_other;
 
   const netCash     = actualNetChange;
   const closeBal    = db.treasury.balance;
@@ -7680,7 +7712,8 @@ function renderCashFlow(db, d, periodFilter, period) {
     </div>
     ${row(lang==='ar'?'سندات قبض من العملاء':'Customer receipts', cashIn_receipts, false, true)}
     ${row(lang==='ar'?'مبيعات نقدية مباشرة':'Direct cash sales', cashIn_direct, false, true)}
-    ${cashIn_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/التزامات/مرتجعات)':'Other movements (salaries/manual/obligations/returns)', cashIn_other, false, true):''}
+    ${cashIn_obligations>0.004?row(lang==='ar'?'استرداد التزامات':'Obligation refunds', cashIn_obligations, false, true):''}
+    ${cashIn_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/مرتجعات)':'Other movements (salaries/manual/returns)', cashIn_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الوارد':'Total Inflows', totalCashIn, true)}
 
     <div style="font-weight:800;font-size:13px;color:var(--danger);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #fee2e2;">
@@ -7688,7 +7721,8 @@ function renderCashFlow(db, d, periodFilter, period) {
     </div>
     ${row(lang==='ar'?'سندات صرف للموردين':'Supplier payments', -cashOut_vouchers, false, true)}
     ${row(lang==='ar'?'مشتريات نقدية مباشرة':'Direct cash purchases', -cashOut_purchases, false, true)}
-    ${cashOut_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/التزامات/مرتجعات)':'Other movements (salaries/manual/obligations/returns)', -cashOut_other, false, true):''}
+    ${cashOut_obligations>0.004?row(lang==='ar'?'سداد الالتزامات الدورية':'Recurring obligation payments', -cashOut_obligations, false, true):''}
+    ${cashOut_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/مرتجعات)':'Other movements (salaries/manual/returns)', -cashOut_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الصادر':'Total Outflows', -totalCashOut, true)}
 
     <div style="margin-top:16px;padding:16px;background:${netCash>=0?'#dcfce7':'#fee2e2'};border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -10545,6 +10579,12 @@ function deleteReturn(id){
     if(prod){
       const stockType=isSales?'out':'in';
       const oldQty=prod.qty;
+      // نفس المستودع اللي أُثِّر فعليًا وقت المرتجع الأصلي (مسجَّل بحركة المخزون
+      // المرتبطة، لا resolveActiveWarehouseId() الحالي اللي قد يختلف الآن) —
+      // بدونه، عكس مرتجع لشركة متعددة الفروع يصحّح الكمية الإجمالية فقط
+      // ويترك db.productStock (المُعتمَد فعليًا بعرض/بيع كل فرع) غير متزامن للأبد
+      const _revStockMove = (db.stock_moves||[]).find(m=>m.reference===r.return_no && m.product_id===r.product_id);
+      const _revWarehouseId = _revStockMove?.warehouse_id || null;
       if(!prod.lots) prod.lots=[];
       if(isSales){
         // شيل نفس اللوت اللي أضافه المرتجع (ref = return_no) بالضبط لو لسه موجود
@@ -10565,9 +10605,11 @@ function deleteReturn(id){
         prod.lots.push({qty:r.qty, cost:unitCost, date:new Date().toISOString(), ref:'reverse-'+r.return_no});
         prod.qty=oldQty+r.qty;
       }
+      // نفس اتجاه تغيير prod.qty أعلاه بالضبط، بس على مستوى المستودع فقط
+      adjustWarehouseStockMapOnly(db, prod.id, _revWarehouseId, isSales ? -r.qty : r.qty);
       if(!db.stock_moves)db.stock_moves=[];
       db.stock_moves.push({id:db.nextId.stock_move||1,product_id:r.product_id,product_name:r.product_name,type:stockType,qty:r.qty,
-        balance_before:oldQty,balance_after:prod.qty,reason:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString()});
+        balance_before:oldQty,balance_after:prod.qty,warehouse_id:_revWarehouseId,reason:`عكس مرتجع ${r.return_no}`,reference:r.return_no,date:new Date().toISOString()});
       db.nextId.stock_move=(db.nextId.stock_move||1)+1;
     }
   }
@@ -11748,6 +11790,37 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
     shift.variance_cash     = Math.round((shift.closing_cash     - ((shift.opening_cash||0)+(shift.sales_cash||0))) * 100) / 100;
     shift.variance_card     = Math.round((shift.closing_card     - (shift.sales_card||0))     * 100) / 100;
     shift.variance_transfer = Math.round((shift.closing_transfer - (shift.sales_transfer||0)) * 100) / 100;
+
+    // عجز/زيادة الصندوق النقدي عند الإغلاق — فرق حقيقي بين المعدود فعليًا
+    // والمتوقع محاسبيًا، لازم ينعكس على الخزينة والدفاتر فورًا (نفس حساب
+    // "إيرادات/مصاريف أخرى" 4900/5900 المُستخدَم بتسوية جرد المخزون اليدوية)
+    // وإلا رصيد الخزينة يبقى محسوبًا نظريًا بينما الدرج الفعلي مختلف للأبد
+    const cashVariance = shift.variance_cash || 0;
+    if (Math.abs(cashVariance) > 0.01) {
+      if (!db.treasury) db.treasury = { balance:0, moves:[] };
+      if (!db.treasury.moves) db.treasury.moves = [];
+      db.treasury.balance = Math.round((db.treasury.balance + cashVariance) * 100) / 100;
+      db.treasury.moves.unshift({
+        id: nextId(db,'treasury'), type: cashVariance>0?'in':'out', amount: Math.abs(cashVariance),
+        description: `${cashVariance>0?(lang==='ar'?'زيادة':'Overage'):(lang==='ar'?'عجز':'Shortage')} صندوق وردية — ${user.username}`,
+        reference: `SHIFT-${shift.id}`, date: new Date().toISOString(), method:'نقدي',
+        branch_id: shift.branch_id || resolveActiveBranchId()
+      });
+      if (!db.journal) db.journal = [];
+      if (!db.nextId.journal) db.nextId.journal = 1;
+      db.journal.push({
+        id: db.nextId.journal++, date: new Date().toISOString(),
+        description: `${cashVariance>0?(lang==='ar'?'زيادة':'Overage'):(lang==='ar'?'عجز':'Shortage')} صندوق — وردية ${user.username} #${shift.id}`,
+        entries: cashVariance>0 ? [
+          {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashVariance},
+          {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount:cashVariance},
+        ] : [
+          {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount:Math.abs(cashVariance)},
+          {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:Math.abs(cashVariance)},
+        ],
+        ref: `SHIFT-${shift.id}`
+      });
+    }
     saveDB(db);
     if (shift._serverId) {
       window._cloudApiFetch?.('PUT', `/api/employees/shifts/${shift._serverId}/close`, {
@@ -13132,7 +13205,9 @@ function confirmImport(data, type, format) {
   const items = Array.isArray(data) ? data : [];
   items.forEach(item=>{
     if(!item.name) return;
-    const ex = db.products.find(p=>p.code===item.code||p.name===item.name);
+    // الكود أولى عند وجوده — لو عندنا كود صريح لا نطابق بالاسم إطلاقًا، وإلا
+    // منتج موجود فعليًا بكود مختلف قد يندمج صامتًا مع صنف آخر بنفس الاسم بالصدفة
+    const ex = item.code ? db.products.find(p=>p.code===item.code) : db.products.find(p=>p.name===item.name);
     if(ex) {
       Object.assign(ex, {buy_price:item.buy_price||ex.buy_price, sell_price:item.sell_price||ex.sell_price, qty:item.qty||ex.qty});
       updated++;
@@ -14466,7 +14541,9 @@ function importProductsCSV(input) {
       if(cols.length<6)return;
       const [code,name,category,buy_price,sell_price,qty]=cols;
       if(!name){skipped++;return;}
-      const ex=db.products.find(p=>p.code===code||p.name===name);
+      // نفس مبدأ استيراد Excel/AI: الكود أولى عند وجوده، لا نطابق بالاسم إذا
+      // كان لدينا كود صريح — يمنع اندماج صنف بكود مختلف بالصدفة بسبب تشابه الاسم
+      const ex=code ? db.products.find(p=>p.code===code) : db.products.find(p=>p.name===name);
       if(ex){ ex.buy_price=Number(buy_price)||ex.buy_price; ex.sell_price=Number(sell_price)||ex.sell_price; ex.qty=Number(qty)||ex.qty; }
       else { db.products.push({id:nextId(db,'product'),code:code||`P${db.nextId.product}`,name,category:category||'عام',unit:'قطعة',buy_price:Number(buy_price)||0,sell_price:Number(sell_price)||0,qty:Number(qty)||0,min_qty:5}); added++; }
     });
@@ -14867,7 +14944,9 @@ function computePartyStatement(party, kind) {
   const isCust = kind === 'customer';
   const partyName = party.name;
   const obList = (isCust ? db.settings?.opening_balances_data?.customers : db.settings?.opening_balances_data?.suppliers) || [];
-  const obEntry = obList.find(x=>x.name===partyName);
+  // نفضّل معرّف الطرف المخزَّن على بند الرصيد الافتتاحي (obSaveAll يلتقطه وقت
+  // الحفظ) — بدونه، طرفان بنفس الاسم يتشاركان نفس بند الرصيد الافتتاحي بكشوفهما
+  const obEntry = obList.find(x=>x.id!=null ? x.id===party.id : x.name===partyName);
   const openingBal = obEntry?.balance || 0;
   const openingDate = db.settings?.opening_balances_date || null;
 
@@ -15839,10 +15918,18 @@ function obAddSupplier() {
 }
 function obRemoveSupplier(i) { _obData.suppliers.splice(i,1); el('ob-step-content').innerHTML=renderOBStepContent(); refreshIcons(); }
 
-// نفس منطق البحث عن عميل/مورد مطابق المستخدم بكل مكان آخر بالمنصة
-// (حالة أحرف + مسافات لا تُحتسَب، والمعطَّل لا يُطابَق) — يمنع نسخة عميل
-// افتتاحي منفصلة تمامًا عن نفس العميل الفعلي بسبب فرق تافه بالاسم
-function _obFindPartyMatch(list, name) {
+// نفس منطق البحث عن عميل/مورد مطابق المستخدم بكل مكان آخر بالمنصة — يفضّل
+// المعرّف المخزَّن على بند الرصيد الافتتاحي نفسه (مُلتقَط أول مرة يُحفَظ فيها)
+// وإلا يسقط لمطابقة بالاسم (حالة أحرف + مسافات لا تُحتسَب، والمعطَّل لا يُطابَق)
+// كخيار احتياطي أول مرة فقط — بدون تفضيل المعرّف، عميلان بنفس الاسم يتشاركان
+// نفس بند الرصيد الافتتاحي صامتًا
+function _obFindPartyMatch(list, entry) {
+  const id = entry && typeof entry === 'object' ? entry.id : null;
+  const name = entry && typeof entry === 'object' ? entry.name : entry;
+  if (id != null) {
+    const byId = (list||[]).find(x => x.id === id);
+    if (byId) return byId;
+  }
   return (list||[]).find(x=>x.is_active!==false && (x.name||'').trim().toLowerCase()===(name||'').trim().toLowerCase());
 }
 
@@ -16262,14 +16349,14 @@ function obSaveAll() {
     if (!db.nextId.customer) db.nextId.customer = 1;
     if (isEdit) {
       (oldData.customers||[]).forEach(c => {
-        const ex = _obFindPartyMatch(db.customers, c.name);
+        const ex = _obFindPartyMatch(db.customers, c);
         if (ex) ex.balance = Math.round(((ex.balance||0)-c.balance)*100)/100;
       });
     }
     _obData.customers.forEach(c => {
-      const ex = _obFindPartyMatch(db.customers, c.name);
-      if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; }
-      else { db.customers.push({ id:nextId(db,'customer'), name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString() }); }
+      const ex = _obFindPartyMatch(db.customers, c);
+      if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; c.id = ex.id; }
+      else { const newId = nextId(db,'customer'); db.customers.push({ id:newId, name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString() }); c.id = newId; }
     });
   }
 
@@ -16278,14 +16365,14 @@ function obSaveAll() {
   if (!db.nextId.supplier) db.nextId.supplier = 1;
   if (isEdit) {
     (oldData.suppliers||[]).forEach(s => {
-      const ex = _obFindPartyMatch(db.suppliers, s.name);
+      const ex = _obFindPartyMatch(db.suppliers, s);
       if (ex) ex.balance = Math.round(((ex.balance||0)-s.balance)*100)/100;
     });
   }
   _obData.suppliers.forEach(s => {
-    const ex = _obFindPartyMatch(db.suppliers, s.name);
-    if (ex) { ex.balance = Math.round(((ex.balance||0)+s.balance)*100)/100; }
-    else { db.suppliers.push({ id:nextId(db,'supplier'), name:s.name, phone:'', email:'', address:'', balance:s.balance, created_at:new Date().toISOString() }); }
+    const ex = _obFindPartyMatch(db.suppliers, s);
+    if (ex) { ex.balance = Math.round(((ex.balance||0)+s.balance)*100)/100; s.id = ex.id; }
+    else { const newId = nextId(db,'supplier'); db.suppliers.push({ id:newId, name:s.name, phone:'', email:'', address:'', balance:s.balance, created_at:new Date().toISOString() }); s.id = newId; }
   });
 
   // القيود المحاسبية الافتتاحية — عند التعديل نحذف القيد الافتتاحي القديم أولًا
