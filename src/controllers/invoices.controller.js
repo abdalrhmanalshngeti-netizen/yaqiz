@@ -85,7 +85,7 @@ exports.create = async (req, res, next) => {
     const {
       customer_id, customer_name, customer_vat, invoice_type,
       date, due_date, items = [], discount_type, discount_value,
-      payment_method, notes
+      payment_method, notes, client_local_id
     } = req.body;
     // cogs_total لم يعد يُقبَل من الـclient إطلاقًا — كان تمريرًا مباشرًا بلا
     // أي تحقق، والسيرفر الآن مصدر الحقيقة الوحيد (عبر stock.deduct وطبقات
@@ -94,6 +94,22 @@ exports.create = async (req, res, next) => {
     if (!items.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة منتج واحد على الأقل' });
+    }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ فاتورة
+    // مكرَّرة (وتخصم المخزون مرتين وتزيد سلسلة ICV مرتين) — نتعرّف على المحاولة
+    // السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT *, (SELECT COALESCE(json_agg(json_build_object(
+            'id', ii.id, 'product_id', ii.product_id, 'product_name', ii.product_name,
+            'qty', ii.qty::float, 'unit_price', ii.unit_price::float, 'line_total', ii.line_total::float,
+            'vat_amount', ii.vat_amount::float
+          )), '[]'::json) FROM invoice_items ii WHERE ii.invoice_id = invoices.id) AS items
+         FROM invoices WHERE company_id = $1 AND client_local_id = $2`,
+        [company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
     }
 
     if (customer_id) {
@@ -184,15 +200,15 @@ exports.create = async (req, res, next) => {
          date, due_date, subtotal, discount_type, discount_value, discount_amount,
          taxable_amount, vat_amount, grand_total, payment_method, notes,
          status, created_by, cogs_total,
-         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23,$24)
+         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23,$24,$25)
       RETURNING *
     `, [company_id, invoice_no, invoice_type || 'simplified',
         customer_id, customer_name, customer_vat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
         taxable, vat_amount, grand, payment_method, notes, user_id,
         0, // cogs_total الحقيقي يُحسَب أدناه بعد خصم المخزون فعليًا، ثم يُحدَّث
-        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId, client_local_id || null]);
 
     // ── إدراج البنود + خصم المخزون (FIFO حقيقي عبر stock.deduct) ──────────
     let cogsTotal = 0;

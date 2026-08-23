@@ -122,16 +122,33 @@ function buildCsr(company, { commonName = 'Yaqiz-POS', organizationUnit = 'Yaqiz
   return { csrPem, csrBase64, privateKeyPem };
 }
 
+// مهلة زمنية إلزامية على أي اتصال ببوابة الهيئة — بدونها، بوابة معلَّقة (لا ترد
+// ولا تقطع الاتصال) تُبقي هذا الطلب معلَّقًا للأبد. هذي الدالة تُستدعى اليوم
+// دائمًا بمعزل عن أي اتصال قاعدة بيانات مفتوح (راجع requestCompliance/
+// requestProduction بالـcontroller)، فالمهلة هنا حماية إضافية للمستخدم نفسه
+// (لا يبقى منتظرًا للأبد)، لا لتفادي استنزاف اتصالات القاعدة تحديدًا
 async function zatcaFetch(url, { method = 'POST', headers = {}, body } = {}) {
-  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Accept-Version': 'V2', ...headers }, body });
-  const text = await res.text();
-  let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  if (!res.ok) {
-    const err = new Error(`ZATCA API error ${res.status}: ${text.slice(0, 500)}`);
-    err.status = res.status; err.data = data;
-    throw err;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json', 'Accept-Version': 'V2', ...headers }, body,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!res.ok) {
+      const err = new Error(`ZATCA API error ${res.status}: ${text.slice(0, 500)}`);
+      err.status = res.status; err.data = data;
+      throw err;
+    }
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('انتهت مهلة الاتصال ببوابة الهيئة (20 ثانية) بلا رد');
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return data;
 }
 
 /**

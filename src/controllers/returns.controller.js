@@ -30,7 +30,7 @@ exports.create = async (req, res, next) => {
       type, party_name, product_id, product_name, qty,
       base_amount, vat_amount, amount, reason,
       linked_invoice_id, linked_purchase_id, date,
-      payment_method, cogs_reversal
+      payment_method, cogs_reversal, client_local_id
     } = req.body;
 
     if (!['sales', 'purchases'].includes(type) || !amount) {
@@ -38,6 +38,17 @@ exports.create = async (req, res, next) => {
     }
 
     await client.query('BEGIN');
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ مرتجعًا
+    // مكرَّرًا (ويؤثر على المخزون مرتين) — نتعرّف على المحاولة السابقة عبر
+    // المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM returns WHERE company_id = $1 AND client_local_id = $2`,
+        [company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
+    }
 
     let linkedInvoice = null;
     if (linked_invoice_id) {
@@ -59,14 +70,14 @@ exports.create = async (req, res, next) => {
       INSERT INTO returns
         (company_id, return_no, type, party_name, product_id, product_name, qty,
          base_amount, vat_amount, amount, reason, linked_invoice_id, linked_purchase_id,
-         date, created_by, payment_method, cogs_reversal)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         date, created_by, payment_method, cogs_reversal, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       RETURNING *
     `, [company_id, return_no, type, party_name || '', product_id || null,
         product_name || '', qty || 0, base_amount || 0, vat_amount || 0, amount,
         reason || '', linked_invoice_id || null, linked_purchase_id || null,
         date || todayLocalDateStr(), req.user.sub,
-        payment_method || null, cogs_reversal || 0]);
+        payment_method || null, cogs_reversal || 0, client_local_id || null]);
 
     // إرجاع الكمية فعليًا للمخزون — لنفس مستودع فرع الفاتورة الأصلية إن وُجدت
     // (نفس المستودع اللي خُصم منه وقت البيع)، وإلا مستودع فرع المستخدم الحالي

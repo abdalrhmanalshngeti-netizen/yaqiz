@@ -45,9 +45,19 @@ exports.create = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     const { code, barcode, name, name_en, category_id, unit_id,
-            buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes } = req.body;
+            buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes, client_local_id } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم المنتج مطلوب' });
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ منتجًا
+    // مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM products WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) return res.status(201).json({ success: true, data: existing });
+    }
 
     await client.query('BEGIN');
     // يُنشَأ المنتج دائمًا بكمية صفر — أي كمية افتتاحية تُضاف بعدها عبر
@@ -58,11 +68,11 @@ exports.create = async (req, res, next) => {
     const { rows: [product] } = await client.query(`
       INSERT INTO products
         (company_id, code, barcode, name, name_en, category_id, unit_id,
-         buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13)
+         buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14)
       RETURNING *
     `, [req.user.company_id, code, barcode, name, name_en, category_id, unit_id,
-        buy_price || 0, sell_price || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes]);
+        buy_price || 0, sell_price || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes, client_local_id || null]);
 
     const openingQty = parseFloat(qty) || 0;
     if (openingQty > 0) {

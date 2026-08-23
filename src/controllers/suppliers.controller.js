@@ -35,18 +35,28 @@ exports.getOne = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number,
-            phone, email, address, city, payment_terms, balance } = req.body;
+            phone, email, address, city, payment_terms, balance, client_local_id } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم المورد مطلوب' });
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ موردًا
+    // مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await db.query(
+        `SELECT * FROM suppliers WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) return res.status(201).json({ success: true, data: existing });
+    }
 
     const { rows } = await db.query(`
       INSERT INTO suppliers
         (company_id, code, name, name_en, vat_number, cr_number,
-         phone, email, address, city, payment_terms, balance)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         phone, email, address, city, payment_terms, balance, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `, [req.user.company_id, code, name, name_en, vat_number, cr_number,
-        phone, email, address, city, payment_terms || 30, parseFloat(balance) || 0]);
+        phone, email, address, city, payment_terms || 30, parseFloat(balance) || 0, client_local_id || null]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }

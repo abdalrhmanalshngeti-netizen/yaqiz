@@ -11,6 +11,12 @@ exports.status = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// لا نستخدم client مخصَّص من db.pool.connect() ولا معاملة صريحة هنا عمدًا —
+// requestComplianceCSID/requestProductionCSID لا يكتبان شيئًا بقاعدة البيانات
+// إلا بعد نجاح الاتصال الخارجي بالهيئة، فلا حاجة لأي atomicity تمتد عبر ذلك
+// الاتصال. db.query يفتح اتصالًا من المسبح وينهيه لكل استعلام منفرد فورًا —
+// فلا يبقى أي اتصال محجوزًا طوال مدة انتظار رد الهيئة (كان يهدد باستنزاف
+// كامل مسبح الاتصالات — 20 فقط — لو تعطّلت بوابة الهيئة لأي سبب)
 exports.requestCompliance = async (req, res, next) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ success: false, message: 'هذه الميزة للمالك فقط' });
@@ -18,19 +24,13 @@ exports.requestCompliance = async (req, res, next) => {
   const { otp, environment } = req.body;
   if (!otp) return res.status(400).json({ success: false, message: 'رمز OTP مطلوب من بوابة فاتورة' });
 
-  const client = await db.pool.connect();
   try {
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    await client.query('BEGIN');
-    const result = await onboarding.requestComplianceCSID(client, company, otp, environment || 'sandbox');
-    await client.query('COMMIT');
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
+    const result = await onboarding.requestComplianceCSID(db, company, otp, environment || 'sandbox');
     res.json({ success: true, message: 'تم إصدار شهادة الامتثال بنجاح', data: result });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('[ZATCA onboarding] compliance CSID failed:', err.message);
     res.status(502).json({ success: false, message: `فشل الاتصال بالهيئة: ${err.message}` });
-  } finally {
-    client.release();
   }
 };
 
@@ -38,43 +38,37 @@ exports.requestProduction = async (req, res, next) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ success: false, message: 'هذه الميزة للمالك فقط' });
   }
-  const client = await db.pool.connect();
   try {
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    await client.query('BEGIN');
-    const result = await onboarding.requestProductionCSID(client, company, req.body.environment || 'sandbox');
-    await client.query('COMMIT');
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
+    const result = await onboarding.requestProductionCSID(db, company, req.body.environment || 'sandbox');
     res.json({ success: true, message: 'تم إصدار شهادة الإنتاج بنجاح', data: result });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('[ZATCA onboarding] production CSID failed:', err.message);
     res.status(502).json({ success: false, message: `فشل الاتصال بالهيئة: ${err.message}` });
-  } finally {
-    client.release();
   }
 };
 
 // إرسال فعلي لفاتورة موجودة مسبقًا للهيئة (تصديق/إبلاغ) — منفصل عن إنشاء
-// الفاتورة نفسها عمدًا (راجع التعليق أعلى zatcaSubmit.service.js)
+// الفاتورة نفسها عمدًا (راجع التعليق أعلى zatcaSubmit.service.js).
+// بلا client/معاملة صريحة عمدًا (نفس مبدأ requestCompliance/requestProduction
+// أعلاه) — submitInvoice يكتب حالة النتيجة (نجاح أو رفض) دائمًا بنفسه بعد
+// انتهاء الاتصال الخارجي، فلا حاجة لأي معاملة تمتد عبر الانتظار للهيئة
 exports.submitInvoiceToZatca = async (req, res, next) => {
-  const client = await db.pool.connect();
   try {
-    const { rows: [invoice] } = await client.query(
+    const { rows: [invoice] } = await db.query(
       `SELECT * FROM invoices WHERE id = $1 AND company_id = $2`,
       [req.params.invoiceId, req.user.company_id]
     );
     if (!invoice) return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
 
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    let credential = await onboarding.getActiveCredential(client, req.user.company_id, 'production');
-    if (!credential) credential = await onboarding.getActiveCredential(client, req.user.company_id, 'compliance');
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
+    let credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
+    if (!credential) credential = await onboarding.getActiveCredential(db, req.user.company_id, 'compliance');
     if (!credential) {
       return res.status(400).json({ success: false, message: 'لا توجد شهادة CSID سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
     }
 
-    await client.query('BEGIN');
-    const result = await submitInvoice(client, company, invoice, credential);
-    await client.query('COMMIT'); // نلتزم دائمًا — حتى عند الرفض، تحديث حالة الفاتورة تشخيصي مهم ويجب أن يبقى محفوظًا
+    const result = await submitInvoice(db, company, invoice, credential);
 
     if (result.success) {
       res.json({ success: true, message: result.status === 'cleared' ? 'تم تصديق الفاتورة من الهيئة' : 'تم إبلاغ الهيئة بالفاتورة', data: result });
@@ -83,40 +77,34 @@ exports.submitInvoiceToZatca = async (req, res, next) => {
       res.status(502).json({ success: false, message: `فشل الإرسال للهيئة: ${result.error}` });
     }
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('[ZATCA submit] unexpected error:', err.message);
     res.status(500).json({ success: false, message: `خطأ غير متوقع: ${err.message}` });
-  } finally {
-    client.release();
   }
 };
 
 // إرسال فعلي لإشعار دائن موجود مسبقًا للهيئة — نفس مسار submitInvoiceToZatca
 // أعلاه بالضبط، لكن لمستند من جدول credit_notes المنفصل
 exports.submitCreditNoteToZatca = async (req, res, next) => {
-  const client = await db.pool.connect();
   try {
-    const { rows: [note] } = await client.query(
+    const { rows: [note] } = await db.query(
       `SELECT * FROM credit_notes WHERE id = $1 AND company_id = $2`,
       [req.params.noteId, req.user.company_id]
     );
     if (!note) return res.status(404).json({ success: false, message: 'إشعار الدائن غير موجود' });
 
-    const { rows: [refInvoice] } = await client.query(
+    const { rows: [refInvoice] } = await db.query(
       `SELECT invoice_type FROM invoices WHERE id = $1`, [note.reference_invoice_id]
     );
     const isSimplified = (refInvoice?.invoice_type || 'simplified') === 'simplified';
 
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    let credential = await onboarding.getActiveCredential(client, req.user.company_id, 'production');
-    if (!credential) credential = await onboarding.getActiveCredential(client, req.user.company_id, 'compliance');
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
+    let credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
+    if (!credential) credential = await onboarding.getActiveCredential(db, req.user.company_id, 'compliance');
     if (!credential) {
       return res.status(400).json({ success: false, message: 'لا توجد شهادة CSID سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
     }
 
-    await client.query('BEGIN');
-    const result = await submitCreditNote(client, company, note, isSimplified, credential);
-    await client.query('COMMIT');
+    const result = await submitCreditNote(db, company, note, isSimplified, credential);
 
     if (result.success) {
       res.json({ success: true, message: result.status === 'cleared' ? 'تم تصديق إشعار الدائن من الهيئة' : 'تم إبلاغ الهيئة بإشعار الدائن', data: result });
@@ -125,11 +113,8 @@ exports.submitCreditNoteToZatca = async (req, res, next) => {
       res.status(502).json({ success: false, message: `فشل الإرسال للهيئة: ${result.error}` });
     }
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('[ZATCA submit] credit note unexpected error:', err.message);
     res.status(500).json({ success: false, message: `خطأ غير متوقع: ${err.message}` });
-  } finally {
-    client.release();
   }
 };
 

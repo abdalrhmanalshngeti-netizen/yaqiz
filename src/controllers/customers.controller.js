@@ -36,20 +36,31 @@ exports.create = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
             email, address, city, credit_limit, payment_terms, balance,
-            street_name, building_number, district, postal_code, country_code } = req.body;
+            street_name, building_number, district, postal_code, country_code, client_local_id } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم العميل مطلوب' });
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ عميلًا
+    // مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await db.query(
+        `SELECT * FROM customers WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) return res.status(201).json({ success: true, data: existing });
+    }
 
     const { rows } = await db.query(`
       INSERT INTO customers
         (company_id, code, name, name_en, vat_number, cr_number,
          phone, email, address, city, credit_limit, payment_terms, balance,
-         street_name, building_number, district, postal_code, country_code)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         street_name, building_number, district, postal_code, country_code, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *
     `, [req.user.company_id, code, name, name_en, vat_number, cr_number,
         phone, email, address, city, credit_limit || 0, payment_terms || 30, parseFloat(balance) || 0,
-        street_name || null, building_number || null, district || null, postal_code || null, country_code || 'SA']);
+        street_name || null, building_number || null, district || null, postal_code || null, country_code || 'SA',
+        client_local_id || null]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }

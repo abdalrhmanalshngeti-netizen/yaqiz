@@ -16948,6 +16948,19 @@ async function runAISearchQuery(q) {
 
   // ── رصيد الـ DB السابق للمقارنة ──────────────────────────
   let _snap = null;
+  // هل يوجد تعديل محلي (إنشاء/تحديث) على هذا الكيان لم يُؤكَّد وصوله للسيرفر
+  // بعد؟ نقارن الحالة الحالية بآخر لقطة (_snap) — وهي بالضبط ما نعتقد أنه
+  // مؤكَّد بالسيرفر (تُصحَّح فورًا عند فشل أي دفعة عبر _revertSnapEntity/
+  // _keepInSnap). بدون هذا الفحص، loadAllFromAPI الدوري كل 60 ثانية
+  // (_periodicDataPull) كان يستبدل هذي المصفوفة بالكامل من رد السيرفر حتى
+  // لو تعديل محلي لسه ما وصل (فشل الدفع، أو الجهاز بلا اتصال لحظيًا) —
+  // فيُمحى صامتًا للأبد بلا أي إعادة محاولة لاحقة. _snap=null (لسه ما صار
+  // أي حفظ محلي بعد تسجيل الدخول) يعني لا خطر إطلاقًا فنُرجع false دائمًا
+  function _hasPendingLocalChanges(db, key) {
+    if (!_snap) return false;
+    try { return JSON.stringify(db[key]) !== JSON.stringify(_snap[key]); }
+    catch (e) { return false; }
+  }
   // نسخة newDB الحيّة الجارية معالجتها بتمريرة _diffAndPush الحالية (إن وُجدت) —
   // getDB() يُرجع نسخة جديدة مُفكَّكة (JSON.parse) بكل استدعاء، منفصلة تمامًا عن
   // كائن newDB اللي تكرّر حلقات هذي التمريرة عليه، فتحديث السجلات المرتبطة داخل
@@ -17098,6 +17111,9 @@ async function runAISearchQuery(q) {
     // قد يتغيّر لاحقًا (customer_id لا يُعاد ربطه تلقائيًا عند تبديل المعرّفات)
     const _custMatch = (_liveDB.customers||[]).find(c => (c.name||'').trim().toLowerCase() === (inv.customer_name||'').trim().toLowerCase());
     return {
+      // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (استجابة ضاعت بالشبكة)
+      // عن فاتورة جديدة فعليًا — بدونه تُنشأ فاتورة مكرَّرة بسلسلة ICV جديدة
+      client_local_id: inv.id,
       customer_id:   _custMatch?.id || null,
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
@@ -17172,6 +17188,9 @@ async function runAISearchQuery(q) {
 
   function productToAPI(p) {
     return {
+      // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (استجابة ضاعت
+      // بالشبكة) عن منتج جديد فعليًا — بدونه تُنشأ نسخة مكرَّرة بالسيرفر
+      client_local_id: p.id,
       name: p.name, name_en: p.name_en||'', code: p.code||'',
       barcode: p.barcode||'',
       buy_price: parseFloat(p.buy_price)||0,
@@ -17270,6 +17289,7 @@ async function runAISearchQuery(q) {
     const _liveDBq = getDB();
     const _qCustMatch = (_liveDBq.customers||[]).find(c => (c.name||'').trim().toLowerCase() === (q.customer_name||'').trim().toLowerCase());
     return {
+      client_local_id: q.id,
       customer_id: _qCustMatch?.id || null,
       customer_name: q.customer_name || '',
       date: (q.created_at || new Date().toISOString()).slice(0, 10),
@@ -17338,14 +17358,18 @@ async function runAISearchQuery(q) {
 
       const db = getDB();
 
-      if (prods?.data)    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
+      // كل استبدال هنا مشروط بعدم وجود تعديل محلي معلَّق لهذا الكيان تحديدًا
+      // (راجع تعليق _hasPendingLocalChanges) — وإلا نتجاوز الاستبدال هذي
+      // الدورة فقط، وتُعاد المحاولة تلقائيًا بالدورة القادمة (لا يعني توقف
+      // التحديث نهائيًا، فقط تأجيله لحين تأكيد وصول التعديل المحلي للسيرفر)
+      if (prods?.data && !_hasPendingLocalChanges(db,'products'))    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
       // العملاء/الموردون غير النشطين (معطّلون، مو محذوفون فعليًا) يبقون
       // محمَّلين محليًا عمدًا — عشان تقدر تشوفهم وتعيد تفعيلهم من الواجهة
-      if (custs?.data)    db.customers  = custs.data.map(customerToFE);
-      if (supps?.data)    db.suppliers  = supps.data.map(supplierToFE);
-      if (invRes?.data)   db.invoices   = invRes.data.map(invToFE);
-      if (purRes?.data)   db.purchases  = purRes.data.map(purchaseToFE);
-      if (empRes?.data)   db.employees  = empRes.data.map(employeeToFE);
+      if (custs?.data && !_hasPendingLocalChanges(db,'customers'))   db.customers  = custs.data.map(customerToFE);
+      if (supps?.data && !_hasPendingLocalChanges(db,'suppliers'))   db.suppliers  = supps.data.map(supplierToFE);
+      if (invRes?.data && !_hasPendingLocalChanges(db,'invoices'))   db.invoices   = invRes.data.map(invToFE);
+      if (purRes?.data && !_hasPendingLocalChanges(db,'purchases'))  db.purchases  = purRes.data.map(purchaseToFE);
+      if (empRes?.data && !_hasPendingLocalChanges(db,'employees'))  db.employees  = empRes.data.map(employeeToFE);
 
       if (treas?.data?.length) {
         const defaultAcc = treas.data.find(a => a.is_default) || treas.data[0];
@@ -17577,7 +17601,7 @@ async function runAISearchQuery(q) {
         );
         db.obligations = [..._srvObls, ..._localPending];
       }
-      if (quotesRes?.data) db.quotes = quotesRes.data.map(quoteToFE);
+      if (quotesRes?.data && !_hasPendingLocalChanges(db,'quotes')) db.quotes = quotesRes.data.map(quoteToFE);
 
       // مزامنة بيانات الشركة في الإعدادات
       if (meRes?.data) {
@@ -17789,7 +17813,9 @@ async function runAISearchQuery(q) {
       // ── Customers: create / update / remove ─────────────
       for (const c of newDB.customers || []) {
         const old = (prev.customers || []).find(o => o.id === c.id);
-        const body = { name: c.name, phone: c.phone, email: c.email, address: c.address,
+        // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (لا يؤثر على التحديث،
+        // السيرفر يتجاهله هناك) — بدونه تُنشأ نسخة مكرَّرة لو ضاعت الاستجابة بالشبكة
+        const body = { client_local_id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address,
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
                        balance: c.balance || 0, is_active: c.is_active !== false,
                        street_name: c.street_name || null, building_number: c.building_number || null,
@@ -17816,7 +17842,7 @@ async function runAISearchQuery(q) {
       // ── Suppliers: create / update / remove ─────────────
       for (const s of newDB.suppliers || []) {
         const old = (prev.suppliers || []).find(o => o.id === s.id);
-        const body = { name: s.name, phone: s.phone, email: s.email,
+        const body = { client_local_id: s.id, name: s.name, phone: s.phone, email: s.email,
                        address: s.address, vat_number: s.vat_num,
                        balance: s.balance || 0, is_active: s.is_active !== false };
         if (!old) {
@@ -17841,7 +17867,7 @@ async function runAISearchQuery(q) {
       // ── Employees: create / update / remove ─────────────
       for (const e of newDB.employees || []) {
         const old = (prev.employees || []).find(o => o.id === e.id);
-        const body = { name: e.name, position: e.position, department: e.department,
+        const body = { client_local_id: e.id, name: e.name, position: e.position, department: e.department,
                        phone: e.phone, email: e.email, salary: e.salary || 0,
                        allowances: e.allowances || 0, status: e.status || 'active' };
         if (!old) {
@@ -17882,6 +17908,7 @@ async function runAISearchQuery(q) {
           // paid_amount فعليًا. نرسلها كـ"آجل" ثم نسجّل المبلغ المدفوع بطلب منفصل
           const _isPartialCreate = p.payment_method === 'جزئي';
           const res = await apiFetch('POST', '/api/purchases', {
+            client_local_id: p.id,
             supplier_id:   _sup2?.id || null,
             supplier_name: p.vendor, description: p.description,
             category: p.category, date: (p.created_at || new Date().toISOString()).slice(0, 10),
@@ -18222,6 +18249,7 @@ async function runAISearchQuery(q) {
 
         if (SYNC_LOG) console.log('→ API: return', r.return_no);
         const res = await apiFetch('POST', '/api/returns', {
+          client_local_id: r.id,
           type: r.type === 'sales' ? 'sales' : 'purchases',
           party_name: r.party || '', product_id: r.product_id || null, product_name: r.product_name || '',
           qty: r.qty || 0, base_amount: r.base_amount || 0, vat_amount: r.vat_amount || 0, amount: r.amount,
@@ -18619,6 +18647,7 @@ async function runAISearchQuery(q) {
                 // اللي يفهمها السيرفر — تُرسَل كـ"آجل" ثم تُسجَّل الدفعة بطلب منفصل
                 const _isPartialCreate2 = p.payment_method === 'جزئي';
                 const res = await apiFetch('POST', '/api/purchases', {
+                  client_local_id: p.id,
                   supplier_name: p.vendor||'', description: p.description||'',
                   category: p.category||'', date: _pDate,
                   purchase_type: p.purchase_type||'opex',

@@ -74,7 +74,17 @@ exports.create = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { company_id, sub: user_id } = req.user;
-    const { customer_id, customer_name, date, valid_until, notes, status, items = [], vat_rate } = req.body;
+    const { customer_id, customer_name, date, valid_until, notes, status, items = [], vat_rate, client_local_id } = req.body;
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ عرض
+    // سعر مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM quotes WHERE company_id = $1 AND client_local_id = $2`,
+        [company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
+    }
 
     if (customer_id) {
       const { rows: [custRow] } = await client.query(
@@ -103,8 +113,8 @@ exports.create = async (req, res, next) => {
     const { rows: [quote] } = await client.query(`
       INSERT INTO quotes
         (company_id, quote_no, customer_id, customer_name, date, valid_until,
-         status, subtotal, vat_amount, grand_total, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         status, subtotal, vat_amount, grand_total, notes, created_by, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `, [company_id,
         quote_no,
@@ -115,7 +125,7 @@ exports.create = async (req, res, next) => {
         STATUS_EN[status] || status || 'draft',
         subtotal, vat_amount, grand_total,
         notes || '',
-        user_id]);
+        user_id, client_local_id || null]);
 
     for (const item of processedItems) {
       await client.query(`

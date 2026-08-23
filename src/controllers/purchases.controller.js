@@ -68,12 +68,23 @@ exports.create = async (req, res, next) => {
       purchase_type, category, description,
       date, amount, vat_amount, payment_method,
       deductible, notes,
-      items = []
+      items = [], client_local_id
     } = req.body;
 
     if (!amount && !items.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'المبلغ أو البنود مطلوبة' });
+    }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ فاتورة
+    // شراء مكرَّرة (وتخصم المخزون مرتين) — نتعرّف على المحاولة السابقة عبر
+    // المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM purchases WHERE company_id = $1 AND client_local_id = $2`,
+        [company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
     }
 
     // يُحل دائمًا (حتى لمشتريات opex بلا بنود) عشان تُنسب فاتورة المشتريات
@@ -109,13 +120,13 @@ exports.create = async (req, res, next) => {
       INSERT INTO purchases
         (company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
          purchase_type, category, description, date, amount, vat_amount, total,
-         remaining, payment_method, status, deductible, notes, created_by, branch_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         remaining, payment_method, status, deductible, notes, created_by, branch_id, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       RETURNING *
     `, [company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
         purchase_type || 'goods', category, description, date,
         baseAmount, vatAmount, total,
-        remaining, payment_method, purchStatus, deductible !== false, notes, user_id, resolvedBranchId]);
+        remaining, payment_method, purchStatus, deductible !== false, notes, user_id, resolvedBranchId, client_local_id || null]);
 
     // إضافة المخزون لو كانت مشتريات بضاعة مع بنود
     if (purchase_type !== 'opex' && items.length) {

@@ -14,25 +14,37 @@
 const db = require('../config/db');
 const { ZATCA_ENDPOINTS, getActiveCredential } = require('./zatcaOnboarding.service');
 
+// مهلة زمنية إلزامية (راجع نفس التعليق بـzatcaOnboarding.service.js) — بوابة
+// الهيئة المعلَّقة بلا هذا كانت تُبقي طلب الإرسال معلَّقًا للأبد
 async function zatcaFetch(url, { certPem, secret, body }) {
   const basicAuth = Buffer.from(`${Buffer.from(certPem).toString('base64')}:${secret}`).toString('base64');
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept-Version': 'V2',
-      Authorization: `Basic ${basicAuth}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  if (!res.ok) {
-    const err = new Error(`ZATCA API error ${res.status}: ${text.slice(0, 500)}`);
-    err.status = res.status; err.data = data;
-    throw err;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Version': 'V2',
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!res.ok) {
+      const err = new Error(`ZATCA API error ${res.status}: ${text.slice(0, 500)}`);
+      err.status = res.status; err.data = data;
+      throw err;
+    }
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('انتهت مهلة الاتصال ببوابة الهيئة (20 ثانية) بلا رد');
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return data;
 }
 
 /**
@@ -121,31 +133,29 @@ async function submitCreditNote(client, company, note, isSimplified, credential)
 // يبقى ظاهرًا فقط بحالة zatca_status ('rejected') ليعيد المالك الإرسال يدويًا
 // لاحقًا. الفواتير المبسّطة تُستثنى عمدًا — لا تحتاج تصديقًا فوريًا أصلًا
 // (تُبلَّغ للهيئة خلال 24 ساعة، لا قبل التسليم للعميل كالقياسية).
-// تفتح اتصال قاعدة بيانات مستقل خاص بها دائمًا — لا تشارك عميل/معاملة المستدعي
-// (اللي غالبًا يكون على وشك الإطلاق/الإغلاق وقت استدعائها).
+// لا تحجز اتصالًا مخصَّصًا من المسبح — db.query يفتح/يُنهي اتصالًا لكل استعلام
+// منفرد فورًا، فلا يبقى أي اتصال محجوزًا طوال مدة انتظار رد الهيئة (submitInvoice
+// نفسه لا يحتاج معاملة صريحة، يكتب حالة النتيجة دائمًا بعد انتهاء الاتصال الخارجي)
 async function submitInvoiceBestEffort(invoiceId, companyId) {
   if (!invoiceId || !companyId) return;
-  const client = await db.pool.connect();
   try {
-    const { rows: [invoice] } = await client.query(
+    const { rows: [invoice] } = await db.query(
       `SELECT * FROM invoices WHERE id = $1 AND company_id = $2`, [invoiceId, companyId]
     );
     if (!invoice || (invoice.invoice_type || 'simplified') === 'simplified') return;
     if (!invoice.xml_content) return; // لم يُوقَّع أصلًا (بلا شهادة CSID سارية) — لا شيء نرسله
 
-    let credential = await getActiveCredential(client, companyId, 'production');
-    if (!credential) credential = await getActiveCredential(client, companyId, 'compliance');
+    let credential = await getActiveCredential(db, companyId, 'production');
+    if (!credential) credential = await getActiveCredential(db, companyId, 'compliance');
     if (!credential) return; // لا تأهيل هيئة بعد — الحالة الشائعة اليوم لمعظم الشركات
 
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);
-    const result = await submitInvoice(client, company, invoice, credential);
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);
+    const result = await submitInvoice(db, company, invoice, credential);
     if (!result.success) {
       console.warn(`[ZATCA auto-submit] invoice ${invoice.invoice_no} rejected/failed:`, result.error);
     }
   } catch (err) {
     console.error(`[ZATCA auto-submit] unexpected error for invoice ${invoiceId}:`, err.message);
-  } finally {
-    client.release();
   }
 }
 
@@ -153,26 +163,23 @@ async function submitInvoiceBestEffort(invoiceId, companyId) {
 // يُمرَّر من المستدعي لأنه محسوب مسبقًا هناك من نوع الفاتورة المرجعية
 async function submitCreditNoteBestEffort(noteId, companyId, isSimplified) {
   if (!noteId || !companyId || isSimplified) return;
-  const client = await db.pool.connect();
   try {
-    const { rows: [note] } = await client.query(
+    const { rows: [note] } = await db.query(
       `SELECT * FROM credit_notes WHERE id = $1 AND company_id = $2`, [noteId, companyId]
     );
     if (!note || !note.xml_content) return;
 
-    let credential = await getActiveCredential(client, companyId, 'production');
-    if (!credential) credential = await getActiveCredential(client, companyId, 'compliance');
+    let credential = await getActiveCredential(db, companyId, 'production');
+    if (!credential) credential = await getActiveCredential(db, companyId, 'compliance');
     if (!credential) return;
 
-    const { rows: [company] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);
-    const result = await submitCreditNote(client, company, note, isSimplified, credential);
+    const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);
+    const result = await submitCreditNote(db, company, note, isSimplified, credential);
     if (!result.success) {
       console.warn(`[ZATCA auto-submit] credit note ${note.note_no} rejected/failed:`, result.error);
     }
   } catch (err) {
     console.error(`[ZATCA auto-submit] unexpected error for credit note ${noteId}:`, err.message);
-  } finally {
-    client.release();
   }
 }
 
