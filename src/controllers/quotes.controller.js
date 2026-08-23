@@ -9,6 +9,7 @@ const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../servi
 const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
 const { generatePhase2QR } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
+const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
 
 const STATUS_AR = { draft:'معلق', sent:'مرسل', accepted:'مقبول', rejected:'مرفوض' };
 const STATUS_EN = { 'معلق':'draft','مرسل':'sent','مقبول':'accepted','مرفوض':'rejected' };
@@ -357,6 +358,10 @@ exports.convert = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true, data: { ...invoice, items: processedItems } });
+
+    // تصديق فوري "أفضل جهد" للفواتير القياسية الناتجة عن تحويل عرض سعر —
+    // نفس مبدأ invoices.controller.js create() بالضبط
+    submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

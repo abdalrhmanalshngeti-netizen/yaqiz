@@ -4295,7 +4295,11 @@ async function showCreditNoteModal(id) {
   if (!note) return;
 
   const db = getDB(); const s = db.settings||{};
-  const qrData = generateZATCAQR(s, { created_at: `${String(note.date).slice(0,10)}T${note.issue_time||'00:00:00'}`, grand_total: Number(note.grand_total), vat_total: Number(note.vat_amount) });
+  // أولوية لرمز QR الحقيقي الموقَّع من السيرفر (Phase-2، creditNote.service.js
+  // يولّده بنفس مسار الفاتورة تمامًا) — وإلا نسقط لرمز Phase-1 المحلي البسيط،
+  // نفس مبدأ showInvoiceModal بالضبط
+  const qrData = note.zatca_qr_phase2 || generateZATCAQR(s, { created_at: `${String(note.date).slice(0,10)}T${note.issue_time||'00:00:00'}`, grand_total: Number(note.grand_total), vat_total: Number(note.vat_amount) });
+  const _hasRealSig = !!note.zatca_qr_phase2;
   const mc = el('modal-container');
   mc.innerHTML = `
   <div class="modal-bg" onclick="closeModal()">
@@ -4353,6 +4357,7 @@ async function showCreditNoteModal(id) {
         <div style="text-align:center;padding:12px 0;border-top:2px dashed var(--border);">
           <canvas id="cn-qr" style="width:120px;height:120px;"></canvas>
           <div style="font-size:10px;color:#64748b;margin-top:4px;">${lang==='ar'?'امسح رمز QR للتحقق':'Scan QR to verify'}</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:2px;">${_hasRealSig?(lang==='ar'?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'ZATCA-compliant'):(lang==='ar'?'إشعار دائن':'Credit note')}</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:14px;">
@@ -4373,11 +4378,17 @@ async function printCreditNote(id) {
   } catch (e) { showToast(lang==='ar'?'تعذر جلب إشعار الدائن':'Could not load credit note','error'); return; }
   if (!note) return;
   const db=getDB(); const s=db.settings||{};
+  // نفس أولوية رمز QR الحقيقي المستخدَمة بالفواتير — بدونها الإشعار المطبوع
+  // فعليًا (الذي يصل يد العميل) ما فيه أي رمز QR إطلاقًا، ولو موجود رمز حقيقي
+  // موقّع بالسيرفر
+  const qrData = note.zatca_qr_phase2 || generateZATCAQR(s, { created_at: `${String(note.date).slice(0,10)}T${note.issue_time||'00:00:00'}`, grand_total: Number(note.grand_total), vat_total: Number(note.vat_amount) });
+  const _hasRealSig = !!note.zatca_qr_phase2;
   const win=window.open('','_blank','width=850,height=700');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
   <meta charset="UTF-8"><title>${note.note_no}</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Tajawal',sans-serif;background:white;padding:24px;color:#0f172a;font-size:13px;}
@@ -4429,8 +4440,25 @@ async function printCreditNote(id) {
       <div class="tot-row tot-final"><span>إجمالي المبلغ الدائن:</span><span>${fmtMoney(note.grand_total)}</span></div>
     </div>
   </div>
+  <div style="text-align:center;margin:16px 0;">
+    <div id="qr-div"></div>
+    <div style="font-size:10px;color:#64748b;margin-top:4px;">امسح رمز QR للتحقق</div>
+    <div style="font-size:9px;color:#94a3b8;margin-top:2px;">${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'إشعار دائن'}</div>
+  </div>
   <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${note.note_no} • إشعار دائن مرجَّع للفاتورة ${note.reference_invoice_no}</div>
-  <script>window.onload=()=>{window.print();}<\/script>
+  <script>
+    window.onload = function() {
+      try {
+        new QRCode(document.getElementById('qr-div'), {
+          text: '${qrData}',
+          width: 120, height: 120,
+          colorDark: '#dc2626', colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) {}
+      setTimeout(()=>window.print(), 800);
+    };
+  <\/script>
   </body></html>`);
   win.document.close();
 }

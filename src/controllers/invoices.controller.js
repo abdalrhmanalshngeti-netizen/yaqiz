@@ -10,6 +10,7 @@ const { generatePhase2QR } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
+const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
 
 exports.list = async (req, res, next) => {
   try {
@@ -312,6 +313,10 @@ exports.create = async (req, res, next) => {
       newValues: { invoice_no, grand_total: grand, status: 'issued' },
       details: `إنشاء فاتورة ${invoice_no} — ${Number(grand).toFixed(2)} ر.س`
     });
+
+    // تصديق فوري "أفضل جهد" للفواتير القياسية (غير المبسّطة) لدى الهيئة —
+    // بلا انتظار وبلا أي تأثير على استجابة الطلب أعلاه (راجع تعليق الدالة)
+    submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
 
   } catch (err) {
     await client.query('ROLLBACK');
