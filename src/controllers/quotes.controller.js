@@ -26,10 +26,22 @@ exports.list = async (req, res, next) => {
     if (from)        { where.push(`q.date >= $${idx++}`);        params.push(from); }
     if (to)          { where.push(`q.date <= $${idx++}`);        params.push(to); }
 
+    // بدون بنود العرض هنا، كل سحب دوري كان يستبدل db.quotes محليًا بنسخة بلا
+    // items — نفس علّة قائمة الفواتير (loadAllFromAPI كل 60 ثانية)
     const { rows } = await db.query(`
-      SELECT q.*, c.name AS customer_name_db, COUNT(*) OVER() AS total_count
+      SELECT q.*, c.name AS customer_name_db,
+             COALESCE(
+               (SELECT json_agg(json_build_object(
+                  'id', qi.id, 'product_id', qi.product_id, 'product_name', qi.product_name,
+                  'qty', qi.qty::float, 'unit_price', qi.unit_price::float,
+                  'discount', qi.discount::float, 'line_total', qi.line_total::float
+                ) ORDER BY qi.sort_order)
+                FROM quote_items qi WHERE qi.quote_id = q.id),
+               '[]'::json
+             ) AS items,
+             COUNT(*) OVER() AS total_count
       FROM quotes q
-      LEFT JOIN customers c ON c.id = q.customer_id
+      LEFT JOIN customers c ON c.id = q.customer_id AND c.company_id = q.company_id
       WHERE ${where.join(' AND ')}
       ORDER BY q.created_at DESC
       LIMIT $${idx++} OFFSET $${idx}
@@ -43,7 +55,7 @@ exports.getOne = async (req, res, next) => {
   try {
     const { rows: [quote] } = await db.query(
       `SELECT q.*, c.name AS customer_name_db
-       FROM quotes q LEFT JOIN customers c ON c.id = q.customer_id
+       FROM quotes q LEFT JOIN customers c ON c.id = q.customer_id AND c.company_id = q.company_id
        WHERE q.id = $1 AND q.company_id = $2`,
       [req.params.id, req.user.company_id]
     );
@@ -62,6 +74,17 @@ exports.create = async (req, res, next) => {
     await client.query('BEGIN');
     const { company_id, sub: user_id } = req.user;
     const { customer_id, customer_name, date, valid_until, notes, status, items = [], vat_rate } = req.body;
+
+    if (customer_id) {
+      const { rows: [custRow] } = await client.query(
+        `SELECT id FROM customers WHERE id = $1 AND company_id = $2`,
+        [customer_id, company_id]
+      );
+      if (!custRow) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'العميل غير موجود' });
+      }
+    }
 
     let subtotal = 0;
     const processedItems = items.map((item, idx) => {
@@ -267,8 +290,8 @@ exports.convert = async (req, res, next) => {
 
     if (quote.customer_id) {
       await client.query(
-        `UPDATE customers SET balance = balance + $1 WHERE id = $2`,
-        [quote.grand_total, quote.customer_id]
+        `UPDATE customers SET balance = balance + $1 WHERE id = $2 AND company_id = $3`,
+        [quote.grand_total, quote.customer_id, company_id]
       );
     }
 
@@ -278,7 +301,7 @@ exports.convert = async (req, res, next) => {
       const { rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]);
       let customerRow = null;
       if (quote.customer_id) {
-        customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [quote.customer_id])).rows[0];
+        customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1 AND company_id = $2`, [quote.customer_id, company_id])).rows[0];
       }
       const xmlItems = processedItems.map(it => ({
         ...it, vat_rate: 15, vat_category_code: 'S',

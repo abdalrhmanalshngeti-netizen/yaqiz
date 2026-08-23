@@ -3084,7 +3084,7 @@ async function doCheckout() {
   // update shift stats
   if(currentUser?.shift_enabled) updateShiftOnSale(inv);
   // loyalty points
-  if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal);
+  if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal, inv.customer_id);
   logActivity('مبيعات POS',`${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
   cart=[];posDiscount=0;posCustomer='';posPayment='نقدي';
   if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
@@ -5809,8 +5809,8 @@ function renderCusContent() {
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(c.name)}','customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
-          <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF('${escJsAttr(c.name)}')">${icon('printer',13)} PDF</button>
+          <button class="btn btn-sm btn-outline" onclick="showPartyStatement(${c.id},'customer')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
+          <button class="btn btn-sm btn-outline" onclick="exportPartyStatementPDF(${c.id},'customer')">${icon('printer',13)} PDF</button>
           ${has('customers.manage')?`<button class="btn btn-sm btn-outline" onclick="showAddEntity('customer', ${c.id})">${icon('pencil',13)} ${t('edit')}</button>`:''}
           ${has('customers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteCustomerEntity(${c.id},'${escJsAttr(c.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
@@ -5885,8 +5885,8 @@ function renderSuppliers(c) {
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-outline" onclick="showPartyStatement('${escJsAttr(s.name)}','supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
-          <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF('${escJsAttr(s.name)}')">${icon('printer',13)} PDF</button>
+          <button class="btn btn-sm btn-outline" onclick="showPartyStatement(${s.id},'supplier')">${icon('file-text',13)} ${lang==='ar'?'كشف':'Statement'}</button>
+          <button class="btn btn-sm btn-outline" onclick="exportSupplierStatementPDF(${s.id})">${icon('printer',13)} PDF</button>
           ${has('suppliers.manage')?`<button class="btn btn-sm btn-outline" onclick="showAddEntity('supplier', ${s.id})">${icon('pencil',13)} ${t('edit')}</button>`:''}
           ${has('suppliers.manage')?`<button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #dc262630;" onclick="deleteSupplierEntity(${s.id},'${escJsAttr(s.name)}')"><span style="font-size:11px;">${icon('slash',11)} ${lang==='ar'?'تعطيل':'Deactivate'}</span></button>`:''}
         </td>
@@ -7043,12 +7043,20 @@ let zakatAsOfDate = new Date().toISOString().slice(0,10);
 function setZakatAsOfDate(v) { zakatAsOfDate = v || new Date().toISOString().slice(0,10); renderZakatReport(el('acct-report-content')); }
 function resetZakatAsOfDate() { setZakatAsOfDate(new Date().toISOString().slice(0,10)); }
 
+// مطابقة سجل (فاتورة/مشترى/سند) بعميل أو مورد — بالمعرّف أولًا لو مخزَّن على
+// السجل، وإلا بالاسم كخيار احتياطي فقط (سجلات قديمة قبل تخزين المعرّف). بدون
+// هذا، تغيير اسم عميل/مورد يُسقط تاريخه بالكامل من وعاء الزكاة بصمت — نفس
+// العلّة المُصلَحة سابقًا بتحديث الأرصدة (postCustomerReceivable/postSupplierPayable)
+function _matchParty(rec, idField, nameField, party) {
+  return rec[idField] ? rec[idField] === party.id : (rec[nameField]||'') === party.name;
+}
+
 function zakatFigures(db, asOf) {
   const cashMovesAfter = (db.treasury?.moves||[]).filter(m=>(m.date||'').slice(0,10) > asOf);
   const cash = (db.treasury?.balance||0) - cashMovesAfter.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0);
   const receivables = db.customers.reduce((s,cu)=>{
-    const inv = db.invoices.filter(i=>i.customer_name===cu.name && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
-    const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+    const inv = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',cu) && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
+    const rcv = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',cu)&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
     return s+Math.max(0,inv-rcv);
   },0);
   // p.cost_price غير مُعرَّف على أي منتج إطلاقًا (لا مكان يضبطه)، فكان
@@ -7056,8 +7064,8 @@ function zakatFigures(db, asOf) {
   // ويُضخّم وعاء الزكاة فعليًا
   const inventoryVal = db.products.reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
   const payables = db.suppliers.reduce((s,su)=>{
-    const pur = db.purchases.filter(p=>p.vendor===su.name && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
-    const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+    const pur = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',su) && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
+    const pay = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',su)&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
     return s+Math.max(0,pur-pay);
   },0);
   const zakatBase = Math.max(0, cash+receivables+inventoryVal-payables);
@@ -7144,8 +7152,8 @@ function drillZakat(kind) {
       rows);
   } else if (kind==='receivables') {
     const rows = db.customers.map(cu=>{
-      const inv = db.invoices.filter(i=>i.customer_name===cu.name && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
-      const rcv = (db.receipts||[]).filter(r=>r.party===cu.name&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+      const inv = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',cu) && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
+      const rcv = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',cu)&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
       return { name: cu.name, outstanding: Math.max(0, inv-rcv) };
     }).filter(r=>r.outstanding>0.004).sort((a,b)=>b.outstanding-a.outstanding);
     showReportDrillDownModal(
@@ -7155,8 +7163,8 @@ function drillZakat(kind) {
       rows.map(r=>[sanitize(r.name), fmtMoney(r.outstanding)]));
   } else if (kind==='payables') {
     const rows = db.suppliers.map(su=>{
-      const pur = db.purchases.filter(p=>p.vendor===su.name && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
-      const pay = (db.receipts||[]).filter(r=>r.party===su.name&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
+      const pur = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',su) && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
+      const pay = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',su)&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
       return { name: su.name, outstanding: Math.max(0, pur-pay) };
     }).filter(r=>r.outstanding>0.004).sort((a,b)=>b.outstanding-a.outstanding);
     showReportDrillDownModal(
@@ -7374,7 +7382,21 @@ function calcReportData(db, filterFn) {
   const cogs = invs.reduce((s,i)=>s+(i.cogs_total||0),0)
     - rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0);
   const grossProfit = revenue - cogs;
-  const expenses = purchs.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).reduce((s,p)=>s+p.amount,0);
+  // كل حسابات المصروفات (5xxx) عدا تكلفة البضاعة المباعة (5100، محسوبة أعلاه
+  // من الفواتير مباشرة) — مصدرها دفتر اليومية مباشرة لا مصفوفة المشتريات فقط،
+  // عشان تشمل الرواتب وحركات الخزينة اليدوية والتزامات مدفوعة (كلها تُنشئ قيد
+  // يومية لكنها لا تُنشئ سطر "مشتريات")، بدل ما تفوتها كما كان يحصل — فيتعارض
+  // صافي الربح هنا مع صافي الربح المحسوب بالميزانية العمومية (نفس البيانات
+  // بالضبط، من مصدرين مختلفين)
+  const journalInPeriod = filterFn ? (db.journal||[]).filter(filterFn) : (db.journal||[]);
+  const expenses = journalInPeriod.reduce((s,entry)=>
+    s + (entry.entries||[]).reduce((es,line)=>{
+      if (line.account_code && line.account_code[0]==='5' && line.account_code!=='5100') {
+        return es + (line.side==='debit' ? (line.amount||0) : -(line.amount||0));
+      }
+      return es;
+    }, 0)
+  , 0);
   const netProfit = grossProfit - expenses;
   return {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit,invs,purchs};
 }
@@ -7605,7 +7627,6 @@ function renderCashFlow(db, d, periodFilter, period) {
 
   const cashIn_receipts   = receipts.reduce((s,r)=>s+r.amount,0);
   const cashIn_direct     = directCash.reduce((s,i)=>s+(i.paid_amount||i.grand_total),0);
-  const totalCashIn       = cashIn_receipts + cashIn_direct;
 
   // التدفقات الصادرة: المبالغ المدفوعة فعلاً للموردين + مصاريف نقدية
   const payments   = (db.receipts||[]).filter(r => r.type==='payment' && (period==='all' || periodFilter(r)));
@@ -7615,13 +7636,26 @@ function renderCashFlow(db, d, periodFilter, period) {
 
   const cashOut_vouchers  = payments.reduce((s,r)=>s+r.amount,0);
   const cashOut_purchases = cashPurch.reduce((s,p)=>s+(p.paid_amount||p.total),0);
-  const totalCashOut      = cashOut_vouchers + cashOut_purchases;
 
-  const netCash     = totalCashIn - totalCashOut;
-  const openBal     = db.treasury.moves.length
-    ? db.treasury.balance - db.treasury.moves.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
-    : 0;
+  // صافي كل حركات الخزينة الفعلية بالفترة — المرجع الوحيد الموثوق لمقدار
+  // التغيّر الحقيقي بالرصيد. التصنيف أعلاه (سندات/بيع وشراء نقدي مباشر) يغطي
+  // أكثر المسارات شيوعًا بس مو كلها — رواتب، حركات خزينة يدوية، تحصيل/سداد
+  // التزامات، والجزء النقدي من المرتجعات كلها تحرّك الخزينة فعليًا بدون ما
+  // تظهر بأي من المجموعتين أعلاه. الفرق بين الصافي الفعلي والمصنَّف يُعرَض
+  // صراحة كبند "حركات أخرى" بدل ما يختفي بصمت ويسبب تعارضًا مع رصيد الخزينة الحقيقي
+  const allMovesInPeriod = (db.treasury.moves||[]).filter(m => period==='all' || periodFilter(m));
+  const actualNetChange = Math.round(allMovesInPeriod.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)*100)/100;
+  const categorizedNet = (cashIn_receipts + cashIn_direct) - (cashOut_vouchers + cashOut_purchases);
+  const otherNet = Math.round((actualNetChange - categorizedNet)*100)/100;
+  const cashIn_other  = Math.max(0, otherNet);
+  const cashOut_other = Math.max(0, -otherNet);
+
+  const totalCashIn       = cashIn_receipts + cashIn_direct + cashIn_other;
+  const totalCashOut      = cashOut_vouchers + cashOut_purchases + cashOut_other;
+
+  const netCash     = actualNetChange;
   const closeBal    = db.treasury.balance;
+  const openBal     = Math.round((closeBal - actualNetChange)*100)/100;
   const color = (v) => v >= 0 ? 'var(--success)' : 'var(--danger)';
 
   const row = (label, val, bold=false, indent=false) => `
@@ -7641,6 +7675,7 @@ function renderCashFlow(db, d, periodFilter, period) {
     </div>
     ${row(lang==='ar'?'سندات قبض من العملاء':'Customer receipts', cashIn_receipts, false, true)}
     ${row(lang==='ar'?'مبيعات نقدية مباشرة':'Direct cash sales', cashIn_direct, false, true)}
+    ${cashIn_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/التزامات/مرتجعات)':'Other movements (salaries/manual/obligations/returns)', cashIn_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الوارد':'Total Inflows', totalCashIn, true)}
 
     <div style="font-weight:800;font-size:13px;color:var(--danger);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #fee2e2;">
@@ -7648,6 +7683,7 @@ function renderCashFlow(db, d, periodFilter, period) {
     </div>
     ${row(lang==='ar'?'سندات صرف للموردين':'Supplier payments', -cashOut_vouchers, false, true)}
     ${row(lang==='ar'?'مشتريات نقدية مباشرة':'Direct cash purchases', -cashOut_purchases, false, true)}
+    ${cashOut_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/التزامات/مرتجعات)':'Other movements (salaries/manual/obligations/returns)', -cashOut_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الصادر':'Total Outflows', -totalCashOut, true)}
 
     <div style="margin-top:16px;padding:16px;background:${netCash>=0?'#dcfce7':'#fee2e2'};border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -10870,8 +10906,16 @@ function printQuote(id){
   win.document.close();
 }
 
-function convertQuoteToInvoice(id) {
+// كانت هذي الدالة تتجاوز endpoint السيرفر الصحيح الموجود أصلاً (POST
+// /api/quotes/:id/convert — فيه قفل صف حقيقي ومنع إعادة تحويل)، وتبني فاتورة
+// محلية بالكامل برقم وهمي تعتمد على مزامنة الخلفية العامة لاحقًا. نفس علّة
+// نقطة البيع/الفاتورة اليدوية بالضبط (رقم/QR لا يطابقان الفاتورة الحقيقية)،
+// وبالإضافة: بلا قفل حقيقي، فتحويلان متزامنان (تبويبان/جهازان) لنفس العرض
+// كانا يقدران ينشئان فاتورتين كاملتين لنفس العرض (مخزون وقيد مضاعفين)
+async function convertQuoteToInvoice(id) {
+  if (blockedByExpiredSubscription()) return;
   const db=getDB(); const q=(db.quotes||[]).find(x=>x.id===id); if(!q)return;
+  if (q.status==='مقبول' || q.converted_to) { showToast(lang==='ar'?'العرض محوَّل بالفعل':'Quote already converted','error'); return; }
   if(q.valid_until && new Date(q.valid_until) < new Date(new Date().toISOString().slice(0,10))){
     const expMsg=lang==='ar'
       ?`عرض السعر ${q.quote_no} منتهي الصلاحية منذ ${fmtDate(q.valid_until)} — تحويله لفاتورة رغم ذلك؟`
@@ -10880,38 +10924,61 @@ function convertQuoteToInvoice(id) {
   } else if(!confirm(lang==='ar'?`تحويل عرض السعر ${q.quote_no} إلى فاتورة؟`:`Convert quote ${q.quote_no} to invoice?`))return;
   const activeWarehouseId=resolveActiveWarehouseId();
   const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
+
+  let res=null;
+  try {
+    if (typeof window._cloudApiFetch !== 'function') throw new Error('bridge unavailable');
+    res = await Promise.race([
+      window._cloudApiFetch('POST', `/api/quotes/${q.id}/convert`, { branch_id: activeBranchId }),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 8000))
+    ]);
+  } catch(e) { res=null; }
+
+  if (!res?.data?.id) {
+    showQuoteConvertFailedOverlay(id);
+    return;
+  }
+
+  // نجاح — الآن فقط، وببيانات السيرفر المؤكَّدة (رقم حقيقي، تكلفة FIFO حقيقية،
+  // ورمز QR الموقَّع إن وُجد)، نبني الفاتورة المحلية ونطبّق الأثر المحلي
+  const srv=res.data;
   const inv={
-    id:nextId(db,'invoice'),
-    invoice_no:`INV-${new Date().getFullYear()}-${String(db.nextId.invoice-1).padStart(3,'0')}`,
-    customer_name:q.customer_name,customer_vat:'',
-    customer_id: db.customers.find(c=>c.name===q.customer_name)?.id || null,
-    items:(q.items||[]).map(i=>({...i})), // نسخة مستقلة — لا تشارك نفس مصفوفة عرض السعر
-    subtotal:q.subtotal,discount:0,
-    vat_total:q.vat_total,grand_total:q.grand_total,
-    payment_method:'آجل',status:'آجل',
-    invoice_type:'simplified',zatca_status:false,
-    paid_amount:0,quote_ref:q.quote_no,
-    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
-    created_at:new Date().toISOString()
+    id: srv.id, invoice_no: srv.invoice_no,
+    customer_name:q.customer_name, customer_vat:'',
+    customer_id: srv.customer_id || db.customers.find(c=>c.name===q.customer_name)?.id || null,
+    items:(srv.items||q.items||[]).map(i=>({
+      id: i.product_id||i.id, name: i.product_name||i.name, code:'',
+      qty: parseFloat(i.qty), price: parseFloat(i.unit_price!=null?i.unit_price:i.price),
+      line_total: parseFloat(i.line_total)
+    })),
+    subtotal: parseFloat(srv.subtotal)||q.subtotal, discount:0,
+    vat_total: parseFloat(srv.vat_amount)||q.vat_total, grand_total: parseFloat(srv.grand_total)||q.grand_total,
+    payment_method:'آجل', status:'آجل',
+    invoice_type:'simplified', zatca_status:false,
+    paid_amount:0, quote_ref:q.quote_no,
+    branch_id: srv.branch_id||activeBranchId, warehouse_id:activeWarehouseId,
+    created_at: srv.created_at || new Date().toISOString(),
+    cogs_total: parseFloat(srv.cogs_total)||0,
+    zatca_qr_phase2: srv.zatca_qr_phase2||null,
+    zatca_uuid: srv.zatca_uuid||null,
+    icv: srv.icv||null,
+    zatca_hash: srv.zatca_hash||null,
   };
 
-  // مخزون (FIFO) — بأسلوب "قدر الإمكان": عناصر عرض السعر مجرد اسم/كمية/سعر بدون
-  // ربط بمنتج فعلي، فبعضها قد يكون خدمة لا تقابلها سلعة بالمخزون أصلاً
+  // مخزون (تقدير فوري محلي للعرض فقط — الخصم الفعلي FIFO حصل بالسيرفر)
   if(!db.stock_moves) db.stock_moves=[];
   if(!db.nextId.stock_move) db.nextId.stock_move=1;
-  let cogsTotal=0;
   inv.items.forEach(item=>{
     const prod=db.products.find(p=>p.id===item.id||p.name===item.name);
     if(prod){
       const oldQty=prod.qty;
-      cogsTotal+=fifoDeduct(prod, item.qty);
+      fifoDeduct(prod, item.qty);
       mutateWarehouseStock(db, prod.id, activeWarehouseId, -item.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:prod.id,product_name:prod.name,product_code:prod.code||'',warehouse_id:activeWarehouseId,
         type:'out',qty:item.qty,balance_before:oldQty,balance_after:prod.qty,
         reason:'تحويل عرض سعر لفاتورة',reference:inv.invoice_no,date:new Date().toISOString()});
     }
   });
-  inv.cogs_total = Math.round(cogsTotal*100)/100;
 
   // قيد محاسبي — دائمًا آجل (نفس سلوك تحويل عروض الأسعار المعروف)
   if(!db.journal) db.journal=[];
@@ -10931,11 +10998,31 @@ function convertQuoteToInvoice(id) {
     entries:jEntries, ref:inv.invoice_no});
 
   db.invoices.push(inv);
-  q.status='مقبول'; q.converted_to=inv.invoice_no;
+  // منع إعادة إرسال هذي الفاتورة بدورة المزامنة العامة — اتزامنت فعليًا للتو
+  if (typeof window._cloudRegisterSyncedInvoice === 'function') window._cloudRegisterSyncedInvoice(inv);
+  q.status='مقبول'; q.converted_to=inv.invoice_no; q.converted_invoice_id=inv.id;
   saveDB(db);
   logActivity('عروض أسعار',`تحويل ${q.quote_no} إلى فاتورة ${inv.invoice_no} — ${fmtMoney(inv.grand_total)}`);
   showToast(`✅ ${lang==='ar'?`تم التحويل إلى فاتورة ${inv.invoice_no}`:`Converted to invoice ${inv.invoice_no}`}`);
   renderPage();
+}
+
+// نافذة فشل التحويل — العرض نفسه بقي كما هو (لا شيء طُبِّق محليًا)، إعادة
+// المحاولة تكفي وتُعيد استدعاء نفس الدالة
+function showQuoteConvertFailedOverlay(quoteId) {
+  const mc=el('modal-container'); if(!mc) return;
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+      <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${lang==='ar'?'تعذّر الاتصال بالسيرفر':'Could not reach the server'}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${lang==='ar'?'لم يتحوّل عرض السعر لفاتورة — عرض السعر ما زال كما هو، حاول مرة ثانية.':'The quote was not converted — it is unchanged, please try again.'}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" onclick="closeModal();convertQuoteToInvoice(${quoteId});">🔄 ${lang==='ar'?'إعادة المحاولة':'Retry'}</button>
+        <button class="btn btn-outline btn-full" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function updateQuoteStatus(id){
@@ -11320,21 +11407,25 @@ function recordStockMoveAuto(productId, productName, productCode, qty, type, ref
 }
 
 // ============ PARTY STATEMENT (حركة العميل / المورد) ============
-function showPartyStatement(partyName, partyType) {
+function showPartyStatement(partyId, partyType) {
   const db=getDB();
   const mc=el('modal-container');
-  // collect all transactions for this party
+  const party = (partyType==='customer' ? db.customers : db.suppliers).find(p=>p.id===partyId);
+  if (!party) return;
+  const partyName = party.name;
+  // collect all transactions for this party — بالمعرّف أولًا، والاسم كخيار
+  // احتياطي فقط (نفس _matchParty المستخدمة بوعاء الزكاة وكشف الحساب الرسمي)
   const rows=[];
-  db.invoices.filter(i=>i.customer_name===partyName).forEach(i=>{
+  db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party)).forEach(i=>{
     rows.push({date:i.created_at,type:'فاتورة مبيعات',ref:i.invoice_no,debit:i.grand_total,credit:0,status:i.status});
   });
-  (db.receipts||[]).filter(r=>r.party===partyName&&r.type==='receipt').forEach(r=>{
+  (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party)&&r.type==='receipt').forEach(r=>{
     rows.push({date:r.created_at,type:'سند قبض',ref:r.voucher_no,debit:0,credit:r.amount,status:'—'});
   });
-  (db.receipts||[]).filter(r=>r.party===partyName&&r.type==='payment').forEach(r=>{
+  (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party)&&r.type==='payment').forEach(r=>{
     rows.push({date:r.created_at,type:'سند صرف',ref:r.voucher_no,debit:r.amount,credit:0,status:'—'});
   });
-  db.purchases.filter(p=>p.vendor===partyName).forEach(p=>{
+  db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party)).forEach(p=>{
     rows.push({date:p.created_at,type:'فاتورة مشتريات',ref:`PO-${p.id}`,debit:0,credit:p.total,status:'—'});
   });
   rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -12360,7 +12451,7 @@ function renderLoyalty(c) {
             <td><b>${sanitize(cu.name)}</b></td>
             <td><span style="font-weight:900;font-size:15px;color:var(--primary);">${(cu.points||0).toLocaleString()}</span> ${lang==='ar'?'نقطة':'pts'}</td>
             <td style="color:var(--success);font-weight:700;">${fmtMoney(cu.value)}</td>
-            <td><button class="btn btn-sm btn-outline" onclick="redeemPoints('${escJsAttr(cu.name)}')" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
+            <td><button class="btn btn-sm btn-outline" onclick="redeemPoints('${escJsAttr(cu.name)}',${cu.id})" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
           </tr>`).join('')}
         </tbody>
       </table></div>
@@ -12397,7 +12488,7 @@ function saveLoyaltySettings() {
   _syncLoyalty('_loyaltySettingsDirty', 'PUT', '/api/loyalty/settings', db.loyalty_settings);
 }
 
-function addLoyaltyPoints(customerName, amount) {
+function addLoyaltyPoints(customerName, amount, customerId) {
   const db=getDB();
   const ls=db.loyalty_settings||{};
   if(!ls.enabled)return;
@@ -12406,7 +12497,7 @@ function addLoyaltyPoints(customerName, amount) {
   db.loyalty_points[customerName]=(db.loyalty_points[customerName]||0)+pts;
   saveDB(db);
   if(pts>0) showToast(`⭐ ${lang==='ar'?`${customerName} كسب ${pts} نقطة`:`${customerName} earned ${pts} points`}`);
-  if (pts) _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:customerName, delta:pts });
+  if (pts) _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:customerName, delta:pts, customer_id:customerId||null });
 }
 
 function showAddPointsModal() {
@@ -12434,17 +12525,18 @@ function saveManualPoints() {
   if(!db.loyalty_points)db.loyalty_points={};
   db.loyalty_points[cust]=(db.loyalty_points[cust]||0)+pts;
   saveDB(db);showToast(`✅ ${pts} ${lang==='ar'?'نقطة أضيفت لـ':'points added to'} ${cust}`);closeModal();renderPage();
-  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:cust, delta:pts });
+  const custId = db.customers.find(c=>c.name===cust)?.id || null;
+  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/points', { customer_name:cust, delta:pts, customer_id:custId });
 }
 
-function redeemPoints(customerName) {
+function redeemPoints(customerName, customerId) {
   const db=getDB(); const pts=db.loyalty_points?.[customerName]||0;
   const ls=db.loyalty_settings||{sar_per_point:0.1};
   const val=pts*ls.sar_per_point;
   if(!confirm(lang==='ar'?`استرداد ${pts} نقطة بقيمة ${fmtMoney(val)} لـ ${customerName}؟`:`Redeem ${pts} points worth ${fmtMoney(val)} for ${customerName}?`))return;
   db.loyalty_points[customerName]=0;
   saveDB(db);showToast(`✅ ${lang==='ar'?'تم الاسترداد':'Redeemed'}: ${fmtMoney(val)}`);renderPage();
-  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/redeem', { customer_name:customerName });
+  _syncLoyalty('_loyaltyPointsDirty', 'POST', '/api/loyalty/redeem', { customer_name:customerName, customer_id:customerId||null });
 }
 
 
@@ -13075,18 +13167,25 @@ function exportReportPDF(title, htmlContent) {
 
 
 // Export account statement (party)
-function exportPartyStatementPDF(partyName) {
+function exportPartyStatementPDF(partyId, partyType) {
   const db=getDB();
+  const isCust = partyType==='customer';
+  const party = (isCust ? db.customers : db.suppliers).find(p=>p.id===partyId);
+  if (!party) { showToast(lang==='ar'?'الطرف غير موجود':'Party not found','error'); return; }
+  const partyName = party.name;
   const now=new Date();
   const rows=[];
-  db.invoices.filter(i=>i.customer_name===partyName).forEach(i=>{
-    rows.push({date:i.created_at,type:'فاتورة مبيعات',ref:i.invoice_no,debit:i.grand_total,credit:0,status:i.status});
-  });
-  (db.receipts||[]).filter(r=>r.party===partyName).forEach(r=>{
+  if (isCust) {
+    db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party)).forEach(i=>{
+      rows.push({date:i.created_at,type:'فاتورة مبيعات',ref:i.invoice_no,debit:i.grand_total,credit:0,status:i.status});
+    });
+  } else {
+    db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party)).forEach(p=>{
+      rows.push({date:p.created_at,type:'فاتورة مشتريات',ref:`PUR-${p.id}`,debit:0,credit:p.total,status:'—'});
+    });
+  }
+  (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party)).forEach(r=>{
     rows.push({date:r.created_at,type:r.type==='receipt'?'سند قبض':'سند صرف',ref:r.voucher_no,debit:r.type==='payment'?r.amount:0,credit:r.type==='receipt'?r.amount:0,status:'—'});
-  });
-  db.purchases.filter(p=>p.vendor===partyName).forEach(p=>{
-    rows.push({date:p.created_at,type:'فاتورة مشتريات',ref:`PUR-${p.id}`,debit:0,credit:p.total,status:'—'});
   });
   rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
   let running=0;
@@ -14731,9 +14830,13 @@ let stmtBankFrom = null;
 let stmtBankTo = null;
 
 // يبني كشف حساب طرف (عميل أو مورد) — يشمل الرصيد الافتتاحي والمرتجعات، والرصيد يُحسب من نفس الحركات المعروضة
-function computePartyStatement(partyName, kind) {
+// party: كائن العميل/المورد الكامل (لازم .id و.name) — لا اسم مجرَّد، عشان
+// تغيير اسم الطرف لاحقًا ما يُسقط تاريخ معاملاته من كشفه المطبوع (نفس علّة
+// وعاء الزكاة المُصلَحة أعلاه، بنفس دالة _matchParty)
+function computePartyStatement(party, kind) {
   const db = getDB();
   const isCust = kind === 'customer';
+  const partyName = party.name;
   const obList = (isCust ? db.settings?.opening_balances_data?.customers : db.settings?.opening_balances_data?.suppliers) || [];
   const obEntry = obList.find(x=>x.name===partyName);
   const openingBal = obEntry?.balance || 0;
@@ -14748,33 +14851,33 @@ function computePartyStatement(partyName, kind) {
   // المحاسبي فعليًا (عبر قيد عكسي + تعديل الرصيد)، فإبقاء بندها بالكشف يظهرها
   // كمديونية دائمة غير مقاصة أبدًا
   if (isCust) {
-    const custInvoices = db.invoices.filter(i=>i.customer_name===partyName && i.status!=='ملغاة');
-    const cancelledInvNos = new Set(db.invoices.filter(i=>i.customer_name===partyName && i.status==='ملغاة').map(i=>i.invoice_no));
+    const custInvoices = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party) && i.status!=='ملغاة');
+    const cancelledInvNos = new Set(db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party) && i.status==='ملغاة').map(i=>i.invoice_no));
     custInvoices.forEach(inv=>{
       events.push({ date: inv.created_at, desc: `${lang==='ar'?'فاتورة مبيعات':'Sales Invoice'} ${inv.invoice_no}`, type: lang==='ar'?'فاتورة':'Invoice', debit: inv.grand_total, credit: 0, ref: inv.invoice_no, method: inv.payment_method||'' });
       if ((inv.paid_amount||0) > 0) {
         events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: inv.paid_amount, ref: inv.invoice_no, method: inv.payment_method||'' });
       }
     });
-    (db.receipts||[]).filter(r=>r.party===partyName && r.type==='receipt' && !cancelledInvNos.has(r.ref)).forEach(r=>{
+    (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party) && r.type==='receipt' && !cancelledInvNos.has(r.ref)).forEach(r=>{
       events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
-    (db.returns||[]).filter(r=>r.type==='sales' && r.party===partyName).forEach(r=>{
+    (db.returns||[]).filter(r=>r.type==='sales' && _matchParty(r,'party_id','party',party)).forEach(r=>{
       events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   } else {
-    const suppPurchases = db.purchases.filter(p=>p.vendor===partyName && p.status!=='ملغاة');
-    const cancelledPurRefs = new Set(db.purchases.filter(p=>p.vendor===partyName && p.status==='ملغاة').map(p=>p.supplier_ref));
+    const suppPurchases = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status!=='ملغاة');
+    const cancelledPurRefs = new Set(db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status==='ملغاة').map(p=>p.supplier_ref));
     suppPurchases.forEach(p=>{
       events.push({ date: p.created_at, desc: p.description || (lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'), type: lang==='ar'?'فاتورة':'Invoice', debit: p.total, credit: 0, ref: p.supplier_ref||'', method: p.payment_method||'' });
       if ((p.paid_amount||0) > 0) {
         events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: p.paid_amount, ref: p.supplier_ref||'', method: p.payment_method||'' });
       }
     });
-    (db.receipts||[]).filter(r=>r.party===partyName && r.type==='payment' && !cancelledPurRefs.has(r.ref)).forEach(r=>{
+    (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party) && r.type==='payment' && !cancelledPurRefs.has(r.ref)).forEach(r=>{
       events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
-    (db.returns||[]).filter(r=>r.type==='purchases' && r.party===partyName).forEach(r=>{
+    (db.returns||[]).filter(r=>r.type==='purchases' && _matchParty(r,'party_id','party',party)).forEach(r=>{
       events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   }
@@ -14786,8 +14889,8 @@ function computePartyStatement(partyName, kind) {
   const totalDebit  = Math.round(events.filter(e=>!e.isOpening).reduce((s,e)=>s+(e.debit||0),0)*100)/100;
   const totalCredit = Math.round(events.filter(e=>!e.isOpening).reduce((s,e)=>s+(e.credit||0),0)*100)/100;
   const txCount = isCust
-    ? db.invoices.filter(i=>i.customer_name===partyName && i.status!=='ملغاة').length
-    : db.purchases.filter(p=>p.vendor===partyName && p.status!=='ملغاة').length;
+    ? db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party) && i.status!=='ملغاة').length
+    : db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status!=='ملغاة').length;
 
   return { events, finalBalance: running, totalDebit, totalCredit, txCount, openingBal, openingDate };
 }
@@ -14871,15 +14974,18 @@ function renderPartyStatementList(c, kind) {
         <td style="font-weight:700;">${sanitize(p.name)}</td>
         <td>${sanitize(p.phone)||'-'}</td>
         <td style="font-weight:700;color:${(p.balance||0)>0?'var(--danger)':'var(--success)'};">${fmtMoney(p.balance||0)}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty='${escJsAttr(p.name)}';renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
+        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty=${p.id};renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
       </tr>`).join('')}
     </tbody>
   </table></div></div>`;
 }
 
-function renderPartyStatementDetail(c, partyName, kind) {
+function renderPartyStatementDetail(c, partyId, kind) {
+  const db = getDB();
   const isCust = kind==='customer';
-  const st = computePartyStatement(partyName, kind);
+  const party = (isCust ? db.customers : db.suppliers).find(p=>p.id===partyId);
+  if (!party) { stmtSelectedParty=null; renderStmtContent(); return; }
+  const st = computePartyStatement(party, kind);
   const label = isCust ? (lang==='ar'?'العميل':'Customer') : (lang==='ar'?'المورد':'Supplier');
   const balLabel = isCust
     ? (lang==='ar'?'الرصيد المستحق (لكم)':'Owed to you')
@@ -14889,8 +14995,8 @@ function renderPartyStatementDetail(c, partyName, kind) {
     <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="stmtSelectedParty=null;renderStmtContent()">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
     <div class="card" style="margin-bottom:14px;"><div class="card-pad">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-        <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${sanitize(partyName)}</div></div>
-        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF(getDB().customers.find(c=>c.name===\''+escJsAttr(partyName)+'\').id)':'exportSupplierStatementPDF(\''+escJsAttr(partyName)+'\')'}">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
+        <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${sanitize(party.name)}</div></div>
+        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF':'exportSupplierStatementPDF'}(${party.id})">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
       </div>
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
         <div class="stat-card"><div class="stat-label">${lang==='ar'?'عدد الفواتير':'Invoice Count'}</div><div class="stat-value">${st.txCount}</div></div>
@@ -14991,7 +15097,7 @@ function exportCustomerStatementPDF(customerId) {
   const customer = db.customers.find(c=>c.id===customerId);
   if(!customer) { showToast('العميل غير موجود','error'); return; }
   const now = new Date();
-  const st = computePartyStatement(customer.name, 'customer');
+  const st = computePartyStatement(customer, 'customer');
   const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${sanitize(e.ref)}</td><td>${sanitize(e.desc)}</td><td>${sanitize(e.method)||'-'}</td>
     <td style="color:#dc2626;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);
@@ -15018,12 +15124,12 @@ function exportCustomerStatementPDF(customerId) {
   win.document.close();
 }
 
-function exportSupplierStatementPDF(supplierName) {
+function exportSupplierStatementPDF(supplierId) {
   const db = getDB(); const s = db.settings||{};
-  const supplier = db.suppliers.find(s=>s.name===supplierName);
+  const supplier = db.suppliers.find(s=>s.id===supplierId);
   if(!supplier) { showToast('المورد غير موجود','error'); return; }
   const now = new Date();
-  const st = computePartyStatement(supplierName, 'supplier');
+  const st = computePartyStatement(supplier, 'supplier');
   const rows = st.events.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${sanitize(e.desc)}</td><td>${sanitize(e.type)}</td><td>${sanitize(e.method)||'-'}</td>
     <td style="color:#dc2626;font-weight:700;">${e.debit?Number(e.debit).toFixed(2):''}</td><td style="color:#16a34a;">${e.credit?Number(e.credit).toFixed(2):''}</td>
     <td style="font-weight:700;">${Number(e.balance).toFixed(2)}</td></tr>`);

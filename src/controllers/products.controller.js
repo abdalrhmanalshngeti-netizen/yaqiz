@@ -50,27 +50,32 @@ exports.create = async (req, res, next) => {
     if (!name) return res.status(400).json({ success: false, message: 'اسم المنتج مطلوب' });
 
     await client.query('BEGIN');
+    // يُنشَأ المنتج دائمًا بكمية صفر — أي كمية افتتاحية تُضاف بعدها عبر
+    // stock.add() تحديدًا (لا بإدراج مباشر بـqty)، عشان تاخذ طبقة تكلفة حقيقية
+    // (stock_lots). بدون هذا، منتج جديد بمخزون افتتاحي كان يظهر برصيد صحيح
+    // بالكمية لكن بلا أي طبقة FIFO تدعمه — يُقيَّم بصفر بالميزانية العمومية،
+    // وأول عملية بيع منه تُسعَّر بسعر الشراء الحالي بدل التكلفة الافتتاحية الفعلية
     const { rows: [product] } = await client.query(`
       INSERT INTO products
         (company_id, code, barcode, name, name_en, category_id, unit_id,
          buy_price, sell_price, qty, min_qty, max_qty, tax_rate, notes)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13)
       RETURNING *
     `, [req.user.company_id, code, barcode, name, name_en, category_id, unit_id,
-        buy_price || 0, sell_price || 0, qty || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes]);
+        buy_price || 0, sell_price || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes]);
 
-    // إنشاء صف product_stock مبدئي بمستودع فرع المستخدم — بدونه أول عملية بيع
-    // بمستودع مُحدَّد ترى الكمية صفرًا رغم ظهورها بقائمة المنتجات (تُنشأ الصفوف
-    // كسولاً فقط عند أول حركة عبر stock.service.js، فتبقى الكمية الابتدائية معلّقة)
-    try {
-      const { warehouse_id } = await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
-      await client.query(
-        `INSERT INTO product_stock (company_id, product_id, warehouse_id, qty) VALUES ($1,$2,$3,$4)
-         ON CONFLICT (product_id, warehouse_id) DO UPDATE SET qty = product_stock.qty + EXCLUDED.qty`,
-        [req.user.company_id, product.id, warehouse_id, qty || 0]
-      );
-    } catch (whErr) {
-      console.warn(`product_stock seed skipped for product ${product.id}:`, whErr.message);
+    const openingQty = parseFloat(qty) || 0;
+    if (openingQty > 0) {
+      try {
+        const { warehouse_id } = await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
+        await stock.add(client, {
+          company_id: req.user.company_id, product_id: product.id, warehouse_id, qty: openingQty,
+          unit_cost: buy_price || 0, reason: 'رصيد افتتاحي', source_type: 'opening_balance', user_id: req.user.sub
+        });
+        product.qty = openingQty;
+      } catch (whErr) {
+        console.warn(`opening stock skipped for product ${product.id}:`, whErr.message);
+      }
     }
 
     await client.query('COMMIT');

@@ -91,6 +91,16 @@ exports.create = async (req, res, next) => {
         INSERT INTO product_stock (company_id, product_id, warehouse_id, qty)
         SELECT company_id, id, $2, qty FROM products WHERE company_id = $1 AND qty <> 0
       `, [req.user.company_id, warehouse.id]);
+
+      // بدون هذا، نفس المخزون المُرحَّل يبقى بلا أي طبقة تكلفة (stock_lots) —
+      // يُقيَّم بصفر بالميزانية العمومية، وأول بيع منه بعد تفعيل الفروع يُسعَّر
+      // بسعر الشراء الحالي وقتها بدل التكلفة الفعلية. آخر سعر شراء معروف
+      // (buy_price) هو أفضل تقدير متاح لمخزون سابق لعصر تتبع الطبقات أصلًا
+      await client.query(`
+        INSERT INTO stock_lots (company_id, product_id, warehouse_id, qty_remaining, unit_cost, source_type)
+        SELECT company_id, id, $2, qty, COALESCE(buy_price, 0), 'opening_balance'
+        FROM products WHERE company_id = $1 AND qty <> 0
+      `, [req.user.company_id, warehouse.id]);
     }
 
     // حساب خزينة نقدي منفصل لكل فرع — البنكي يبقى مشتركًا على مستوى الشركة

@@ -9,12 +9,17 @@ exports.get = async (req, res, next) => {
       `SELECT enabled, points_per_sar, sar_per_point FROM loyalty_settings WHERE company_id = $1`,
       [company_id]
     );
+    // الاسم الحالي (c.name) لا الاسم المخزَّن وقت آخر تحديث (lp.customer_name) —
+    // بدون هذا، تغيير اسم عميل يُرجع نقاطه للواجهة تحت اسمه القديم فتظهر "مفقودة"
     const { rows: pointRows } = await db.query(
-      `SELECT customer_name, points FROM loyalty_points WHERE company_id = $1`,
+      `SELECT lp.customer_id, lp.customer_name, lp.points, c.name AS current_name
+       FROM loyalty_points lp
+       LEFT JOIN customers c ON c.id = lp.customer_id AND c.company_id = lp.company_id
+       WHERE lp.company_id = $1`,
       [company_id]
     );
     const points = {};
-    pointRows.forEach(r => { points[r.customer_name] = r.points; });
+    pointRows.forEach(r => { points[r.current_name || r.customer_name] = r.points; });
 
     res.json({
       success: true,
@@ -49,20 +54,46 @@ exports.addPoints = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const customer_name = String(req.body.customer_name || '').trim();
+    const customer_id   = req.body.customer_id || null;
     const delta = Math.round(parseFloat(req.body.delta) || 0);
     if (!customer_name || !delta) {
       return res.status(400).json({ success: false, message: 'customer_name و delta مطلوبان' });
     }
 
-    const { rows: [row] } = await db.query(`
-      INSERT INTO loyalty_points (company_id, customer_name, points, updated_at)
-      VALUES ($1,$2,GREATEST(0,$3),NOW())
-      ON CONFLICT (company_id, customer_name) DO UPDATE SET
-        points = GREATEST(0, loyalty_points.points + $3), updated_at = NOW()
-      RETURNING points
-    `, [company_id, customer_name, delta]);
+    // نطابق بالمعرّف أولًا لو مُرسَل — يمنع فقدان النقاط عند تغيير الاسم لاحقًا،
+    // وإلا سجل قديم بنفس الاسم بلا معرّف بعد (يُلحَق به المعرّف الآن إن وُجد)
+    let row = null;
+    if (customer_id) {
+      ({ rows: [row] } = await db.query(
+        `SELECT id FROM loyalty_points WHERE company_id = $1 AND customer_id = $2`,
+        [company_id, customer_id]
+      ));
+    }
+    if (!row) {
+      ({ rows: [row] } = await db.query(
+        `SELECT id FROM loyalty_points WHERE company_id = $1 AND customer_id IS NULL AND customer_name = $2`,
+        [company_id, customer_name]
+      ));
+    }
 
-    res.json({ success: true, points: row.points });
+    let result;
+    if (row) {
+      ({ rows: [result] } = await db.query(`
+        UPDATE loyalty_points SET
+          points = GREATEST(0, points + $1), customer_name = $2,
+          customer_id = COALESCE(customer_id, $3), updated_at = NOW()
+        WHERE id = $4
+        RETURNING points
+      `, [delta, customer_name, customer_id, row.id]));
+    } else {
+      ({ rows: [result] } = await db.query(`
+        INSERT INTO loyalty_points (company_id, customer_id, customer_name, points, updated_at)
+        VALUES ($1,$2,$3,GREATEST(0,$4),NOW())
+        RETURNING points
+      `, [company_id, customer_id, customer_name, delta]));
+    }
+
+    res.json({ success: true, points: result.points });
   } catch (err) { next(err); }
 };
 
@@ -71,12 +102,20 @@ exports.redeem = async (req, res, next) => {
   try {
     const { company_id } = req.user;
     const customer_name = String(req.body.customer_name || '').trim();
-    if (!customer_name) return res.status(400).json({ success: false, message: 'customer_name مطلوب' });
+    const customer_id   = req.body.customer_id || null;
+    if (!customer_name && !customer_id) return res.status(400).json({ success: false, message: 'customer_name مطلوب' });
 
-    await db.query(`
-      UPDATE loyalty_points SET points = 0, updated_at = NOW()
-      WHERE company_id = $1 AND customer_name = $2
-    `, [company_id, customer_name]);
+    if (customer_id) {
+      await db.query(
+        `UPDATE loyalty_points SET points = 0, updated_at = NOW() WHERE company_id = $1 AND customer_id = $2`,
+        [company_id, customer_id]
+      );
+    } else {
+      await db.query(
+        `UPDATE loyalty_points SET points = 0, updated_at = NOW() WHERE company_id = $1 AND customer_name = $2`,
+        [company_id, customer_name]
+      );
+    }
 
     res.json({ success: true });
   } catch (err) { next(err); }

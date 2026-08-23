@@ -24,8 +24,21 @@ exports.list = async (req, res, next) => {
     if (from)        { where.push(`i.date >= $${idx++}`);             params.push(from); }
     if (to)          { where.push(`i.date <= $${idx++}`);             params.push(to); }
 
+    // بدون بنود الفاتورة هنا، كل عملية سحب دورية (loadAllFromAPI/كل 60 ثانية)
+    // كانت تستبدل db.invoices محليًا بنسخة بلا items إطلاقًا — الفاتورة تفقد
+    // أصنافها المعروضة خلال دقيقة من إنشائها على كل جهاز
     const { rows } = await db.query(`
       SELECT i.*, c.name AS customer_name,
+             COALESCE(
+               (SELECT json_agg(json_build_object(
+                  'id', ii.id, 'product_id', ii.product_id, 'product_name', ii.product_name,
+                  'product_code', ii.product_code, 'qty', ii.qty::float, 'unit_price', ii.unit_price::float,
+                  'discount', ii.discount::float, 'line_total', ii.line_total::float,
+                  'vat_amount', ii.vat_amount::float, 'unit_cost', ii.unit_cost::float
+                ) ORDER BY ii.sort_order)
+                FROM invoice_items ii WHERE ii.invoice_id = i.id),
+               '[]'::json
+             ) AS items,
              COUNT(*) OVER() AS total_count
       FROM invoices i
       LEFT JOIN customers c ON c.id = i.customer_id
