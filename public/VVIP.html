@@ -714,10 +714,39 @@ function getDB() {
           d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5900', name:'مصاريف أخرى', name_en:'Other Expenses', type:'مصروفات', is_group:false, parent:11 });
         }
       }
+      _healNextIdCounters(d);
       return d;
     }
   } catch(e) {}
   return initDB();
+}
+
+// إصلاح عام: db.nextId.* أبدًا ما كان يُطابَق مع البيانات الحقيقية القادمة من
+// السيرفر (loadAllFromAPI) — يبقى على قيمته الافتراضية (١ غالبًا) بأي جهاز/
+// جلسة متصفح جديدة، بغضّ النظر عن كم سجل حقيقي موجود فعلاً بنفس المصفوفة.
+// أول عنصر جديد يُنشأ محليًا بهذي الجلسة كان معرَّض يتصادم بنفس معرّف سجل حقيقي
+// موجود مسبقًا (لاحظناها فعليًا بفواتير الشراء: نفس المعرّف المحلي انطبق غلط
+// على فاتورة قديمة حقيقية وقت المزامنة). الإصلاح: كل استدعاء لـgetDB() يرفع
+// كل عدّاد ليكون أكبر من أعلى id فعلي موجود بمصفوفته — عملية ترفع فقط، أبدًا
+// ما تخفّض، فما تؤثر على أي معرّف محلي مؤقت قائم بالفعل.
+const NEXTID_ARRAY_MAP = {
+  invoice:'invoices', purchase:'purchases', customer:'customers', supplier:'suppliers',
+  product:'products', user:'users', account:'accounts', employee:'employees',
+  obligation:'obligations', escalation:'escalations', quote:'quotes', return_:'returns',
+  shift:'shifts', stock_move:'stock_moves', journal:'journal', activity:'activity',
+  po:'purchase_orders', stock_transfer:'stock_transfers', branch:'branches', warehouse:'warehouses',
+};
+function _maxNumericId(arr) {
+  return (arr||[]).reduce((m,x)=> (typeof x?.id==='number' && x.id>m) ? x.id : m, 0);
+}
+function _healNextIdCounters(d) {
+  if (!d.nextId) d.nextId = {};
+  for (const key in NEXTID_ARRAY_MAP) {
+    const maxId = _maxNumericId(d[NEXTID_ARRAY_MAP[key]]);
+    if (maxId > 0 && (!d.nextId[key] || d.nextId[key] <= maxId)) d.nextId[key] = maxId + 1;
+  }
+  const maxTreasury = _maxNumericId(d.treasury?.moves);
+  if (maxTreasury > 0 && (!d.nextId.treasury || d.nextId.treasury <= maxTreasury)) d.nextId.treasury = maxTreasury + 1;
 }
 function saveDB(db) {
   try {
