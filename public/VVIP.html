@@ -3547,9 +3547,9 @@ function showNewInvoiceModal() {
       <div class="modal-head">
         <h3>📋 ${lang==='ar'?'إصدار فاتورة مبيعات جديدة':'New Sales Invoice'}</h3>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="saveNewInvoice(true)">${icon('printer',14)} ${lang==='ar'?'حفظ وطباعة':'Save & Print'}</button>
-          <button class="btn btn-outline btn-sm" onclick="saveNewInvoice(false)">${icon('save',14)} ${lang==='ar'?'حفظ الفاتورة':'Save'}</button>
-          <button class="btn btn-outline btn-sm" onclick="closeModal()">${icon('x',14)} ${lang==='ar'?'إلغاء':'Cancel'}</button>
+          <button id="ni-save-print-btn" class="btn btn-primary btn-sm" onclick="saveNewInvoice(true)">${icon('printer',14)} ${lang==='ar'?'حفظ وطباعة':'Save & Print'}</button>
+          <button id="ni-save-btn" class="btn btn-outline btn-sm" onclick="saveNewInvoice(false)">${icon('save',14)} ${lang==='ar'?'حفظ الفاتورة':'Save'}</button>
+          <button id="ni-cancel-btn" class="btn btn-outline btn-sm" onclick="closeModal()">${icon('x',14)} ${lang==='ar'?'إلغاء':'Cancel'}</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 300px;gap:16px;overflow:hidden;">
@@ -3559,8 +3559,8 @@ function showNewInvoiceModal() {
           <!-- Header info -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
             <div>
-              <label class="form-label">${lang==='ar'?'رقم الفاتورة':'Invoice #'}</label>
-              <input class="input" id="ni-no" value="SAL-${new Date().getFullYear()}${String((db.nextId.invoice||1)).padStart(5,'0')}" readonly style="background:var(--bg);" />
+              <label class="form-label">${lang==='ar'?'رقم الفاتورة (يُحدَّد فعليًا عند الحفظ)':'Invoice # (assigned on save)'}</label>
+              <input class="input" id="ni-no" value="${lang==='ar'?'يُحدَّد بعد الحفظ':'Assigned after saving'}" readonly style="background:var(--bg);color:var(--text-muted);" />
             </div>
             <div>
               <label class="form-label">${lang==='ar'?'تاريخ الفاتورة':'Date'}</label>
@@ -3938,7 +3938,13 @@ function saveNewInvoice(printAfter=false) {
   if(newInvItems.length===0){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
   guardClosedPeriod(el('ni-date').value, () => _saveNewInvoiceActual(printAfter));
 }
-function _saveNewInvoiceActual(printAfter) {
+
+// نفس علّة نقطة البيع بالضبط (رقم مُصطنَع محليًا + طباعة قبل أي اتصال بالسيرفر)
+// — هذي الشاشة أصلًا بلا أي رمز QR إطلاقًا، فالإصلاح هنا يضيف واحدًا لأول مرة
+// بجانب انتظار رد السيرفر. السيرفر ما عنده مفهوم "دفع جزئي وقت الإنشاء" (منطق
+// binary فقط: إما "آجل" أو "مدفوعة بالكامل") — فنُنشئها كآجلة ثم نسجّل التحصيل
+// الجزئي بطلب منفصل فورًا (نفس آلية تحصيل الدفعات الموجودة أصلًا لأي فاتورة).
+async function _saveNewInvoiceActual(printAfter) {
   const db=getDB();
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
@@ -3960,7 +3966,8 @@ function _saveNewInvoiceActual(printAfter) {
   const activeWarehouseId=resolveWarehouseIdForBranch(db, activeBranchId);
 
   // لازم يتحقق من كفاية مخزون *هذا الفرع تحديدًا* قبل إنشاء أي شيء — نرفض
-  // الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت
+  // الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت (السيرفر يعيد نفس
+  // الفحص أيضًا وقت الإنشاء الفعلي، هذا مجرد رد فعل فوري محلي)
   const shortages = newInvItems
     .map(ni => ({ ni, avail: getWarehouseStockQty(db, ni.id, activeWarehouseId) }))
     .filter(x => x.avail < x.ni.qty);
@@ -3971,33 +3978,84 @@ function _saveNewInvoiceActual(printAfter) {
     return;
   }
 
-  const inv={
-    id:nextId(db,'invoice'),
-    invoice_no:el('ni-no').value,
-    customer_name:el('ni-customer').value,
-    customer_vat:el('ni-customer-vat')?.value||'',
-    items:newInvItems.map(i=>({...i,line_total:i.qty*i.price})),
-    subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
-    payment_method:payment, status,
-    invoice_type:el('ni-type').value,
-    notes: el('ni-notes')?.value?.trim()||'',
-    zatca_status:false, paid_amount:partialPaid,
-    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
-    created_at:new Date(el('ni-date').value).toISOString()
+  const customerName = el('ni-customer').value;
+  const customerVat  = el('ni-customer-vat')?.value||'';
+  const invoiceType  = el('ni-type').value;
+  const notes        = el('ni-notes')?.value?.trim()||'';
+  const dateVal      = el('ni-date').value;
+  const items        = newInvItems.map(i=>({...i,line_total:i.qty*i.price}));
+
+  const draftInv = {
+    customer_name: customerName, customer_vat: customerVat,
+    items, subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
+    // السيرفر يقرر "مدفوعة بالكامل" لأي payment_method غير "آجل"/"credit" — الدفع
+    // الجزئي يُرسَل كآجل هنا، ثم يُسجَّل التحصيل الجزئي بطلب منفصل بالأسفل
+    payment_method: payment==='جزئي' ? 'آجل' : payment,
+    invoice_type: invoiceType, branch_id: activeBranchId,
+    created_at: new Date(dateVal).toISOString()
   };
 
-  // stock moves (FIFO)
+  const btns = ['ni-save-print-btn','ni-save-btn','ni-cancel-btn'].map(id=>el(id));
+  const origHtml = btns.map(b=>b?.innerHTML);
+  const clickedBtn = printAfter ? btns[0] : btns[1];
+  btns.forEach(b=>{ if(b) b.disabled=true; });
+  if(clickedBtn) clickedBtn.innerHTML = `⏳ ${lang==='ar'?'جارٍ الحفظ...':'Saving...'}`;
+  const restoreBtns = () => { btns.forEach((b,i)=>{ if(b){ b.disabled=false; b.innerHTML=origHtml[i]; } }); };
+
+  let res=null;
+  try {
+    if (typeof window._cloudApiFetch !== 'function' || typeof window._cloudInvToAPI !== 'function') throw new Error('bridge unavailable');
+    res = await Promise.race([
+      window._cloudApiFetch('POST', '/api/invoices', window._cloudInvToAPI(draftInv)),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 8000))
+    ]);
+  } catch(e) { res=null; }
+
+  if (!res?.data?.id) {
+    restoreBtns();
+    showSaveInvoiceFailedOverlay(() => _saveNewInvoiceActual(printAfter));
+    return;
+  }
+  const srv = res.data;
+
+  // دفع جزئي وقت الإنشاء: الفاتورة أُنشئت آجلة فعليًا بالسيرفر أعلاه — الآن
+  // نسجّل التحصيل الجزئي بنفس رقمها الحقيقي (فشل نادر هنا لا يمنع إتمام
+  // الفاتورة نفسها؛ دورة المزامنة العامة تلتقط الفرق لاحقًا لأن paid_amount
+  // المحلي سيكون أكبر من صفر المخزَّن بالسيرفر)
+  if (payment==='جزئي') {
+    try { await window._cloudApiFetch('POST', `/api/invoices/${srv.id}/payment`, { amount: partialPaid, payment_method: 'نقدي' }); }
+    catch(e) { /* ignore — سيُلتقط لاحقًا بمزامنة الدفعات العامة */ }
+  }
+
+  const inv={
+    id: srv.id,
+    invoice_no: srv.invoice_no,
+    customer_name:customerName, customer_vat:customerVat,
+    items,
+    subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
+    payment_method:payment, status,
+    invoice_type:invoiceType,
+    notes,
+    zatca_status:false, paid_amount:partialPaid,
+    branch_id:activeBranchId, warehouse_id:activeWarehouseId,
+    created_at: srv.created_at || draftInv.created_at,
+    cogs_total: parseFloat(srv.cogs_total)||0,
+    zatca_qr_phase2: srv.zatca_qr_phase2||null,
+    zatca_uuid: srv.zatca_uuid||null,
+    icv: srv.icv||null,
+    zatca_hash: srv.zatca_hash||null,
+  };
+
+  // stock moves (تقدير فوري محلي للعرض فقط — الخصم الفعلي حصل بالسيرفر)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
-  let cogsTotal=0;
   newInvItems.forEach(ni=>{
     const p=db.products.find(x=>x.id===ni.id);
     if(p){const oldQty=p.qty;
-      cogsTotal+=fifoDeduct(p, ni.qty);
+      fifoDeduct(p, ni.qty);
       mutateWarehouseStock(db, p.id, activeWarehouseId, -ni.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',warehouse_id:activeWarehouseId,type:'out',qty:ni.qty,balance_before:oldQty,balance_after:p.qty,reason:'فاتورة مبيعات',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
-  inv.cogs_total = Math.round(cogsTotal*100)/100;
 
   // treasury
   if(partialPaid>0){
@@ -4023,29 +4081,63 @@ function _saveNewInvoiceActual(printAfter) {
     invJEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold',account_code:'5100',side:'debit',amount:inv.cogs_total});
     invJEntries.push({account:lang==='ar'?'المخزون':'Inventory',account_code:'1300',side:'credit',amount:inv.cogs_total});
   }
-  db.journal.push({id:db.nextId.journal++,date:new Date(el('ni-date').value).toISOString(),
+  db.journal.push({id:db.nextId.journal++,date:new Date(dateVal).toISOString(),
     description:`فاتورة مبيعات: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:invJEntries, ref:inv.invoice_no});
 
-  db.invoices.push(inv); saveDB(db);
+  db.invoices.push(inv);
+  // منع إعادة إرسال هذي الفاتورة بدورة المزامنة العامة — اتزامنت فعليًا للتو
+  if (typeof window._cloudRegisterSyncedInvoice === 'function') window._cloudRegisterSyncedInvoice(inv);
+  saveDB(db);
   // بلا هذا، بيع نقدي من شاشة "فواتير المبيعات" (لا نقطة البيع) كان غير مرئي
   // إطلاقًا لحساب الوردية المفتوحة — يتسبب بعجز وهمي وقت إغلاقها لاحقًا
   updateShiftOnSale(inv);
   logActivity('مبيعات',`فاتورة ${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
+  restoreBtns();
   closeModal();
   if(printAfter) printSalesInvoice(inv.id);
   renderPage();
 }
 
+// نافذة انقطاع الاتصال بشاشة الفاتورة اليدوية — تُبنى كطبقة منفصلة فوق
+// النموذج (بنفس أسلوب guardClosedPeriod) بدل الكتابة فوق #modal-container،
+// عشان ما تُفقَد قيم كل الحقول المُدخَلة (العميل، الأصناف، الملاحظات...)
+function showSaveInvoiceFailedOverlay(onRetry) {
+  const ov = document.createElement('div');
+  ov.id = 'ni-save-failed-overlay';
+  ov.className = 'modal-bg';
+  ov.style.zIndex = '99999';
+  ov.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+      <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${lang==='ar'?'تعذّر الاتصال بالسيرفر':'Could not reach the server'}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${lang==='ar'?'لم تُحفظ الفاتورة — كل البيانات اللي أدخلتها ما زالت موجودة بالنموذج.':'The invoice was not saved — everything you entered is still in the form.'}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" id="ni-save-retry-btn">🔄 ${lang==='ar'?'إعادة المحاولة':'Retry'}</button>
+        <button class="btn btn-outline btn-full" id="ni-save-cancel-btn">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const closeOverlay = () => ov.remove();
+  ov.addEventListener('click', closeOverlay);
+  ov.querySelector('#ni-save-cancel-btn').onclick = closeOverlay;
+  ov.querySelector('#ni-save-retry-btn').onclick = () => { closeOverlay(); onRetry(); };
+}
+
 function printSalesInvoice(id) {
   const db=getDB(); const inv=db.invoices.find(i=>i.id===id); if(!inv)return;
   const s=db.settings||{};
+  // أولوية لرمز QR الحقيقي الموقَّع من السيرفر (Phase-2) إن وُجد — وإلا رمز
+  // Phase-1 محلي بسيط. هذي الشاشة ما كان فيها أي رمز QR إطلاقًا قبل هذا التعديل
+  const qrData = inv.zatca_qr_phase2 || generateZATCAQR(s, inv);
+  const _hasRealSig = !!inv.zatca_qr_phase2;
   const win=window.open('','_blank','width=850,height=700');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
   <meta charset="UTF-8"><title>${inv.invoice_no}</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Tajawal',sans-serif;background:white;padding:24px;color:#0f172a;font-size:13px;}
@@ -4107,8 +4199,23 @@ function printSalesInvoice(id) {
     </div>
   </div>
   ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #1e40af;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${sanitize(inv.notes)}</div>`:''}
-  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${inv.invoice_no} • متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
-  <script>window.onload=()=>{window.print();}<\/script>
+  <div style="text-align:center;margin:16px 0;">
+    <div id="qr-div"></div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:4px;">امسح رمز QR للتحقق من الفاتورة</div>
+  </div>
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${inv.invoice_no} • ${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'فاتورة ضريبية مبسطة'}</div>
+  <script>
+    window.onload = function() {
+      try {
+        new QRCode(document.getElementById('qr-div'), {
+          text: '${qrData}', width: 120, height: 120,
+          colorDark: '#1e40af', colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) {}
+      setTimeout(()=>window.print(), 800);
+    };
+  <\/script>
   </body></html>`);
   win.document.close();
 }
@@ -17444,13 +17551,18 @@ async function runAISearchQuery(q) {
           // بكل شركة قد تتطابق صدفة مع معرّف سيرفر حقيقي لمورد آخر تمامًا (تضارب
           // صامت يربط المشترى بمورد خاطئ)، لا مجرد "غير موجود"
           const _sup2 = _ldb2.suppliers.find(s => (s.name||'').trim().toLowerCase() === (p.vendor||'').trim().toLowerCase());
+          // السيرفر يقرر "مدفوعة بالكامل" فقط لو payment_method ضمن قائمة أساليب
+          // نقدية معروفة، وإلا "غير مدفوعة إطلاقًا" (remaining=total كاملاً) —
+          // "جزئي" ليست بالقائمة، فكانت تُسجَّل كأنه لم يُدفع شيء نهائيًا رغم دفع
+          // paid_amount فعليًا. نرسلها كـ"آجل" ثم نسجّل المبلغ المدفوع بطلب منفصل
+          const _isPartialCreate = p.payment_method === 'جزئي';
           const res = await apiFetch('POST', '/api/purchases', {
             supplier_id:   _sup2?.id || null,
             supplier_name: p.vendor, description: p.description,
             category: p.category, date: (p.created_at || new Date().toISOString()).slice(0, 10),
             purchase_type: p.purchase_type || ((p.category === 'بضاعة' || p.category === 'goods') ? 'goods' : 'opex'),
             amount: parseFloat(p.amount) || 0, vat_amount: parseFloat(p.vat) || 0,
-            payment_method: p.payment_method || 'نقدي', deductible: p.deductible !== false,
+            payment_method: _isPartialCreate ? 'آجل' : (p.payment_method || 'نقدي'), deductible: p.deductible !== false,
             supplier_ref: p.supplier_ref||'', notes: p.notes||'', branch_id: p.branch_id||null,
             items: (p.items||[]).filter(it=>it.name||it.product_id).map(it=>{
               const _pr=_ldb2.products.find(x=>x.id===it.product_id)||_ldb2.products.find(x=>x.name===it.name);
@@ -17466,6 +17578,9 @@ async function runAISearchQuery(q) {
                 if (_pur) { _pur.purchase_no = res.data.purchase_no; _origSaveDB(_db); }
               } catch {}
             }
+            if (_isPartialCreate && parseFloat(p.paid_amount||0) > 0) {
+              await apiFetch('POST', `/api/purchases/${res.data.id}/payment`, { amount: parseFloat(p.paid_amount) }).catch(e => console.warn('purchase initial partial payment:', e.message));
+            }
           } else {
             _revertSnapEntity('purchases', p.id, null);
           }
@@ -17475,7 +17590,10 @@ async function runAISearchQuery(q) {
           if (_newPaid > _oldPaid + 0.01) {
             if (SYNC_LOG) console.log('→ API: purchase payment', p.vendor, _newPaid - _oldPaid);
             const _payAmt = Math.round((_newPaid - _oldPaid)*100)/100;
-            const ok = await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _payAmt })
+            // كانت هذي الرابط '/addPayment' (خطأ إملائي) — الراوت الفعلي المسجَّل
+            // بالسيرفر هو '/payment' فقط؛ كل استدعاء هنا كان يفشل بصمت (404 مُبتلَع
+            // بالـcatch أدناه) فلا تحصيل جزئي لاحق على أي فاتورة شراء يصل للسيرفر إطلاقًا
+            const ok = await apiFetch('POST', `/api/purchases/${p.id}/payment`, { amount: _payAmt })
               .then(()=>true).catch(e => { console.warn('purchase payment:', e.message); return false; });
             if (!ok) _revertSnapEntity('purchases', p.id, old);
           } else {
@@ -18147,7 +18265,9 @@ async function runAISearchQuery(q) {
                 const _ap = _apiPurs.find(a => a.purchase_no === p.purchase_no || a.id === p.id);
                 if (_ap && parseFloat(p.paid_amount||0) > parseFloat(_ap.paid_amount||0) + 0.01) {
                   const _delta = Math.round((parseFloat(p.paid_amount) - parseFloat(_ap.paid_amount||0))*100)/100;
-                  await apiFetch('POST', `/api/purchases/${p.id}/addPayment`, { amount: _delta }).catch(()=>null);
+                  // كان '/addPayment' (خطأ إملائي، الراوت الفعلي '/payment') — كل تحصيل
+                  // جزئي لاحق على مشترى مُتزامَن أصلًا كان يفشل بصمت (404) ولا يصل للسيرفر
+                  await apiFetch('POST', `/api/purchases/${p.id}/payment`, { amount: _delta }).catch(()=>null);
                 }
               }
 
@@ -18170,12 +18290,15 @@ async function runAISearchQuery(q) {
                   continue;
                 }
                 // غير موجودة → أنشئها
+                // نفس علّة المسار العام: "جزئي" ليست بقائمة أساليب الدفع النقدية
+                // اللي يفهمها السيرفر — تُرسَل كـ"آجل" ثم تُسجَّل الدفعة بطلب منفصل
+                const _isPartialCreate2 = p.payment_method === 'جزئي';
                 const res = await apiFetch('POST', '/api/purchases', {
                   supplier_name: p.vendor||'', description: p.description||'',
                   category: p.category||'', date: _pDate,
                   purchase_type: p.purchase_type||'opex',
                   amount: parseFloat(p.amount)||0, vat_amount: parseFloat(p.vat)||0,
-                  payment_method: p.payment_method||'نقدي', deductible: p.deductible!==false,
+                  payment_method: _isPartialCreate2 ? 'آجل' : (p.payment_method||'نقدي'), deductible: p.deductible!==false,
                   supplier_ref: p.supplier_ref||'', notes: p.notes||'',
                   items: (p.items||[]).filter(it=>it.product_id||it.name).map(it=>{
                     const _ldb=getDB(); const _pr=_ldb.products.find(x=>x.id===it.product_id)||_ldb.products.find(x=>x.name===it.name);
@@ -18188,6 +18311,9 @@ async function runAISearchQuery(q) {
                     const _db2 = getDB();
                     const _p2 = _db2.purchases.find(x=>x.id===res.data.id);
                     if (_p2) { _p2.purchase_no = res.data.purchase_no; _origSaveDB(_db2); }
+                  }
+                  if (_isPartialCreate2 && parseFloat(p.paid_amount||0) > 0) {
+                    await apiFetch('POST', `/api/purchases/${res.data.id}/payment`, { amount: parseFloat(p.paid_amount) }).catch(()=>null);
                   }
                 }
               }
