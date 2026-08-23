@@ -2943,10 +2943,12 @@ function updatePOSTotals() {
 // balanceAmount: (اختياري) لو المبلغ المؤثر فعليًا على رصيد الطرف يختلف عن
 //                مبلغ القيد نفسه (حالة سند القبض/الصرف اللي يُطبَّق جزئيًا على
 //                فواتير محددة) — افتراضيًا نفس journalAmount
-function postCustomerReceivable(db, jEntries, customerName, journalAmount, direction, balanceAmount) {
+// customerId (اختياري): نفس مبدأ postSupplierPayable — لو تحدَّد، الأولوية له
+// دائمًا على مطابقة الاسم (نص حر يتغيّر بأي تعديل بيانات عميل لاحق)
+function postCustomerReceivable(db, jEntries, customerName, journalAmount, direction, balanceAmount, customerId) {
   if (balanceAmount === undefined) balanceAmount = journalAmount;
   if (balanceAmount) {
-    const cust = db.customers.find(c => c.name === customerName);
+    const cust = customerId ? db.customers.find(c => c.id === customerId) : db.customers.find(c => c.name === customerName);
     if (cust) {
       const next = (cust.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
       cust.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
@@ -3026,7 +3028,7 @@ async function doCheckout() {
   const inv={
     id: srv.id,
     invoice_no: srv.invoice_no,
-    customer_name: draftInv.customer_name, customer_vat:'',
+    customer_name: draftInv.customer_name, customer_vat:'', customer_id: srv.customer_id||null,
     items: draftInv.items,
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
@@ -3063,7 +3065,7 @@ async function doCheckout() {
   if(posPayment!=='آجل') {
     jEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:total});
   } else {
-    postCustomerReceivable(db, jEntries, inv.customer_name, total, 'increase');
+    postCustomerReceivable(db, jEntries, inv.customer_name, total, 'increase', undefined, inv.customer_id);
   }
   jEntries.push({account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue',account_code:'4100',side:'credit',amount:afterDisc});
   jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT',account_code:'2200',side:'credit',amount:vat});
@@ -3542,7 +3544,7 @@ function cancelInvoice(id) {
   // 4. عكس رصيد العميل — خصم المبلغ المتبقي غير المسدد
   const remaining=Math.max(0,(parseFloat(inv.grand_total||0))-(paidAmt));
   if(remaining>0 && inv.customer_name){
-    postCustomerReceivable(db, [], inv.customer_name, 0, 'decrease', remaining);
+    postCustomerReceivable(db, [], inv.customer_name, 0, 'decrease', remaining, inv.customer_id);
   }
 
   // 5. الفاتورة تبقى في السجل بحالة "ملغاة" — لا حذف نهائي، رقمها لا يُعاد استخدامه أبداً
@@ -4063,7 +4065,7 @@ async function _saveNewInvoiceActual(printAfter) {
   const inv={
     id: srv.id,
     invoice_no: srv.invoice_no,
-    customer_name:customerName, customer_vat:customerVat,
+    customer_name:customerName, customer_vat:customerVat, customer_id: srv.customer_id||null,
     items,
     subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
     payment_method:payment, status,
@@ -4101,10 +4103,10 @@ async function _saveNewInvoiceActual(printAfter) {
   if(!db.nextId.journal)db.nextId.journal=1;
   const invJEntries = [];
   if(payment==='آجل') {
-    postCustomerReceivable(db, invJEntries, inv.customer_name, total, 'increase');
+    postCustomerReceivable(db, invJEntries, inv.customer_name, total, 'increase', undefined, inv.customer_id);
   } else if(payment==='جزئي') {
     if(partialPaid>0) invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:partialPaid});
-    if(total-partialPaid>0) postCustomerReceivable(db, invJEntries, inv.customer_name, total-partialPaid, 'increase');
+    if(total-partialPaid>0) postCustomerReceivable(db, invJEntries, inv.customer_name, total-partialPaid, 'increase', undefined, inv.customer_id);
   } else {
     invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:total});
   }
@@ -9872,7 +9874,7 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     // نقدًا، بينما رصيد العميل ينخفض فقط بالمبلغ المُطبَّق حقًا على فواتيره
     // (voucher.applied_amount) — قد يقل عن amount لو تجاوز السند ما هو مستحق عليه
     const rcvEntries = [{ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount }];
-    postCustomerReceivable(db, rcvEntries, voucher.party, amount, 'decrease', voucher.applied_amount);
+    postCustomerReceivable(db, rcvEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
     db.journal.push({
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
@@ -10021,7 +10023,7 @@ function deleteReceipt(id) {
     }
     // عكس رصيد العميل — بنفس المبلغ اللي فعلياً اتخصم منه وقت إنشاء السند
     const reversedAmt = v.applied_amount!=null ? v.applied_amount : amount;
-    postCustomerReceivable(db, [], v.party, 0, 'increase', reversedAmt);
+    postCustomerReceivable(db, [], v.party, 0, 'increase', reversedAmt, v.party_id);
   }
 
   // 4. عكس المشتريات (إذا سند صرف)
@@ -10396,7 +10398,7 @@ function _saveReturnActual(type, amount, linkedId) {
       {account:lang==='ar'?'ضريبة القيمة المضافة':'VAT Payable', account_code:'2200', side:'debit', amount:vat},
     ];
     if(cashPortion>0) salesRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:cashPortion});
-    postCustomerReceivable(db, salesRetEntries, ret.party, creditPortion, 'decrease');
+    postCustomerReceivable(db, salesRetEntries, ret.party, creditPortion, 'decrease', undefined, ret.party_id);
     if(returnCogsReversal>0) {
       // البضاعة رجعت للمخزون → نعكس جزء من تكلفة البضاعة المباعة الأصلية
       salesRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:returnCogsReversal});
@@ -10525,7 +10527,7 @@ function deleteReturn(id){
     ];
     if(cashPortion>0) revEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
     // الجزء الآجل اللي خُصم من رصيد العميل وقت المرتجع يُعاد له الآن
-    postCustomerReceivable(db, revEntries, r.party, creditPortion, 'increase');
+    postCustomerReceivable(db, revEntries, r.party, creditPortion, 'increase', undefined, r.party_id);
     if(r.cogs_reversal>0){
       revEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:r.cogs_reversal});
       revEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount:r.cogs_reversal});
@@ -10882,6 +10884,7 @@ function convertQuoteToInvoice(id) {
     id:nextId(db,'invoice'),
     invoice_no:`INV-${new Date().getFullYear()}-${String(db.nextId.invoice-1).padStart(3,'0')}`,
     customer_name:q.customer_name,customer_vat:'',
+    customer_id: db.customers.find(c=>c.name===q.customer_name)?.id || null,
     items:(q.items||[]).map(i=>({...i})), // نسخة مستقلة — لا تشارك نفس مصفوفة عرض السعر
     subtotal:q.subtotal,discount:0,
     vat_total:q.vat_total,grand_total:q.grand_total,
@@ -10917,7 +10920,7 @@ function convertQuoteToInvoice(id) {
     {account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue', account_code:'4100', side:'credit', amount:inv.subtotal},
   ];
   // رصيد العميل والقيد المحاسبي معًا — يرتفعان بكامل قيمة الفاتورة لأنها آجل بالكامل ولا شيء مسدد
-  postCustomerReceivable(db, jEntries, inv.customer_name, inv.grand_total, 'increase');
+  postCustomerReceivable(db, jEntries, inv.customer_name, inv.grand_total, 'increase', undefined, inv.customer_id);
   if(inv.vat_total>0) jEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT', account_code:'2200', side:'credit', amount:inv.vat_total});
   if(inv.cogs_total>0) {
     jEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount:inv.cogs_total});
@@ -14167,7 +14170,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
   // Journal entry
   if(!db.journal) db.journal=[];
   const qrEntries = [{account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount}];
-  postCustomerReceivable(db, qrEntries, inv.customer_name, amount, 'decrease');
+  postCustomerReceivable(db, qrEntries, inv.customer_name, amount, 'decrease', undefined, inv.customer_id);
   db.journal.push({
     id: (db.nextId.journal||1), date: new Date().toISOString(),
     description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
@@ -16854,6 +16857,7 @@ async function runAISearchQuery(q) {
       id: inv.id, invoice_no: inv.invoice_no,
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
+      customer_id:   inv.customer_id||null,
       items: (inv.items||[]).map(it => ({
         name: it.product_name, qty: parseFloat(it.qty),
         price: parseFloat(it.unit_price), line_total: parseFloat(it.line_total)
