@@ -64,7 +64,15 @@ exports.create = async (req, res, next) => {
     const debit  = entries.filter(e => e.side === 'debit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     const credit = entries.filter(e => e.side === 'credit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     // سماحية بسيطة لفروق التقريب المتراكمة عبر عدة بنود (نسبة الضريبة، الخصومات...)
-    if (Math.abs(debit - credit) > 0.05) {
+    // — نفس حد 0.01 المستخدَم بشاشة القيد اليدوي بالضبط (VVIP.html)، فكل مبلغ
+    // بالمنصة مُقرَّب لأقرب هللة قبل دخوله القيد أصلًا، فأي فرق حقيقي أكبر من
+    // هللة واحدة يعني قيدًا غير متوازن فعليًا، لا مجرد ضجيج تقريب عائم.
+    // المقارنة بالهللات (أعداد صحيحة) لا بالريال (كسور عائمة) — لأن طرح رقمين
+    // عشريين متقاربين بجافاسكريبت (مثلاً 100.01-100.00) قد ينتج ضجيجًا عائمًا
+    // أكبر بقليل من 0.01 فعليًا رغم تطابقهما محاسبيًا، فيرفض قيدًا متوازنًا فعلًا
+    const debitCents  = Math.round(debit * 100);
+    const creditCents = Math.round(credit * 100);
+    if (Math.abs(debitCents - creditCents) > 1) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'القيد غير متوازن — المدين لا يساوي الدائن' });
     }

@@ -12469,9 +12469,13 @@ function renderJEBalance() {
   const debits=window._jEntries.filter(e=>e.side==='debit').reduce((s,e)=>s+e.amount,0);
   const credits=window._jEntries.filter(e=>e.side==='credit').reduce((s,e)=>s+e.amount,0);
   const diff=Math.abs(debits-credits);
-  bal.style.background=diff<0.01?'#dcfce7':'#fee2e2';
-  bal.style.color=diff<0.01?'#15803d':'#b91c1c';
-  bal.innerHTML=diff<0.01
+  // نقارن بالهللات (أعداد صحيحة) لا بفروق عشرية عائمة — طرح رقمين متقاربين
+  // بجافاسكريبت (مثلاً 100.01-100.00) قد ينتج ضجيجًا عائمًا أكبر بقليل من
+  // 0.01 رغم تطابقهما محاسبيًا فعلًا، فيُظهر القيد "غير متوازن" خطأً
+  const diffCents=Math.abs(Math.round(debits*100)-Math.round(credits*100));
+  bal.style.background=diffCents<=1?'#dcfce7':'#fee2e2';
+  bal.style.color=diffCents<=1?'#15803d':'#b91c1c';
+  bal.innerHTML=diffCents<=1
     ?`✅ ${lang==='ar'?'القيد متوازن':'Entry Balanced'} — ${fmtMoney(debits)}`
     :`⚠️ ${lang==='ar'?'فرق:':'Difference:'} ${fmtMoney(diff)} | ${lang==='ar'?'مدين:':'Dr:'} ${fmtMoney(debits)} | ${lang==='ar'?'دائن:':'Cr:'} ${fmtMoney(credits)}`;
 }
@@ -12482,7 +12486,7 @@ function saveJournalEntry() {
   if(!el('je-desc')?.value){showToast(lang==='ar'?'البيان مطلوب':'Description required','error');return;}
   const debits=window._jEntries.filter(e=>e.side==='debit').reduce((s,e)=>s+e.amount,0);
   const credits=window._jEntries.filter(e=>e.side==='credit').reduce((s,e)=>s+e.amount,0);
-  if(Math.abs(debits-credits)>0.01){showToast(lang==='ar'?'القيد غير متوازن':'Entry not balanced','error');return;}
+  if(Math.abs(Math.round(debits*100)-Math.round(credits*100))>1){showToast(lang==='ar'?'القيد غير متوازن':'Entry not balanced','error');return;}
   if(!db.journal)db.journal=[];
   if(!db.nextId.journal)db.nextId.journal=1;
   const entry={id:db.nextId.journal++,date:new Date(el('je-date').value).toISOString(),
