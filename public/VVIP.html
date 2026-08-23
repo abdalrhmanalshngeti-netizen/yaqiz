@@ -4895,7 +4895,11 @@ function addGPItem() {
   if (!prod) prod = db.products.find(p=>p.name===name);
   const _gpVatOn2 = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
   const lineTotal=Math.round(qty*price*100)/100;
-  _goodsItems.push({name,qty,price,line_total:lineTotal,vat:_gpVatOn2?Math.round(lineTotal*0.15*100)/100:0,product_id:prod?.id||null});
+  // الضريبة تُخزَّن هنا خامًا بلا تقريب — التقريب يصير مرة وحدة على الإجمالي
+  // الكلي بـupdateGPTotals/_saveGoodsPurchaseActual، نفس منهجية نقطة البيع/
+  // الفاتورة اليدوية/عروض الأسعار والسيرفر بالضبط. تقريب كل بند لحاله ثم
+  // جمعها كان ينتج فرق هللة أحيانًا عن نفس الفاتورة محسوبة بمنهجية "مرة وحدة"
+  _goodsItems.push({name,qty,price,line_total:lineTotal,vat:_gpVatOn2?lineTotal*0.15:0,product_id:prod?.id||null});
   el('gp-iname').value=''; el('gp-iqty').value=1; el('gp-iunit').value=0; el('gp-iline').value=0;
   renderGPItems(); updateGPTotals();
 }
@@ -4953,9 +4957,9 @@ function updateGPItem(idx, field, value) {
 }
 
 function updateGPTotals() {
-  const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
-  const total=sub+vat;
+  const sub=Math.round(_goodsItems.reduce((s,i)=>s+i.line_total,0)*100)/100;
+  const vat=Math.round(_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0)*100)/100;
+  const total=Math.round((sub+vat)*100)/100;
   if(el('gp-sub')) el('gp-sub').textContent=fmtMoney(sub);
   if(el('gp-vat-val')) el('gp-vat-val').textContent=fmtMoney(vat);
   if(el('gp-total')) el('gp-total').textContent=fmtMoney(total);
@@ -4982,9 +4986,9 @@ function toggleGPPayment() {
 }
 
 function updateGPRemaining() {
-  const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
-  const total=sub+vat;
+  const sub=Math.round(_goodsItems.reduce((s,i)=>s+i.line_total,0)*100)/100;
+  const vat=Math.round(_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0)*100)/100;
+  const total=Math.round((sub+vat)*100)/100;
   const paid=Number(el('gp-paid')?.value||0);
   const rem=el('gp-remaining');
   if(rem) rem.textContent=`${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(Math.max(0,total-paid))}`;
@@ -4998,9 +5002,9 @@ function saveGoodsPurchase() {
 }
 function _saveGoodsPurchaseActual() {
   const db=getDB();
-  const sub=_goodsItems.reduce((s,i)=>s+i.line_total,0);
-  const vat=_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0);
-  const total=sub+vat;
+  const sub=Math.round(_goodsItems.reduce((s,i)=>s+i.line_total,0)*100)/100;
+  const vat=Math.round(_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0)*100)/100;
+  const total=Math.round((sub+vat)*100)/100;
   const payment=el('gp-payment').value;
   const paidNow=payment==='نقدي'?total:payment==='آجل'?0:Number(el('gp-paid')?.value||0);
   const remaining=total-paidNow;
@@ -12140,12 +12144,16 @@ function startPOReceive(id) {
   const db=getDB();
   const po=(db.purchase_orders||[]).find(p=>p.id===id); if(!po)return;
 
+  // نفس بوابة vat_enabled المُطبَّقة بإضافة صنف يدوية بهذي الشاشة (addGPItem) —
+  // بدونها، استلام أمر شراء لشركة معطِّلة الضريبة كان يفرض 15% دائمًا. والضريبة
+  // خام بلا تقريب لكل بند (راجع تعليق addGPItem أعلاه لنفس السبب بالضبط)
+  const _poVatOn = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
   _goodsItems = po.items.map(item=>{
     const prod = db.products.find(x=>x.name.trim().toLowerCase()===item.name.trim().toLowerCase());
     const price = item.price!=null ? item.price : (item.qty ? item.total/item.qty : 0);
     const lineTotal = Math.round(item.qty*price*100)/100;
     return { name:item.name, qty:item.qty, price, line_total:lineTotal,
-      vat:Math.round(lineTotal*0.15*100)/100, product_id: prod?.id||null };
+      vat:_poVatOn ? lineTotal*0.15 : 0, product_id: prod?.id||null };
   });
   _pendingPOId = po.id;
   showAddGoodsPurchase(true);
@@ -13109,7 +13117,12 @@ function parsePDFText(text, type, filename) {
       if(price>0&&lineTotal>0) itemRows.push({name:m[1].trim(), qty, price, total:lineTotal});
     }
 
-    const data = {vendor, description:`فاتورة مستوردة من PDF — ${filename}`, subtotal:subtotal||total/1.15, vat:vat||total*0.15/1.15, total:total||subtotal*1.15, items:itemRows, _raw:text.slice(0,500)};
+    // نفس صيغة استخراج الضريبة من مبلغ شامل الضريبة المُستخدَمة بكل شاشة أخرى
+    // (المرتجعات، سداد الالتزامات): base=total/1.15 ثم vat=total-base بالضبط،
+    // لا total*0.15/1.15 (متكافئة رياضيًا لكن قد تختلف بكسر هللة بسبب ترتيب
+    // العمليات العائم) — التطابق بالصيغة نفسها يمنع فرق تقريب بين الشاشتين
+    const _pdfBase = total>0 ? Math.round((total/1.15)*100)/100 : 0;
+    const data = {vendor, description:`فاتورة مستوردة من PDF — ${filename}`, subtotal:subtotal||_pdfBase, vat:vat||Math.round((total-_pdfBase)*100)/100, total:total||Math.round(subtotal*1.15*100)/100, items:itemRows, _raw:text.slice(0,500)};
     if(!data.total) { if(status) status.innerHTML=`<div style="background:#fef3c7;padding:12px;border-radius:8px;">⚠️ ${lang==='ar'?'تعذّر استخراج الإجمالي. راجع البيانات يدوياً':'Could not extract total. Review manually'}</div>`; }
     showImportPreview(data, type, 'pdf');
 
@@ -13188,15 +13201,20 @@ function confirmImport(data, type, format) {
       subtotal: data.reduce((s,r)=>s+(r.amount||0),0),
       vat_amount: 0,
       grand_total: data.reduce((s,r)=>s+(r.amount||0),0)
-    } : {
-      vendor: data.vendor || '',
-      date: new Date().toISOString().slice(0,10),
-      invoice_no: '',
-      items: (data.items||[]).map(i=>({ description:i.name||i.description||'بند', qty:i.qty||1, unit_price:i.price||i.unit_price||0, total:i.total||0 })),
-      subtotal: data.subtotal || data.total/1.15 || 0,
-      vat_amount: data.vat || data.total*0.15/1.15 || 0,
-      grand_total: data.total || 0
-    };
+    } : (() => {
+      // نفس صيغة base=total/1.15 ثم vat=total-base المُستخدَمة بكل مكان آخر
+      // (راجع تعليق parsePDFInvoice أعلاه) — لا total*0.15/1.15
+      const _aiBase = data.total>0 ? Math.round((data.total/1.15)*100)/100 : 0;
+      return {
+        vendor: data.vendor || '',
+        date: new Date().toISOString().slice(0,10),
+        invoice_no: '',
+        items: (data.items||[]).map(i=>({ description:i.name||i.description||'بند', qty:i.qty||1, unit_price:i.price||i.unit_price||0, total:i.total||0 })),
+        subtotal: data.subtotal || _aiBase,
+        vat_amount: data.vat || Math.round((data.total-_aiBase)*100)/100,
+        grand_total: data.total || 0
+      };
+    })();
     openPurchaseFormWithAIData(aiData, null);
     return;
   }
