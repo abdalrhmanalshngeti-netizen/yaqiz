@@ -2941,7 +2941,11 @@ function postSupplierPayable(db, jEntries, supplierName, journalAmount, directio
   }
 }
 
-function doCheckout() {
+// الإيصال المطبوع لازم يطابق الفاتورة الحقيقية الموقّعة بالسيرفر (رقم متسلسل +
+// رمز QR الحقيقي إن وُجد) — لذا نتصل بالسيرفر وننتظر رده *قبل* أي تعديل محلي
+// أو طباعة. عند انقطاع الاتصال نوقف البيع بدل طباعة إيصال برقم لن يطابق
+// السجل الرسمي أبدًا (قرار صريح: لا مسار بديل بلا اتصال بهذي الشاشة)
+async function doCheckout() {
   if (blockedByExpiredSubscription()) return;
   if(cart.length===0){showToast(lang==='ar'?'السلة فارغة':'Cart empty','error');return;}
   const db=getDB();
@@ -2953,29 +2957,67 @@ function doCheckout() {
   const vat=_vatActivePOS?afterDisc*0.15:0; const total=afterDisc+vat;
   const activeWarehouseId=resolveActiveWarehouseId();
   const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
-  const inv={
-    id:nextId(db,'invoice'),
-    invoice_no:`SAL-${new Date().getFullYear()}${String(db.nextId.invoice-1).padStart(5,'0')}`,
+
+  // فاتورة مبدئية — بلا أي تعديل على db بعد — تُستخدم فقط لبناء طلب السيرفر
+  const draftInv = {
     customer_name:posCustomer||t('cashCustomer'), customer_vat:'',
     items:cart.map(i=>({id:i.id,name:i.name,code:i.code||'',qty:i.qty,price:i.price,line_total:i.qty*i.price})),
+    subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
+    payment_method:posPayment, invoice_type:'simplified',
+    branch_id:activeBranchId, created_at:new Date().toISOString()
+  };
+
+  const btn=el('pos-checkout-btn');
+  const origBtnHtml=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML=`⏳ ${lang==='ar'?'جارٍ إتمام البيع...':'Processing...'}`;}
+
+  let res=null;
+  try {
+    if (typeof window._cloudApiFetch !== 'function' || typeof window._cloudInvToAPI !== 'function') throw new Error('bridge unavailable');
+    res = await Promise.race([
+      window._cloudApiFetch('POST', '/api/invoices', window._cloudInvToAPI(draftInv)),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 8000))
+    ]);
+  } catch(e) { res=null; }
+
+  if (!res?.data?.id) {
+    if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
+    showCheckoutFailedModal();
+    return;
+  }
+
+  // نجاح — الآن فقط، وببيانات السيرفر المؤكَّدة (رقم حقيقي، ورمز QR الموقَّع إن
+  // وُجد)، نبني الفاتورة المحلية ونطبّق كل الأثر المحلي (خزينة، قيد يومية،
+  // إحصاءات الوردية، نقاط الولاء)
+  const srv=res.data;
+  const inv={
+    id: srv.id,
+    invoice_no: srv.invoice_no,
+    customer_name: draftInv.customer_name, customer_vat:'',
+    items: draftInv.items,
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
     invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
     branch_id:activeBranchId, warehouse_id:activeWarehouseId,
-    created_at:new Date().toISOString()
+    created_at: srv.created_at || draftInv.created_at,
+    cogs_total: parseFloat(srv.cogs_total)||0,
+    zatca_qr_phase2: srv.zatca_qr_phase2||null,
+    zatca_uuid: srv.zatca_uuid||null,
+    icv: srv.icv||null,
+    zatca_hash: srv.zatca_hash||null,
   };
-  // stock moves (FIFO)
+
+  // stock moves (تقدير فوري محلي للعرض فقط — الخصم الفعلي FIFO حصل بالسيرفر
+  // وقت الإنشاء، وcogs_total أعلاه هو القيمة الحقيقية المعتمدة)
   if(!db.stock_moves)db.stock_moves=[];
   if(!db.nextId.stock_move)db.nextId.stock_move=1;
-  let cogsTotal=0;
   cart.forEach(ci=>{
     const p=db.products.find(x=>x.id===ci.id);
     if(p){const oldQty=p.qty;
-      cogsTotal+=fifoDeduct(p, ci.qty);
+      fifoDeduct(p, ci.qty);
       mutateWarehouseStock(db, p.id, activeWarehouseId, -ci.qty);
       db.stock_moves.push({id:db.nextId.stock_move++,product_id:p.id,product_name:p.name,product_code:p.code||'',warehouse_id:activeWarehouseId,type:'out',qty:ci.qty,balance_before:oldQty,balance_after:p.qty,reason:'مبيعات POS',reference:inv.invoice_no,date:new Date().toISOString()});}
   });
-  inv.cogs_total = Math.round(cogsTotal*100)/100;
   // treasury
   if(posPayment!=='آجل'){
     db.treasury.balance+=total;
@@ -3000,23 +3042,46 @@ function doCheckout() {
     description:`مبيعات POS: ${inv.invoice_no} — ${inv.customer_name}`,
     entries:jEntries, ref:inv.invoice_no});
 
-  db.invoices.push(inv); saveDB(db);
+  db.invoices.push(inv);
+  // منع إعادة إرسال هذي الفاتورة بدورة المزامنة العامة — اتزامنت فعليًا للتو
+  if (typeof window._cloudRegisterSyncedInvoice === 'function') window._cloudRegisterSyncedInvoice(inv);
+  saveDB(db);
   // update shift stats
   if(currentUser?.shift_enabled) updateShiftOnSale(inv);
   // loyalty points
   if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal);
   logActivity('مبيعات POS',`${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
   cart=[];posDiscount=0;posCustomer='';posPayment='نقدي';
+  if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
   showInvoiceModal(inv);
   if (currentPage === 'pos') renderPOSPage(el('page-content'));
   else renderPOS(el('sales-content'));
 }
 
+// نافذة انقطاع الاتصال وقت البيع — بلا مسار بديل، السلة تبقى سليمة
+function showCheckoutFailedModal() {
+  const mc=el('modal-container'); if(!mc) return;
+  mc.innerHTML = `
+  <div class="modal-bg" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+      <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${lang==='ar'?'تعذّر الاتصال بالسيرفر':'Could not reach the server'}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${lang==='ar'?'لا يمكن إتمام البيع الآن — السلة ما زالت محفوظة كما هي.':'The sale could not be completed right now — your cart is still intact.'}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" onclick="closeModal();doCheckout();">🔄 ${lang==='ar'?'إعادة المحاولة':'Retry'}</button>
+        <button class="btn btn-outline btn-full" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function showInvoiceModal(inv) {
   const db=getDB(); const s=db.settings||{};
-  // Generate ZATCA QR data (TLV base64 simplified)
-  const qrData = generateZATCAQR(s, inv);
+  // أولوية لرمز QR الحقيقي الموقَّع من السيرفر (Phase-2) إن وُجد — وإلا نسقط
+  // لرمز Phase-1 المحلي البسيط (الحالة الشائعة اليوم: لا شركة أهّلت CSID بعد)
+  const qrData = inv.zatca_qr_phase2 || generateZATCAQR(s, inv);
+  const _hasRealSig = !!inv.zatca_qr_phase2;
   const mc=el('modal-container');
   mc.innerHTML=`
   <div class="modal-bg" onclick="closeModal()">
@@ -3095,7 +3160,7 @@ function showInvoiceModal(inv) {
         <div style="text-align:center;padding:12px 0;border-top:2px dashed var(--border);">
           <canvas id="zatca-qr" style="width:120px;height:120px;"></canvas>
           <div style="font-size:10px;color:#64748b;margin-top:4px;">امسح رمز QR للتحقق</div>
-          <div style="font-size:9px;color:#94a3b8;margin-top:2px;">متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:2px;">${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'فاتورة ضريبية مبسطة'}</div>
         </div>
 
         <!-- Footer -->
@@ -3185,7 +3250,9 @@ function generateQRCanvas(canvasId, data) {
 function printPOSReceipt(id) {
   const db=getDB(); const inv=db.invoices.find(i=>i.id===id); if(!inv)return;
   const s=db.settings||{};
-  const qrData=generateZATCAQR(s,inv);
+  // أولوية لرمز QR الحقيقي الموقَّع من السيرفر (Phase-2) إن وُجد
+  const qrData=inv.zatca_qr_phase2 || generateZATCAQR(s,inv);
+  const _hasRealSig=!!inv.zatca_qr_phase2;
   const win=window.open('','_blank','width=400,height=700');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
@@ -3239,7 +3306,7 @@ function printPOSReceipt(id) {
   <div class="dashed"></div>
   <div id="qr-div"></div>
   <div class="center muted" style="font-size:10px;margin-bottom:4px;">امسح رمز QR للتحقق من الفاتورة</div>
-  <div class="center muted" style="font-size:9px;">متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك</div>
+  <div class="center muted" style="font-size:9px;">${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'فاتورة ضريبية مبسطة'}</div>
   <div class="dashed"></div>
   <div class="center" style="font-size:11px;margin-top:6px;">شكراً لتعاملكم معنا 🌟</div>
   <script>
@@ -16648,7 +16715,11 @@ async function runAISearchQuery(q) {
       invoice_type:   inv.invoice_type||'simplified',
       zatca_status:   inv.zatca_status==='accepted',
       branch_id:      inv.branch_id||null,
-      created_at:     inv.created_at
+      created_at:     inv.created_at,
+      zatca_qr_phase2: inv.zatca_qr_phase2||null,
+      zatca_uuid:      inv.zatca_uuid||null,
+      icv:             inv.icv||null,
+      zatca_hash:      inv.zatca_hash||null,
     };
   }
 
@@ -17150,6 +17221,20 @@ async function runAISearchQuery(q) {
 
   // تعريض apiFetch للكود الخارجي (لإدارة المستخدمين)
   window._cloudApiFetch = apiFetch;
+  // تعريض invToAPI وقفل _snap لنقطة البيع — doCheckout يحتاج إرسال الفاتورة
+  // للسيرفر والانتظار فورًا (لا دورة المزامنة العامة كل 100ms) عشان يطبع
+  // الإيصال برقم/رمز QR حقيقيين، ثم يجب تسجيلها بـ_snap فورًا لمنع دورة
+  // المزامنة القادمة من إعادة إرسالها كـ"جديدة" وتكرارها بالسيرفر
+  window._cloudInvToAPI = invToAPI;
+  window._cloudRegisterSyncedInvoice = function(inv) {
+    try {
+      if (!_snap) return;
+      if (!_snap.invoices) _snap.invoices = [];
+      const idx = _snap.invoices.findIndex(x => x.id === inv.id);
+      const copy = JSON.parse(JSON.stringify(inv));
+      if (idx >= 0) _snap.invoices[idx] = copy; else _snap.invoices.push(copy);
+    } catch (e) { /* ignore */ }
+  };
 
   // ═══════════════════════════════════════════════════════
   // 4. DIFF & SYNC (saveDB hook)
@@ -17456,6 +17541,22 @@ async function runAISearchQuery(q) {
                     });
                   }
                   _origSaveDB(_db3);
+                }
+              } catch {}
+            }
+            // بيانات التوقيع الإلكتروني (ZATCA Phase-2) — تفيد أي فاتورة أُنشئت
+            // من مسار غير نقطة البيع (تحويل عرض سعر، لاحقًا الفاتورة اليدوية)
+            // وبقيت على مسار المزامنة العام غير المحظور
+            if (res.data.zatca_qr_phase2 !== undefined || res.data.zatca_uuid) {
+              try {
+                const _db4 = getDB();
+                const _iv4 = _db4.invoices.find(x => x.id === res.data.id);
+                if (_iv4) {
+                  _iv4.zatca_qr_phase2 = res.data.zatca_qr_phase2 || null;
+                  _iv4.zatca_uuid = res.data.zatca_uuid || null;
+                  _iv4.icv = res.data.icv || null;
+                  _iv4.zatca_hash = res.data.zatca_hash || null;
+                  _origSaveDB(_db4);
                 }
               } catch {}
             }
