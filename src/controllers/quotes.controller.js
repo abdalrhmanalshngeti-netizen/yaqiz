@@ -4,10 +4,10 @@ const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
-const { buildInvoiceXML } = require('../services/zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
-const { generatePhase2QR } = require('../services/zatcaQR.service');
+const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
 
@@ -332,6 +332,7 @@ exports.convert = async (req, res, next) => {
           qrBase64 = generatePhase2QR({
             company: companyRow, invoice, invoiceHashBase64: invoiceHash, signatureValueBase64: signatureValue,
             publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
+            caSignatureDer: extractCaSignature(cert.raw),
           });
         } catch (signErr) {
           console.error(`[ZATCA] signing/QR failed for converted invoice ${invoice_no}:`, signErr.message);
@@ -346,6 +347,7 @@ exports.convert = async (req, res, next) => {
       invoice.zatca_qr_phase2 = qrBase64;
       if (warnings.length) {
         console.warn(`[ZATCA] converted invoice ${invoice_no} generated with incomplete seller data:`, warnings);
+        await notifyIncompleteSellerData(client, company_id, warnings);
       }
     } catch (xmlErr) {
       console.error(`[ZATCA] XML generation failed for converted invoice ${invoice_no}:`, xmlErr.message);

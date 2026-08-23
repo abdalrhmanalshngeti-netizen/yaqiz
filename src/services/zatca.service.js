@@ -79,6 +79,37 @@ function validateSeller(company) {
   return errors;
 }
 
+// تحذيرات اكتمال بيانات البائع (BR-KSA) كانت تُكتب بسجلّات السيرفر فقط
+// (console.warn) — لا تصل لصاحب الحساب أبدًا، فيستمر بإصدار فواتير غير
+// مكتملة البيانات نظاميًا بلا أي علم. هنا نحوّلها لإشعار حقيقي بجدول
+// notifications (نفس الآلية المستخدَمة لتنبيهات تحديث الأسعار)، بشرط عدم
+// تكرار الإشعار طالما فيه إشعار سابق غير مقروء من نفس النوع — وإلا كل فاتورة
+// جديدة تُنشئ إشعارًا مستقلًا طالما الشركة ما أكملت بياناتها
+async function notifyIncompleteSellerData(client, companyId, warnings) {
+  if (!warnings || !warnings.length) return;
+  try {
+    const { rows: [existing] } = await client.query(
+      `SELECT id FROM notifications WHERE company_id = $1 AND type = 'zatca_incomplete_seller' AND is_read = false LIMIT 1`,
+      [companyId]
+    );
+    if (existing) return;
+    const { rows: owners } = await client.query(
+      `SELECT id FROM users WHERE company_id = $1 AND role = 'owner' AND active = true`,
+      [companyId]
+    );
+    const message = `بيانات شركتك بالفوترة الإلكترونية غير مكتملة وفق متطلبات هيئة الزكاة والضريبة والجمارك: ${warnings.join('، ')}. أكمل هذي البيانات من إعدادات الشركة لضمان قبول فواتيرك رسميًا.`;
+    for (const owner of owners) {
+      await client.query(
+        `INSERT INTO notifications (company_id, user_id, type, title, message, link)
+         VALUES ($1,$2,'zatca_incomplete_seller','بيانات الفوترة الإلكترونية ناقصة',$3,'/VVIP.html#settings')`,
+        [companyId, owner.id, message]
+      );
+    }
+  } catch (e) {
+    console.error('[ZATCA] failed to notify owner of incomplete seller data:', e.message);
+  }
+}
+
 // تجميع أسطر الفاتورة حسب (رمز فئة الضريبة + نسبتها) — القسم 8.4 من المواصفة
 function buildVatBreakdown(items, allowanceTotal = 0, chargeTotal = 0) {
   const groups = new Map();
@@ -293,4 +324,4 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   return { xml, warnings };
 }
 
-module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller };
+module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller, notifyIncompleteSellerData };

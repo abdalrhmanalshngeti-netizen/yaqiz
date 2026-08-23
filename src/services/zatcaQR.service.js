@@ -3,10 +3,14 @@
 // بملف منفصل "Security Features Implementation Standards" لا نملكه هنا؛ الحقول
 // أدناه مبنية على البنية العامة الموثّقة في مصادر تكامل عامة لـZATCA Phase 2).
 //
-// ⚠️ الحقل التاسع (توقيع سلطة الاعتماد على المفتاح العام) يأتي من داخل الشهادة
-// نفسها التي تُصدرها الهيئة عند التأهيل الفعلي (CSID) — شهادات الاختبار
-// الموقَّعة ذاتيًا (self-signed) المستخدمة بفحوصاتنا المحلية لا تحتويه، لذا
-// الدالة تتقبّله كمعامل اختياري وتضعه فارغًا إن لم يتوفر، مع تنبيه بالسجلّ.
+// الحقل التاسع (توقيع سلطة الاعتماد) يأتي من داخل الشهادة نفسها التي تُصدرها
+// الهيئة عند التأهيل الفعلي (CSID) — بالتحديد حقل signatureValue من بنية
+// X.509 القياسية Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm,
+// signatureValue }. شهادات الاختبار الموقَّعة ذاتيًا (self-signed) المستخدمة
+// بفحوصاتنا المحلية لا تحمل توقيع جهة اعتماد حقيقية بمعنى مفيد، لكن extractCaSignature
+// تستخرج ما هو موجود فعليًا بأي شهادة X.509 صالحة (ذاتية أو صادرة عن الهيئة).
+
+const forge = require('node-forge');
 
 function tlv(tag, valueBuffer) {
   let vb = valueBuffer;
@@ -51,4 +55,31 @@ function generatePhase2QR({ company, invoice, invoiceHashBase64, signatureValueB
   return Buffer.concat(parts).toString('base64');
 }
 
-module.exports = { generatePhase2QR };
+/**
+ * يستخرج قيمة توقيع الجهة المُصدِرة (CA signature) من شهادة X.509 حقيقية —
+ * الحقل الثالث (signatureValue) من بنية Certificate ::= SEQUENCE { ... } بالضبط.
+ * Node's crypto.X509Certificate لا يعرّض هذا الحقل مباشرة كخاصية عامة، فنحلّل
+ * DER يدويًا عبر node-forge (متوفرة أصلًا بالمشروع لبناء CSR بـzatcaOnboarding.service.js).
+ * @param {Buffer} certificateDer الشهادة بصيغة DER الخام (crypto.X509Certificate#raw)
+ * @returns {Buffer|null} بايتات التوقيع الخام (بدون بايت "البتات غير المستخدمة" الأول)، أو null لو تعذّر التحليل
+ */
+function extractCaSignature(certificateDer) {
+  try {
+    // decodeBitStrings:false إلزامي هنا — بدونه forge يحاول "تفكيك" محتوى
+    // signatureValue تلقائيًا لأن توقيع ECDSA نفسه DER SEQUENCE صالح (r,s)،
+    // فيرجع .value كشجرة ASN.1 متداخلة (مصفوفة كائنات) بدل نص بايتات خام،
+    // فيُنتج Buffer.from عليها بايتات فارغة صامتة بلا أي خطأ ظاهر
+    const asn1 = forge.asn1.fromDer(forge.util.createBuffer(certificateDer.toString('binary')), { decodeBitStrings: false });
+    // Certificate SEQUENCE: [0]=tbsCertificate, [1]=signatureAlgorithm, [2]=signatureValue (BIT STRING)
+    const signatureValueBitString = asn1.value[2];
+    const bitStringBytes = Buffer.from(signatureValueBitString.value, 'binary');
+    // أول بايت بأي BIT STRING مُرمَّز DER = عدد البتات غير المستخدمة بآخر بايت
+    // (صفر دائمًا لتوقيعات كهذي بالكامل بايتات) — نستبعده لأخذ التوقيع الخام فقط
+    return bitStringBytes.subarray(1);
+  } catch (e) {
+    console.warn('zatcaQR: failed to extract CA signature from certificate:', e.message);
+    return null;
+  }
+}
+
+module.exports = { generatePhase2QR, extractCaSignature };

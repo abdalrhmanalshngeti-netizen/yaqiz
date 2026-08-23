@@ -6,10 +6,10 @@
 // (zatca.service: buildInvoiceXML مع docKind='credit_note')، نفس التوقيع
 // الرقمي إن وُجدت شهادة CSID سارية، ونفس توليد رمز QR للمرحلة الثانية.
 const crypto = require('crypto');
-const { buildInvoiceXML } = require('./zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData } = require('./zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaHash.service');
 const { buildXadesSignature, embedSignature } = require('./zatcaSign.service');
-const { generatePhase2QR } = require('./zatcaQR.service');
+const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
 const zatcaOnboarding = require('./zatcaOnboarding.service');
 const { nextDocNumber } = require('./docNumber.service');
 
@@ -112,6 +112,7 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
         qrBase64 = generatePhase2QR({
           company: companyRow, invoice: noteForXml, invoiceHashBase64: noteHash, signatureValueBase64: signatureValue,
           publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
+          caSignatureDer: extractCaSignature(cert.raw),
         });
       } catch (signErr) {
         console.error(`[ZATCA] credit note ${note_no} signing/QR failed:`, signErr.message);
@@ -126,6 +127,7 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     note.zatca_qr_phase2 = qrBase64;
     if (warnings.length) {
       console.warn(`[ZATCA] credit note ${note_no} generated with incomplete seller data:`, warnings);
+      await notifyIncompleteSellerData(client, company_id, warnings);
     }
   } catch (xmlErr) {
     console.error(`[ZATCA] credit note ${note_no} XML generation failed:`, xmlErr.message);
