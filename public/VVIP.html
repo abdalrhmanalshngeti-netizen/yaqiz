@@ -4850,8 +4850,9 @@ function calcGPLine() {
   const qty   = Number(el('gp-iqty')?.value  || 1);
   const price = Number(el('gp-iunit')?.value || 0);
   const linePre = qty * price;
-  const unitVat  = Math.round(price   * 0.15 * 100) / 100;
-  const lineVat  = Math.round(linePre * 0.15 * 100) / 100;
+  const _gpVatOn = getDB().settings?.vat_enabled !== false && getDB().settings?.vat_enabled !== 0;
+  const unitVat  = _gpVatOn ? Math.round(price   * 0.15 * 100) / 100 : 0;
+  const lineVat  = _gpVatOn ? Math.round(linePre * 0.15 * 100) / 100 : 0;
   const lineIncl = Math.round((linePre + lineVat) * 100) / 100;
   if (el('gp-iline'))        el('gp-iline').value = linePre.toFixed(2);
   if (el('gp-unit-vat'))     el('gp-unit-vat').textContent = `ضريبة الحبة: ${unitVat.toFixed(2)} ر.س`;
@@ -4869,8 +4870,9 @@ function addGPItem() {
   if(!qty||!price){showToast(lang==='ar'?'أدخل الكمية والسعر':'Enter qty and price','error');return;}
   // auto-fill price from product
   const db=getDB(); const prod=db.products.find(p=>p.name===name);
+  const _gpVatOn2 = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
   const lineTotal=Math.round(qty*price*100)/100;
-  _goodsItems.push({name,qty,price,line_total:lineTotal,vat:Math.round(lineTotal*0.15*100)/100,product_id:prod?.id||null});
+  _goodsItems.push({name,qty,price,line_total:lineTotal,vat:_gpVatOn2?Math.round(lineTotal*0.15*100)/100:0,product_id:prod?.id||null});
   el('gp-iname').value=''; el('gp-iqty').value=1; el('gp-iunit').value=0; el('gp-iline').value=0;
   renderGPItems(); updateGPTotals();
 }
@@ -4919,7 +4921,8 @@ function updateGPItem(idx, field, value) {
   if (field === 'vat')   { item.vat = num; item._vatManual = true; }
   item.line_total = Math.round(item.qty * item.price * 100) / 100;
   if (field !== 'vat' && !item._vatManual) {
-    item.vat = Math.round(item.line_total * 0.15 * 100) / 100;
+    const _gpVatOn3 = getDB().settings?.vat_enabled !== false && getDB().settings?.vat_enabled !== 0;
+    item.vat = _gpVatOn3 ? Math.round(item.line_total * 0.15 * 100) / 100 : 0;
   }
   // نأجّل إعادة الرسم للـ tick التالي — تعديل innerHTML للجدول مباشرة أثناء
   // حدث change لعنصر جوّاه يسبب خطأ DOM بمتصفحات كروميوم
@@ -5274,7 +5277,8 @@ function saveMissingProducts() {
 
 function calcPurchVat() {
   const a = Number(el('p-amount')?.value||0);
-  const vat = a*0.15;
+  const _vatOnOpex = getDB().settings?.vat_enabled !== false && getDB().settings?.vat_enabled !== 0;
+  const vat = _vatOnOpex ? a*0.15 : 0;
   if(el('p-vat')) el('p-vat').value = fmtMoney(vat);
   if(el('opex-total')) el('opex-total').textContent = fmtMoney(a+vat);
 }
@@ -5285,7 +5289,8 @@ function savePurchase(purchase_type) {
   const amount = Number(el('p-amount').value||0);
   if(!el('p-vendor').value){showToast(lang==='ar'?'أدخل اسم الجهة':'Enter payee name','error');return;}
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
-  const vat = amount*0.15;
+  const _vatOnOpex2 = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
+  const vat = _vatOnOpex2 ? amount*0.15 : 0;
   const dateVal = el('p-opex-date')?.value||new Date().toISOString().slice(0,10);
   const p = {
     id: nextId(db,'purchase'),
@@ -6930,7 +6935,7 @@ function renderOverdueReport(c) {
   //     النقدي وقت البيع نفسه، لا فقط سندات القبض المنفصلة لاحقًا) ---
   const custRows = [];
   db.customers.forEach(cu=>{
-    const allInvs = db.invoices.filter(i=>i.customer_name===cu.name && i.status!=='ملغاة');
+    const allInvs = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',cu) && i.status!=='ملغاة');
     if(!allInvs.length) return;
     const totalInv = allInvs.reduce((s,i)=>s+(i.grand_total||0),0);
     const totalPaid = allInvs.reduce((s,i)=>s+(i.paid_amount||0),0);
@@ -6947,7 +6952,7 @@ function renderOverdueReport(c) {
   // --- بيانات الموردين: حساب من paid_amount الفعلي لكل فاتورة شراء (نفس المبدأ) ---
   const suppRows = [];
   db.suppliers.forEach(su=>{
-    const allPurs = (db.purchases||[]).filter(p=>p.vendor===su.name && p.status!=='ملغاة');
+    const allPurs = (db.purchases||[]).filter(p=>_matchParty(p,'supplier_id','vendor',su) && p.status!=='ملغاة');
     if(!allPurs.length) return;
     const totalPur = allPurs.reduce((s,p)=>s+(p.total||0),0);
     const totalPaid = allPurs.reduce((s,p)=>s+(p.paid_amount||0),0);
@@ -7211,16 +7216,16 @@ function printARAPReport(section='all') {
 
   // حساب بيانات العملاء
   const custData = db.customers.map(c=>{
-    const totalInv = db.invoices.filter(i=>i.customer_name===c.name).reduce((s,i)=>s+(i.grand_total||0),0);
-    const totalRcv = (db.receipts||[]).filter(r=>r.party===c.name&&r.type==='receipt').reduce((s,r)=>s+r.amount,0);
+    const totalInv = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',c)).reduce((s,i)=>s+(i.grand_total||0),0);
+    const totalRcv = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',c)&&r.type==='receipt').reduce((s,r)=>s+r.amount,0);
     const outstanding = Math.max(0, Math.round((totalInv-totalRcv)*100)/100);
     return {name:c.name, phone:c.phone||'', totalInv, totalRcv, outstanding};
   }).sort((a,b)=>b.outstanding-a.outstanding);
 
   // حساب بيانات الموردين
   const suppData = db.suppliers.map(s=>{
-    const totalPur = db.purchases.filter(p=>p.vendor===s.name).reduce((sum,p)=>sum+(p.total||0),0);
-    const totalPaid = (db.receipts||[]).filter(r=>r.party===s.name&&r.type==='payment').reduce((s,r)=>s+r.amount,0);
+    const totalPur = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',s)).reduce((sum,p)=>sum+(p.total||0),0);
+    const totalPaid = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',s)&&r.type==='payment').reduce((s,r)=>s+r.amount,0);
     const outstanding = Math.max(0, Math.round((totalPur-totalPaid)*100)/100);
     return {name:s.name, phone:s.phone||'', totalPur, totalPaid, outstanding};
   }).sort((a,b)=>b.outstanding-a.outstanding);
@@ -7701,16 +7706,21 @@ function renderCashFlow(db, d, periodFilter, period) {
 
 // ── Products Report ──
 function renderProductsReport(d, db) {
+  // نجمّع بمعرّف المنتج أولًا لا اسمه — تغيير اسم منتج كان يفرّق تاريخ مبيعاته
+  // لصفّين منفصلين، ومنتجان بنفس الاسم كانا يندمجان بصفّ واحد خاطئ
   const productSales = {};
   db.invoices.forEach(inv=>{
     (inv.items||[]).forEach(item=>{
-      if(!productSales[item.name]) productSales[item.name]={name:item.name,qty:0,revenue:0,cost:0};
-      productSales[item.name].qty += item.qty||0;
-      productSales[item.name].revenue += item.line_total||0;
+      const key = item.id!=null ? `id:${item.id}` : `name:${item.name}`;
+      if(!productSales[key]) productSales[key]={name:item.name,qty:0,revenue:0,cost:0};
+      productSales[key].qty += item.qty||0;
+      productSales[key].revenue += item.line_total||0;
     });
   });
   db.products.forEach(p=>{
-    if(productSales[p.name]) productSales[p.name].cost = productSales[p.name].qty * p.buy_price;
+    const key = `id:${p.id}`;
+    if(productSales[key]) productSales[key].cost = productSales[key].qty * p.buy_price;
+    else if(productSales[`name:${p.name}`]) productSales[`name:${p.name}`].cost = productSales[`name:${p.name}`].qty * p.buy_price;
   });
   const rows = Object.values(productSales)
     .map(r=>({...r, profit:r.revenue-r.cost, margin:r.revenue>0?((r.revenue-r.cost)/r.revenue*100):0}))
@@ -7845,13 +7855,15 @@ function renderBranchPerformanceReport(db, periodFilter, period) {
 
 // ── Suppliers Report ──
 function renderSuppliersReport(db) {
+  // نجمّع بمعرّف المورد أولًا لا اسمه — نفس علّة تقرير المنتجات أعلاه
   const sd = {};
   db.purchases.forEach(p=>{
-    if(!sd[p.vendor]) sd[p.vendor]={name:p.vendor,total:0,count:0,vat:0,goods:0,opex:0};
-    sd[p.vendor].total+=p.total; sd[p.vendor].count++;
-    sd[p.vendor].vat+=p.vat;
-    if(p.purchase_type==='goods') sd[p.vendor].goods+=p.total;
-    else sd[p.vendor].opex+=p.total;
+    const key = p.supplier_id!=null ? `id:${p.supplier_id}` : `name:${p.vendor}`;
+    if(!sd[key]) sd[key]={name:p.vendor,total:0,count:0,vat:0,goods:0,opex:0};
+    sd[key].total+=p.total; sd[key].count++;
+    sd[key].vat+=p.vat;
+    if(p.purchase_type==='goods') sd[key].goods+=p.total;
+    else sd[key].opex+=p.total;
   });
   const rows=Object.values(sd).sort((a,b)=>b.total-a.total);
   const grandTotal=rows.reduce((s,r)=>s+r.total,0);
@@ -9670,7 +9682,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بفاتورة آجلة (اختياري):':'Link to pending invoice (optional):'}</div>
         <select class="select" id="v-invoice-link" onchange="onInvoiceLinkChange()">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${i.grand_total-(i.paid_amount||0)}" data-party="${sanitize(i.customer_name)}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
+          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${i.grand_total-(i.paid_amount||0)}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
         </select>
         <div id="v-invoice-info" style="margin-top:8px;display:none;background:white;border-radius:8px;padding:10px;font-size:12px;"></div>
       </div>` : ''}
@@ -9680,18 +9692,19 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بمشتريات مستحقة (اختياري):':'Link to pending purchase (optional):'}</div>
         <select class="select" id="v-purchase-link" onchange="onPurchaseLinkChange()">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${sanitize(p.vendor)}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
+          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${sanitize(p.vendor)}" data-party-id="${p.supplier_id||''}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
         </select>
       </div>` : ''}
 
       <div class="form-row">
         <div>
           <label class="form-label">${partyLabel} *</label>
-          <select class="select" id="v-party-select" onchange="el('v-party').value=this.value">
+          <select class="select" id="v-party-select" onchange="el('v-party').value=this.options[this.selectedIndex].dataset.name||''; el('v-party-id').value=this.value;">
             <option value="">${lang==='ar'?'— اختر —':'— Select —'}</option>
-            ${partyList.map(p=>`<option value="${sanitize(p.name)}">${sanitize(p.name)}</option>`).join('')}
+            ${partyList.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}">${sanitize(p.name)}</option>`).join('')}
           </select>
-          <input class="input" id="v-party" placeholder="${lang==='ar'?'أو اكتب اسماً آخر...':'Or type another name...'}" style="margin-top:6px;font-size:12px;" />
+          <input class="input" id="v-party" oninput="el('v-party-id').value=''" placeholder="${lang==='ar'?'أو اكتب اسماً آخر...':'Or type another name...'}" style="margin-top:6px;font-size:12px;" />
+          <input type="hidden" id="v-party-id" value="" />
         </div>
         <div><label class="form-label">${lang==='ar'?'المبلغ':'Amount'} *</label><input class="input" type="number" id="v-amount" value="0" min="0" step="0.01" /></div>
       </div>
@@ -9717,8 +9730,6 @@ function showVoucherModal(type) {
       </div>
     </div>
   </div>`;
-  // sync select → input
-  setTimeout(()=>{ const sel=el('v-party-select'); if(sel) sel.onchange=()=>{ el('v-party').value=sel.value; }; },50);
   refreshIcons();
 }
 
@@ -9728,8 +9739,9 @@ function onPurchaseLinkChange() {
   if(opt.value) {
     el('v-amount').value = opt.dataset.amount;
     el('v-party').value = opt.dataset.party;
+    el('v-party-id').value = opt.dataset.partyId||'';
     const partySelect = el('v-party-select');
-    if(partySelect) { for(let o of partySelect.options) { if(o.value===opt.dataset.party) { partySelect.value=opt.dataset.party; break; } } }
+    if(partySelect && opt.dataset.partyId) partySelect.value = opt.dataset.partyId;
     el('v-desc').value = lang==='ar'?`سداد للمورد ${opt.dataset.party}`:`Supplier payment - ${opt.dataset.party}`;
   }
 }
@@ -9742,6 +9754,9 @@ function onInvoiceLinkChange() {
   if(opt.value) {
     el('v-amount').value = opt.dataset.amount;
     el('v-party').value = opt.dataset.party;
+    el('v-party-id').value = opt.dataset.partyId||'';
+    const partySelect = el('v-party-select');
+    if(partySelect && opt.dataset.partyId) partySelect.value = opt.dataset.partyId;
     el('v-ref').value = opt.dataset.no;
     el('v-desc').value = lang==='ar'?`سداد فاتورة ${opt.dataset.no}`:`Payment for invoice ${opt.dataset.no}`;
     if(info){ info.style.display='block'; info.innerHTML=`✅ ${lang==='ar'?'سيتم تحديث حالة الفاتورة':'Invoice status will be updated'} <b>${opt.dataset.no}</b> ${lang==='ar'?'إلى مسددة':'to Paid'}`; }
@@ -9765,14 +9780,20 @@ function saveVoucher(type, printAfter=true) {
   const linkedInvoiceId = linkSel ? Number(linkSel.value)||null : null;
   const purLinkSel = el('v-purchase-link');
   const linkedPurchaseId = purLinkSel ? Number(purLinkSel.value)||null : null;
-  // party: prefer select if filled, else text input
-  const partyVal = (el('v-party-select')?.value||'') || el('v-party').value;
+  // اسم الطرف يبقى بحقل النص دومًا (يُملأ تلقائيًا عند الاختيار من القائمة)،
+  // بينما v-party-id يحمل المعرّف الحقيقي فقط لو اختير من القائمة فعليًا —
+  // بدونه، تطابق طرفين بنفس الاسم يختار أولهما صامتًا
+  const partyVal = el('v-party').value;
+  const partyIdVal = Number(el('v-party-id')?.value)||null;
+  const partyObj = partyIdVal
+    ? (isReceipt ? db.customers.find(c=>c.id===partyIdVal) : db.suppliers.find(s=>s.id===partyIdVal))
+    : { id: null, name: partyVal };
 
   // معاينة إجبارية قبل التطبيق التلقائي على أقدم فاتورة/فاتورة شراء غير مسددة —
   // بدون هذا التأكيد، مبلغ السند قد يُطبَّق على فاتورة غير اللي يقصدها العميل
   if(isReceipt && !linkedInvoiceId) {
     const preview = db.invoices
-      .filter(i=>i.customer_name===partyVal && (i.status==='آجل'||i.status==='جزئي'))
+      .filter(i=>_matchParty(i,'customer_id','customer_name',partyObj) && (i.status==='آجل'||i.status==='جزئي'))
       .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
     if(preview.length) {
       let left=amount;
@@ -9786,7 +9807,7 @@ function saveVoucher(type, printAfter=true) {
   }
   if(!isReceipt && !linkedPurchaseId) {
     const preview = db.purchases
-      .filter(p=>p.vendor===partyVal && (p.status==='آجل'||p.status==='جزئي'||(p.remaining_amount||0)>0))
+      .filter(p=>_matchParty(p,'supplier_id','vendor',partyObj) && (p.status==='آجل'||p.status==='جزئي'||(p.remaining_amount||0)>0))
       .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
     if(preview.length) {
       let left=amount;
@@ -9799,17 +9820,16 @@ function saveVoucher(type, printAfter=true) {
     }
   }
 
-  guardClosedPeriod(el('v-date')?.value||new Date().toISOString().slice(0,10), () => _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount));
+  guardClosedPeriod(el('v-date')?.value||new Date().toISOString().slice(0,10), () => _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal));
 }
-function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount) {
+function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal) {
   const db = getDB();
   const _voucherParty = partyVal || el('v-party').value;
-  // نحل معرّف العميل/المورد الحقيقي هنا وقت الإنشاء ونخزّنه على السند نفسه —
-  // بدون هذا، أي عملية لاحقة على هذا السند (حذفه وعكس أثره مثلاً) تضطر تطابق
-  // بالاسم النصي المخزَّن، اللي يفقد صلاحيته صامتًا لو اتغيّر اسم الطرف لاحقًا
-  const _voucherPartyId = isReceipt
+  // نفضّل المعرّف اللي التقطناه وقت اختيار الطرف من القائمة (partyIdVal) —
+  // بدون هذا، تطابق طرفين بنفس الاسم يختار أولهما بالترتيب صامتًا
+  const _voucherPartyId = partyIdVal || (isReceipt
     ? db.customers.find(c => c.name === _voucherParty)?.id || null
-    : db.suppliers.find(s => s.name === _voucherParty)?.id || null;
+    : db.suppliers.find(s => s.name === _voucherParty)?.id || null);
   const voucher = {
     id: num, type,
     voucher_no: `${isReceipt?'RCV':'PAY'}-${String(num).padStart(4,'0')}`,
@@ -9841,12 +9861,12 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
 
   // 2. تطبيق سند القبض على فواتير العميل
   if(isReceipt) {
-    const party = voucher.party;
+    const party = { id: voucher.party_id, name: voucher.party };
     // إذا مربوط بفاتورة محددة → طبّق عليها فقط
     const targetInvs = linkedInvoiceId
       ? db.invoices.filter(i=>i.id===linkedInvoiceId)
       : db.invoices
-          .filter(i=>i.customer_name===party && (i.status==='آجل'||i.status==='جزئي'))
+          .filter(i=>_matchParty(i,'customer_id','customer_name',party) && (i.status==='آجل'||i.status==='جزئي'))
           .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); // الأقدم أولاً
 
     let left = amount;
@@ -9877,11 +9897,11 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
 
   // 2b. تطبيق سند الصرف على مشتريات المورد
   if(!isReceipt) {
-    const party = voucher.party;
+    const party = { id: voucher.party_id, name: voucher.party };
     const targetPurs = linkedPurchaseId
       ? db.purchases.filter(p=>p.id===linkedPurchaseId)
       : db.purchases
-          .filter(p=>p.vendor===party && (p.status==='آجل'||p.status==='جزئي'||(p.remaining_amount||0)>0))
+          .filter(p=>_matchParty(p,'supplier_id','vendor',party) && (p.status==='آجل'||p.status==='جزئي'||(p.remaining_amount||0)>0))
           .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
 
     let left = amount;
@@ -10218,16 +10238,20 @@ function showReturnModal(type) {
         <select class="select" id="rt-link" onchange="onReturnLinkChange('${type}')">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
           ${isSales
-            ? linkItems.map(i=>`<option value="${i.id}" data-party="${sanitize(i.customer_name)}" data-amount="${i.grand_total}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${fmtMoney(i.grand_total)}</option>`).join('')
-            : linkItems.map(p=>`<option value="${p.id}" data-party="${sanitize(p.vendor)}" data-amount="${p.total}" data-no="PO-${p.id}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${fmtMoney(p.total)}</option>`).join('')
+            ? linkItems.map(i=>`<option value="${i.id}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-amount="${i.grand_total}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${fmtMoney(i.grand_total)}</option>`).join('')
+            : linkItems.map(p=>`<option value="${p.id}" data-party="${sanitize(p.vendor)}" data-party-id="${p.supplier_id||''}" data-amount="${p.total}" data-no="PO-${p.id}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${fmtMoney(p.total)}</option>`).join('')
           }
         </select>
       </div>
 
       <div class="form-row">
         <div><label class="form-label">${isSales?(lang==='ar'?'العميل':'Customer'):(lang==='ar'?'المورد':'Supplier')} *</label>
-          <input class="input" id="rt-party" list="rt-list" />
-          <datalist id="rt-list">${(isSales?db.customers:db.suppliers).map(x=>`<option value="${sanitize(x.name)}">`).join('')}</datalist>
+          <select class="select" id="rt-party-select" onchange="el('rt-party').value=this.options[this.selectedIndex].dataset.name||''; el('rt-party-id').value=this.value;">
+            <option value="">${lang==='ar'?'— اختر —':'— Select —'}</option>
+            ${(isSales?db.customers:db.suppliers).map(x=>`<option value="${x.id}" data-name="${sanitize(x.name)}">${sanitize(x.name)}</option>`).join('')}
+          </select>
+          <input class="input" id="rt-party" oninput="el('rt-party-id').value=''" placeholder="${lang==='ar'?'أو اكتب اسماً آخر...':'Or type another name...'}" style="margin-top:6px;font-size:12px;" />
+          <input type="hidden" id="rt-party-id" value="" />
         </div>
         <div><label class="form-label">${lang==='ar'?'المبلغ (شامل الضريبة)':'Amount (incl. VAT)'} *</label>
           <input class="input" type="number" id="rt-amount" value="0" oninput="calcReturnVat()" />
@@ -10291,6 +10315,9 @@ function onReturnLinkChange(type) {
   const opt=sel.options[sel.selectedIndex];
   if(opt.value) {
     el('rt-party').value = opt.dataset.party||'';
+    el('rt-party-id').value = opt.dataset.partyId||'';
+    const partySelect = el('rt-party-select');
+    if(partySelect && opt.dataset.partyId) partySelect.value = opt.dataset.partyId;
     el('rt-amount').value = opt.dataset.amount||0;
     calcReturnVat();
   }
@@ -10322,9 +10349,10 @@ function saveReturn(type) {
     if(!confirm(confirmMsg)) return;
   }
 
-  guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), () => _saveReturnActual(type, amount, linkedId));
+  const partyIdVal = Number(el('rt-party-id')?.value)||null;
+  guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), () => _saveReturnActual(type, amount, linkedId, partyIdVal));
 }
-function _saveReturnActual(type, amount, linkedId) {
+function _saveReturnActual(type, amount, linkedId, partyIdVal) {
   const db=getDB();
   const isSales=type==='sales';
   const num=db.nextId.return_||1; db.nextId.return_=num+1;
@@ -10342,12 +10370,13 @@ function _saveReturnActual(type, amount, linkedId) {
   const linkedRec = linkedId ? (isSales ? db.invoices.find(i=>i.id===linkedId) : db.purchases.find(p=>p.id===linkedId)) : null;
   const retMethod = linkedRec?.payment_method || null;
   const _retParty = el('rt-party').value;
-  // نفس مبدأ السندات: نحل معرّف العميل/المورد الحقيقي وقت إنشاء المرتجع
-  // ونخزّنه عليه — يفضّل معرّف الفاتورة/فاتورة الشراء المرتبطة (أدق، محلولة
-  // فعليًا وقت تلك الفاتورة) وإلا مطابقة بالاسم كخيار احتياطي فقط
+  // نفس مبدأ السندات: نفضّل معرّف الفاتورة/فاتورة الشراء المرتبطة (أدق، محلولة
+  // فعليًا وقت تلك الفاتورة)، ثم المعرّف الملتقَط وقت اختيار الطرف من القائمة
+  // (partyIdVal)، وإلا مطابقة بالاسم كخيار احتياطي أخير فقط — بدون partyIdVal
+  // كانت تطابق طرفين بنفس الاسم تختار أولهما صامتًا
   const _retPartyId = !isSales
-    ? (linkedRec?.supplier_id ?? db.suppliers.find(s => s.name === _retParty)?.id ?? null)
-    : (linkedRec?.customer_id ?? db.customers.find(c => c.name === _retParty)?.id ?? null);
+    ? (linkedRec?.supplier_id ?? partyIdVal ?? db.suppliers.find(s => s.name === _retParty)?.id ?? null)
+    : (linkedRec?.customer_id ?? partyIdVal ?? db.customers.find(c => c.name === _retParty)?.id ?? null);
 
   const ret={
     id:num, type, return_no:`RET-${String(num).padStart(4,'0')}`,
@@ -16965,7 +16994,7 @@ async function runAISearchQuery(q) {
       customer_vat:  inv.customer_vat||'',
       customer_id:   inv.customer_id||null,
       items: (inv.items||[]).map(it => ({
-        name: it.product_name, qty: parseFloat(it.qty),
+        id: it.product_id||null, name: it.product_name, qty: parseFloat(it.qty),
         price: parseFloat(it.unit_price), line_total: parseFloat(it.line_total)
       })),
       subtotal:       parseFloat(inv.subtotal)||0,
@@ -17044,6 +17073,7 @@ async function runAISearchQuery(q) {
     const cat = p.category||'';
     return {
       id: p.id, vendor: p.supplier_name||p.vendor||'',
+      supplier_id: p.supplier_id||null,
       description: p.description||'', category: cat,
       purchase_type: p.purchase_type || (cat==='بضاعة'||cat==='مواد خام'||cat==='بضاعة جاهزة'||cat==='مواد تغليف' ? 'goods' : 'opex'),
       amount: parseFloat(p.amount)||0,

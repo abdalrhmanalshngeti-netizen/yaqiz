@@ -33,11 +33,31 @@ exports.resolveWarehouseForBranch = async (client, company_id, branch_id, requir
   return { branch_id: bId, warehouse_id: wh.id };
 };
 
-// يحل فرع الفاتورة: مصرَّح صراحة بالطلب أولًا، وإلا فرع المستخدم نفسه —
-// بقراءة طازجة من قاعدة البيانات دائمًا (لا نثق بأي شيء مخزَّن بالـ JWT لأن
-// المالك يقدر يغيّر فرع الموظف في أي وقت والتوكن يبقى صالحًا ٨ ساعات).
-exports.resolveWarehouseForUser = async (client, company_id, user_id, explicitBranchId) => {
-  if (explicitBranchId) return exports.resolveWarehouseForBranch(client, company_id, explicitBranchId);
+// يتأكد إن المستخدم مصرَّح له فعليًا يسجّل عملية على فرع مُحدَّد صراحة بالطلب —
+// المالك يقدر لأي فرع بشركته، غيره فقط فرعه المخصَّص هو. بدون هذا، أي موظف
+// عادي (كاشير مثلاً) يقدر يمرّر أي branch_id صحيح لنفس الشركة (تكفي معرفة رقمه
+// فقط، لا صلاحية فعلية) ويسجّل فاتورة/شراء/مرتجع/حركة خزينة على فرع ثاني يمس
+// مخزونه ورصيده المالي — يفسد تقارير أداء ذلك الفرع بحركات لا تخصه إطلاقًا
+exports.assertBranchAuthorized = async (client, company_id, user_id, role, explicitBranchId) => {
+  if (!explicitBranchId || role === 'owner') return;
+  const { rows: [u] } = await client.query(
+    `SELECT branch_id FROM users WHERE id = $1 AND company_id = $2`,
+    [user_id, company_id]
+  );
+  if (String(u?.branch_id) !== String(explicitBranchId)) {
+    throw Object.assign(new Error('لا يمكنك تسجيل عملية على فرع آخر غير فرعك المخصَّص'), { status: 403 });
+  }
+};
+
+// يحل فرع الفاتورة: مصرَّح صراحة بالطلب أولًا (بعد التحقق من صلاحية المستخدم
+// عليه)، وإلا فرع المستخدم نفسه — بقراءة طازجة من قاعدة البيانات دائمًا (لا
+// نثق بأي شيء مخزَّن بالـ JWT لأن المالك يقدر يغيّر فرع الموظف في أي وقت
+// والتوكن يبقى صالحًا ٨ ساعات).
+exports.resolveWarehouseForUser = async (client, company_id, user_id, explicitBranchId, role) => {
+  if (explicitBranchId) {
+    await exports.assertBranchAuthorized(client, company_id, user_id, role, explicitBranchId);
+    return exports.resolveWarehouseForBranch(client, company_id, explicitBranchId);
+  }
   const { rows: [u] } = await client.query(
     `SELECT branch_id FROM users WHERE id = $1 AND company_id = $2`,
     [user_id, company_id]

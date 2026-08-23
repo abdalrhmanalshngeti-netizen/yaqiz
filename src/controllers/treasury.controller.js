@@ -179,7 +179,7 @@ exports.addMove = async (req, res, next) => {
     }
 
     const { branch_id: resolvedBranchId } =
-      await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
+      await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id, req.user.role);
     const acct = await resolveTreasuryAccount(client, req.user.company_id, payment_method, resolvedBranchId);
     if (!acct) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'لا يوجد حساب خزينة افتراضي' }); }
 

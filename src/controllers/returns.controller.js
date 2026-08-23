@@ -75,7 +75,7 @@ exports.create = async (req, res, next) => {
         await client.query('SAVEPOINT sp_stock');
         const { warehouse_id } = linkedInvoice
           ? await branch.resolveWarehouseForBranch(client, company_id, linkedInvoice.branch_id, false)
-          : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
+          : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id, req.user.role);
         // نُرجع البضاعة بنفس تكلفتها الأصلية وقت البيع (invoice_items.unit_cost)
         // لو مرتبطة بفاتورة حقيقية — لا بسعر الشراء الحالي (قد يكون تغيّر)
         let unitCost;

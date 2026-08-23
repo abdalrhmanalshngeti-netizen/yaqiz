@@ -110,7 +110,7 @@ exports.create = async (req, res, next) => {
     // نفسه — بقراءة طازجة دائمًا، ليس من التوكن (المالك يقدر يغيّر فرع الموظف
     // بأي وقت والتوكن يبقى صالحًا ٨ ساعات)
     const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
-      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id);
+      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id, req.user.role);
 
     // ── التحقق من كفاية المخزون *بمستودع هذا الفرع تحديدًا* قبل إنشاء أي شيء —
     // نرفض الفاتورة كاملة بدل إنشائها وتجاهل خصم المخزون بصمت لو الكمية غير

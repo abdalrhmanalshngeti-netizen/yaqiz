@@ -100,37 +100,43 @@ exports.vatReport = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// كانت تحسب "تكلفة البضاعة المباعة" كإجمالي مشتريات بضاعة بالفترة، لا تكلفة
+// ما بيع فعليًا (نفس البق المُصلَح بالجانب العميل سابقًا) — تُحسَب الآن من
+// دفتر اليومية الحقيقي (المُزامَن فعليًا من كل الأجهزة)، بنفس منهجية الميزانية
+// العمومية أدناه: إيراد = صافي حساب 4xxx، التكلفة = حساب 5100 تحديدًا (COGS
+// حقيقي FIFO وقت البيع، لا وقت الشراء)، وبقية 5xxx مصاريف تشغيلية
 exports.incomeStatement = async (req, res, next) => {
   try {
     const { from, to } = req.query;
     const cid = req.user.company_id;
 
-    const [revenue, purchases, expenses] = await Promise.all([
-      db.query(`
-        SELECT COALESCE(SUM(taxable_amount),0) AS amount FROM invoices
-        WHERE company_id=$1 AND status != 'cancelled'
-          AND ($2::date IS NULL OR date >= $2) AND ($3::date IS NULL OR date <= $3)
-      `, [cid, from || null, to || null]),
+    const { rows } = await db.query(`
+      SELECT ji.account_code, ji.account_name,
+        SUM(CASE WHEN ji.side='debit'  THEN ji.amount ELSE 0 END) AS debit,
+        SUM(CASE WHEN ji.side='credit' THEN ji.amount ELSE 0 END) AS credit
+      FROM journal_items ji
+      JOIN journal_entries je ON je.id = ji.entry_id
+      WHERE je.company_id = $1
+        AND ($2::date IS NULL OR je.date >= $2) AND ($3::date IS NULL OR je.date <= $3)
+      GROUP BY ji.account_code, ji.account_name
+    `, [cid, from || null, to || null]);
 
-      db.query(`
-        SELECT COALESCE(SUM(amount),0) AS amount FROM purchases
-        WHERE company_id=$1 AND purchase_type='goods'
-          AND ($2::date IS NULL OR date >= $2) AND ($3::date IS NULL OR date <= $3)
-      `, [cid, from || null, to || null]),
+    const bal = {};
+    rows.forEach(r => { bal[r.account_code] = { name: r.account_name, debit: parseFloat(r.debit), credit: parseFloat(r.credit) }; });
+    const get = code => bal[code] || { debit: 0, credit: 0 };
+    const debitNormal  = code => get(code).debit  - get(code).credit;
+    const creditNormal = code => get(code).credit - get(code).debit;
+    const codesStarting = d => Object.keys(bal).filter(c => c.startsWith(d));
 
-      db.query(`
-        SELECT category, COALESCE(SUM(amount),0) AS amount FROM purchases
-        WHERE company_id=$1 AND purchase_type='opex'
-          AND ($2::date IS NULL OR date >= $2) AND ($3::date IS NULL OR date <= $3)
-        GROUP BY category ORDER BY amount DESC
-      `, [cid, from || null, to || null]),
-    ]);
-
-    const rev   = parseFloat(revenue.rows[0].amount);
-    const cogs  = parseFloat(purchases.rows[0].amount);
+    const rev   = codesStarting('4').reduce((s, c) => s + creditNormal(c), 0);
+    const cogs  = debitNormal('5100');
     const gross = rev - cogs;
-    const opex  = expenses.rows.reduce((s, r) => s + parseFloat(r.amount), 0);
-    const net   = gross - opex;
+    const expenseRows = codesStarting('5').filter(c => c !== '5100')
+      .map(c => ({ category: bal[c].name, amount: debitNormal(c) }))
+      .filter(r => Math.abs(r.amount) > 0.004)
+      .sort((a, b) => b.amount - a.amount);
+    const opex = expenseRows.reduce((s, r) => s + r.amount, 0);
+    const net  = gross - opex;
 
     res.json({
       success: true,
@@ -139,7 +145,7 @@ exports.incomeStatement = async (req, res, next) => {
         cogs,
         gross_profit: gross,
         gross_margin: rev > 0 ? ((gross / rev) * 100).toFixed(2) : 0,
-        expenses:     expenses.rows,
+        expenses:     expenseRows,
         total_opex:   opex,
         net_income:   net
       }
@@ -184,38 +190,71 @@ exports.branchPerformance = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// كانت تتجاهل الأصول الثابتة، وضريبة القيمة المضافة المستردة، والالتزامات
+// الدورية المستحقة بالكامل، وتحسب حقوق الملكية كرقم موازن (أصول-خصوم) لا
+// كرأس مال + أرباح متراكمة حقيقية — نفس البقّات المُصلَحة بالجانب العميل
+// سابقًا (renderBalanceSheet). تُبنى الآن من دفتر اليومية الحقيقي مباشرة،
+// بنفس منهجية الجانب العميل بالضبط، فتطابقه رقميًا دائمًا
 exports.balanceSheet = async (req, res, next) => {
   try {
     const cid = req.user.company_id;
-    const [cash, receivables, inventory, payables] = await Promise.all([
-      db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM treasury_accounts WHERE company_id=$1 AND is_active=true`, [cid]),
-      db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM customers WHERE company_id=$1 AND balance > 0`, [cid]),
-      // تقييم FIFO حقيقي من طبقات التكلفة الفعلية المتبقية — بدل تقريب
-      // "الكمية الحالية × آخر سعر شراء" اللي يتجاهل طبقات التكلفة الأقدم كليًا
-      db.query(`SELECT COALESCE(SUM(sl.qty_remaining * sl.unit_cost),0) AS amount
-                FROM stock_lots sl JOIN products p ON p.id = sl.product_id
-                WHERE sl.company_id=$1 AND sl.qty_remaining > 0 AND p.is_active=true`, [cid]),
-      db.query(`SELECT COALESCE(SUM(balance),0) AS amount FROM suppliers WHERE company_id=$1 AND balance > 0`, [cid]),
-    ]);
+    const { rows } = await db.query(`
+      SELECT ji.account_code, ji.account_name,
+        SUM(CASE WHEN ji.side='debit'  THEN ji.amount ELSE 0 END) AS debit,
+        SUM(CASE WHEN ji.side='credit' THEN ji.amount ELSE 0 END) AS credit
+      FROM journal_items ji
+      JOIN journal_entries je ON je.id = ji.entry_id
+      WHERE je.company_id = $1
+      GROUP BY ji.account_code, ji.account_name
+    `, [cid]);
 
-    const totalAssets = parseFloat(cash.rows[0].amount) +
-                        parseFloat(receivables.rows[0].amount) +
-                        parseFloat(inventory.rows[0].amount);
+    const bal = {};
+    rows.forEach(r => { bal[r.account_code] = { name: r.account_name, debit: parseFloat(r.debit), credit: parseFloat(r.credit) }; });
+    const get = code => bal[code] || { debit: 0, credit: 0 };
+    const debitNormal  = code => get(code).debit  - get(code).credit;
+    const creditNormal = code => get(code).credit - get(code).debit;
+    const codesStarting = d => Object.keys(bal).filter(c => c.startsWith(d));
+
+    const cash        = debitNormal('1100');
+    const receivables = debitNormal('1200');
+    const inventoryVal = debitNormal('1300');
+    const fixedAssets  = debitNormal('1500');
+    const outputVAT  = creditNormal('2200');
+    const inputVAT   = debitNormal('2210');
+    const vatNet      = outputVAT - inputVAT;
+    const vatPayable   = Math.max(0, vatNet);
+    const vatReceivable = Math.max(0, -vatNet);
+    const knownAssetCodes = ['1100','1200','1300','1500'];
+    const otherAssets = codesStarting('1').filter(c => !knownAssetCodes.includes(c)).reduce((s, c) => s + debitNormal(c), 0);
+    const totalAssets = cash + receivables + inventoryVal + fixedAssets + vatReceivable + otherAssets;
+
+    const accountsPayable = creditNormal('2100');
+    const obligationsAccrued = creditNormal('2300');
+    const knownLiabCodes = ['2100','2200','2210','2300'];
+    const otherLiab = codesStarting('2').filter(c => !knownLiabCodes.includes(c)).reduce((s, c) => s + creditNormal(c), 0);
+    const totalLiab = accountsPayable + vatPayable + obligationsAccrued + otherLiab;
+
+    const netRevenue = codesStarting('4').reduce((s, c) => s + creditNormal(c), 0);
+    const netCOGS    = debitNormal('5100');
+    const netOPEX    = codesStarting('5').filter(c => c !== '5100').reduce((s, c) => s + debitNormal(c), 0);
+    const netProfit  = (netRevenue - netCOGS) - netOPEX;
+
+    const capital = creditNormal('3000');
+    const otherEquity = codesStarting('3').filter(c => c !== '3000').reduce((s, c) => s + creditNormal(c), 0);
+    const equity = capital + otherEquity + netProfit;
 
     res.json({
       success: true,
       data: {
         assets: {
-          cash:        parseFloat(cash.rows[0].amount),
-          receivables: parseFloat(receivables.rows[0].amount),
-          inventory:   parseFloat(inventory.rows[0].amount),
-          total:       totalAssets
+          cash, receivables, inventory: inventoryVal, fixed_assets: fixedAssets,
+          vat_receivable: vatReceivable, other: otherAssets, total: totalAssets
         },
         liabilities: {
-          payables: parseFloat(payables.rows[0].amount),
-          total:    parseFloat(payables.rows[0].amount)
+          payables: accountsPayable, vat_payable: vatPayable, obligations: obligationsAccrued,
+          other: otherLiab, total: totalLiab
         },
-        equity: totalAssets - parseFloat(payables.rows[0].amount)
+        equity
       }
     });
   } catch (err) { next(err); }
@@ -225,7 +264,7 @@ exports.customerAging = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
       SELECT
-        c.name,
+        c.id AS customer_id, c.name,
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - i.due_date) <= 0  THEN i.grand_total - i.paid_amount END),0) AS current_due,
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - i.due_date) BETWEEN 1  AND 30  THEN i.grand_total - i.paid_amount END),0) AS days_1_30,
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - i.due_date) BETWEEN 31 AND 60  THEN i.grand_total - i.paid_amount END),0) AS days_31_60,
@@ -235,7 +274,7 @@ exports.customerAging = async (req, res, next) => {
       FROM invoices i
       JOIN customers c ON c.id = i.customer_id
       WHERE i.company_id = $1 AND i.status IN ('issued','partial')
-      GROUP BY c.name
+      GROUP BY c.id, c.name
       HAVING SUM(i.grand_total - i.paid_amount) > 0
       ORDER BY total DESC
     `, [req.user.company_id]);
@@ -248,7 +287,7 @@ exports.supplierAging = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
       SELECT
-        s.name,
+        s.id AS supplier_id, s.name,
         COALESCE(SUM(p.remaining),0) AS total_payable,
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - p.date) <= 30  THEN p.remaining END),0) AS within_30,
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - p.date) BETWEEN 31 AND 60 THEN p.remaining END),0) AS days_31_60,
@@ -256,7 +295,7 @@ exports.supplierAging = async (req, res, next) => {
       FROM purchases p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE p.company_id = $1 AND p.status IN ('unpaid','partial')
-      GROUP BY s.name
+      GROUP BY s.id, s.name
       HAVING SUM(p.remaining) > 0
       ORDER BY total_payable DESC
     `, [req.user.company_id]);

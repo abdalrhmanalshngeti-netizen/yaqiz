@@ -198,7 +198,7 @@ exports.convert = async (req, res, next) => {
     // فرع/مستودع البائع — نفس منطق invoices.controller.js create()، وإلا تُسجَّل
     // مبيعة حقيقية بلا خصم أي مخزون فعلي إطلاقًا
     const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
-      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id);
+      await branch.resolveWarehouseForUser(client, company_id, user_id, req.body.branch_id, req.user.role);
 
     const stockShortages = [];
     for (const item of items) {
@@ -247,9 +247,15 @@ exports.convert = async (req, res, next) => {
         `محوّل من ${quote.quote_no}`, user_id,
         zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
 
+    // النسبة الفعلية للعرض (قد تكون 0 لو الضريبة معطَّلة أو العرض بدون ضريبة
+    // أصلاً) — quote_items لا تخزّن نسبة لكل بند، فنشتقها من إجمالي العرض
+    // نفسه بدل فرض 15% دائمًا (كان يفرض ضريبة على عرض بلا ضريبة إطلاقًا)
+    const effectiveVatRate = parseFloat(quote.subtotal) > 0
+      ? parseFloat(quote.vat_amount) / parseFloat(quote.subtotal)
+      : 0;
     const processedItems = items.map(item => ({
       ...item,
-      vat_amount: parseFloat(item.line_total) * 0.15,
+      vat_amount: parseFloat(item.line_total) * effectiveVatRate,
     }));
 
     // تجميع تكلفة البضاعة المباعة فعليًا (FIFO حقيقي عبر stock.deduct) — كانت
@@ -304,7 +310,7 @@ exports.convert = async (req, res, next) => {
         customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1 AND company_id = $2`, [quote.customer_id, company_id])).rows[0];
       }
       const xmlItems = processedItems.map(it => ({
-        ...it, vat_rate: 15, vat_category_code: 'S',
+        ...it, vat_rate: Math.round(effectiveVatRate * 10000) / 100, vat_category_code: 'S',
       }));
       const { xml, warnings } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,

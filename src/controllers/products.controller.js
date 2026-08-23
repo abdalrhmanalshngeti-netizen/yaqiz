@@ -67,7 +67,7 @@ exports.create = async (req, res, next) => {
     const openingQty = parseFloat(qty) || 0;
     if (openingQty > 0) {
       try {
-        const { warehouse_id } = await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id);
+        const { warehouse_id } = await branch.resolveWarehouseForUser(client, req.user.company_id, req.user.sub, req.body.branch_id, req.user.role);
         await stock.add(client, {
           company_id: req.user.company_id, product_id: product.id, warehouse_id, qty: openingQty,
           unit_cost: buy_price || 0, reason: 'رصيد افتتاحي', source_type: 'opening_balance', user_id: req.user.sub

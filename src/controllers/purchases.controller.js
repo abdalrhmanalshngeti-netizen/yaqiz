@@ -78,7 +78,10 @@ exports.create = async (req, res, next) => {
 
     // يُحل دائمًا (حتى لمشتريات opex بلا بنود) عشان تُنسب فاتورة المشتريات
     // لفرع معيّن بالتقارير — لكن المستودع المُستخرَج منه لا يُستخدم إلا لو
-    // كانت مشتريات بضاعة فعلية (أدناه)
+    // كانت مشتريات بضاعة فعلية (أدناه). هذا المسار يستدعي resolveWarehouseForBranch
+    // مباشرة (لا resolveWarehouseForUser) فكان يقبل أي branch_id من أي مستخدم
+    // بلا أي تحقق صلاحية إطلاقًا — نتحقق صراحة هنا قبل الحل
+    await branch.assertBranchAuthorized(client, company_id, req.user.sub, req.user.role, req.body.branch_id);
     const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
       await branch.resolveWarehouseForBranch(client, company_id, req.body.branch_id);
 

@@ -268,7 +268,7 @@ exports.openShift = async (req, res, next) => {
     if (existing) return res.status(400).json({ success: false, message: 'لديك وردية مفتوحة بالفعل' });
 
     const { branch_id: resolvedBranchId } =
-      await branch.resolveWarehouseForUser(db, req.user.company_id, req.user.sub, branch_id);
+      await branch.resolveWarehouseForUser(db, req.user.company_id, req.user.sub, branch_id, req.user.role);
 
     let resolvedPosPointId = null;
     if (pos_point_id) {
