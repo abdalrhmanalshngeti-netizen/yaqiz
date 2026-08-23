@@ -2956,10 +2956,14 @@ function postCustomerReceivable(db, jEntries, customerName, journalAmount, direc
     jEntries.push({ account: lang==='ar'?'الذمم المدينة':'Accounts Receivable', account_code:'1200', side: direction==='increase'?'debit':'credit', amount: journalAmount });
   }
 }
-function postSupplierPayable(db, jEntries, supplierName, journalAmount, direction, balanceAmount) {
+// supplierId (اختياري): لو تحدَّد، الأولوية له دائمًا على مطابقة الاسم — الاسم
+// نص حر يتغيّر بأي وقت (تعديل بيانات المورد)، وأي سجل قديم (فاتورة شراء/سند/
+// مرتجع) يخزّن الاسم وقت إنشائه فقط، فيفقد مطابقته صامتًا بعد أي تعديل اسم
+// لاحق — رصيد المورد يتوقف عن التحديث لتلك السجلات بلا أي خطأ يُنبّه لذلك
+function postSupplierPayable(db, jEntries, supplierName, journalAmount, direction, balanceAmount, supplierId) {
   if (balanceAmount === undefined) balanceAmount = journalAmount;
   if (balanceAmount) {
-    const sup = db.suppliers.find(s => s.name === supplierName);
+    const sup = supplierId ? db.suppliers.find(s => s.id === supplierId) : db.suppliers.find(s => s.name === supplierName);
     if (sup) {
       const next = (sup.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
       sup.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
@@ -5022,7 +5026,7 @@ function _saveGoodsPurchaseActual() {
     {account:lang==='ar'?'ضريبة المدخلات':'Input VAT',account_code:'2210',side:'debit',amount:vat},
   ];
   if(paidNow>0) pgEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount:paidNow});
-  postSupplierPayable(db, pgEntries, p.vendor, remaining, 'increase');
+  postSupplierPayable(db, pgEntries, p.vendor, remaining, 'increase', undefined, p.supplier_id);
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`فاتورة شراء بضاعة - ${p.vendor}`,
@@ -9761,11 +9765,19 @@ function saveVoucher(type, printAfter=true) {
 }
 function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount) {
   const db = getDB();
+  const _voucherParty = partyVal || el('v-party').value;
+  // نحل معرّف العميل/المورد الحقيقي هنا وقت الإنشاء ونخزّنه على السند نفسه —
+  // بدون هذا، أي عملية لاحقة على هذا السند (حذفه وعكس أثره مثلاً) تضطر تطابق
+  // بالاسم النصي المخزَّن، اللي يفقد صلاحيته صامتًا لو اتغيّر اسم الطرف لاحقًا
+  const _voucherPartyId = isReceipt
+    ? db.customers.find(c => c.name === _voucherParty)?.id || null
+    : db.suppliers.find(s => s.name === _voucherParty)?.id || null;
   const voucher = {
     id: num, type,
     voucher_no: `${isReceipt?'RCV':'PAY'}-${String(num).padStart(4,'0')}`,
-    party: partyVal || el('v-party').value,
+    party: _voucherParty,
     party_type: isReceipt ? 'customer' : 'supplier',
+    party_id: _voucherPartyId,
     amount, description: el('v-desc').value,
     method: el('v-method').value, ref: el('v-ref').value,
     linked_invoice_id: linkedInvoiceId,
@@ -9870,7 +9882,7 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
   } else {
     // Dr. Accounts Payable / Cr. Cash — نفس المبدأ بالعكس
     const payEntries = [];
-    postSupplierPayable(db, payEntries, voucher.party, amount, 'decrease', voucher.applied_amount);
+    postSupplierPayable(db, payEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
     payEntries.push({ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount });
     db.journal.push({
       id: (db.nextId.journal||1), date: new Date().toISOString(),
@@ -10034,7 +10046,7 @@ function deleteReceipt(id) {
     }
     // عكس رصيد المورد
     const reversedAmt = v.applied_amount!=null ? v.applied_amount : amount;
-    postSupplierPayable(db, [], v.party, 0, 'increase', reversedAmt);
+    postSupplierPayable(db, [], v.party, 0, 'increase', reversedAmt, v.party_id);
   }
 
   db.receipts=(db.receipts||[]).filter(r=>r.id!==id);
@@ -10291,10 +10303,17 @@ function _saveReturnActual(type, amount, linkedId) {
   // ورّث طريقة الدفع من الفاتورة/الفاتورة المرتبطة إن وُجدت
   const linkedRec = linkedId ? (isSales ? db.invoices.find(i=>i.id===linkedId) : db.purchases.find(p=>p.id===linkedId)) : null;
   const retMethod = linkedRec?.payment_method || null;
+  const _retParty = el('rt-party').value;
+  // نفس مبدأ السندات: نحل معرّف العميل/المورد الحقيقي وقت إنشاء المرتجع
+  // ونخزّنه عليه — يفضّل معرّف الفاتورة/فاتورة الشراء المرتبطة (أدق، محلولة
+  // فعليًا وقت تلك الفاتورة) وإلا مطابقة بالاسم كخيار احتياطي فقط
+  const _retPartyId = !isSales
+    ? (linkedRec?.supplier_id ?? db.suppliers.find(s => s.name === _retParty)?.id ?? null)
+    : (linkedRec?.customer_id ?? db.customers.find(c => c.name === _retParty)?.id ?? null);
 
   const ret={
     id:num, type, return_no:`RET-${String(num).padStart(4,'0')}`,
-    party:el('rt-party').value, amount, vat_amount:vat, base_amount:base,
+    party:_retParty, party_id:_retPartyId, amount, vat_amount:vat, base_amount:base,
     item:el('rt-item').value, reason:el('rt-reason').value,
     date:el('rt-date').value, created_at:new Date().toISOString(),
     linked_id:linkedId, product_id:prodId,
@@ -10402,7 +10421,7 @@ function _saveReturnActual(type, amount, linkedId) {
     // Purchase return: Dr. Cash (الجزء المسدد) و/أو Dr. الذمم الدائنة (الجزء الآجل) / Cr. Purchase Returns & Cr. Input VAT
     const purRetEntries = [];
     if(cashPortion>0) purRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
-    postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease');
+    postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease', undefined, ret.party_id);
     purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
     purRetEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'credit', amount:vat});
     db.journal.push({
@@ -10516,7 +10535,7 @@ function deleteReturn(id){
     const revEntries=[];
     if(cashPortion>0) revEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:cashPortion});
     // الجزء الآجل اللي خُصم من رصيد المورد وقت المرتجع يُعاد له الآن
-    postSupplierPayable(db, revEntries, r.party, creditPortion, 'increase');
+    postSupplierPayable(db, revEntries, r.party, creditPortion, 'increase', undefined, r.party_id);
     revEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'debit', amount:r.base_amount||0});
     revEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:r.vat_amount||0});
     db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(), description:`عكس مرتجع مشتريات ${r.return_no} — ${r.party}`, entries:revEntries, ref:r.return_no});
@@ -14258,7 +14277,7 @@ function saveQuickPayPurchase(purchaseId) {
   // قيد محاسبي
   if(!db.journal) db.journal=[];
   const qppEntries = [];
-  postSupplierPayable(db, qppEntries, p.vendor, amount, 'decrease');
+  postSupplierPayable(db, qppEntries, p.vendor, amount, 'decrease', undefined, p.supplier_id);
   qppEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount});
   db.journal.push({
     id:(db.nextId.journal||1), date:new Date().toISOString(),
