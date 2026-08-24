@@ -1,5 +1,11 @@
 const https = require('https');
 
+// مهلة زمنية إلزامية — بدونها طلب معلَّق (شبكة متقطعة، أو OpenAI نفسها متعثّرة)
+// كان يبقى بلا رد للأبد، فيُجمّد أي طلب Express ينتظره (استخراج فاتورة،
+// المساعد الذكي، بوت الدعم...) بلا أي حد أقصى. 60 ثانية تكفي أطول حالة واقعية
+// (استخراج فاتورة من صورة معقّدة)، بينما أغلب النداءات النصية أسرع بكثير
+const OPENAI_TIMEOUT_MS = 60000;
+
 function openAIRequest(payload) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -12,6 +18,7 @@ function openAIRequest(payload) {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
       },
+      timeout: OPENAI_TIMEOUT_MS,
     };
     const req = https.request(options, res => {
       let raw = '';
@@ -20,6 +27,9 @@ function openAIRequest(payload) {
         try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
         catch { resolve({ status: res.statusCode, body: raw }); }
       });
+    });
+    req.on('timeout', () => {
+      req.destroy(new Error(`انتهت مهلة الاتصال بـOpenAI (${OPENAI_TIMEOUT_MS / 1000} ثانية) بلا رد`));
     });
     req.on('error', reject);
     req.write(body);

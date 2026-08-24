@@ -864,13 +864,16 @@ exports.replyTicket = async (req, res, next) => {
       const { rows: [co] } = await db.query(`SELECT contact_email FROM companies WHERE id = $1`, [ticket.company_id]);
       if (co?.contact_email) {
         const { sendMail } = require('../services/email.service');
+        // تهريب النص قبل الحقن بقالب البريد — دفاع إضافي حتى لو الرد كتبه موظف
+        // مصادَق عليه (لا يفترض ثقة عمياء بأي نص حر يُحقَن مباشرة بـHTML بريد فعلي)
+        const eMessage = String(message).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
         sendMail({
           to: co.contact_email,
           subject: `رد على تذكرة الدعم #${ticket.id} — يقظ`,
           html: `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;background:#f1f5f9;padding:20px;">
             <div style="max-width:500px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.1);">
               <div style="background:#0f172a;padding:20px 28px;color:#fff;font-weight:700;">رد على تذكرة الدعم #${ticket.id}</div>
-              <div style="padding:24px 28px;color:#1e293b;line-height:1.8;white-space:pre-wrap;">${message}</div>
+              <div style="padding:24px 28px;color:#1e293b;line-height:1.8;white-space:pre-wrap;">${eMessage}</div>
               <div style="padding:14px 28px;color:#94a3b8;font-size:.8rem;border-top:1px solid #f1f5f9;">يقظ — yaqiz.me</div>
             </div>
           </body></html>`

@@ -407,13 +407,12 @@ exports.assistant = async (req, res, next) => {
   }
 };
 
-// مساعد مرافق لمعالج "الأرصدة الافتتاحية" فقط — مُعفى بالكامل وعمدًا من أي حدّ
-// يومي/شهري أو باقة (بعكس 'assistant' أعلاه): استخدامه محدود بطبيعته (owner فقط،
-// أثناء إعداد الحساب لمرة واحدة أو تعديل نادر لاحقًا)، ومحكوم بمحتوى step_guide
-// المُرسَل من العميل (OB_GUIDE) لا استكشافًا حرًا لبيانات الشركة المالية الكاملة —
-// لذلك لا حاجة لـscopeAIContext() هنا (مصمَّمة لتصفية بيانات محفوظة حسب صلاحية
-// الموظف؛ هذا المسار owner-only أصلًا عبر بوابة المعالج بالواجهة). نسجّل الاستخدام
-// فقط لغرض التدقيق بلوحة الإدارة، بلا أي فحص حدّ أو رفض 403.
+// مساعد مرافق لمعالج "الأرصدة الافتتاحية" فقط — بلا تقييد حسب الباقة (بعكس
+// 'assistant' أعلاه، متاح حتى للأساسية): محكوم بمحتوى step_guide المُرسَل من
+// العميل (OB_GUIDE) لا استكشافًا حرًا لبيانات الشركة المالية الكاملة — لذلك لا
+// حاجة لـscopeAIContext() هنا (مصمَّمة لتصفية بيانات محفوظة حسب صلاحية الموظف؛
+// هذا المسار owner-only أصلًا عبر بوابة المعالج بالواجهة). حد شهري ثابت أدناه
+// (100 سؤال، كل الباقات) يمنع تكلفة API مفتوحة — كان بلا أي سقف إطلاقًا سابقًا
 // حدود كل باقة بمعالج الأرصدة الافتتاحية — تُرسَل للمساعد الذكي كسياق موثوق من
 // السيرفر (لا نعتمد على أي قيمة "plan" قد يرسلها العميل بالطلب، لضمان دقتها)
 const OB_PLAN_LIMITS = {
@@ -421,6 +420,10 @@ const OB_PLAN_LIMITS = {
   growth: { customers: true,  obligations: true,  employees: true  },
   pro:    { customers: true,  obligations: true,  employees: true  },
 };
+// حد شهري ثابت لكل الباقات (100 سؤال) — بدون أي حد كان مساعد الأرصدة الافتتاحية
+// الوحيد بين كل ميزات الذكاء الاصطناعي بلا سقف استخدام إطلاقًا، رغم إنه متاح
+// لكل الباقات بما فيها الأساسية (خطر تكلفة API مفتوحة حقيقي)
+const OB_ASSISTANT_MONTHLY_LIMIT = 100;
 
 exports.openingBalanceAssistant = async (req, res, next) => {
   try {
@@ -428,6 +431,17 @@ exports.openingBalanceAssistant = async (req, res, next) => {
     const { question, history } = req.body;
     const context = req.body.context && typeof req.body.context === 'object' ? req.body.context : {};
     if (!question) return res.status(400).json({ success: false, message: 'question مطلوب' });
+
+    const usedThisMonth = await getMonthlyUsage(company_id, 'opening_balance_assistant');
+    if (usedThisMonth >= OB_ASSISTANT_MONTHLY_LIMIT) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_MONTHLY_LIMIT',
+        message: `وصلت للحد الشهري (${OB_ASSISTANT_MONTHLY_LIMIT} سؤال) لمساعد الأرصدة الافتتاحية. يتجدد الحد أول الشهر القادم.`,
+        used: usedThisMonth,
+        limit: OB_ASSISTANT_MONTHLY_LIMIT,
+      });
+    }
 
     const plan = await getPlan(company_id);
     context.company_plan = plan;

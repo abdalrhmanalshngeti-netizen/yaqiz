@@ -3016,18 +3016,22 @@ async function doCheckout() {
   const origBtnHtml=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.innerHTML=`⏳ ${lang==='ar'?'جارٍ إتمام البيع...':'Processing...'}`;}
 
-  let res=null;
+  let res=null, checkoutErr=null;
   try {
     if (typeof window._cloudApiFetch !== 'function' || typeof window._cloudInvToAPI !== 'function') throw new Error('bridge unavailable');
     res = await Promise.race([
       window._cloudApiFetch('POST', '/api/invoices', window._cloudInvToAPI(draftInv)),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 8000))
     ]);
-  } catch(e) { res=null; }
+  } catch(e) { res=null; checkoutErr=e; }
 
   if (!res?.data?.id) {
     if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
-    showCheckoutFailedModal();
+    // نعرض رسالة السيرفر الفعلية لو توفرت (مثل رفض فرع غير مصرَّح، أو انتهاء
+    // مهلة/انقطاع شبكة حقيقي) بدل رسالة عامة واحدة تُوهم دائمًا بمشكلة شبكة —
+    // فرع رُفض من السيرفر لن يُحل بمجرد "إعادة المحاولة"، يحتاج تحديث الصفحة
+    // ليسحب بيانات الفرع الحديثة (نفس مبدأ التزامن الدوري كل 60 ثانية)
+    showCheckoutFailedModal(checkoutErr?.message);
     return;
   }
 
@@ -3105,16 +3109,27 @@ async function doCheckout() {
 }
 
 // نافذة انقطاع الاتصال وقت البيع — بلا مسار بديل، السلة تبقى سليمة
-function showCheckoutFailedModal() {
+function showCheckoutFailedModal(serverMessage) {
   const mc=el('modal-container'); if(!mc) return;
+  // رسالة السيرفر الفعلية (لو توفرت وليست "timeout"/"bridge unavailable" الداخليتين)
+  // أدق من نص عام دائم — خصوصًا لو السبب رفض صلاحية فرع لا انقطاع شبكة حقيقي،
+  // وعندها "إعادة المحاولة" وحدها لن تحل شيء، لازم تحديث الصفحة لسحب بيانات حديثة
+  const isGenericInternal = !serverMessage || serverMessage === 'timeout' || serverMessage === 'bridge unavailable';
+  const looksLikeBranchIssue = !isGenericInternal && /فرع/.test(serverMessage);
+  const title = isGenericInternal
+    ? (lang==='ar'?'تعذّر الاتصال بالسيرفر':'Could not reach the server')
+    : (lang==='ar'?'تعذّر إتمام البيع':'Could not complete the sale');
+  const body = isGenericInternal
+    ? (lang==='ar'?'لا يمكن إتمام البيع الآن — السلة ما زالت محفوظة كما هي.':'The sale could not be completed right now — your cart is still intact.')
+    : `${sanitize(serverMessage)}${looksLikeBranchIssue ? (lang==='ar'?' — جرّب تحديث الصفحة أولًا قبل إعادة المحاولة.':' — try refreshing the page before retrying.') : ''}`;
   mc.innerHTML = `
   <div class="modal-bg" onclick="closeModal()">
     <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
       <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
-      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${lang==='ar'?'تعذّر الاتصال بالسيرفر':'Could not reach the server'}</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${lang==='ar'?'لا يمكن إتمام البيع الآن — السلة ما زالت محفوظة كما هي.':'The sale could not be completed right now — your cart is still intact.'}</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${title}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${body}</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-full" onclick="closeModal();doCheckout();">🔄 ${lang==='ar'?'إعادة المحاولة':'Retry'}</button>
+        ${looksLikeBranchIssue ? `<button class="btn btn-primary btn-full" onclick="location.reload();">🔄 ${lang==='ar'?'تحديث الصفحة':'Refresh page'}</button>` : `<button class="btn btn-primary btn-full" onclick="closeModal();doCheckout();">🔄 ${lang==='ar'?'إعادة المحاولة':'Retry'}</button>`}
         <button class="btn btn-outline btn-full" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
       </div>
     </div>
@@ -15661,7 +15676,9 @@ async function obChatSendProactive(key) {
     _obChatMessages[msgIdx] = { role:'assistant', text:answer };
     _obChatApiHistory.push({ question:`[شرح تلقائي لخطوة: ${OB_STEP_TITLES[key]||key}]`, answer });
   } catch (e) {
-    _obChatMessages[msgIdx] = { role:'assistant', text: lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.' };
+    // نعرض رسالة السيرفر الفعلية إن وُجدت (مثل بلوغ الحد الشهري) بدل رسالة
+    // عامة تخفي السبب الحقيقي عن المستخدم
+    _obChatMessages[msgIdx] = { role:'assistant', text: e?.message || (lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.') };
   }
   el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
   obChatScrollToBottom();
@@ -15688,7 +15705,7 @@ async function obChatSend() {
     _obChatMessages[msgIdx] = { role:'assistant', text:answer };
     _obChatApiHistory.push({ question, answer });
   } catch (e) {
-    _obChatMessages[msgIdx] = { role:'assistant', text: lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.' };
+    _obChatMessages[msgIdx] = { role:'assistant', text: e?.message || (lang==='ar'?'تعذّر الاتصال بالمساعد الذكي الآن.':'Could not reach the assistant right now.') };
   }
   el('ob-chat-messages') && (el('ob-chat-messages').innerHTML = renderOBChatMessagesHtml());
   obChatScrollToBottom();

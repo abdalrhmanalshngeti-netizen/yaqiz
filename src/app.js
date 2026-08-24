@@ -25,13 +25,23 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:    ["'self'"],
+      // إزالة unpkg.com — غير مُستخدَم إطلاقًا بأي صفحة (تأكَّد بالبحث بكل public/)،
+      // كان سماحًا زائدًا بلا أي فائدة فعلية. cdnjs/jsdelivr لا تزالان مطلوبتان
+      // فعليًا (JsBarcode، qrcodejs، xlsx). إزالة unsafe-inline/unsafe-eval نفسها
+      // تحتاج إعادة هيكلة منفصلة كبيرة (كل onclick="" بالتطبيق + كود JS المضمَّن
+      // بالصفحة نفسها) — خارج نطاق هذا التخفيف الآمن البسيط
       scriptSrc:     ["'self'", "'unsafe-inline'", "'unsafe-eval'",
-                      "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
+                      "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc:       ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc:        ["'self'", "data:", "blob:", "https:"],
-      connectSrc:    ["'self'", "https://api.openai.com", "https:"],
+      // تقييد لـ'self' فقط — الواجهة لا تتصل بأي شيء خارجي مباشرة إطلاقًا (كل
+      // نداءات الذكاء الاصطناعي تمر عبر السيرفر بمفتاح API لا يصل للمتصفح أبدًا)،
+      // فالسماح العام بأي https: كان يُبطل الغرض الحقيقي من connect-src (منع
+      // تسريب بيانات لخادم خارجي لو حصل XSS يومًا) — api.openai.com لم تُستخدَم
+      // من المتصفح أصلًا (تأكَّد بالبحث)، كانت سماحًا زائدًا بلا فائدة
+      connectSrc:    ["'self'"],
       workerSrc:     ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
       frameSrc:      ["'none'"],
     }

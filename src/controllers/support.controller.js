@@ -1,6 +1,13 @@
 const db          = require('../config/db');
 const { sendMail } = require('../services/email.service');
 
+// يهرّب أي نص خام قبل حقنه بقالب HTML — بدونها، حقل حر بالتذكرة (خصوصًا مسار
+// /api/support/public غير المصادَق عليه من شاشة الدخول) يقدر يحقن HTML/روابط
+// مزوَّرة داخل بريد إلكتروني حقيقي يصل لصندوق وارد موظف الدعم (تصيّد ضد الطاقم)
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 // يشعر كل موظف لوحة إدارة نشِط عنده صلاحية "تذاكر الدعم" (والمالك دائماً)
 // بتذكرة جديدة — إشعار داخل اللوحة + بريد إلكتروني، بدل إيميل واحد ثابت
 async function notifyEligibleAdmins(ticket, { companyName, userName, role, department, subDept, description, note }) {
@@ -10,7 +17,15 @@ async function notifyEligibleAdmins(ticket, { companyName, userName, role, depar
   );
   if (!admins.length) return;
 
-  const title = `🎧 تذكرة دعم جديدة — ${companyName}`;
+  // كل الحقول أدناه نص حر قادم من المستخدم (أحد المسارين مو مصادَق عليه
+  // إطلاقًا) — تُهرَّب جميعًا قبل الحقن بقالب البريد
+  const eCompanyName = escapeHtml(companyName);
+  const eUserName     = escapeHtml(userName);
+  const eRole         = escapeHtml(role);
+  const eDepartment   = escapeHtml(department);
+  const eNoteBox      = escapeHtml(subDept || description || note);
+
+  const title = `🎧 تذكرة دعم جديدة — ${eCompanyName}`;
   const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><style>
     body{font-family:'Tajawal',Arial,sans-serif;background:#f1f5f9;margin:0;padding:0;}
     .wrap{max-width:520px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);}
@@ -26,12 +41,12 @@ async function notifyEligibleAdmins(ticket, { companyName, userName, role, depar
   <div class="wrap">
     <div class="header"><h1>🎧 تذكرة دعم جديدة</h1></div>
     <div class="body">
-      <div class="row"><span class="label">الشركة</span><span class="val">${companyName}</span></div>
-      <div class="row"><span class="label">المستخدم</span><span class="val">${userName}${role ? ' ('+role+')' : ''}</span></div>
-      ${department ? `<div class="row"><span class="label">القسم</span><span class="val">${department}</span></div>` : ''}
+      <div class="row"><span class="label">الشركة</span><span class="val">${eCompanyName}</span></div>
+      <div class="row"><span class="label">المستخدم</span><span class="val">${eUserName}${eRole ? ' ('+eRole+')' : ''}</span></div>
+      ${eDepartment ? `<div class="row"><span class="label">القسم</span><span class="val">${eDepartment}</span></div>` : ''}
       <div class="row"><span class="label">رقم التذكرة</span><span class="val">#${ticket.id}</span></div>
       <div class="row"><span class="label">التاريخ</span><span class="val">${new Date(ticket.created_at).toLocaleString('ar-SA')}</span></div>
-      ${(subDept || description || note) ? `<div class="note-box">${subDept || description || note}</div>` : ''}
+      ${eNoteBox ? `<div class="note-box">${eNoteBox}</div>` : ''}
     </div>
     <div class="footer">يقظ — yaqiz.me | لوحة الإدارة ← تذاكر الدعم</div>
   </div></body></html>`;
