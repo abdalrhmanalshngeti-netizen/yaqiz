@@ -1143,7 +1143,7 @@ function doLogin() {
     const err=el('l-err'); err.style.display='block';
     if (!window._apiReachable) {
       err.innerHTML = (lang==='ar'?'⚠️ السيرفر لا يستجيب حالياً. انتظر قليلاً ثم اضغط ':'⚠️ Server not responding. Wait a moment then click ')
-        + `<a href="#" onclick="event.preventDefault();window._retryConnection?.()" style="color:#3b82f6;font-weight:800;">${lang==='ar'?'إعادة الاتصال':'Reconnect'}</a>`;
+        + `<a href="#" data-action="_retryConnection" data-prevent-default="1" style="color:#3b82f6;font-weight:800;">${lang==='ar'?'إعادة الاتصال':'Reconnect'}</a>`;
     } else {
       err.textContent=lang==='ar'?'اسم المستخدم أو كلمة المرور غير صحيحة':'Invalid credentials';
     }
@@ -7032,13 +7032,13 @@ function renderTrialBalance(c) {
       <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <span style="font-weight:700;font-size:13px;">${icon('calendar',16)} ${lang==='ar'?'كما كان بتاريخ:':'As of date:'}</span>
         ${canPickDate?`
-          <input type="date" class="input" style="width:160px;" value="${asOf}" onchange="setTBAsOfDate(this.value)" />
-          ${!isToday?`<button class="btn btn-sm btn-outline" onclick="resetTBAsOfDate()">${lang==='ar'?'اليوم':'Today'}</button>`:''}
+          <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setTBAsOfDate" />
+          ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetTBAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
           <b>${new Date().toLocaleDateString('en-US')}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
-        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" onclick="exportTrialBalancePDF()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportTrialBalancePDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
       </div>
     </div>
 
@@ -7054,7 +7054,7 @@ function renderTrialBalance(c) {
         <tbody>
           ${rows.length===0
             ?`<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد قيود بدفتر اليومية حتى هذا التاريخ':'No journal entries up to this date'}</td></tr>`
-            :rows.map(r=>`<tr style="cursor:pointer;" onclick="drillAccount('${r.code}','${sanitize(r.name).replace(/'/g,"\\'")}')" title="${lang==='ar'?'اضغط لعرض القيود المكوّنة لهذا الرصيد':'Click to see the entries behind this balance'}">
+            :rows.map(r=>`<tr style="cursor:pointer;" data-action="drillAccount" data-args="${JSON.stringify([r.code, sanitize(r.name)]).replace(/"/g,'&quot;')}" title="${lang==='ar'?'اضغط لعرض القيود المكوّنة لهذا الرصيد':'Click to see the entries behind this balance'}">
             <td><code>${r.code}</code></td>
             <td style="font-weight:700;">${sanitize(r.name)} ${icon('search',11)}</td>
             <td><span style="background:${typeColor[r.type]}18;color:${typeColorEn[r.type]};padding:2px 10px;border-radius:999px;font-size:11px;font-weight:800;">${typeLabel[r.type]}</span></td>
@@ -7134,6 +7134,7 @@ function exportTrialBalancePDF() {
 }
 
 let overdueTab = 'customers';
+function setOverdueTab(tab) { overdueTab = tab; renderOverdueReport(el('report-main-content')); }
 function renderOverdueReport(c) {
   const db  = getDB();
   const now = new Date();
@@ -7184,28 +7185,28 @@ function renderOverdueReport(c) {
   const total = rows.reduce((s,r)=>s+r.remaining,0);
   const partyLabel = isCust ? (lang==='ar'?'العميل':'Customer') : (lang==='ar'?'المورد':'Supplier');
   const actionBtn  = isCust
-    ? (id=>`<button class="btn btn-sm btn-primary" onclick="quickReceipt(${id})">📥 ${lang==='ar'?'تحصيل':'Collect'}</button>`)
+    ? (id=>`<button class="btn btn-sm btn-primary" data-action="quickReceipt" data-args="[${id}]">📥 ${lang==='ar'?'تحصيل':'Collect'}</button>`)
     : (id=>`<span></span>`);
 
   c.innerHTML = `<div style="margin-top:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div style="font-size:16px;font-weight:800;">⏰ ${lang==='ar'?'تقرير الذمم المتأخرة':'Overdue Report'}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="btn ${isCust?'btn-primary':'btn-outline'}" onclick="overdueTab='customers';renderOverdueReport(el('report-main-content'))">
+        <button class="btn ${isCust?'btn-primary':'btn-outline'}" data-action="setOverdueTab" data-args='["customers"]'>
           👤 ${lang==='ar'?'ذمم العملاء (لك)':'Receivables'}
           <span class="badge ${isCust?'badge-white':'badge-blue'}" style="margin-${lang==='ar'?'right':'left'}:4px;">${fmtMoney(custRows.reduce((s,r)=>s+r.remaining,0))}</span>
         </button>
-        <button class="btn ${!isCust?'btn-primary':'btn-outline'}" onclick="overdueTab='suppliers';renderOverdueReport(el('report-main-content'))">
+        <button class="btn ${!isCust?'btn-primary':'btn-outline'}" data-action="setOverdueTab" data-args='["suppliers"]'>
           🏭 ${lang==='ar'?'ذمم الموردين (عليك)':'Payables'}
           <span class="badge ${!isCust?'badge-white':'badge-red'}" style="margin-${lang==='ar'?'right':'left'}:4px;">${fmtMoney(suppRows.reduce((s,r)=>s+r.remaining,0))}</span>
         </button>
-        <button class="btn btn-outline" onclick="printARAPReport('customers')" style="border-color:#1e40af;color:#1e40af;font-size:12px;">
+        <button class="btn btn-outline" data-action="printARAPReport" data-args='["customers"]' style="border-color:#1e40af;color:#1e40af;font-size:12px;">
           🖨️ ${lang==='ar'?'طباعة العملاء':'Print Cust.'}
         </button>
-        <button class="btn btn-outline" onclick="printARAPReport('suppliers')" style="border-color:#ea580c;color:#ea580c;font-size:12px;">
+        <button class="btn btn-outline" data-action="printARAPReport" data-args='["suppliers"]' style="border-color:#ea580c;color:#ea580c;font-size:12px;">
           🖨️ ${lang==='ar'?'طباعة الموردين':'Print Supp.'}
         </button>
-        <button class="btn btn-outline" onclick="printARAPReport('all')" style="border-color:var(--primary);color:var(--primary);font-size:12px;">
+        <button class="btn btn-outline" data-action="printARAPReport" data-args='["all"]' style="border-color:var(--primary);color:var(--primary);font-size:12px;">
           🖨️ ${lang==='ar'?'طباعة شامل':'Print All'}
         </button>
       </div>
@@ -7301,8 +7302,8 @@ function renderZakatReport(c) {
   const { cash, receivables, inventoryVal, payables, zakatBase, zakatDue } = zakatFigures(db, asOf);
   const nisab = 20908; // نصاب تقريبي بالريال (85 جرام ذهب × ~246 ريال)
 
-  const row=(label,val,color='',onclick='')=>`<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);${onclick?'cursor:pointer;':''}" ${onclick?`onclick="${onclick}"`:''}>
-    <span style="font-weight:600;">${label}${onclick?` ${icon('search',11)}`:''}</span>
+  const row=(label,val,color='',action='',args=[])=>`<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);${action?'cursor:pointer;':''}" ${action?`data-action="${action}" data-args='${JSON.stringify(args).replace(/"/g,'&quot;')}'`:''}>
+    <span style="font-weight:600;">${label}${action?` ${icon('search',11)}`:''}</span>
     <span style="font-weight:800;${color?`color:${color};`:''}"">${fmtMoney(val)}</span>
   </div>`;
 
@@ -7316,27 +7317,27 @@ function renderZakatReport(c) {
       <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <span style="font-weight:700;font-size:13px;">${icon('calendar',16)} ${lang==='ar'?'كما كان بتاريخ:':'As of date:'}</span>
         ${canPickDate?`
-          <input type="date" class="input" style="width:160px;" value="${asOf}" onchange="setZakatAsOfDate(this.value)" />
-          ${!isToday?`<button class="btn btn-sm btn-outline" onclick="resetZakatAsOfDate()">${lang==='ar'?'اليوم':'Today'}</button>`:''}
+          <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setZakatAsOfDate" />
+          ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetZakatAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
           <b>${new Date().toLocaleDateString('en-US')}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
-        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" onclick="exportZakatReportPDF()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+        <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportZakatReportPDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
       </div>
     </div>
 
     <div class="card" style="padding:20px;margin-bottom:16px;">
       <div style="font-weight:800;font-size:14px;margin-bottom:12px;color:var(--primary);">📥 ${lang==='ar'?'الأصول الزكوية (تُضاف)':'Zakatable Assets (add)'}</div>
-      ${row(lang==='ar'?'💵 رصيد الخزينة (النقد)':'Cash / Treasury', cash, '#16a34a', "drillZakat('cash')")}
-      ${row(lang==='ar'?'👤 ذمم العملاء (المستحقة)':'Customer Receivables', receivables, '#16a34a', "drillZakat('receivables')")}
+      ${row(lang==='ar'?'💵 رصيد الخزينة (النقد)':'Cash / Treasury', cash, '#16a34a', 'drillZakat', ['cash'])}
+      ${row(lang==='ar'?'👤 ذمم العملاء (المستحقة)':'Customer Receivables', receivables, '#16a34a', 'drillZakat', ['receivables'])}
       ${row(lang==='ar'?'📦 قيمة المخزون (بسعر التكلفة)':'Inventory at Cost', inventoryVal, '#16a34a')}
       ${!isToday?`<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">ℹ️ ${lang==='ar'?'قيمة المخزون تُعرض دائمًا بالكمية الحالية (اليوم) لعدم توفر سجل كميات تاريخي دقيق — بقية البنود محسوبة فعليًا كما كانت بالتاريخ المحدد.':'Inventory value always reflects current quantities (no historical stock ledger) — other items are computed as of the chosen date.'}</div>`:''}
     </div>
 
     <div class="card" style="padding:20px;margin-bottom:16px;">
       <div style="font-weight:800;font-size:14px;margin-bottom:12px;color:var(--danger);">📤 ${lang==='ar'?'الالتزامات (تُطرح)':'Liabilities (deduct)'}</div>
-      ${row(lang==='ar'?'🏭 ذمم الموردين (المطلوبة)':'Supplier Payables', payables, '#dc2626', "drillZakat('payables')")}
+      ${row(lang==='ar'?'🏭 ذمم الموردين (المطلوبة)':'Supplier Payables', payables, '#dc2626', 'drillZakat', ['payables'])}
     </div>
 
     <div class="card" style="padding:20px;background:var(--primary-soft);border:2px solid var(--primary);">
@@ -7723,14 +7724,17 @@ function dateRangeControlsHtml(exportFn) {
   return `
     ${hasPlanFeature('custom_period')?`
       <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'من:':'From:'}</span>
-      <input type="date" class="input" style="width:150px;" value="${reportFrom}" onchange="reportPeriod='custom';reportFrom=this.value;renderPage()" />
+      <input type="date" class="input" style="width:150px;" value="${reportFrom}" data-onchange="setReportFrom" />
       <span style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'إلى:':'To:'}</span>
-      <input type="date" class="input" style="width:150px;" value="${reportTo}" onchange="reportPeriod='custom';reportTo=this.value;renderPage()" />
-      ${reportPeriod==='custom'&&reportFrom&&reportTo?`<button class="btn btn-sm btn-outline" onclick="reportPeriod='all';reportFrom='';reportTo='';renderPage()">${lang==='ar'?'مسح الفترة':'Clear range'}</button>`:''}
+      <input type="date" class="input" style="width:150px;" value="${reportTo}" data-onchange="setReportTo" />
+      ${reportPeriod==='custom'&&reportFrom&&reportTo?`<button class="btn btn-sm btn-outline" data-action="clearReportRange">${lang==='ar'?'مسح الفترة':'Clear range'}</button>`:''}
     `:`<span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'تحديد فترة مخصصة متاح بباقة النمو والاحترافية':'Custom date range available on Growth & Pro'}</span>`}
-    <button class="btn btn-outline btn-sm" onclick="${exportFn}()">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
+    <button class="btn btn-outline btn-sm" data-action="${exportFn}">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
   `;
 }
+function setReportFrom(v) { reportPeriod='custom'; reportFrom=v; renderPage(); }
+function setReportTo(v) { reportPeriod='custom'; reportTo=v; renderPage(); }
+function clearReportRange() { reportPeriod='all'; reportFrom=''; reportTo=''; renderPage(); }
 
 function renderReportsInner(c) {
   const db = getDB();
@@ -7744,14 +7748,14 @@ function renderReportsInner(c) {
     <div class="page-header"><div class="page-title-lg">${t('reports')}</div></div>
 
     <div id="rpt-subtabs" class="tabs">
-      <button class="tab-btn ${reportTab==='vat'?'active':''}" onclick="setReportTab('vat')">${t('vatReport')}</button>
-      ${hasPlanFeature('income_statement')?`<button class="tab-btn ${reportTab==='income'?'active':''}" onclick="setReportTab('income')">${t('incomeStatement')}</button>`:''}
-      ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" onclick="setReportTab('aging')">⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
-      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='products'?'active':''}" onclick="setReportTab('products')">📦 ${lang==='ar'?'المنتجات':'Products'}</button>`:''}
-      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='suppliers'?'active':''}" onclick="setReportTab('suppliers')">🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>`:''}
-      ${(db.branches||[]).filter(b=>b.active!==false).length>1?`<button class="tab-btn ${reportTab==='branches'?'active':''}" onclick="setReportTab('branches')">🏬 ${lang==='ar'?'أداء الفروع':'Branch Performance'}</button>`:''}
-      ${hasPlanFeature('bank_recon')?`<button class="tab-btn ${reportTab==='bank'?'active':''}" onclick="setReportTab('bank')">🏦 ${lang==='ar'?'تسوية البنك':'Bank Recon'}</button>`:''}
-      ${hasPlanFeature('cashflow')?`<button class="tab-btn ${reportTab==='cashflow'?'active':''}" onclick="setReportTab('cashflow')">💧 ${lang==='ar'?'التدفق النقدي':'Cash Flow'}</button>`:''}
+      <button class="tab-btn ${reportTab==='vat'?'active':''}" data-action="setReportTab" data-args='["vat"]'>${t('vatReport')}</button>
+      ${hasPlanFeature('income_statement')?`<button class="tab-btn ${reportTab==='income'?'active':''}" data-action="setReportTab" data-args='["income"]'>${t('incomeStatement')}</button>`:''}
+      ${hasPlanFeature('aging_report')?`<button class="tab-btn ${reportTab==='aging'?'active':''}" data-action="setReportTab" data-args='["aging"]'>⏱️ ${lang==='ar'?'عمر الديون':'Aging'}</button>`:''}
+      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='products'?'active':''}" data-action="setReportTab" data-args='["products"]'>📦 ${lang==='ar'?'المنتجات':'Products'}</button>`:''}
+      ${hasPlanFeature('extra_reports')?`<button class="tab-btn ${reportTab==='suppliers'?'active':''}" data-action="setReportTab" data-args='["suppliers"]'>🏭 ${lang==='ar'?'الموردون':'Suppliers'}</button>`:''}
+      ${(db.branches||[]).filter(b=>b.active!==false).length>1?`<button class="tab-btn ${reportTab==='branches'?'active':''}" data-action="setReportTab" data-args='["branches"]'>🏬 ${lang==='ar'?'أداء الفروع':'Branch Performance'}</button>`:''}
+      ${hasPlanFeature('bank_recon')?`<button class="tab-btn ${reportTab==='bank'?'active':''}" data-action="setReportTab" data-args='["bank"]'>🏦 ${lang==='ar'?'تسوية البنك':'Bank Recon'}</button>`:''}
+      ${hasPlanFeature('cashflow')?`<button class="tab-btn ${reportTab==='cashflow'?'active':''}" data-action="setReportTab" data-args='["cashflow"]'>💧 ${lang==='ar'?'التدفق النقدي':'Cash Flow'}</button>`:''}
     </div>
 
     <div id="report-content">
@@ -7803,7 +7807,7 @@ function renderReportsInner(c) {
             <span style="font-weight:800;">${t('incomeStatement')}</span>
             <div style="display:flex;gap:8px;align-items:center;margin-inline-start:auto;flex-wrap:wrap;">
               ${dateRangeControlsHtml('exportIncomeStatementPDF')}
-              ${hasPlanFeature('ai_analyze')?`<button class="btn btn-sm" onclick="runAIAnalysis()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;gap:6px;display:inline-flex;align-items:center;">${icon('sparkles',14)} ${lang==='ar'?'تحليل ذكي':'AI Analysis'}</button>`:''}
+              ${hasPlanFeature('ai_analyze')?`<button class="btn btn-sm" data-action="runAIAnalysis" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;gap:6px;display:inline-flex;align-items:center;">${icon('sparkles',14)} ${lang==='ar'?'تحليل ذكي':'AI Analysis'}</button>`:''}
             </div>
           </div>
           <div class="card-pad">
@@ -7813,7 +7817,7 @@ function renderReportsInner(c) {
             {label:t('grossProfit'),v:grossProfit,bold:true,kind:'gross'},
             {label:t('expenses'),v:-expenses,color:'var(--danger)',kind:'expenses'},
             {label:t('netProfit'),v:netProfit,bold:true,big:true,kind:'net'}
-          ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};cursor:pointer;" onclick="drillIncome('${r.kind}')" title="${lang==='ar'?'اضغط لعرض التفاصيل':'Click for details'}">
+          ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};cursor:pointer;" data-action="drillIncome" data-args='["${r.kind}"]' title="${lang==='ar'?'اضغط لعرض التفاصيل':'Click for details'}">
             <span>${r.label} ${icon('search',11)}</span>
             <span>${fmtMoney(Math.abs(r.v))}</span>
           </div>`).join('')}
@@ -8243,7 +8247,7 @@ function renderBankRecon(db) {
         <div><label class="form-label">${lang==='ar'?'من تاريخ':'From'}</label><input class="input" type="date" id="br-from" value="${from}" /></div>
         <div><label class="form-label">${lang==='ar'?'إلى تاريخ':'To'}</label><input class="input" type="date" id="br-to" value="${to}" /></div>
       </div>
-      <button class="btn btn-primary" style="margin-top:10px;" onclick="setBankReconPeriod()">${lang==='ar'?'تطبيق الفترة':'Apply Period'}</button>
+      <button class="btn btn-primary" style="margin-top:10px;" data-action="setBankReconPeriod">${lang==='ar'?'تطبيق الفترة':'Apply Period'}</button>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">${lang==='ar'?'حدّد نفس الفترة الموجودة في كشف الحساب البنكي اللي جبته من البنك (مثلاً من 1 إلى 30 من الشهر).':'Match the exact period shown on your bank statement.'}</p>
     </div></div>`;
 
@@ -8270,8 +8274,8 @@ function renderBankRecon(db) {
       <div class="card" style="margin-bottom:16px;"><div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div style="font-weight:800;">📄 ${lang==='ar'?`تمت مطابقة ${matchedCount} من ${results.length} سطر تلقائيًا (فرق تاريخ حتى 3 أيام)`:`Auto-matched ${matchedCount} of ${results.length} lines (up to 3 days tolerance)`}</div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline btn-sm" onclick="showBankStatementImport()">${icon('upload',14)} ${lang==='ar'?'استيراد كشف جديد':'Import New Statement'}</button>
-          <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="clearBankImport()">${icon('trash-2',14)} ${lang==='ar'?'حذف الاستيراد':'Clear Import'}</button>
+          <button class="btn btn-outline btn-sm" data-action="showBankStatementImport">${icon('upload',14)} ${lang==='ar'?'استيراد كشف جديد':'Import New Statement'}</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-action="clearBankImport">${icon('trash-2',14)} ${lang==='ar'?'حذف الاستيراد':'Clear Import'}</button>
         </div>
       </div></div>
 
@@ -8320,7 +8324,7 @@ function renderBankRecon(db) {
         <div style="font-weight:800;margin-bottom:2px;">📥 ${lang==='ar'?'عندك كشف حساب من البنك؟':'Have a statement from the bank?'}</div>
         <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?'ارفعه وخلّ النظام يطابق كل سطر تلقائيًا بدل كتابة رقم إجمالي يدويًا.':'Upload it and let the system auto-match every line instead of typing one manual total.'}</div>
       </div>
-      <button class="btn btn-primary" onclick="showBankStatementImport()">${icon('upload',16)} ${lang==='ar'?'استيراد كشف حساب بنكي':'Import Bank Statement'}</button>
+      <button class="btn btn-primary" data-action="showBankStatementImport">${icon('upload',16)} ${lang==='ar'?'استيراد كشف حساب بنكي':'Import Bank Statement'}</button>
     </div></div>
 
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
@@ -8339,7 +8343,7 @@ function renderBankRecon(db) {
           <label class="form-label">🏦 ${lang==='ar'?'إجمالي حركات البنك حسب كشف الحساب لهذه الفترة (يدويًا):':'Total bank moves per statement for this period (manual):'}</label>
           <input class="input" type="number" id="bank-bal-input" value="${bankNetworkTotal}" />
         </div>
-        <button class="btn btn-primary" onclick="saveBankBalance()">${lang==='ar'?'تحديث':'Update'}</button>
+        <button class="btn btn-primary" data-action="saveBankBalance">${lang==='ar'?'تحديث':'Update'}</button>
       </div>
       <div style="margin-top:12px;background:${Math.abs(finalDiff)<0.01?'#dcfce7':'#fee2e2'};padding:12px;border-radius:10px;font-weight:700;">
         ${Math.abs(finalDiff)<0.01
@@ -8352,7 +8356,7 @@ function renderBankRecon(db) {
     <div class="card">
       <div class="card-head">
         <h3>📋 ${lang==='ar'?'بنود تسوية إضافية':'Additional Reconciliation Items'}</h3>
-        <button class="btn btn-sm btn-primary" onclick="addBankAdjustment()">${icon('plus',14)} ${lang==='ar'?'إضافة بند':'Add'}</button>
+        <button class="btn btn-sm btn-primary" data-action="addBankAdjustment">${icon('plus',14)} ${lang==='ar'?'إضافة بند':'Add'}</button>
       </div>
       ${adjs.length===0?`<div class="empty"><div class="empty-icon">📋</div>${lang==='ar'?'لا توجد بنود':'No items'}</div>`:
       `<div class="tbl-wrap"><table class="tbl">
@@ -8362,7 +8366,7 @@ function renderBankRecon(db) {
           <td><span class="badge ${a.type==='add'?'badge-green':'badge-red'}">${a.type==='add'?(lang==='ar'?'إضافة':'Add'):(lang==='ar'?'خصم':'Deduct')}</span></td>
           <td style="font-weight:700;color:${a.type==='add'?'var(--success)':'var(--danger)'};">${a.type==='add'?'+':'-'}${fmtMoney(a.amount)}</td>
           <td style="font-size:12px;">${fmtDate(a.date)}</td>
-          <td><button class="icon-btn" style="width:26px;height:26px;" onclick="removeBankAdj(${i})">${icon('x',12)}</button></td>
+          <td><button class="icon-btn" style="width:26px;height:26px;" data-action="removeBankAdj" data-args="[${i}]">${icon('x',12)}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`}
     </div>
@@ -12766,7 +12770,7 @@ function renderLoyalty(c) {
             <input class="input" type="number" id="ly-spp" value="${ls.sar_per_point}" min="0.01" step="0.01" />
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="saveLoyaltySettings()">${lang==='ar'?'حفظ الإعدادات':'Save Settings'}</button>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px;" data-action="saveLoyaltySettings">${lang==='ar'?'حفظ الإعدادات':'Save Settings'}</button>
       </div>
     </div>
 
@@ -12781,7 +12785,7 @@ function renderLoyalty(c) {
     <div class="card">
       <div class="card-head">
         <h3>🏆 ${lang==='ar'?'ترتيب العملاء بالنقاط':'Customer Points Leaderboard'}</h3>
-        <button class="btn btn-sm btn-outline" onclick="showAddPointsModal()">${icon('plus',14)} ${lang==='ar'?'إضافة نقاط يدوي':'Add Points Manually'}</button>
+        <button class="btn btn-sm btn-outline" data-action="showAddPointsModal">${icon('plus',14)} ${lang==='ar'?'إضافة نقاط يدوي':'Add Points Manually'}</button>
       </div>
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
@@ -12798,7 +12802,7 @@ function renderLoyalty(c) {
             <td><b>${sanitize(cu.name)}</b></td>
             <td><span style="font-weight:900;font-size:15px;color:var(--primary);">${(cu.points||0).toLocaleString()}</span> ${lang==='ar'?'نقطة':'pts'}</td>
             <td style="color:var(--success);font-weight:700;">${fmtMoney(cu.value)}</td>
-            <td><button class="btn btn-sm btn-outline" onclick="redeemPoints('${escJsAttr(cu.name)}',${cu.id})" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
+            <td><button class="btn btn-sm btn-outline" data-action="redeemPoints" data-args="${JSON.stringify([cu.name, cu.id]).replace(/"/g,'&quot;')}" ${!cu.points?'disabled':''}>${icon('gift',13)} ${lang==='ar'?'استرداد':'Redeem'}</button></td>
           </tr>`).join('')}
         </tbody>
       </table></div>
@@ -13415,12 +13419,14 @@ function showImportPreview(data, type, format) {
   }
   html += `</div>
   <div style="display:flex;gap:8px;">
-    <button class="btn btn-primary btn-full" onclick="if(window._importPending){confirmImport(window._importPending.data,window._importPending.type,window._importPending.format)}">${icon('check',16)} ${lang==='ar'?'تأكيد الاستيراد':'Confirm Import'}</button>
-    <button class="btn btn-outline" onclick="el('import-preview').style.display='none';window._importPending=null;">${lang==='ar'?'إلغاء':'Cancel'}</button>
+    <button class="btn btn-primary btn-full" data-action="confirmPendingImport">${icon('check',16)} ${lang==='ar'?'تأكيد الاستيراد':'Confirm Import'}</button>
+    <button class="btn btn-outline" data-action="cancelPendingImport">${lang==='ar'?'إلغاء':'Cancel'}</button>
   </div>`;
 
   preview.innerHTML = html;
 }
+function confirmPendingImport() { if (window._importPending) confirmImport(window._importPending.data, window._importPending.type, window._importPending.format); }
+function cancelPendingImport() { const el_ = el('import-preview'); if (el_) el_.style.display='none'; window._importPending=null; }
 
 function confirmImport(data, type, format) {
   const db = getDB();
@@ -13876,7 +13882,7 @@ async function renderAdminSessionsTab(mc) {
           <h3 style="font-weight:900;font-size:15px;">🔐 جلسات الدخول الإداري</h3>
           <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">كل مرة يدخل فيها الأدمن على حسابك</div>
         </div>
-        <button onclick="revokeAdminSessions()" style="padding:9px 18px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
+        <button data-action="revokeAdminSessions" style="padding:9px 18px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
           🚫 إلغاء جميع الجلسات
         </button>
       </div>
@@ -13943,7 +13949,7 @@ async function loadMyDeviceSessions(){
           <div style="font-size:13px;font-weight:700;">${parseUADevice(s.user_agent)} ${s.id===res.current_session_id?'<span style="font-size:10px;padding:2px 8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:999px;margin-right:6px;">هذا الجهاز</span>':''}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sanitize(s.ip_address||'')} · ${fmtDate(s.created_at)}</div>
         </div>
-        ${s.id!==res.current_session_id?`<button onclick="revokeMyDeviceSession(${s.id})" style="padding:6px 14px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">إنهاء</button>`:''}
+        ${s.id!==res.current_session_id?`<button data-action="revokeMyDeviceSession" data-args="[${s.id}]" style="padding:6px 14px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">إنهاء</button>`:''}
       </div>`).join('');
   } catch { box.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:10px;">خطأ في التحميل</div>`; }
 }
@@ -13967,7 +13973,7 @@ function renderPricingPolicies(c) {
     const diff  = computed !== null ? Math.round((computed - sell)*100)/100 : null;
     const badge = diff === null ? '' : Math.abs(diff) < 0.01
       ? `<span style="font-size:10px;padding:2px 7px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:5px;">✓ متزامن</span>`
-      : `<span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.15);color:#fbbf24;border-radius:5px;cursor:pointer;" onclick="showProductModal(${p.id})">تحديث سعر البيع → ${computed} ر.س</span>`;
+      : `<span style="font-size:10px;padding:2px 7px;background:rgba(251,191,36,.15);color:#fbbf24;border-radius:5px;cursor:pointer;" data-action="showProductModal" data-args="[${p.id}]">تحديث سعر البيع → ${computed} ر.س</span>`;
     return `<div style="display:grid;grid-template-columns:1fr 90px 90px 90px auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div>
         <div style="font-size:13px;font-weight:700;">${sanitize(p.name)}</div>
@@ -14007,7 +14013,7 @@ function renderPricingPolicies(c) {
     <div class="card" style="margin-top:12px;"><div class="card-pad">
       <div style="font-size:13px;font-weight:800;margin-bottom:12px;color:var(--text-muted);">🔴 منتجات بدون سياسة تسعير (${noPolicy.length})</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${noPolicy.map(p=>`<span onclick="showProductModal(${p.id})" style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;">${sanitize(p.name)}</span>`).join('')}
+        ${noPolicy.map(p=>`<span data-action="showProductModal" data-args="[${p.id}]" style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;">${sanitize(p.name)}</span>`).join('')}
       </div>
     </div></div>` : ''}
   </div>`;
@@ -14067,11 +14073,11 @@ function renderZatcaOnboardingBody(status) {
     </div>
 
     <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-      <button class="btn btn-primary" ${status==='production_issued'?'disabled style="opacity:.5;cursor:not-allowed;"':''} onclick="submitZatcaCompliance()">
+      <button class="btn btn-primary" ${status==='production_issued'?'disabled style="opacity:.5;cursor:not-allowed;"':''} data-action="submitZatcaCompliance">
         🔑 ${lang==='ar'?'طلب شهادة الاختبار (Compliance)':'Request Compliance CSID'}
       </button>
       <button class="btn" style="background:${canRequestProduction?'var(--accent)':'var(--bg)'};color:${canRequestProduction?'#fff':'var(--text-muted)'};${canRequestProduction?'':'cursor:not-allowed;'}"
-        ${canRequestProduction?'':'disabled'} onclick="submitZatcaProduction()">
+        ${canRequestProduction?'':'disabled'} data-action="submitZatcaProduction">
         🏆 ${lang==='ar'?'طلب شهادة الإنتاج (Production)':'Request Production CSID'}
       </button>
     </div>
@@ -14104,7 +14110,7 @@ async function loadZatcaPendingDocuments() {
             <span style="font-weight:800;font-size:13px;">${d.doc_type==='credit_note'?'📄 '+(lang==='ar'?'إشعار دائن':'Credit note'):'🧾 '+(lang==='ar'?'فاتورة':'Invoice')} ${sanitize(d.doc_no)}</span>
             <div style="font-size:11px;color:var(--text-muted);">${fmtDate(d.date)} — ${fmtMoney(d.grand_total)}</div>
           </div>
-          <button class="btn btn-sm btn-primary" onclick="submitZatcaDocument('${d.doc_type}', ${d.id})">📤 ${lang==='ar'?'إرسال الآن':'Submit now'}</button>
+          <button class="btn btn-sm btn-primary" data-action="submitZatcaDocument" data-args="${JSON.stringify([d.doc_type, d.id]).replace(/"/g,'&quot;')}">📤 ${lang==='ar'?'إرسال الآن':'Submit now'}</button>
         </div>`).join('')}
     </div>`;
   } catch (e) {
@@ -14192,7 +14198,7 @@ function renderSettingsGeneral(c) {
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p.desc}${expStr}</div>
             ${isExpired?`<div style="color:#dc2626;font-size:13px;font-weight:800;margin-top:6px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">⚠️ ${lang==='ar'?'انتهت فترتك المجانية — يجب الاشتراك الآن لمتابعة استخدام النظام. جميع الصفحات الأخرى مقفلة حتى الاشتراك.':'Your free period has ended — you must subscribe now to keep using the system. All other pages are locked until you subscribe.'}</div>`:''}
             ${isTrial&&daysLeft<=7?`<div style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;">⏳ ${lang==='ar'?`تجربتك تنتهي خلال ${daysLeft} أيام!`:`Trial ends in ${daysLeft} days!`}</div>`:''}
-            <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="showSubscriptionModal()">🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</button>
+            <button class="btn btn-primary btn-sm" style="margin-top:10px;" data-action="showSubscriptionModal">🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</button>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${Object.entries(planMeta).map(([k,v])=>`
@@ -14235,7 +14241,7 @@ function renderSettingsGeneral(c) {
         <div></div>
       </div>
     </div></div>
-    ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" onclick="saveSettings()">${t('save')}</button>`:''}
+    ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" data-action="saveSettings">${t('save')}</button>`:''}
 
     ${currentUser?.role==='owner' ? renderZatcaOnboardingCard() : ''}
 
@@ -14247,7 +14253,7 @@ function renderSettingsGeneral(c) {
           <div style="font-weight:800;font-size:14px;">${lang==='ar'?'تطبيق ضريبة القيمة المضافة 15%':'Apply 15% VAT on invoices'}</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${lang==='ar'?'عند التفعيل تُضاف ضريبة 15% تلقائياً على كل فاتورة مبيعات':'When enabled, 15% VAT is added automatically to all sales invoices'}</div>
         </div>
-        <button type="button" onclick="toggleVAT(getDB().settings?.vat_enabled===false)" style="position:relative;display:inline-block;width:50px;height:26px;flex-shrink:0;border:none;padding:0;background:transparent;cursor:pointer;border-radius:999px;">
+        <button type="button" data-action="toggleVAT" data-args='[${db.settings?.vat_enabled===false}]' style="position:relative;display:inline-block;width:50px;height:26px;flex-shrink:0;border:none;padding:0;background:transparent;cursor:pointer;border-radius:999px;">
           <span style="position:absolute;inset:0;background:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'var(--primary)':'#cbd5e1'};border-radius:999px;transition:.3s;display:block;">
             <span style="position:absolute;height:20px;width:20px;right:${(db.settings?.vat_enabled!==false&&db.settings?.vat_enabled!==0)?'3px':'27px'};bottom:3px;background:white;border-radius:50%;transition:.3s;display:block;"></span>
           </span>
@@ -14272,7 +14278,7 @@ function renderSettingsGeneral(c) {
             <div style="font-weight:700;">${sanitize(u.full_name||u.username)} <span style="font-size:11px;color:var(--text-muted);">@${u.username} · ${u.role}</span></div>
             <div style="display:flex;align-items:center;gap:8px;">
               <input class="input" type="number" min="0" style="width:130px;" value="${target||''}" id="tgt-${sanitize(u.username)}" placeholder="${lang==='ar'?'الهدف اليومي ر.س':'Daily target SAR'}" />
-              <button class="btn btn-sm btn-primary" onclick="saveTarget('${escJsAttr(u.username)}')">${lang==='ar'?'حفظ':'Save'}</button>
+              <button class="btn btn-sm btn-primary" data-action="saveTarget" data-args="${JSON.stringify([u.username]).replace(/"/g,'&quot;')}">${lang==='ar'?'حفظ':'Save'}</button>
             </div>
           </div>
           ${target>0?`<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden;">
@@ -14290,14 +14296,14 @@ function renderSettingsGeneral(c) {
         <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px dashed var(--border);">
           <div style="font-weight:800;margin-bottom:6px;">📥 ${lang==='ar'?'استيراد منتجات من Excel':'Import Products from Excel'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${lang==='ar'?'الأعمدة: الكود، الاسم، التصنيف، سعر الشراء، سعر البيع، الكمية':'Columns: Code, Name, Category, BuyPrice, SellPrice, Qty'}</div>
-          <input type="file" id="import-file" accept=".csv" style="display:none;" onchange="importProductsCSV(this)" />
-          <button class="btn btn-outline btn-sm" onclick="el('import-file').click()">${icon('upload',14)} ${lang==='ar'?'استيراد CSV':'Import CSV'}</button>
-          <button class="btn btn-outline btn-sm" style="margin-${lang==='ar'?'right':'left'}:8px;" onclick="downloadImportTemplate()">${icon('download',14)} ${lang==='ar'?'نموذج':'Template'}</button>
+          <input type="file" id="import-file" accept=".csv" style="display:none;" data-onchange-el="importProductsCSV" />
+          <button class="btn btn-outline btn-sm" data-action="clickImportFileInput">${icon('upload',14)} ${lang==='ar'?'استيراد CSV':'Import CSV'}</button>
+          <button class="btn btn-outline btn-sm" style="margin-${lang==='ar'?'right':'left'}:8px;" data-action="downloadImportTemplate">${icon('download',14)} ${lang==='ar'?'نموذج':'Template'}</button>
         </div>
         <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px dashed var(--border);">
           <div style="font-weight:800;margin-bottom:6px;">🔲 ${lang==='ar'?'توليد باركود للمنتجات':'Generate Product Barcodes'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${lang==='ar'?'اطبع بطاقات الباركود لمنتجاتك':'Print barcode labels for your products'}</div>
-          <button class="btn btn-outline btn-sm" onclick="showBarcodeGenerator()">${icon('scan-barcode',14)} ${lang==='ar'?'فتح مولد الباركود':'Open Generator'}</button>
+          <button class="btn btn-outline btn-sm" data-action="showBarcodeGenerator">${icon('scan-barcode',14)} ${lang==='ar'?'فتح مولد الباركود':'Open Generator'}</button>
         </div>
       </div>
     </div></div>
@@ -14306,12 +14312,12 @@ function renderSettingsGeneral(c) {
     <div class="card"><div class="card-pad">
       <h3 style="margin-bottom:12px;font-weight:800;">💾 ${lang==='ar'?'النسخ الاحتياطي':'Backup'}</h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="exportData('json')">${icon('download',16)} ${lang==='ar'?'نسخة احتياطية الآن':'Backup Now'}</button>
-        <button class="btn btn-outline" onclick="exportData('invoices-csv')">${icon('file-spreadsheet',16)} ${lang==='ar'?'تصدير الفواتير':'Export Invoices'}</button>
-        <button class="btn btn-outline" onclick="exportData('purchases-csv')">${icon('file-spreadsheet',16)} ${lang==='ar'?'تصدير المشتريات':'Export Purchases'}</button>
-        <button class="btn btn-outline" onclick="importBackup()">${icon('upload',16)} ${lang==='ar'?'استعادة نسخة احتياطية':'Restore Backup'}</button>
+        <button class="btn btn-primary" data-action="exportData" data-args='["json"]'>${icon('download',16)} ${lang==='ar'?'نسخة احتياطية الآن':'Backup Now'}</button>
+        <button class="btn btn-outline" data-action="exportData" data-args='["invoices-csv"]'>${icon('file-spreadsheet',16)} ${lang==='ar'?'تصدير الفواتير':'Export Invoices'}</button>
+        <button class="btn btn-outline" data-action="exportData" data-args='["purchases-csv"]'>${icon('file-spreadsheet',16)} ${lang==='ar'?'تصدير المشتريات':'Export Purchases'}</button>
+        <button class="btn btn-outline" data-action="importBackup">${icon('upload',16)} ${lang==='ar'?'استعادة نسخة احتياطية':'Restore Backup'}</button>
       </div>
-      <input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreBackup(this)" />
+      <input type="file" id="restore-file" accept=".json" style="display:none;" data-onchange-el="restoreBackup" />
       <div style="margin-top:10px;font-size:11px;color:var(--text-muted);">${lang==='ar'?'آخر حفظ:':'Last saved:'} ${new Date().toLocaleString('en-US')}</div>
     </div></div>
   </div>`;
@@ -14471,6 +14477,9 @@ function closeModal() { const mc=el('modal-container'); if(mc) mc.innerHTML=''; 
 
 // ============ GLOBAL SEARCH ============
 
+function closeSearchAndGoTo(page) { closeSearch(); goTo(page); }
+function runAISearchQueryFromLast() { runAISearchQuery(window._lastAIQuery); }
+
 function doGlobalSearch(q) {
   const dd = el('search-dropdown');
   if (!dd) return;
@@ -14484,7 +14493,7 @@ function doGlobalSearch(q) {
   if (invs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'الفواتير':'Invoices'}</div>`;
     html += invs.slice(0,4).map(i => `
-      <div class="search-item" onclick="closeSearch();goTo('sales')">
+      <div class="search-item" data-action="closeSearchAndGoTo" data-args='["sales"]'>
         <div class="search-item-icon">${icon('file-text',16)}</div>
         <div><div class="search-item-name">${i.invoice_no}</div><div class="search-item-sub">${sanitize(i.customer_name)} • ${fmtMoney(i.grand_total)}</div></div>
       </div>`).join('');
@@ -14493,7 +14502,7 @@ function doGlobalSearch(q) {
   if (custs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'العملاء':'Customers'}</div>`;
     html += custs.slice(0,3).map(c => `
-      <div class="search-item" onclick="closeSearch();goTo('customers')">
+      <div class="search-item" data-action="closeSearchAndGoTo" data-args='["customers"]'>
         <div class="search-item-icon">${icon('user',16)}</div>
         <div><div class="search-item-name">${sanitize(c.name)}</div><div class="search-item-sub">${sanitize(c.phone)}</div></div>
       </div>`).join('');
@@ -14502,7 +14511,7 @@ function doGlobalSearch(q) {
   if (sups.length) {
     html += `<div class="search-section-title">${lang==='ar'?'الموردون':'Suppliers'}</div>`;
     html += sups.slice(0,3).map(s => `
-      <div class="search-item" onclick="closeSearch();goTo('customers')">
+      <div class="search-item" data-action="closeSearchAndGoTo" data-args='["customers"]'>
         <div class="search-item-icon">${icon('truck',16)}</div>
         <div><div class="search-item-name">${sanitize(s.name)}</div><div class="search-item-sub">${sanitize(s.phone)}</div></div>
       </div>`).join('');
@@ -14511,7 +14520,7 @@ function doGlobalSearch(q) {
   if (prods.length) {
     html += `<div class="search-section-title">${lang==='ar'?'المنتجات':'Products'}</div>`;
     html += prods.slice(0,4).map(p => `
-      <div class="search-item" onclick="closeSearch();goTo('inventory')">
+      <div class="search-item" data-action="closeSearchAndGoTo" data-args='["inventory"]'>
         <div class="search-item-icon">${icon('box',16)}</div>
         <div><div class="search-item-name">${sanitize(p.name)}</div><div class="search-item-sub">${sanitize(p.code)} • ${fmtMoney(p.sell_price)} • ${lang==='ar'?'مخزون:':'Stock:'} ${activeBranchStockQty(db,p)}</div></div>
       </div>`).join('');
@@ -14520,7 +14529,7 @@ function doGlobalSearch(q) {
   if (purs.length) {
     html += `<div class="search-section-title">${lang==='ar'?'المشتريات':'Purchases'}</div>`;
     html += purs.slice(0,3).map(p => `
-      <div class="search-item" onclick="closeSearch();goTo('purchases')">
+      <div class="search-item" data-action="closeSearchAndGoTo" data-args='["purchases"]'>
         <div class="search-item-icon">${icon('package',16)}</div>
         <div><div class="search-item-name">${sanitize(p.vendor)}</div><div class="search-item-sub">${sanitize(p.description)} • ${fmtMoney(p.total)}</div></div>
       </div>`).join('');
@@ -14533,7 +14542,7 @@ function doGlobalSearch(q) {
     window._lastAIQuery = q;
     html += `
     <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
-      <div class="search-item" onclick="runAISearchQuery(window._lastAIQuery)" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-radius:8px;">
+      <div class="search-item" data-action="runAISearchQueryFromLast" style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);border-radius:8px;">
         <div class="search-item-icon" style="color:#6366f1;">✨</div>
         <div>
           <div class="search-item-name" style="color:#4f46e5;">${lang==='ar'?'اسأل يقظ الذكي:':'Ask Yaqiz AI:'} "${q}"</div>
@@ -14892,6 +14901,7 @@ function generateBarcodePrint() {
 
 // ============ RESTORE BACKUP ============
 function importBackup() { el('restore-file')?.click(); }
+function clickImportFileInput() { el('import-file')?.click(); }
 function restoreBackup(input) {
   const file=input.files[0]; if(!file)return;
   if(!confirm(lang==='ar'?'سيتم استبدال كل البيانات الحالية. تأكيد؟':'This will replace all current data. Confirm?'))return;
@@ -15203,7 +15213,9 @@ function exportPayrollPDF() {
 // ============ الكشوفات (Statements) ============
 let stmtMainTab = 'customers'; // customers | suppliers | bank
 let stmtSelectedParty = null;
+function setStmtSelectedParty(id) { stmtSelectedParty = id; renderStmtContent(); }
 let stmtBankFrom = null;
+function applyStmtBankDates() { stmtBankFrom = el('stmt-bank-from').value; stmtBankTo = el('stmt-bank-to').value; renderStmtContent(); }
 let stmtBankTo = null;
 
 // يبني كشف حساب طرف (عميل أو مورد) — يشمل الرصيد الافتتاحي والمرتجعات، والرصيد يُحسب من نفس الحركات المعروضة
@@ -15321,9 +15333,9 @@ function renderStatements(c) {
   if (stmtMainTab==='customers' && !hasPlanPage('customers')) stmtMainTab = 'suppliers';
   c.innerHTML = `<div>
     <div class="tabs" style="margin-bottom:14px;">
-      ${hasPlanPage('customers')?`<button class="tab-btn ${stmtMainTab==='customers'?'active':''}" onclick="setStmtMainTab('customers')">👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>`:''}
-      <button class="tab-btn ${stmtMainTab==='suppliers'?'active':''}" onclick="setStmtMainTab('suppliers')">🏭 ${lang==='ar'?'كشوفات الموردين':'Supplier Statements'}</button>
-      ${hasPlanFeature('bank_statement')?`<button class="tab-btn ${stmtMainTab==='bank'?'active':''}" onclick="setStmtMainTab('bank')">🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>`:''}
+      ${hasPlanPage('customers')?`<button class="tab-btn ${stmtMainTab==='customers'?'active':''}" data-action="setStmtMainTab" data-args='["customers"]'>👥 ${lang==='ar'?'كشوفات العملاء':'Customer Statements'}</button>`:''}
+      <button class="tab-btn ${stmtMainTab==='suppliers'?'active':''}" data-action="setStmtMainTab" data-args='["suppliers"]'>🏭 ${lang==='ar'?'كشوفات الموردين':'Supplier Statements'}</button>
+      ${hasPlanFeature('bank_statement')?`<button class="tab-btn ${stmtMainTab==='bank'?'active':''}" data-action="setStmtMainTab" data-args='["bank"]'>🏦 ${lang==='ar'?'الكشف البنكي':'Bank Statement'}</button>`:''}
     </div>
     <div id="stmt-content"></div>
   </div>`;
@@ -15353,7 +15365,7 @@ function renderPartyStatementList(c, kind) {
         <td style="font-weight:700;">${sanitize(p.name)}</td>
         <td>${sanitize(p.phone)||'-'}</td>
         <td style="font-weight:700;color:${(p.balance||0)>0?'var(--danger)':'var(--success)'};">${fmtMoney(p.balance||0)}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="stmtSelectedParty=${p.id};renderStmtContent()">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
+        <td><button class="btn btn-sm btn-outline" data-action="setStmtSelectedParty" data-args="[${p.id}]">${lang==='ar'?'فتح الكشف':'Open Statement'}</button></td>
       </tr>`).join('')}
     </tbody>
   </table></div></div>`;
@@ -15371,11 +15383,11 @@ function renderPartyStatementDetail(c, partyId, kind) {
     : (lang==='ar'?'الرصيد المستحق (عليكم)':'You owe');
 
   c.innerHTML = `<div>
-    <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" onclick="stmtSelectedParty=null;renderStmtContent()">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
+    <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" data-action="setStmtSelectedParty" data-args="[null]">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
     <div class="card" style="margin-bottom:14px;"><div class="card-pad">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
         <div><div style="font-size:12px;color:var(--text-muted);">${label}</div><div style="font-size:20px;font-weight:900;">${sanitize(party.name)}</div></div>
-        <button class="btn btn-outline btn-sm" onclick="${isCust?'exportCustomerStatementPDF':'exportSupplierStatementPDF'}(${party.id})">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
+        <button class="btn btn-outline btn-sm" data-action="${isCust?'exportCustomerStatementPDF':'exportSupplierStatementPDF'}" data-args="[${party.id}]">🖨️ ${lang==='ar'?'طباعة':'Print'}</button>
       </div>
       <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
         <div class="stat-card"><div class="stat-label">${lang==='ar'?'عدد الفواتير':'Invoice Count'}</div><div class="stat-value">${st.txCount}</div></div>
@@ -15413,7 +15425,7 @@ function renderBankStatementView(c) {
         <div><label class="form-label">${lang==='ar'?'من تاريخ':'From'}</label><input class="input" type="date" id="stmt-bank-from" value="${from}" /></div>
         <div><label class="form-label">${lang==='ar'?'إلى تاريخ':'To'}</label><input class="input" type="date" id="stmt-bank-to" value="${to}" /></div>
       </div>
-      <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="stmtBankFrom=el('stmt-bank-from').value;stmtBankTo=el('stmt-bank-to').value;renderStmtContent()">${lang==='ar'?'تطبيق':'Apply'}</button>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px;" data-action="applyStmtBankDates">${lang==='ar'?'تطبيق':'Apply'}</button>
     </div></div>
 
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px;">
@@ -15622,8 +15634,8 @@ function _renderTourStep() {
       +   '<div style="font-size:14px;font-weight:900;color:#0f172a;margin-bottom:6px;">'+step.title+'</div>'
       +   '<div style="font-size:12.5px;color:#475569;line-height:1.7;margin-bottom:14px;">'+step.text+'</div>'
       +   '<div style="display:flex;justify-content:space-between;align-items:center;">'
-      +     '<button onclick="tourSkip()" style="background:none;border:none;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">تخطّي</button>'
-      +     '<button onclick="tourNext()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">'+((_activeTour.idx+1>=total)?'إنهاء':'التالي →')+'</button>'
+      +     '<button data-action="tourSkip" style="background:none;border:none;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">تخطّي</button>'
+      +     '<button data-action="tourNext" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">'+((_activeTour.idx+1>=total)?'إنهاء':'التالي →')+'</button>'
       +   '</div>'
       + '</div>';
     document.body.appendChild(box);
@@ -15802,9 +15814,9 @@ function showOBGuidePanel() {
   const g = OB_GUIDE[key] || {};
   const panelHtml = document.createElement('div');
   panelHtml.id = 'ob-guide-panel';
-  panelHtml.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:10001;" onclick="closeOBGuidePanel()"></div>'
+  panelHtml.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:10001;" data-action="closeOBGuidePanel"></div>'
     + '<div style="position:fixed;top:0;bottom:0;left:0;width:min(380px,92vw);background:var(--card);z-index:10002;box-shadow:8px 0 32px rgba(0,0,0,0.25);overflow-y:auto;padding:24px 22px;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;">📖 من دليل الأرصدة الافتتاحية</div><button class="icon-btn" onclick="closeOBGuidePanel()">'+icon('x',18)+'</button></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;">📖 من دليل الأرصدة الافتتاحية</div><button class="icon-btn" data-action="closeOBGuidePanel">'+icon('x',18)+'</button></div>'
     + '<div style="font-size:17px;font-weight:900;margin-bottom:14px;">'+(stepTitles[key]||'')+'</div>'
     + '<div style="font-size:13.5px;line-height:1.9;color:var(--text-main);margin-bottom:14px;">'+(g.def||'')+'</div>'
     + (g.example ? '<div style="background:#eff6ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;">💡 '+g.example+'</div>' : '')
@@ -15946,8 +15958,8 @@ function renderOBChatPanelHtml() {
     <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;">
       <input id="ob-chat-inp" class="input" placeholder="${lang==='ar'?'اكتب سؤالك هنا...':'Type your question...'}"
         style="flex:1;padding:8px 12px;font-size:13px;border-radius:10px;"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();obChatSend();}" />
-      <button onclick="obChatSend()" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:18px;flex-shrink:0;">↑</button>
+        data-enter-action="obChatSend" />
+      <button data-action="obChatSend" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:18px;flex-shrink:0;">↑</button>
     </div>
   </div>`;
 }
@@ -16145,6 +16157,7 @@ function obImportStagingEdit(i, field, value) {
   if (!_obImportStaging[i]) return;
   _obImportStaging[i][field] = (field==='name') ? value : (Number(value)||0);
 }
+function obImportStagingEditField(value, i, field) { obImportStagingEdit(i, field, value); }
 function obImportRemoveStagingRow(i) {
   _obImportStaging.splice(i,1);
   el('ob-step-content').innerHTML = renderOBStepContent(); refreshIcons();
@@ -16252,7 +16265,7 @@ function renderOBWizard() {
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
     +'<div><div style="font-size:12px;opacity:0.75;margin-bottom:4px;letter-spacing:.5px;">إعداد المنشأة — أرصدة البداية</div>'
     +'<div style="font-size:20px;font-weight:900;">'+stepTitles[curKey]+'</div></div>'
-    +(OB_GUIDE[curKey]?'<button onclick="showOBGuidePanel()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:10px;padding:7px 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">📖 الدليل</button>':'')
+    +(OB_GUIDE[curKey]?'<button data-action="showOBGuidePanel" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:10px;padding:7px 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">📖 الدليل</button>':'')
     +'</div>'
     +'<div style="margin-top:14px;">'
     +'<div style="display:flex;gap:4px;margin-bottom:6px;">'
@@ -16262,8 +16275,8 @@ function renderOBWizard() {
     +'</div></div>'
     +'<div id="ob-step-content" style="padding:24px 28px;min-height:280px;">'+renderOBStepContent()+'</div>'
     +'<div style="padding:14px 28px 22px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);">'
-    +'<div>'+(_obStep>1?'<button class="btn btn-outline" onclick="obPrevStep()">← السابق</button>':'<button class="btn btn-outline" style="color:var(--text-muted);" onclick="obSkipWizard()">تخطّ الآن</button>')+'</div>'
-    +'<div style="display:flex;gap:8px;">'+(_obStep<stepCount?'<button class="btn btn-outline" onclick="obSkipStep()">تخطّ</button><button class="btn btn-primary" onclick="obNextStep()">التالي →</button>':'<button class="btn btn-primary" style="padding:10px 32px;font-size:14px;" onclick="obSaveAll()">✓ حفظ والبدء الآن</button>')+'</div>'
+    +'<div>'+(_obStep>1?'<button class="btn btn-outline" data-action="obPrevStep">← السابق</button>':'<button class="btn btn-outline" style="color:var(--text-muted);" data-action="obSkipWizard">تخطّ الآن</button>')+'</div>'
+    +'<div style="display:flex;gap:8px;">'+(_obStep<stepCount?'<button class="btn btn-outline" data-action="obSkipStep">تخطّ</button><button class="btn btn-primary" data-action="obNextStep">التالي →</button>':'<button class="btn btn-primary" style="padding:10px 32px;font-size:14px;" data-action="obSaveAll">✓ حفظ والبدء الآن</button>')+'</div>'
     +'</div></div>'
     +renderOBChatPanelHtml()
     +'</div>';
@@ -16298,14 +16311,14 @@ function obStep1() {
 
 function obStep2() {
   const total = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
-  const rows  = _obData.products.map((p,i)=>'<tr><td><b>'+p.name+'</b></td><td>'+p.qty+'</td><td>'+fmtMoney(p.buy_price)+'</td><td>'+fmtMoney(p.sell_price)+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(p.qty*p.buy_price)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveProduct('+i+')">✕</button></td></tr>').join('');
+  const rows  = _obData.products.map((p,i)=>'<tr><td><b>'+p.name+'</b></td><td>'+p.qty+'</td><td>'+fmtMoney(p.buy_price)+'</td><td>'+fmtMoney(p.sell_price)+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(p.qty*p.buy_price)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveProduct" data-args="['+i+']">✕</button></td></tr>').join('');
   const stagingRows = _obImportStaging.map((it,i)=>
     '<tr>'
-    +'<td><input class="input" style="font-size:12px;padding:4px 6px;" value="'+sanitize(it.name)+'" onchange="obImportStagingEdit('+i+',\'name\',this.value)" /></td>'
-    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:70px;" value="'+it.qty+'" onchange="obImportStagingEdit('+i+',\'qty\',this.value)" /></td>'
-    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.buy_price+'" onchange="obImportStagingEdit('+i+',\'buy_price\',this.value)" /></td>'
-    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.sell_price+'" onchange="obImportStagingEdit('+i+',\'sell_price\',this.value)" /></td>'
-    +'<td><button class="icon-btn" style="width:26px;height:26px;" onclick="obImportRemoveStagingRow('+i+')">✕</button></td>'
+    +'<td><input class="input" style="font-size:12px;padding:4px 6px;" value="'+sanitize(it.name)+'" data-onchange="obImportStagingEditField" data-onchange-args="['+i+',&quot;name&quot;]" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:70px;" value="'+it.qty+'" data-onchange="obImportStagingEditField" data-onchange-args="['+i+',&quot;qty&quot;]" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.buy_price+'" data-onchange="obImportStagingEditField" data-onchange-args="['+i+',&quot;buy_price&quot;]" /></td>'
+    +'<td><input class="input" type="number" style="font-size:12px;padding:4px 6px;width:80px;" value="'+it.sell_price+'" data-onchange="obImportStagingEditField" data-onchange-args="['+i+',&quot;sell_price&quot;]" /></td>'
+    +'<td><button class="icon-btn" style="width:26px;height:26px;" data-action="obImportRemoveStagingRow" data-args="['+i+']">✕</button></td>'
     +'</tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أضف كل صنف في مخزونك الحالي مع كميته وأسعاره.</p>'
@@ -16314,25 +16327,25 @@ function obStep2() {
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;">'+(lang==='ar'?'أو استورد دفعة كاملة بدلاً من الإدخال يدويًا:':'Or import a whole batch instead of entering manually:')+'</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
-    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">📊 '+(lang==='ar'?'استيراد من Excel':'Import from Excel')+'<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="obImportExcelChange(this)" /></label>'
-    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">🤖 '+(lang==='ar'?'تفريغ بالذكاء الاصطناعي (PDF/صورة)':'AI extract (PDF/image)')+'<input type="file" accept=".pdf,image/*" style="display:none;" onchange="obImportAIChange(this)" /></label>'
+    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">📊 '+(lang==='ar'?'استيراد من Excel':'Import from Excel')+'<input type="file" accept=".xlsx,.xls" style="display:none;" data-onchange-el="obImportExcelChange" /></label>'
+    +'<label class="btn btn-outline" style="cursor:pointer;font-size:12px;">🤖 '+(lang==='ar'?'تفريغ بالذكاء الاصطناعي (PDF/صورة)':'AI extract (PDF/image)')+'<input type="file" accept=".pdf,image/*" style="display:none;" data-onchange-el="obImportAIChange" /></label>'
     +'</div>'
     +'<div id="ob-import-status"></div>'
     +(_obImportStaging.length>0
       ? '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl" style="font-size:12px;"><thead><tr><th>'+(lang==='ar'?'الصنف':'Item')+'</th><th>'+(lang==='ar'?'الكمية':'Qty')+'</th><th>'+(lang==='ar'?'سعر الشراء':'Buy')+'</th><th>'+(lang==='ar'?'سعر البيع':'Sell')+'</th><th></th></tr></thead><tbody>'+stagingRows+'</tbody></table></div>'
         +'<div style="display:flex;gap:8px;margin-top:8px;">'
-        +'<button class="btn btn-primary" style="font-size:12px;" onclick="obImportCommitStaging()">✓ '+(lang==='ar'?'إضافة الكل للمخزون':'Add all to inventory')+'</button>'
-        +'<button class="btn btn-outline" style="font-size:12px;" onclick="obImportClearStaging()">'+(lang==='ar'?'إلغاء':'Cancel')+'</button>'
+        +'<button class="btn btn-primary" style="font-size:12px;" data-action="obImportCommitStaging">✓ '+(lang==='ar'?'إضافة الكل للمخزون':'Add all to inventory')+'</button>'
+        +'<button class="btn btn-outline" style="font-size:12px;" data-action="obImportClearStaging">'+(lang==='ar'?'إلغاء':'Cancel')+'</button>'
         +'</div>'
       : '')
     +'</div>'
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم الصنف *</label><input class="input" id="ob-p-name" placeholder="مثال: زيت زيتون" onkeydown="if(event.key===\'Enter\')obAddProduct()" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم الصنف *</label><input class="input" id="ob-p-name" placeholder="مثال: زيت زيتون" data-enter-action="obAddProduct" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">الكمية *</label><input class="input" type="number" id="ob-p-qty" value="1" min="0" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">سعر الشراء</label><input class="input" type="number" id="ob-p-buy" placeholder="0.00" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">سعر البيع</label><input class="input" type="number" id="ob-p-sell" placeholder="0.00" /></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddProduct()">+</button>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddProduct">+</button>'
     +'</div></div>'
     +(_obData.products.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">📦 لم تُضف أي أصناف — يمكنك تخطّي هذه الخطوة</div>'
@@ -16343,15 +16356,15 @@ function obStep2() {
 
 function obStep3() {
   const total = _obData.customers.reduce((s,c)=>s+c.balance,0);
-  const rows  = _obData.customers.map((c,i)=>'<tr><td><b>'+c.name+'</b></td><td style="color:#16a34a;font-weight:700;">'+fmtMoney(c.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveCustomer('+i+')">✕</button></td></tr>').join('');
+  const rows  = _obData.customers.map((c,i)=>'<tr><td><b>'+c.name+'</b></td><td style="color:#16a34a;font-weight:700;">'+fmtMoney(c.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveCustomer" data-args="['+i+']">✕</button></td></tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل العملاء الذين عليهم مبالغ لم تُحصَّل بعد.</p>'
     +obGuideBlock('customers')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم العميل *</label><input class="input" id="ob-c-name" placeholder="اسم العميل" onkeydown="if(event.key===\'Enter\')obAddCustomer()" /></div>'
-    +'<div><label class="form-label" style="font-size:11px;">المبلغ المستحق (ريال) *</label><input class="input" type="number" id="ob-c-bal" placeholder="0.00" onkeydown="if(event.key===\'Enter\')obAddCustomer()" /></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddCustomer()">+</button>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم العميل *</label><input class="input" id="ob-c-name" placeholder="اسم العميل" data-enter-action="obAddCustomer" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">المبلغ المستحق (ريال) *</label><input class="input" type="number" id="ob-c-bal" placeholder="0.00" data-enter-action="obAddCustomer" /></div>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddCustomer">+</button>'
     +'</div></div>'
     +(_obData.customers.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">👥 لا يوجد عملاء بمبالغ مستحقة — تخطّ إذا لم يكن هناك</div>'
@@ -16362,15 +16375,15 @@ function obStep3() {
 
 function obStep4() {
   const total = _obData.suppliers.reduce((s,x)=>s+x.balance,0);
-  const rows  = _obData.suppliers.map((s,i)=>'<tr><td><b>'+s.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(s.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveSupplier('+i+')">✕</button></td></tr>').join('');
+  const rows  = _obData.suppliers.map((s,i)=>'<tr><td><b>'+s.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(s.balance)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveSupplier" data-args="['+i+']">✕</button></td></tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل الموردين الذين عليك مبالغ لم تُسدَّد بعد.</p>'
     +obGuideBlock('suppliers')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم المورد *</label><input class="input" id="ob-s-name" placeholder="اسم المورد" onkeydown="if(event.key===\'Enter\')obAddSupplier()" /></div>'
-    +'<div><label class="form-label" style="font-size:11px;">المبلغ المستحق (ريال) *</label><input class="input" type="number" id="ob-s-bal" placeholder="0.00" onkeydown="if(event.key===\'Enter\')obAddSupplier()" /></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddSupplier()">+</button>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم المورد *</label><input class="input" id="ob-s-name" placeholder="اسم المورد" data-enter-action="obAddSupplier" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">المبلغ المستحق (ريال) *</label><input class="input" type="number" id="ob-s-bal" placeholder="0.00" data-enter-action="obAddSupplier" /></div>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddSupplier">+</button>'
     +'</div></div>'
     +(_obData.suppliers.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">🏭 لا يوجد موردون بمبالغ مستحقة — تخطّ إذا لم يكن هناك</div>'
@@ -16381,15 +16394,15 @@ function obStep4() {
 
 function obStep5() {
   const total = _obData.fixed_assets.reduce((s,a)=>s+a.value,0);
-  const rows  = _obData.fixed_assets.map((a,i)=>'<tr><td><b>'+a.name+'</b></td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(a.value)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveAsset('+i+')">✕</button></td></tr>').join('');
+  const rows  = _obData.fixed_assets.map((a,i)=>'<tr><td><b>'+a.name+'</b></td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(a.value)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveAsset" data-args="['+i+']">✕</button></td></tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">هل تمتلك أصولاً ثابتة مثل سيارات أو أجهزة أو معدات أو عقارات؟</p>'
     +obGuideBlock('fixed_assets')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم الأصل *</label><input class="input" id="ob-a-name" placeholder="مثال: سيارة هايلكس 2022" onkeydown="if(event.key===\'Enter\')obAddAsset()" /></div>'
-    +'<div><label class="form-label" style="font-size:11px;">القيمة الدفترية (ريال) *</label><input class="input" type="number" id="ob-a-val" placeholder="0.00" onkeydown="if(event.key===\'Enter\')obAddAsset()" /></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddAsset()">+</button>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم الأصل *</label><input class="input" id="ob-a-name" placeholder="مثال: سيارة هايلكس 2022" data-enter-action="obAddAsset" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">القيمة الدفترية (ريال) *</label><input class="input" type="number" id="ob-a-val" placeholder="0.00" data-enter-action="obAddAsset" /></div>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddAsset">+</button>'
     +'</div></div>'
     +(_obData.fixed_assets.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">🏗️ لا يوجد أصول ثابتة — تخطّ إذا لم يكن هناك</div>'
@@ -16400,16 +16413,16 @@ function obStep5() {
 
 function obStep6() {
   const total = _obData.obligations.reduce((s,o)=>s+o.amount,0);
-  const rows  = _obData.obligations.map((o,i)=>'<tr><td><b>'+o.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(o.amount)+'</td><td>'+o.frequency+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveObligation('+i+')">✕</button></td></tr>').join('');
+  const rows  = _obData.obligations.map((o,i)=>'<tr><td><b>'+o.name+'</b></td><td style="color:#dc2626;font-weight:700;">'+fmtMoney(o.amount)+'</td><td>'+o.frequency+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveObligation" data-args="['+i+']">✕</button></td></tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أدخل الالتزامات الدورية الثابتة التي تدفعها بانتظام.</p>'
     +obGuideBlock('obligations')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم الالتزام *</label><input class="input" id="ob-ob-name" placeholder="مثال: إيجار المستودع" onkeydown="if(event.key===\'Enter\')obAddObligation()" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم الالتزام *</label><input class="input" id="ob-ob-name" placeholder="مثال: إيجار المستودع" data-enter-action="obAddObligation" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">المبلغ (ريال) *</label><input class="input" type="number" id="ob-ob-amt" placeholder="0.00" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">التكرار</label><select class="select" id="ob-ob-freq"><option>شهري</option><option>أسبوعي</option><option>ربع سنوي</option><option>نصف سنوي</option><option>سنوي</option></select></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddObligation()">+</button>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddObligation">+</button>'
     +'</div></div>'
     +(_obData.obligations.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">📋 لا توجد التزامات دورية — تخطّ إذا لم يكن هناك</div>'
@@ -16420,16 +16433,16 @@ function obStep6() {
 
 function obStep7() {
   const totalSal = _obData.employees.reduce((s,e)=>s+e.salary,0);
-  const rows     = _obData.employees.map((e,i)=>'<tr><td style="color:var(--text-muted);">'+(i+1)+'</td><td><b>'+e.name+'</b></td><td>'+(e.job_title||'—')+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(e.salary)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" onclick="obRemoveEmployee('+i+')">✕</button></td></tr>').join('');
+  const rows     = _obData.employees.map((e,i)=>'<tr><td style="color:var(--text-muted);">'+(i+1)+'</td><td><b>'+e.name+'</b></td><td>'+(e.job_title||'—')+'</td><td style="color:var(--primary);font-weight:700;">'+fmtMoney(e.salary)+'</td><td><button class="icon-btn" style="width:26px;height:26px;" data-action="obRemoveEmployee" data-args="['+i+']">✕</button></td></tr>').join('');
   return '<div>'
     +'<p style="color:var(--text-muted);font-size:13px;margin-bottom:10px;">أضف موظفيك الحاليين مع مسمياتهم الوظيفية ورواتبهم.</p>'
     +obGuideBlock('employees')
     +'<div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px;">'
     +'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:end;">'
-    +'<div><label class="form-label" style="font-size:11px;">اسم الموظف *</label><input class="input" id="ob-e-name" placeholder="الاسم الكامل" onkeydown="if(event.key===\'Enter\')obAddEmployee()" /></div>'
+    +'<div><label class="form-label" style="font-size:11px;">اسم الموظف *</label><input class="input" id="ob-e-name" placeholder="الاسم الكامل" data-enter-action="obAddEmployee" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">المسمى الوظيفي</label><input class="input" id="ob-e-job" placeholder="مثال: محاسب" /></div>'
     +'<div><label class="form-label" style="font-size:11px;">الراتب (ريال)</label><input class="input" type="number" id="ob-e-sal" placeholder="0.00" /></div>'
-    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" onclick="obAddEmployee()">+</button>'
+    +'<button class="btn btn-primary" style="height:38px;padding:0 10px;margin-top:18px;" data-action="obAddEmployee">+</button>'
     +'</div></div>'
     +(_obData.employees.length===0
       ?'<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">👨‍💼 لم تُضف أي موظفين — تخطّ إذا لم يكن لديك موظفون</div>'
@@ -16710,7 +16723,7 @@ function renderOpeningBalancesSettings(c) {
       +'<div style="font-size:48px;margin-bottom:16px;">📋</div>'
       +'<div style="font-weight:800;font-size:16px;margin-bottom:8px;">لم تُعبأ الأرصدة الافتتاحية بعد</div>'
       +'<div style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">أضف أرصدة بداية نشاطك التجاري ليبدأ النظام من النقطة الصحيحة</div>'
-      +'<button class="btn btn-primary" onclick="showOpeningBalancesWizard(false)">بدء معالج الأرصدة الافتتاحية</button>'
+      +'<button class="btn btn-primary" data-action="showOpeningBalancesWizard" data-args="[false]">بدء معالج الأرصدة الافتتاحية</button>'
       +'</div>';
     return;
   }
@@ -16725,7 +16738,7 @@ function renderOpeningBalancesSettings(c) {
     +'<div class="card-head"><h3>📋 الأرصدة الافتتاحية</h3>'
     +'<div style="display:flex;gap:8px;align-items:center;">'
     +(date?'<span style="font-size:11px;color:var(--text-muted);">بتاريخ: '+fmtDate(date)+'</span>':'')
-    +'<button class="btn btn-outline btn-sm" onclick="showOpeningBalancesWizard(true)">✎ تعديل</button>'
+    +'<button class="btn btn-outline btn-sm" data-action="showOpeningBalancesWizard" data-args="[true]">✎ تعديل</button>'
     +'</div></div>'
     +'<div class="card-pad">'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">'
@@ -18855,7 +18868,7 @@ async function runAISearchQuery(q) {
   function _showOfflineBar() {
     let bar = document.getElementById('_yaqiz_sync_bar');
     if (!bar) return;
-    bar.innerHTML = '🔴 السيرفر لا يستجيب — <button onclick="window._retryConnection()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>';
+    bar.innerHTML = '🔴 السيرفر لا يستجيب — <button data-action="_retryConnection" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>';
     bar.style.background = '#dc2626';
     bar.style.display = 'flex';
     // لا تختفي تلقائياً — تبقى حتى يضغط المستخدم إعادة المحاولة أو يتصل
@@ -18875,7 +18888,7 @@ async function runAISearchQuery(q) {
       if (u && p && u.value && p.value) { window.doLogin(); }
       else { syncPlanFromAPI(); }
     } else {
-      if (bar) { bar.innerHTML = '🔴 السيرفر لا يزال لا يستجيب — <button onclick="window._retryConnection()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>'; bar.style.background='#dc2626'; bar.style.display='flex'; }
+      if (bar) { bar.innerHTML = '🔴 السيرفر لا يزال لا يستجيب — <button data-action="_retryConnection" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-inline-start:8px;">إعادة المحاولة</button>'; bar.style.background='#dc2626'; bar.style.display='flex'; }
     }
   };
 
@@ -18890,7 +18903,7 @@ async function runAISearchQuery(q) {
     bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:9px 20px;display:flex;align-items:center;justify-content:space-between;font-family:inherit;font-size:13px;font-weight:700;box-shadow:0 2px 12px rgba(0,0,0,.3);';
     bar.innerHTML = `
       <span>🔑 أنت تتصفح كـ <strong>${companyName}</strong> — جلسة إدارية مؤقتة (تنتهي بعد ساعتين)</span>
-      <button onclick="endImpersonation()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:white;border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-weight:800;font-size:12px;">إنهاء الجلسة ✕</button>`;
+      <button data-action="endImpersonation" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:white;border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-weight:800;font-size:12px;">إنهاء الجلسة ✕</button>`;
     document.body.prepend(bar);
     document.body.style.paddingTop = (parseInt(document.body.style.paddingTop)||0) + 42 + 'px';
   }
@@ -19061,7 +19074,7 @@ async function runAISearchQuery(q) {
     wrap.id = '_reg_link';
     wrap.style.cssText = 'text-align:center;margin-top:14px;font-size:13px;';
     wrap.innerHTML = `<span style="color:#94a3b8;">ليس لديك حساب؟ </span>
-      <button onclick="_showRegisterModal()" style="background:none;border:none;color:#3b82f6;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-decoration:underline;">سجّل منشأتك مجاناً</button>`;
+      <button data-action="_showRegisterModal" style="background:none;border:none;color:#3b82f6;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;text-decoration:underline;">سجّل منشأتك مجاناً</button>`;
     card.appendChild(wrap);
   }
 
