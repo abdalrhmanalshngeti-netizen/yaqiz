@@ -161,6 +161,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .loader{padding:30px;text-align:center;color:var(--muted);font-weight:700}
 .empty-state{text-align:center;padding:30px;color:var(--muted);font-size:13px;font-weight:600}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;z-index:9999;display:none;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+/* بديل onmouseover/onmouseout="this.style.x=y" (تشديد CSP، المرحلة 2) */
+.hover-row-soft:hover{background:rgba(255,255,255,.03) !important}
+.hover-ticket-row:hover{background:rgba(59,130,246,.07) !important}
+.hover-ticket-row-public:hover{background:rgba(59,130,246,.07) !important}
 </style>
 </head>
 <body>
@@ -180,16 +184,16 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <label>كلمة المرور</label>
       <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
     </div>
-    <button class="btn-login" onclick="doAdminLogin()">دخول</button>
+    <button class="btn-login" data-action="doAdminLogin">دخول</button>
     <div class="back" style="text-align:center;margin-top:14px;">
-      <a href="#" onclick="event.preventDefault();toggleForgotForm()" style="color:var(--muted);font-size:13px;text-decoration:none;">نسيت كلمة المرور؟</a>
+      <a href="#" data-action="toggleForgotForm" data-prevent-default="1" style="color:var(--muted);font-size:13px;text-decoration:none;">نسيت كلمة المرور؟</a>
     </div>
     <div id="forgot-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border2);">
       <div class="field">
         <label>البريد الإلكتروني</label>
         <input type="email" id="forgot-email" placeholder="admin@example.com">
       </div>
-      <button class="btn-login" id="btn-forgot-admin" onclick="sendAdminForgotPassword()">إرسال رابط الاسترجاع</button>
+      <button class="btn-login" id="btn-forgot-admin" data-action="sendAdminForgotPassword">إرسال رابط الاسترجاع</button>
       <div id="forgot-msg" style="font-size:12px;text-align:center;margin-top:10px;display:none;"></div>
     </div>
   </div>
@@ -212,30 +216,30 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="topbar-right">
       <div class="status-dot">المنصة تعمل</div>
       <div style="position:relative;">
-        <button onclick="toggleNotifDropdown()" style="position:relative;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">
+        <button data-action="toggleNotifDropdown" style="position:relative;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">
           🔔
           <span id="admin-notif-badge" class="tab-badge" style="display:none;position:absolute;top:-5px;left:-5px;">0</span>
         </button>
         <div id="admin-notif-dropdown" style="display:none;position:absolute;left:0;top:46px;width:340px;max-height:420px;overflow-y:auto;background:var(--card);border:1px solid var(--border2);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);z-index:500;"></div>
       </div>
-      <div class="admin-badge" style="cursor:pointer;" onclick="showMyAccountModal()" title="حسابي">👤 <span id="admin-name">المالك</span></div>
-      <button class="btn-logout" onclick="doLogout()">خروج</button>
+      <div class="admin-badge" style="cursor:pointer;" data-action="showMyAccountModal" title="حسابي">👤 <span id="admin-name">المالك</span></div>
+      <button class="btn-logout" data-action="doLogout">خروج</button>
     </div>
   </div>
 
   <!-- NAV TABS -->
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="switchTab('dashboard')" id="tab-dashboard">📊 لوحة التحكم</button>
-    <button class="nav-tab" onclick="switchTab('companies')"   id="tab-companies">🏢 الشركات</button>
-    <button class="nav-tab" onclick="switchTab('newclients')"  id="tab-newclients">🆕 عملاء جدد <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
-    <button class="nav-tab" onclick="switchTab('users')"       id="tab-users">👥 المستخدمون</button>
-    <button class="nav-tab" onclick="switchTab('tickets')"     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
-    <button class="nav-tab" onclick="switchTab('costs')"       id="tab-costs">💰 تحليل التكلفة</button>
-    <button class="nav-tab" onclick="switchTab('plans')"       id="tab-plans">📦 الباقات والإيرادات</button>
-    <button class="nav-tab" onclick="switchTab('aiusage')"     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
-    <button class="nav-tab" onclick="switchTab('log')"         id="tab-log">📋 سجل النشاط</button>
-    <button class="nav-tab" onclick="switchTab('employees')"   id="tab-employees">🧑‍💼 الموظفون</button>
-    <button class="nav-tab" onclick="switchTab('myteam')"       id="tab-myteam" style="display:none;">👥 فريقي</button>
+    <button class="nav-tab active" data-action="switchTab" data-args='["dashboard"]' id="tab-dashboard">📊 لوحة التحكم</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["companies"]'   id="tab-companies">🏢 الشركات</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["newclients"]'  id="tab-newclients">🆕 عملاء جدد <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
+    <button class="nav-tab" data-action="switchTab" data-args='["users"]'       id="tab-users">👥 المستخدمون</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["tickets"]'     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
+    <button class="nav-tab" data-action="switchTab" data-args='["costs"]'       id="tab-costs">💰 تحليل التكلفة</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["plans"]'       id="tab-plans">📦 الباقات والإيرادات</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]'     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["log"]'         id="tab-log">📋 سجل النشاط</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["employees"]'   id="tab-employees">🧑‍💼 الموظفون</button>
+    <button class="nav-tab" data-action="switchTab" data-args='["myteam"]'       id="tab-myteam" style="display:none;">👥 فريقي</button>
   </div>
 
   <div class="main">
@@ -244,7 +248,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section active" id="sec-dashboard">
       <div class="kpi-grid" id="kpi-grid"><div class="loader"><span class="spinner"></span></div></div>
       <!-- بطاقة التذاكر المفتوحة -->
-      <div class="chart-card" id="tickets-dash-card" style="margin-bottom:24px;cursor:pointer;" onclick="switchTab('tickets')" title="اضغط لعرض التذاكر">
+      <div class="chart-card" id="tickets-dash-card" style="margin-bottom:24px;cursor:pointer;" data-action="switchTab" data-args='["tickets"]' title="اضغط لعرض التذاكر">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <div class="chart-title" style="margin:0;">🎧 تذاكر الدعم المفتوحة</div>
           <div style="display:flex;align-items:center;gap:10px;">
@@ -282,7 +286,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="panel" style="margin-bottom:24px;">
         <div class="panel-head">
           <div><div class="panel-title">🆕 أحدث العملاء المسجّلين</div><div class="panel-sub">آخر 10 منشآت</div></div>
-          <button class="btn-action" onclick="switchTab('companies')">عرض الكل ←</button>
+          <button class="btn-action" data-action="switchTab" data-args='["companies"]'>عرض الكل ←</button>
         </div>
         <div style="overflow-x:auto">
           <table>
@@ -312,12 +316,12 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-sub" id="companies-label">جاري التحميل...</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <input class="search-input" type="text" id="co-search" placeholder="🔍 بحث باسم الشركة..." oninput="filterCompanies()">
+          <input class="search-input" type="text" id="co-search" placeholder="🔍 بحث باسم الشركة..." data-oninput="triggerFilterCompanies">
           <div class="filter-btns">
-            <button class="fbtn active" id="cf-all"       onclick="filterCompanies('all')">الكل</button>
-            <button class="fbtn"        id="cf-active"    onclick="filterCompanies('active')">نشطة</button>
-            <button class="fbtn"        id="cf-suspended" onclick="filterCompanies('suspended')">معلّقة</button>
-            <button class="fbtn"        id="cf-cancelled" onclick="filterCompanies('cancelled')">ملغاة</button>
+            <button class="fbtn active" id="cf-all"       data-action="filterCompanies" data-args='["all"]'>الكل</button>
+            <button class="fbtn"        id="cf-active"    data-action="filterCompanies" data-args='["active"]'>نشطة</button>
+            <button class="fbtn"        id="cf-suspended" data-action="filterCompanies" data-args='["suspended"]'>معلّقة</button>
+            <button class="fbtn"        id="cf-cancelled" data-action="filterCompanies" data-args='["cancelled"]'>ملغاة</button>
           </div>
         </div>
       </div>
@@ -342,7 +346,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">🆕 عملاء جدد</div>
           <div class="sec-sub">المنشآت المسجّلة خلال آخر 15 يوماً</div>
         </div>
-        <button class="btn-action" onclick="loadNewClients()">🔄 تحديث</button>
+        <button class="btn-action" data-action="loadNewClients">🔄 تحديث</button>
       </div>
       <div id="newclients-content">
         <div class="loader"><span class="spinner"></span></div>
@@ -356,7 +360,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">👥 المستخدمون</div>
           <div class="sec-sub" id="users-label">جاري التحميل...</div>
         </div>
-        <input class="search-input" type="text" id="user-search" placeholder="🔍 بحث..." oninput="filterUsers()">
+        <input class="search-input" type="text" id="user-search" placeholder="🔍 بحث..." data-oninput="filterUsers">
       </div>
       <div class="panel">
         <div style="overflow-x:auto">
@@ -379,10 +383,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-sub" id="tickets-label">جاري التحميل...</div>
         </div>
         <div class="filter-btns">
-          <button class="fbtn active" id="tf-open"        onclick="loadTickets('open')">مفتوحة</button>
-          <button class="fbtn"        id="tf-in_progress" onclick="loadTickets('in_progress')">قيد المعالجة</button>
-          <button class="fbtn"        id="tf-resolved"    onclick="loadTickets('resolved')">محلولة</button>
-          <button class="fbtn"        id="tf-all"         onclick="loadTickets('all')">الكل</button>
+          <button class="fbtn active" id="tf-open"        data-action="loadTickets" data-args='["open"]'>مفتوحة</button>
+          <button class="fbtn"        id="tf-in_progress" data-action="loadTickets" data-args='["in_progress"]'>قيد المعالجة</button>
+          <button class="fbtn"        id="tf-resolved"    data-action="loadTickets" data-args='["resolved"]'>محلولة</button>
+          <button class="fbtn"        id="tf-all"         data-action="loadTickets" data-args='["all"]'>الكل</button>
         </div>
       </div>
       <div class="panel">
@@ -406,7 +410,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">📦 إدارة الباقات</div>
           <div class="sec-sub">عدد المشتركين في كل باقة وبيانات كل شركة</div>
         </div>
-        <button class="btn-action" onclick="loadPlans()">🔄 تحديث</button>
+        <button class="btn-action" data-action="loadPlans">🔄 تحديث</button>
       </div>
       <div id="plans-content"><div class="loader"><span class="spinner"></span></div></div>
     </div>
@@ -422,15 +426,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="cost-settings">
           <div class="cost-input-wrap">
             <label>💻 تكلفة السيرفر / شهر (ر.س)</label>
-            <input class="cost-input" type="number" id="cost-server" value="75" min="0" step="1" oninput="recalcCost()">
+            <input class="cost-input" type="number" id="cost-server" value="75" min="0" step="1" data-oninput="recalcCost">
           </div>
           <div class="cost-input-wrap">
             <label>🧾 تكلفة كل فاتورة (ر.س)</label>
-            <input class="cost-input" type="number" id="cost-inv" value="0.02" min="0" step="0.01" oninput="recalcCost()">
+            <input class="cost-input" type="number" id="cost-inv" value="0.02" min="0" step="0.01" data-oninput="recalcCost">
           </div>
           <div class="cost-input-wrap">
             <label>👤 تكلفة كل مستخدم (ر.س)</label>
-            <input class="cost-input" type="number" id="cost-user" value="1.00" min="0" step="0.10" oninput="recalcCost()">
+            <input class="cost-input" type="number" id="cost-user" value="1.00" min="0" step="0.10" data-oninput="recalcCost">
           </div>
           <div class="cost-input-wrap" style="display:flex;align-items:flex-end">
             <div id="cost-total-badge" style="width:100%;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 14px;text-align:center">
@@ -450,7 +454,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">🤖 استخدام الذكاء الاصطناعي</div>
           <div class="sec-sub">لكل شركة: عدد المستخدمين، وكم منهم استخدم الذكاء الاصطناعي فعليًا. اضغط على شركة لعرض نصوص أسئلتها بالشات (بدون الإجابات).</div>
         </div>
-        <button class="btn-action" onclick="loadAIUsage()">🔄 تحديث</button>
+        <button class="btn-action" data-action="loadAIUsage">🔄 تحديث</button>
       </div>
       <div id="aiusage-content"><div class="loader"><span class="spinner"></span></div></div>
     </div>
@@ -462,7 +466,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">📋 سجل النشاط</div>
           <div class="sec-sub">آخر 100 حدث على المنصة</div>
         </div>
-        <button class="fbtn active" onclick="loadLog()">🔄 تحديث</button>
+        <button class="fbtn active" data-action="loadLog">🔄 تحديث</button>
       </div>
       <div class="panel">
         <div id="log-list"><div class="loader"><span class="spinner"></span></div></div>
@@ -476,7 +480,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">🧑‍💼 موظفو لوحة الإدارة</div>
           <div class="sec-sub">إضافة موظفين ومنحهم صلاحيات محددة — خاص بالمالك فقط</div>
         </div>
-        <button class="btn-action" onclick="showAddEmployeeModal()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">➕ إضافة موظف</button>
+        <button class="btn-action" data-action="showAddEmployeeModal" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">➕ إضافة موظف</button>
       </div>
       <div class="panel">
         <div style="overflow-x:auto">
@@ -620,10 +624,10 @@ function show2FALoginForm(tempToken){
     <div class="err-msg" id="tfa-err">رمز غير صحيح</div>
     <div class="field">
       <label>رمز التحقق (أو رمز احتياطي)</label>
-      <input type="text" id="tfa-code" placeholder="123456" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')confirmTwoFactorLogin('${tempToken}')">
+      <input type="text" id="tfa-code" placeholder="123456" autocomplete="one-time-code" data-enter-action="confirmTwoFactorLogin" data-enter-args='${JSON.stringify([tempToken])}'>
     </div>
-    <button class="btn-login" onclick="confirmTwoFactorLogin('${tempToken}')">تحقق</button>
-    <div class="back" style="text-align:center;margin-top:14px;"><a href="#" onclick="event.preventDefault();location.reload()" style="color:var(--muted);font-size:13px;text-decoration:none;">← رجوع لتسجيل الدخول</a></div>`;
+    <button class="btn-login" data-action="confirmTwoFactorLogin" data-args='${JSON.stringify([tempToken])}'>تحقق</button>
+    <div class="back" style="text-align:center;margin-top:14px;"><a href="#" data-action="reloadPage" data-prevent-default="1" style="color:var(--muted);font-size:13px;text-decoration:none;">← رجوع لتسجيل الدخول</a></div>`;
   document.getElementById('adm-login-logo-2fa').innerHTML = LOGO_SVG;
   document.getElementById('tfa-code').focus();
 }
@@ -789,9 +793,9 @@ function renderAIUsageTable(rows) {
             <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.ai_user_count?'#34d399':'var(--muted)'};">${r.ai_user_count?fmt(r.ai_user_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;color:${r.extract_count?'#c4b5fd':'var(--muted)'};">${r.extract_count?fmt(r.extract_count):'—'}</td>
             <td style="padding:10px 14px;text-align:center;color:${r.analyze_count?'#f9a8d4':'var(--muted)'};">${r.analyze_count?fmt(r.analyze_count):'—'}</td>
-            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};cursor:${r.assistant_count?'pointer':'default'};" ${r.assistant_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','assistant')"`:''}>${r.assistant_count?fmt(r.assistant_count)+' ›':'—'}</td>
-            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.opening_balance_assistant_count?'#6ee7b7':'var(--muted)'};cursor:${r.opening_balance_assistant_count?'pointer':'default'};" ${r.opening_balance_assistant_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','opening_balance_assistant')"`:''}>${r.opening_balance_assistant_count?fmt(r.opening_balance_assistant_count)+' ›':'—'}</td>
-            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.support_chat_count?'#fb923c':'var(--muted)'};cursor:${r.support_chat_count?'pointer':'default'};" ${r.support_chat_count?`onclick="showAIQuestionsModal(${r.id},'${escHtml(r.name).replace(/'/g,"\\'")}','support_chat')"`:''}>${r.support_chat_count?fmt(r.support_chat_count)+' ›':'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.assistant_count?'#a5b4fc':'var(--muted)'};cursor:${r.assistant_count?'pointer':'default'};" ${r.assistant_count?`data-action="showAIQuestionsModal" data-args="${JSON.stringify([r.id,r.name,'assistant']).replace(/"/g,'&quot;')}"`:''}>${r.assistant_count?fmt(r.assistant_count)+' ›':'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.opening_balance_assistant_count?'#6ee7b7':'var(--muted)'};cursor:${r.opening_balance_assistant_count?'pointer':'default'};" ${r.opening_balance_assistant_count?`data-action="showAIQuestionsModal" data-args="${JSON.stringify([r.id,r.name,'opening_balance_assistant']).replace(/"/g,'&quot;')}"`:''}>${r.opening_balance_assistant_count?fmt(r.opening_balance_assistant_count)+' ›':'—'}</td>
+            <td style="padding:10px 14px;text-align:center;font-weight:800;color:${r.support_chat_count?'#fb923c':'var(--muted)'};cursor:${r.support_chat_count?'pointer':'default'};" ${r.support_chat_count?`data-action="showAIQuestionsModal" data-args="${JSON.stringify([r.id,r.name,'support_chat']).replace(/"/g,'&quot;')}"`:''}>${r.support_chat_count?fmt(r.support_chat_count)+' ›':'—'}</td>
             <td></td>
           </tr>`).join('')}
         </tbody>
@@ -817,13 +821,13 @@ async function showAIQuestionsModal(companyId, companyName, feature) {
   const ov = document.createElement('div');
   ov.id = 'ai-questions-overlay';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML = `<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
+  ov.innerHTML = `<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div style="font-size:18px;font-weight:900;color:#f0f4ff;">${title} — ${escHtml(companyName)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subtitle} (الأسئلة الأقدم من هذا التحديث بلا إجابة محفوظة)</div>
       </div>
-      <button onclick="closeAIQuestionsModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
+      <button data-action="closeAIQuestionsModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
     </div>
     <div id="ai-questions-body" style="padding:20px 28px;"><div class="loader"><span class="spinner"></span></div></div>
   </div>`;
@@ -879,7 +883,7 @@ function renderNewClients(data) {
   function buildRows(list) {
     if (!list.length) return `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">لا توجد سجلات</td></tr>`;
     return list.map(r => `
-      <tr onclick="switchTab('companies')" style="cursor:pointer;" title="عرض الشركات">
+      <tr data-action="switchTab" data-args='["companies"]' style="cursor:pointer;" title="عرض الشركات">
         <td><strong>${escHtml(r.name||'')}</strong></td>
         <td>${escHtml(r.full_name||'')} <span style="color:var(--muted);font-size:11px;">@${escHtml(r.username||'')}</span></td>
         <td style="direction:ltr;text-align:right;">
@@ -976,7 +980,7 @@ function renderPlansSection(data) {
         <td>${c.invoice_count || 0} فاتورة</td>
         <td>${c.subscription_expires_at ? new Date(c.subscription_expires_at).toLocaleDateString('ar-SA') : '—'}</td>
         <td>
-          <select ${hasPerm('companies_manage')?'':'disabled title="تحتاج صلاحية إدارة الشركات"'} onchange="changePlan(${c.id}, this.value)" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'Tajawal',sans-serif;font-size:12px;">
+          <select ${hasPerm('companies_manage')?'':'disabled title="تحتاج صلاحية إدارة الشركات"'} data-onchange="changePlanV" data-onchange-args="${JSON.stringify([c.id])}" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'Tajawal',sans-serif;font-size:12px;">
             ${Object.entries(PLAN_META).map(([pk,pm]) => `<option value="${pk}" ${pk===key?'selected':''}>${pm.label}</option>`).join('')}
           </select>
         </td>
@@ -1002,6 +1006,7 @@ function renderPlansSection(data) {
     ${tables || '<p style="color:var(--muted);padding:20px;text-align:center;">لا توجد شركات بعد</p>'}`;
 }
 
+function changePlanV(value, id) { changePlan(id, value); }
 async function changePlan(companyId, newPlan) {
   try {
     await apiFetch(`/api/admin/companies/${companyId}/plan`, {
@@ -1207,7 +1212,7 @@ function renderCompaniesTable(companies) {
     <tr>
       <td style="font-weight:800;color:var(--muted)">${i+1}</td>
       <td>
-        <div style="font-weight:800;color:#f0f4ff;cursor:pointer;" onclick="showCompanyModal(${c.id})">${escHtml(c.name)}</div>
+        <div style="font-weight:800;color:#f0f4ff;cursor:pointer;" data-action="showCompanyModal" data-args="${JSON.stringify([c.id])}">${escHtml(c.name)}</div>
         ${c.contact_email?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(c.contact_email)}</div>`:''}
       </td>
       <td>${badge(c.status)}</td>
@@ -1219,10 +1224,11 @@ function renderCompaniesTable(companies) {
       <td>${fmtSAR(c.total_revenue)}</td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
       <td>
-        <button onclick="showCompanyModal(${c.id})" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">⚙️ إدارة</button>
+        <button data-action="showCompanyModal" data-args="${JSON.stringify([c.id])}" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">⚙️ إدارة</button>
       </td>
     </tr>`).join('');
 }
+function triggerFilterCompanies() { filterCompanies(); }
 function filterCompanies(status) {
   if(status) {
     _coFilterStatus=status;
@@ -1245,13 +1251,13 @@ function promptImpersonationReason(id, name){
   const ov=document.createElement('div');
   ov.id='reason-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;">
     <div style="font-size:16px;font-weight:900;margin-bottom:6px;">🔑 الدخول بحساب ${escHtml(name||'')}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">اكتب ملاحظة معاينة مختصرة قبل الدخول — تُسجَّل في سجل النشاط.</div>
     <textarea id="reason-input" rows="3" placeholder="مثال: متابعة تذكرة الدعم #45" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:10px;padding:10px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;resize:vertical;"></textarea>
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button onclick="confirmImpersonate()" style="flex:1;padding:11px;background:linear-gradient(135deg,#7c3aed,#8b5cf6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">دخول</button>
-      <button onclick="closeReasonModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="confirmImpersonate" style="flex:1;padding:11px;background:linear-gradient(135deg,#7c3aed,#8b5cf6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">دخول</button>
+      <button data-action="closeReasonModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
   ov.onclick=closeReasonModal;
@@ -1296,7 +1302,7 @@ async function showCompanyModal(id){
   const ov=document.createElement('div');
   ov.id='co-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div id="co-modal-box" onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:700px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
+  ov.innerHTML=`<div id="co-modal-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:700px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:40px;text-align:center;color:var(--muted)"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
   ov.onclick=closeCoModal;
@@ -1341,7 +1347,7 @@ function renderCoModal(c){
         <span>📅 ${fmtD(c.created_at)}</span>
       </div>
     </div>
-    <button onclick="closeCoModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
+    <button data-action="closeCoModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
   </div>
 
   <!-- معلومات التواصل -->
@@ -1386,11 +1392,11 @@ function renderCoModal(c){
           <div style="font-size:22px;font-weight:900;color:#f9a8d4;">${fmt(c.ai_analyze_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تحليل مستندات</div>
         </div>
-        <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_assistant_count?'pointer':'default'};" ${c.ai_assistant_count?`onclick="showAIQuestionsModal(${c.id},'${escHtml(c.name).replace(/'/g,"\\'")}','assistant')"`:''}>
+        <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_assistant_count?'pointer':'default'};" ${c.ai_assistant_count?`data-action="showAIQuestionsModal" data-args="${JSON.stringify([c.id,c.name,'assistant']).replace(/"/g,'&quot;')}"`:''}>
           <div style="font-size:22px;font-weight:900;color:#a5b4fc;">${fmt(c.ai_assistant_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">أسئلة الشات (اسأل يقظ)</div>
         </div>
-        <div style="background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_support_chat_count?'pointer':'default'};" ${c.ai_support_chat_count?`onclick="showAIQuestionsModal(${c.id},'${escHtml(c.name).replace(/'/g,"\\'")}','support_chat')"`:''}>
+        <div style="background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.2);border-radius:12px;padding:12px;text-align:center;cursor:${c.ai_support_chat_count?'pointer':'default'};" ${c.ai_support_chat_count?`data-action="showAIQuestionsModal" data-args="${JSON.stringify([c.id,c.name,'support_chat']).replace(/"/g,'&quot;')}"`:''}>
           <div style="font-size:22px;font-weight:900;color:#fdba74;">${fmt(c.ai_support_chat_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">محادثات الدعم الفني</div>
         </div>
@@ -1403,7 +1409,7 @@ function renderCoModal(c){
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">حالة الحساب</div>
       <div style="display:flex;gap:8px;">
         ${['active','suspended','cancelled'].map(s=>`
-          <button onclick="coModalSetStatus(${c.id},'${s}')" style="flex:1;padding:10px;border:2px solid ${c.status===s?statusColors[s]:'#1a2942'};background:${c.status===s?`${statusColors[s]}22`:'transparent'};color:${c.status===s?statusColors[s]:'var(--muted)'};border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;transition:.15s;">
+          <button data-action="coModalSetStatus" data-args='${JSON.stringify([c.id,s])}' style="flex:1;padding:10px;border:2px solid ${c.status===s?statusColors[s]:'#1a2942'};background:${c.status===s?`${statusColors[s]}22`:'transparent'};color:${c.status===s?statusColors[s]:'var(--muted)'};border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;transition:.15s;">
             ${statusLabels[s]}
           </button>`).join('')}
       </div>
@@ -1421,7 +1427,7 @@ function renderCoModal(c){
           <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">تاريخ انتهاء الاشتراك</label>
           <input type="date" id="co-modal-expiry" value="${expiry}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
         </div>
-        <button onclick="coModalSavePlan(${c.id})" style="padding:10px 22px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
+        <button data-action="coModalSavePlan" data-args="${JSON.stringify([c.id])}" style="padding:10px 22px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
       </div>
       ${expiry?`<div style="margin-top:8px;font-size:12px;color:${new Date(expiry)<new Date()?'#f87171':'#6b7fa3'};">⏳ تنتهي: ${fmtD(c.subscription_expires_at)}</div>`:''}
     </div>
@@ -1434,8 +1440,8 @@ function renderCoModal(c){
           <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">حد الفروع المخصص (فارغ = حد الباقة الطبيعي)</label>
           <input type="number" min="1" step="1" id="co-modal-branch-limit" placeholder="حد الباقة: ${({basic:1,growth:3,pro:5})[c.plan]||1}" value="${c.branch_limit_override ?? ''}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
         </div>
-        <button onclick="coModalSaveBranchLimit(${c.id})" style="padding:10px 22px;background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ</button>
-        ${c.branch_limit_override!=null?`<button onclick="coModalClearBranchLimit(${c.id})" style="padding:10px 16px;background:transparent;border:1.5px solid #3a2942;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;">إلغاء التجاوز</button>`:''}
+        <button data-action="coModalSaveBranchLimit" data-args="${JSON.stringify([c.id])}" style="padding:10px 22px;background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ</button>
+        ${c.branch_limit_override!=null?`<button data-action="coModalClearBranchLimit" data-args="${JSON.stringify([c.id])}" style="padding:10px 16px;background:transparent;border:1.5px solid #3a2942;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;">إلغاء التجاوز</button>`:''}
       </div>
       ${c.branch_limit_override!=null?`<div style="margin-top:8px;font-size:12px;color:#a78bfa;">🏬 هذي الشركة على تجاوز مخصص: ${c.branch_limit_override} فروع (بدل حد باقتها العادي)</div>`:''}
     </div>`:''}
@@ -1443,7 +1449,7 @@ function renderCoModal(c){
 
   ${hasPerm('impersonate')?`
   <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
-    <button onclick="coModalImpersonate(${c.id})" style="width:100%;padding:13px;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.35);color:#c4b5fd;border-radius:12px;font-family:inherit;font-weight:900;font-size:14px;cursor:pointer;transition:.2s;">
+    <button data-action="coModalImpersonate" data-args="${JSON.stringify([c.id])}" style="width:100%;padding:13px;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.35);color:#c4b5fd;border-radius:12px;font-family:inherit;font-weight:900;font-size:14px;cursor:pointer;transition:.2s;">
       🔑 دخول حساب الشركة (انتحال الهوية)
     </button>
   </div>`:''}
@@ -1568,15 +1574,15 @@ function showMyAccountModal(){
   const ov=document.createElement('div');
   ov.id='myacc-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;">
     <div style="font-size:16px;font-weight:900;margin-bottom:16px;">👤 حسابي</div>
     <div class="field"><label>الاسم الكامل</label><input id="myacc-name" value="${escHtml($('admin-name')?.textContent||'')}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div class="field"><label>البريد الإلكتروني (اسم الدخول)</label><input id="myacc-email" type="email" placeholder="اتركه فاضي لعدم التغيير" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div class="field"><label>كلمة مرور جديدة</label><input id="myacc-newpass" type="password" placeholder="اتركها فاضية لعدم التغيير" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div id="myacc-current-wrap" style="display:none;" class="field"><label>كلمة المرور الحالية (مطلوبة لتغيير الإيميل/كلمة المرور)</label><input id="myacc-current" type="password" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button onclick="saveMyAccount()" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
-      <button onclick="closeMyAccountModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="saveMyAccount" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="closeMyAccountModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
     <div style="margin-top:18px;padding-top:16px;border-top:1px solid #1a2942;">
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">🔒 المصادقة الثنائية (2FA)</div>
@@ -1603,11 +1609,11 @@ async function loadMy2FAStatus(){
     box.innerHTML = enabled
       ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:8px;">
           <span style="font-size:12px;font-weight:700;color:#34d399;">✅ مفعّلة</span>
-          <button onclick="showDisable2FAModal()" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تعطيل</button>
+          <button data-action="showDisable2FAModal" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تعطيل</button>
         </div>`
       : `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#0d1629;border-radius:8px;">
           <span style="font-size:12px;color:var(--muted);">غير مفعّلة</span>
-          <button onclick="start2FASetup()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تفعيل</button>
+          <button data-action="start2FASetup" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تفعيل</button>
         </div>`;
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">خطأ في التحميل</div>';}
 }
@@ -1622,7 +1628,7 @@ async function start2FASetup(){
       </div>
       <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">امسح الرمز بتطبيق المصادقة (Google Authenticator/Authy)، أو أدخل السر يدوياً: <code style="color:#93c5fd;">${res.secret}</code></div>
       <input id="tfa-setup-code" placeholder="أدخل الرمز المكوّن من 6 أرقام" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
-      <button onclick="confirm2FASetupUI()" style="width:100%;padding:9px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
+      <button data-action="confirm2FASetupUI" style="width:100%;padding:9px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">فشل التوليد</div>';}
 }
 async function confirm2FASetupUI(){
@@ -1647,12 +1653,12 @@ function showDisable2FAModal(){
   const ov=document.createElement('div');
   ov.id='disable-2fa-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:380px;width:100%;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:380px;width:100%;">
     <div style="font-size:15px;font-weight:900;margin-bottom:10px;">تعطيل المصادقة الثنائية</div>
     <input id="disable-2fa-pass" type="password" placeholder="كلمة المرور الحالية" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button onclick="confirmDisable2FA()" style="flex:1;padding:11px;background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">تعطيل</button>
-      <button onclick="closeDisable2FAModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="confirmDisable2FA" style="flex:1;padding:11px;background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">تعطيل</button>
+      <button data-action="closeDisable2FAModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
   ov.onclick=closeDisable2FAModal;
@@ -1688,7 +1694,7 @@ async function loadMySessions(){
           <div style="font-size:12px;font-weight:700;">${parseUA(s.user_agent)} ${s.id===res.current_session_id?'<span class="badge green" style="margin-right:6px;">هذا الجهاز</span>':''}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px;">${escHtml(s.ip_address||'')} · ${fmtD(s.created_at)}</div>
         </div>
-        ${s.id!==res.current_session_id?`<button onclick="revokeMySession(${s.id})" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 10px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">إنهاء</button>`:''}
+        ${s.id!==res.current_session_id?`<button data-action="revokeMySession" data-args="${JSON.stringify([s.id])}" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:7px;padding:5px 10px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">إنهاء</button>`:''}
       </div>`).join('');
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">خطأ في التحميل</div>';}
 }
@@ -1732,7 +1738,7 @@ function renderEmployeesTable(list){
       <td>${e.role==='owner'?'<span style="color:var(--muted);font-size:12px;">كل الصلاحيات</span>':(e.permissions&&e.permissions.length?e.permissions.map(p=>`<span class="badge blue" style="margin-left:4px;">${PERM_LABELS[p]||p}</span>`).join(''):'<span style="color:var(--muted);font-size:12px;">بدون صلاحيات</span>')}</td>
       <td>${e.active?'<span class="badge green">● نشط</span>':'<span class="badge red">● معطّل</span>'}</td>
       <td style="font-size:12px;color:var(--muted);">${e.last_login?fmtD(e.last_login):'لم يدخل بعد'}</td>
-      <td>${e.role==='owner'?'—':`<button class="abtn prog" onclick="showEditEmployeeModal(${e.id})">✏️ تعديل</button>`}</td>
+      <td>${e.role==='owner'?'—':`<button class="abtn prog" data-action="showEditEmployeeModal" data-args="${JSON.stringify([e.id])}">✏️ تعديل</button>`}</td>
     </tr>`).join('');
 }
 
@@ -1758,7 +1764,7 @@ function showAddEmployeeModal(){
   const ov=document.createElement('div');
   ov.id='emp-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
     <div style="font-size:16px;font-weight:900;margin-bottom:16px;">➕ إضافة موظف جديد</div>
     <div class="field"><label>الاسم الكامل</label><input id="emp-name" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div class="field"><label>البريد الإلكتروني</label><input id="emp-email" type="email" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
@@ -1767,8 +1773,8 @@ function showAddEmployeeModal(){
     <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;">الصلاحيات</div>
     ${permCheckboxes([])}
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button onclick="saveNewEmployee()" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
-      <button onclick="closeEmployeeModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="saveNewEmployee" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="closeEmployeeModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
   ov.onclick=closeEmployeeModal;
@@ -1794,7 +1800,7 @@ function showEditEmployeeModal(id){
   const ov=document.createElement('div');
   ov.id='emp-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;">
     <div style="font-size:16px;font-weight:900;margin-bottom:4px;">✏️ تعديل ${escHtml(emp.full_name)}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${escHtml(emp.email)}</div>
     <div class="field"><label>المدير المباشر</label>${managerSelectHtml(emp.id, emp.manager_id)}</div>
@@ -1804,10 +1810,10 @@ function showEditEmployeeModal(id){
       <input type="checkbox" id="emp-active-cb" ${emp.active?'checked':''}> الحساب مفعّل
     </label>
     <div style="display:flex;gap:10px;margin-top:10px;">
-      <button onclick="saveEmployeeEdit(${id})" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
-      <button onclick="closeEmployeeModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="saveEmployeeEdit" data-args="${JSON.stringify([id])}" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="closeEmployeeModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
-    <button onclick="promptResetPassword(${id},'${escHtml(emp.full_name).replace(/'/g,"\\'")}')" style="width:100%;margin-top:10px;padding:9px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#fbbf24;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">🔒 إعادة تعيين كلمة المرور</button>
+    <button data-action="promptResetPassword" data-args="${JSON.stringify([id,emp.full_name]).replace(/"/g,'&quot;')}" style="width:100%;margin-top:10px;padding:9px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#fbbf24;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">🔒 إعادة تعيين كلمة المرور</button>
   </div>`;
   ov.onclick=closeEmployeeModal;
   document.body.appendChild(ov);
@@ -1833,12 +1839,12 @@ function promptResetPassword(id,name){
   const ov=document.createElement('div');
   ov.id='reset-pass-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(6px);z-index:9600;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:380px;width:100%;">
+  ov.innerHTML=`<div data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:380px;width:100%;">
     <div style="font-size:15px;font-weight:900;margin-bottom:10px;">🔒 إعادة تعيين كلمة مرور ${escHtml(name)}</div>
     <input id="reset-pass-input" type="text" placeholder="كلمة المرور الجديدة" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button onclick="confirmResetPassword()" style="flex:1;padding:11px;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">تعيين</button>
-      <button onclick="closeResetPassModal()" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
+      <button data-action="confirmResetPassword" style="flex:1;padding:11px;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">تعيين</button>
+      <button data-action="closeResetPassModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
   ov.onclick=closeResetPassModal;
@@ -1877,7 +1883,7 @@ async function loadMyTeam(){
         <td style="font-size:12px;color:var(--muted);">${escHtml(e.email)}</td>
         <td>${e.active?'<span class="badge green">● نشط</span>':'<span class="badge red">● معطّل</span>'}</td>
         <td style="font-size:12px;color:var(--muted);">${e.last_login?fmtD(e.last_login):'لم يدخل بعد'}</td>
-        <td><button class="abtn prog" onclick="viewTeamMemberActivity(${e.id})">📊 عرض النشاط</button></td>
+        <td><button class="abtn prog" data-action="viewTeamMemberActivity" data-args="${JSON.stringify([e.id])}">📊 عرض النشاط</button></td>
       </tr>`).join('');
   }catch{$('myteam-tbody').innerHTML='<tr><td colspan="5" class="empty-state">خطأ في التحميل</td></tr>';}
 }
@@ -1887,7 +1893,7 @@ async function viewTeamMemberActivity(id){
   const ov=document.createElement('div');
   ov.id='team-activity-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML=`<div id="team-activity-box" onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;">
+  ov.innerHTML=`<div id="team-activity-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;">
     <div style="text-align:center;padding:30px;color:var(--muted);"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
   ov.onclick=closeTeamActivityModal;
@@ -1908,7 +1914,7 @@ function renderTeamActivity(res){
         <div style="font-size:17px;font-weight:900;">📊 نشاط ${escHtml(member.full_name)}</div>
         <div style="font-size:12px;color:var(--muted);">${escHtml(member.email)}</div>
       </div>
-      <button onclick="closeTeamActivityModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:30px;height:30px;border-radius:8px;color:var(--muted);cursor:pointer;">✕</button>
+      <button data-action="closeTeamActivityModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:30px;height:30px;border-radius:8px;color:var(--muted);cursor:pointer;">✕</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#93c5fd;">${tickets.length}</div><div style="font-size:11px;color:var(--muted);">تذاكر استلمها</div></div>
@@ -1952,7 +1958,7 @@ async function toggleNotifDropdown(){
     const items=res.data||[];
     if(!items.length){dd.innerHTML='<div class="empty-state" style="padding:24px;">لا توجد إشعارات</div>';return;}
     dd.innerHTML=items.map(n=>`
-      <div onclick="openNotif(${n.ticket_id||'null'})" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${n.is_read?'opacity:.6;':''}" onmouseover="this.style.background='rgba(255,255,255,.03)'" onmouseout="this.style.background=''">
+      <div class="hover-row-soft" data-action="openNotif" data-args="${JSON.stringify([n.ticket_id||null])}" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${n.is_read?'opacity:.6;':''}">
         <div style="font-weight:800;font-size:13px;color:#f0f4ff;">${escHtml(n.title||'')}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(n.message||'')}</div>
         <div style="font-size:11px;color:var(--muted2);margin-top:3px;">${fmtD(n.created_at)}</div>
@@ -1969,7 +1975,7 @@ function openNotif(ticketId){
 }
 document.addEventListener('click', e=>{
   const dd=$('admin-notif-dropdown');
-  if(dd && dd.style.display==='block' && !e.target.closest('#admin-notif-dropdown') && !e.target.closest('button[onclick="toggleNotifDropdown()"]')) dd.style.display='none';
+  if(dd && dd.style.display==='block' && !e.target.closest('#admin-notif-dropdown') && !e.target.closest('button[data-action="toggleNotifDropdown"]')) dd.style.display='none';
 });
 
 // ── Support Tickets ────────────────────────────────────
@@ -1995,7 +2001,7 @@ async function loadTicketsBadge(){
     const card=$('dash-tickets-count'); if(card) card.textContent=count;
     const latest=$('dash-tickets-latest');
     if(latest && items.length){
-      latest.innerHTML=items.slice(0,3).map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;" onclick="switchTab('tickets');openTicketDetail(${t.id})"><span style="font-weight:700;color:#f0f4ff;">${escHtml(t.company_name)||'طلب عام'}</span><span style="color:var(--muted);">${escHtml(t.department||t.sub_dept)||'—'}</span><span style="color:var(--muted);font-size:11px;">${fmtD(t.created_at)}</span></div>`).join('');
+      latest.innerHTML=items.slice(0,3).map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;" data-action="switchTab" data-args='["tickets"]' data-action2="openTicketDetail" data-args2="${JSON.stringify([t.id])}"><span style="font-weight:700;color:#f0f4ff;">${escHtml(t.company_name)||'طلب عام'}</span><span style="color:var(--muted);">${escHtml(t.department||t.sub_dept)||'—'}</span><span style="color:var(--muted);font-size:11px;">${fmtD(t.created_at)}</span></div>`).join('');
     } else if(latest) latest.innerHTML=`<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px;">لا توجد تذاكر مفتوحة</div>`;
   }catch(e){ console.error('[Tickets badge error]', e); }
 }
@@ -2028,10 +2034,8 @@ function renderTickets(tickets){
     const previewRaw = (t.description||t.note||'').slice(0,60)+(t.description?.length>60||t.note?.length>60?'…':'');
     const preview = escHtml(previewRaw);
     return `
-    <tr style="cursor:pointer;${isPublic?'background:rgba(245,158,11,.04);border-right:3px solid rgba(245,158,11,.5);':''}"
-        onclick="openTicketDetail(${t.id})"
-        onmouseover="this.style.background='rgba(59,130,246,.07)'"
-        onmouseout="this.style.background='${isPublic?'rgba(245,158,11,.04)':''}'">
+    <tr class="hover-ticket-row" style="cursor:pointer;${isPublic?'background:rgba(245,158,11,.04);border-right:3px solid rgba(245,158,11,.5);':''}"
+        data-action="openTicketDetail" data-args="${JSON.stringify([t.id])}">
       <td style="font-weight:800;color:var(--muted)">#${t.id}</td>
       <td>${companyCell}</td>
       <td>
@@ -2043,10 +2047,10 @@ function renderTickets(tickets){
       <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${preview||'—'}</td>
       <td><span class="badge ${sClass[t.status]||'blue'}">● ${sLabel[t.status]||t.status}</span></td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(t.created_at)}</td>
-      <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;flex-wrap:wrap;">
-        ${t.status!=='open'        ?`<button class="abtn open" onclick="setTicketStatus(${t.id},'open')">مفتوحة</button>`:''}
-        ${t.status!=='in_progress' ?`<button class="abtn prog" onclick="setTicketStatus(${t.id},'in_progress')">معالجة</button>`:''}
-        ${t.status!=='resolved'    ?`<button class="abtn done" onclick="setTicketStatus(${t.id},'resolved')">محلولة</button>`:''}
+      <td data-action=""><div style="display:flex;gap:5px;flex-wrap:wrap;">
+        ${t.status!=='open'        ?`<button class="abtn open" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'open'])}'>مفتوحة</button>`:''}
+        ${t.status!=='in_progress' ?`<button class="abtn prog" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'in_progress'])}'>معالجة</button>`:''}
+        ${t.status!=='resolved'    ?`<button class="abtn done" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'resolved'])}'>محلولة</button>`:''}
       </div></td>
     </tr>`;}).join('');
 }
@@ -2068,7 +2072,7 @@ async function openTicketDetail(id){
   const ov=document.createElement('div');
   ov.id='ticket-modal-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
-  ov.innerHTML=`<div id="ticket-modal-box" onclick="event.stopPropagation()" style="background:#111d33;border:1px solid #243352;border-radius:20px;width:100%;max-width:860px;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
+  ov.innerHTML=`<div id="ticket-modal-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:20px;width:100%;max-width:860px;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:40px;text-align:center;color:var(--muted)"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
   ov.onclick=closeTicketModal;
@@ -2129,8 +2133,7 @@ function renderTicketDetail(t, history, replies){
     : (otherTickets.length===0
         ? `<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0;">هذه أول تذكرة من هذه الشركة</div>`
         : otherTickets.map(h=>`
-          <div onclick="openTicketDetail(${h.id})" style="padding:10px 12px;border-radius:10px;border:1px solid #1a2942;margin-bottom:8px;cursor:pointer;transition:.15s;"
-            onmouseover="this.style.background='rgba(59,130,246,.08)'" onmouseout="this.style.background=''">
+          <div class="hover-ticket-row" data-action="openTicketDetail" data-args="${JSON.stringify([h.id])}" style="padding:10px 12px;border-radius:10px;border:1px solid #1a2942;margin-bottom:8px;cursor:pointer;transition:.15s;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
               <span style="font-weight:800;color:#93c5fd;font-size:13px;">#${h.id}</span>
               <span class="badge ${sClass[h.status]||'blue'}" style="font-size:10px;">● ${sLabel[h.status]||h.status}</span>
@@ -2152,9 +2155,9 @@ function renderTicketDetail(t, history, replies){
         : `<div style="font-size:18px;font-weight:900;color:#f0f4ff;">${escHtml(t.company_name)||'—'}</div>`}
       <span style="background:${statusBg[t.status]||'rgba(59,130,246,.1)'};color:${statusColor[t.status]||'#93c5fd'};border-radius:8px;padding:3px 12px;font-size:12px;font-weight:800;">${statusIcon[t.status]||'●'} ${sLabel[t.status]||t.status}</span>
       ${t.assigned_name?`<span style="font-size:12px;color:var(--muted);">👷 مستلمة بواسطة <b style="color:#c4d0e8;">${escHtml(t.assigned_name)}</b></span>`
-        :`<button onclick="claimTicket(${t.id})" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);color:#93c5fd;border-radius:8px;padding:5px 12px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">🙋 استلام</button>`}
+        :`<button data-action="claimTicket" data-args="${JSON.stringify([t.id])}" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);color:#93c5fd;border-radius:8px;padding:5px 12px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">🙋 استلام</button>`}
     </div>
-    <button onclick="closeTicketModal()" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
+    <button data-action="closeTicketModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
   </div>
 
   <!-- Body: 2 columns -->
@@ -2212,7 +2215,7 @@ function renderTicketDetail(t, history, replies){
         </div>` : `<div style="color:var(--muted);font-size:12px;margin-bottom:12px;">لا توجد ردود بعد</div>`}
         ${isPublic ? '' : `
         <textarea id="ticket-reply-input" rows="3" placeholder="اكتب ردك للعميل..." style="width:100%;background:#0d1629;border:1.5px solid #243352;border-radius:10px;padding:10px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;resize:vertical;"></textarea>
-        <button onclick="sendTicketReply(${t.id})" style="margin-top:8px;padding:9px 18px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">📤 إرسال الرد</button>`}
+        <button data-action="sendTicketReply" data-args="${JSON.stringify([t.id])}" style="margin-top:8px;padding:9px 18px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">📤 إرسال الرد</button>`}
       </div>
     </div>
 
@@ -2236,9 +2239,9 @@ function renderTicketDetail(t, history, replies){
   <!-- Footer: status actions -->
   <div style="padding:14px 24px;border-top:1px solid #1a2942;display:flex;align-items:center;gap:10px;background:#0a1220;border-radius:0 0 20px 20px;">
     <span style="font-size:12px;color:var(--muted);font-weight:700;">تغيير الحالة:</span>
-    ${t.status!=='open'        ?`<button class="abtn open" onclick="setTicketStatus(${t.id},'open',true)">🔴 مفتوحة</button>`:'<span style="background:rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: مفتوحة</span>'}
-    ${t.status!=='in_progress' ?`<button class="abtn prog" onclick="setTicketStatus(${t.id},'in_progress',true)">🟡 معالجة</button>`:(t.status==='in_progress'?'<span style="background:rgba(245,158,11,.2);color:#fbbf24;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: قيد المعالجة</span>':'')}
-    ${t.status!=='resolved'    ?`<button class="abtn done" onclick="setTicketStatus(${t.id},'resolved',true)">🟢 محلولة</button>`:(t.status==='resolved'?'<span style="background:rgba(16,185,129,.2);color:#34d399;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: محلولة</span>':'')}
+    ${t.status!=='open'        ?`<button class="abtn open" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'open',true])}'>🔴 مفتوحة</button>`:'<span style="background:rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: مفتوحة</span>'}
+    ${t.status!=='in_progress' ?`<button class="abtn prog" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'in_progress',true])}'>🟡 معالجة</button>`:(t.status==='in_progress'?'<span style="background:rgba(245,158,11,.2);color:#fbbf24;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: قيد المعالجة</span>':'')}
+    ${t.status!=='resolved'    ?`<button class="abtn done" data-action="setTicketStatus" data-args='${JSON.stringify([t.id,'resolved',true])}'>🟢 محلولة</button>`:(t.status==='resolved'?'<span style="background:rgba(16,185,129,.2);color:#34d399;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800;">● الحالة الحالية: محلولة</span>':'')}
   </div>`;
 }
 
@@ -2333,6 +2336,81 @@ async function loadLog(){
       </div>`).join(''):'<div class="empty-state">لا توجد أنشطة</div>';
   }catch{$('log-list').innerHTML='<div class="empty-state">خطأ في التحميل</div>';}
 }
+
+// ── تفويض الأحداث (تشديد CSP — إزالة الحاجة لـunsafe-inline بـscript-src-attr) ──
+// نفس البنية المستخدمة بـVVIP.html بالضبط: data-action ينفّذ دالة حقيقية
+// بدل onclick="" مضمّن، closest() يمنع الوصول لعنصر data-action أبعد تلقائيًا
+// (بديل event.stopPropagation() القديم بلا كود إضافي)
+function reloadPage() { location.reload(); }
+document.addEventListener('click', function(e) {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.preventDefault) e.preventDefault();
+  const fn = window[el.dataset.action];
+  if (typeof fn === 'function') {
+    let args = [];
+    if (el.dataset.args) { try { args = JSON.parse(el.dataset.args); } catch (err) { args = []; } }
+    fn.apply(el, args);
+  }
+  if (el.dataset.action2) {
+    const fn2 = window[el.dataset.action2];
+    if (typeof fn2 === 'function') {
+      let args2 = [];
+      if (el.dataset.args2) { try { args2 = JSON.parse(el.dataset.args2); } catch (err) { args2 = []; } }
+      fn2.apply(el, args2);
+    }
+  }
+});
+document.addEventListener('change', function(e) {
+  const el = e.target.closest('[data-onchange]');
+  if (!el) return;
+  const fn = window[el.dataset.onchange];
+  if (typeof fn !== 'function') return;
+  const val = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+  let args = [];
+  if (el.dataset.onchangeArgs) { try { args = JSON.parse(el.dataset.onchangeArgs); } catch (err) { args = []; } }
+  fn.apply(el, [val, ...args]);
+});
+document.addEventListener('input', function(e) {
+  const el = e.target.closest('[data-oninput]');
+  if (!el) return;
+  const fn = window[el.dataset.oninput];
+  if (typeof fn !== 'function') return;
+  let args = [];
+  if (el.dataset.oninputArgs) { try { args = JSON.parse(el.dataset.oninputArgs); } catch (err) { args = []; } }
+  fn.apply(el, [el.value, ...args]);
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    const enterEl = e.target.closest('[data-enter-action]');
+    if (enterEl) {
+      e.preventDefault();
+      const fn = window[enterEl.dataset.enterAction];
+      if (typeof fn === 'function') {
+        let args = [];
+        if (enterEl.dataset.enterArgs) { try { args = JSON.parse(enterEl.dataset.enterArgs); } catch (err) { args = []; } }
+        fn.apply(enterEl, args);
+      }
+    }
+  }
+  const kdEl = e.target.closest('[data-onkeydown]');
+  if (kdEl) {
+    const fn2 = window[kdEl.dataset.onkeydown];
+    if (typeof fn2 === 'function') fn2.call(kdEl, e);
+  }
+});
+document.addEventListener('focusin', function(e) {
+  const el = e.target.closest('[data-onfocus]');
+  if (!el) return;
+  const fn = window[el.dataset.onfocus];
+  if (typeof fn === 'function') fn.call(el, el.value);
+});
+document.addEventListener('focusout', function(e) {
+  const el = e.target.closest('[data-onblur]');
+  if (!el) return;
+  const fn = window[el.dataset.onblur];
+  if (typeof fn === 'function') fn.call(el);
+});
 
 // ── Startup ────────────────────────────────────────────
 document.addEventListener('keydown', e=>{

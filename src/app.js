@@ -43,11 +43,14 @@ app.use(helmet({
       // 'unsafe-inline' تلقائيًا لو وُجد nonce بنفس التوجيه (سلوك موثّق بمواصفة
       // CSP)، فهذا يغلق فعليًا احتمال تنفيذ <script> خارجي يُحقَن عبر XSS مستقبلي
       // (لا يعرف الـnonce الصحيح مسبقًا) بلا أي تعديل على onclick="" إطلاقًا.
-      // scriptSrcAttr (خصائص onclick=""...) تبقى 'unsafe-inline' كما هي — إزالتها
-      // تحتاج تحويل آلاف الأزرار بالتطبيق لـaddEventListener، مشروع منفصل أكبر
+      // scriptSrcAttr: كل خصائص onclick=""/onchange=""/... (663 بـVVIP.html +
+      // مثيلاتها بـadmin.html) حُوِّلت لنمط data-action مع مستمع تفويض مركزي
+      // واحد (document.addEventListener) بدل التنفيذ المضمّن، فصار ممكنًا حذف
+      // 'unsafe-inline' هنا فعليًا — يمنع أي onclick="" يُحقَن عبر XSS مستقبلي
+      // من التنفيذ إطلاقًا (المتصفح يرفضه بلا استثناء بمجرد إزالة هذا التوجيه)
       scriptSrc:     ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`, "'unsafe-eval'",
                       "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
-      scriptSrcAttr: ["'unsafe-inline'"],
+      scriptSrcAttr: ["'none'"],
       styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc:       ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc:        ["'self'", "data:", "blob:", "https:"],
