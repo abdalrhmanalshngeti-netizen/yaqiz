@@ -1212,10 +1212,15 @@ const allNavItems = [
 ];
 
 // ── تعريف الباقات ─────────────────────────────────────
+// 'users'/'returns'/'activity'/'stock_moves'/'accounts' لا يُفتَح لها goTo()
+// اليوم فعليًا (تُعرَض فقط كتبويبات فرعية داخل settings/inventory/accountingReports
+// المحمية أصلًا بـhasPlanFeature) — لكن أُضيفت هنا أيضًا (بنفس منطق hasPlanFeature
+// الفعلي بكل صفحة) كحماية دفاعية: لو أي كود مستقبلي استدعى goTo() لأحدها مباشرة
+// (رابط سريع، نتيجة بحث...)، ما ينحظر بصمت لعميل مستحِق فعليًا لها
 const PLAN_PAGES = {
-  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings'],
-  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings'],
+  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings','users','returns'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings','users','returns','activity','stock_moves'],
+  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings','users','returns','activity','stock_moves','accounts'],
   expired: ['settings'],
 };
 
