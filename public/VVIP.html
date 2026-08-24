@@ -641,9 +641,15 @@ function isPeriodClosed(dateStr) {
   const mk = _periodKey(dateStr,'month'), yk = _periodKey(dateStr,'year');
   return list.some(cp => (cp.period_type==='month'&&cp.period_key===mk) || (cp.period_type==='year'&&cp.period_key===yk));
 }
+// سجل عابر (بالذاكرة فقط، لا يُخزَّن) لتوكنات تجاوز الإقفال بانتظار مزامنتها
+// الفعلية بالسيرفر — مطلوب لأن المشتريات/السندات/المرتجعات/القيود تُحفَظ محلياً
+// أولاً وتصل السيرفر لاحقاً عبر حلقة مزامنة عامة منفصلة تماماً عن دالة الحفظ
+// نفسها (بعكس الفواتير اللي تُرسَل مباشرة). المفتاح "entity:localId"
+window._periodOverrideTokens = window._periodOverrideTokens || {};
+
 // dateStr: تاريخ العملية المطلوب فحصها. onProceed: تُستدعى فقط لو التاريخ حر أو تم تجاوز الإقفال بنجاح بكلمة مرور التجاوز المخصصة (منفصلة عن كلمة مرور دخول المالك).
 function guardClosedPeriod(dateStr, onProceed) {
-  if (!isPeriodClosed(dateStr)) { onProceed(); return; }
+  if (!isPeriodClosed(dateStr)) { onProceed(null); return; }
   // نبني هذا كطبقة (overlay) منفصلة فوق النموذج الأصلي بدل الكتابة فوق
   // #modal-container — لو استبدلنا محتواه، تُفقَد كل قيم حقول النموذج
   // الأصلي (المبلغ، التاريخ، الوصف...) قبل ما تصل onProceed لقراءتها.
@@ -652,7 +658,7 @@ function guardClosedPeriod(dateStr, onProceed) {
   ov.className = 'modal-bg';
   ov.style.zIndex = '99999';
   ov.innerHTML = `
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+    <div class="modal" data-action="" style="max-width:420px;">
       <div class="modal-head">
         <h3>🔒 ${lang==='ar'?'فترة محاسبية مُقفلة':'Closed Accounting Period'}</h3>
         <button class="icon-btn" id="cp-override-close">${icon('x',18)}</button>
@@ -671,6 +677,12 @@ function guardClosedPeriod(dateStr, onProceed) {
   refreshIcons();
   const closeOverlay = () => ov.remove();
   ov.addEventListener('click', closeOverlay);
+  // data-action="" وحده لا يكفي هنا — closest() بمستمع النقر المفوَّض العام
+  // يمنع فقط تفعيل data-action آخر بنفس الحدث، لكن لا يوقف الفقاعة الفعلية
+  // (bubbling) الوصول لمستمع addEventListener('click', closeOverlay) المباشر
+  // فوق (ov) — بعكس onclick="" القديم اللي كان يستدعي stopPropagation() حقيقية.
+  // نعيد نفس الأثر هنا عبر مستمع JS مباشر (آمن CSP، بلا سمة onclick="")
+  ov.querySelector('.modal').addEventListener('click', e => e.stopPropagation());
   ov.querySelector('#cp-override-close').onclick = closeOverlay;
   ov.querySelector('#cp-override-cancel').onclick = closeOverlay;
   ov.querySelector('#cp-override-btn').onclick = async () => {
@@ -681,7 +693,7 @@ function guardClosedPeriod(dateStr, onProceed) {
     btn.disabled=true; btn.textContent=lang==='ar'?'جارٍ التحقق...':'Verifying...';
     try {
       const res = await window._cloudApiFetch('POST', '/api/closed-periods/verify-override', { password: pass });
-      if (res?.success) { ov.remove(); onProceed(); }
+      if (res?.success) { ov.remove(); onProceed(res.overrideToken || null); }
       else { throw new Error(); }
     } catch(e) {
       errEl.textContent = e?.message || (lang==='ar'?'كلمة المرور غير صحيحة':'Incorrect password');
@@ -4059,7 +4071,7 @@ function saveNewInvoice(printAfter=false) {
   if (blockedByExpiredSubscription()) return;
   if(!el('ni-customer')?.value){showToast(lang==='ar'?'العميل مطلوب':'Customer required','error');return;}
   if(newInvItems.length===0){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
-  guardClosedPeriod(el('ni-date').value, () => _saveNewInvoiceActual(printAfter));
+  guardClosedPeriod(el('ni-date').value, (overrideToken) => _saveNewInvoiceActual(printAfter, overrideToken));
 }
 
 // نفس علّة نقطة البيع بالضبط (رقم مُصطنَع محليًا + طباعة قبل أي اتصال بالسيرفر)
@@ -4067,7 +4079,7 @@ function saveNewInvoice(printAfter=false) {
 // بجانب انتظار رد السيرفر. السيرفر ما عنده مفهوم "دفع جزئي وقت الإنشاء" (منطق
 // binary فقط: إما "آجل" أو "مدفوعة بالكامل") — فنُنشئها كآجلة ثم نسجّل التحصيل
 // الجزئي بطلب منفصل فورًا (نفس آلية تحصيل الدفعات الموجودة أصلًا لأي فاتورة).
-async function _saveNewInvoiceActual(printAfter) {
+async function _saveNewInvoiceActual(printAfter, overrideToken) {
   const db=getDB();
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
@@ -4129,14 +4141,15 @@ async function _saveNewInvoiceActual(printAfter) {
   try {
     if (typeof window._cloudApiFetch !== 'function' || typeof window._cloudInvToAPI !== 'function') throw new Error('bridge unavailable');
     res = await Promise.race([
-      window._cloudApiFetch('POST', '/api/invoices', window._cloudInvToAPI(draftInv)),
+      window._cloudApiFetch('POST', '/api/invoices', window._cloudInvToAPI(draftInv),
+        overrideToken ? { 'X-Period-Override-Token': overrideToken } : undefined),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 8000))
     ]);
   } catch(e) { res=null; }
 
   if (!res?.data?.id) {
     restoreBtns();
-    showSaveInvoiceFailedOverlay(() => _saveNewInvoiceActual(printAfter));
+    showSaveInvoiceFailedOverlay(() => _saveNewInvoiceActual(printAfter, overrideToken));
     return;
   }
   const srv = res.data;
@@ -5108,9 +5121,9 @@ function saveGoodsPurchase() {
   if (blockedByExpiredSubscription()) return;
   if(!el('gp-vendor')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
   if(!_goodsItems.length){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
-  guardClosedPeriod(el('gp-date')?.value||new Date().toISOString().slice(0,10), () => _saveGoodsPurchaseActual());
+  guardClosedPeriod(el('gp-date')?.value||new Date().toISOString().slice(0,10), (overrideToken) => _saveGoodsPurchaseActual(overrideToken));
 }
-function _saveGoodsPurchaseActual() {
+function _saveGoodsPurchaseActual(overrideToken) {
   const db=getDB();
   const sub=Math.round(_goodsItems.reduce((s,i)=>s+i.line_total,0)*100)/100;
   const vat=Math.round(_goodsItems.reduce((s,i)=>s+(i.vat!=null?i.vat:i.line_total*0.15),0)*100)/100;
@@ -5142,6 +5155,7 @@ function _saveGoodsPurchaseActual() {
     created_at:new Date(el('gp-date').value).toISOString()
   };
   db.purchases.push(p);
+  if (overrideToken) window._periodOverrideTokens[`purchases:${p.id}`] = overrideToken;
 
   // إذا الفاتورة جاية من استلام أمر شراء → اربطها به وعلّمه مكتمل
   if (_pendingPOId) {
@@ -5169,12 +5183,14 @@ function _saveGoodsPurchaseActual() {
   ];
   if(paidNow>0) pgEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'credit',amount:paidNow});
   postSupplierPayable(db, pgEntries, p.vendor, remaining, 'increase', undefined, p.supplier_id);
-  db.journal.push({
+  const _pgJournalEntry = {
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`فاتورة شراء بضاعة - ${p.vendor}`,
     entries:pgEntries,
     ref:`PUR-${p.id}`
-  });
+  };
+  db.journal.push(_pgJournalEntry);
+  if (overrideToken) window._periodOverrideTokens[`journal:${_pgJournalEntry.id}`] = overrideToken;
 
   saveDB(db);
   logActivity('مشتريات',`فاتورة بضاعة من ${p.vendor} — ${fmtMoney(total)} — ${status}`);
@@ -6389,7 +6405,7 @@ function renderPeriodClosing(c) {
       <div class="card-pad">
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">${lang==='ar'?'كلمة مرور منفصلة تمامًا عن كلمة مرور تسجيل دخولك — هي وحدها اللي تفتح فترة مُقفلة أو تتجاوزها، حتى لو غيّرت كلمة مرور دخولك لاحقًا.':"Completely separate from your login password — only this unlocks or bypasses a closed period, even if your login password changes later."}</p>
         <div id="pc-override-status" style="font-size:13px;font-weight:700;margin-bottom:10px;">${lang==='ar'?'جارٍ التحقق...':'Checking...'}</div>
-        <button class="btn btn-outline" onclick="showSetOverridePasswordModal()">${lang==='ar'?'تعيين / تغيير كلمة مرور التجاوز':'Set / Change Override Password'}</button>
+        <button class="btn btn-outline" data-action="showSetOverridePasswordModal">${lang==='ar'?'تعيين / تغيير كلمة مرور التجاوز':'Set / Change Override Password'}</button>
       </div>
     </div>`:''}
 
@@ -6405,14 +6421,14 @@ function renderPeriodClosing(c) {
                 return `<option value="${key}" ${key===thisMonthKey?'selected':''}>${monthNames[i]} ${now.getFullYear()}</option>`;
               }).join('')}
             </select>
-            <button class="btn btn-outline btn-full" onclick="closePeriod('month', el('pc-month-select').value)">${lang==='ar'?'إقفال هذا الشهر':'Close this month'}</button>
+            <button class="btn btn-outline btn-full" data-action="closeMonthPeriodBtn">${lang==='ar'?'إقفال هذا الشهر':'Close this month'}</button>
           </div>
           <div>
             <label class="form-label">${lang==='ar'?'إقفال سنوي':'Close a Year'}</label>
             <select class="select" id="pc-year-select" style="margin-bottom:8px;">
               ${[now.getFullYear(), now.getFullYear()-1].map(y=>`<option value="${y}" ${String(y)===thisYearKey?'selected':''}>${y}</option>`).join('')}
             </select>
-            <button class="btn btn-outline btn-full" onclick="closePeriod('year', el('pc-year-select').value)">${lang==='ar'?'إقفال هذه السنة':'Close this year'}</button>
+            <button class="btn btn-outline btn-full" data-action="closeYearPeriodBtn">${lang==='ar'?'إقفال هذه السنة':'Close this year'}</button>
           </div>
         </div>
       </div>
@@ -6436,7 +6452,7 @@ function renderPeriodClosing(c) {
               <td><span class="badge ${cp.period_type==='year'?'badge-blue':'badge-amber'}">${cp.period_type==='year'?(lang==='ar'?'سنوي':'Year'):(lang==='ar'?'شهري':'Month')}</span></td>
               <td>${sanitize(cp.closed_by_name)||'-'}</td>
               <td>${fmtDate(cp.created_at)}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="reopenPeriod('${cp.id}')">${lang==='ar'?'🔓 فتح':'🔓 Reopen'}</button></td>
+              <td><button class="btn btn-sm btn-outline" data-action="reopenPeriod" data-args="${JSON.stringify([cp.id]).replace(/"/g,'&quot;')}">${lang==='ar'?'🔓 فتح':'🔓 Reopen'}</button></td>
             </tr>`).join('')}
         </tbody>
       </table></div>
@@ -6468,7 +6484,7 @@ function showSetOverridePasswordModal() {
   const ov = document.createElement('div');
   ov.className = 'modal-bg'; ov.style.zIndex = '99999';
   ov.innerHTML = `
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+    <div class="modal" data-action="" style="max-width:420px;">
       <div class="modal-head">
         <h3>🔑 ${lang==='ar'?'تعيين / تغيير كلمة مرور التجاوز':'Set / Change Override Password'}</h3>
         <button class="icon-btn" id="sop-close">${icon('x',18)}</button>
@@ -6490,6 +6506,7 @@ function showSetOverridePasswordModal() {
   refreshIcons();
   const close = () => ov.remove();
   ov.addEventListener('click', close);
+  ov.querySelector('.modal').addEventListener('click', e => e.stopPropagation());
   ov.querySelector('#sop-close').onclick = close;
   ov.querySelector('#sop-cancel').onclick = close;
   ov.querySelector('#sop-save').onclick = async () => {
@@ -6518,23 +6535,59 @@ function showSetOverridePasswordModal() {
   };
 }
 
-function closePeriod(type, key) {
+function closeMonthPeriodBtn() { closePeriod('month', el('pc-month-select').value); }
+function closeYearPeriodBtn() { closePeriod('year', el('pc-year-select').value); }
+
+async function closePeriod(type, key) {
   if(!key) return;
-  const label = type==='year' ? key : key;
-  if(!confirm(lang==='ar'?`تأكيد إقفال ${type==='year'?'سنة':'شهر'} ${label}؟ لن يقدر أي أحد يسجّل أو يعدّل عملية بتاريخ ضمن هذه الفترة إلا بكلمة مرور التجاوز المخصصة.`:`Confirm closing ${label}? No one will be able to record/edit a transaction dated in this period without the override password.`)) return;
+  if(!confirm(type==='year'
+    ? (lang==='ar'?`تأكيد إقفال سنة ${key}؟ سيُنشر قيد تصفير محاسبي حقيقي يصفّر كل حسابات الإيرادات/المصروفات وينقل صافي الربح/الخسارة لحساب الأرباح المرحّلة — بالإضافة لمنع أي عملية بتاريخ ضمن هذه السنة إلا بكلمة مرور التجاوز.`:`Confirm closing year ${key}? A real closing journal entry will be posted, zeroing every revenue/expense account and moving net profit/loss to Retained Earnings — plus blocking any transaction dated in this year without the override password.`)
+    : (lang==='ar'?`تأكيد إقفال شهر ${key}؟ لن يقدر أي أحد يسجّل أو يعدّل عملية بتاريخ ضمن هذه الفترة إلا بكلمة مرور التجاوز المخصصة.`:`Confirm closing ${key}? No one will be able to record/edit a transaction dated in this period without the override password.`)
+  )) return;
   const db=getDB();
   if(!db.closed_periods) db.closed_periods=[];
   if(db.closed_periods.some(cp=>cp.period_type===type && cp.period_key===key)){
     showToast(lang==='ar'?'هذه الفترة مُقفلة مسبقاً':'This period is already closed','error'); return;
   }
-  db.closed_periods.push({
-    id: 'local-'+Date.now(), period_type: type, period_key: key,
-    closed_by_name: currentUser?.full_name||currentUser?.username||'', created_at: new Date().toISOString()
-  });
-  saveDB(db);
-  logActivity('المحاسبة', `إقفال ${type==='year'?'سنة':'شهر'} ${key}`);
-  showToast(`✅ ${lang==='ar'?`تم إقفال ${key}`:`${key} closed`}`);
-  renderPage();
+
+  if (type !== 'year') {
+    // إقفال شهري: قفل تحكّم بسيط بلا أثر محاسبي حقيقي — كما كان دائمًا
+    // (تفاؤلي محلي + مزامنة خلفية عامة، مقبول لعدم وجود أي عملية مالية حقيقية)
+    db.closed_periods.push({
+      id: 'local-'+Date.now(), period_type: type, period_key: key,
+      closed_by_name: currentUser?.full_name||currentUser?.username||'', created_at: new Date().toISOString()
+    });
+    saveDB(db);
+    logActivity('المحاسبة', `إقفال شهر ${key}`);
+    showToast(`✅ ${lang==='ar'?`تم إقفال ${key}`:`${key} closed`}`);
+    renderPage();
+    return;
+  }
+
+  // إقفال سنوي: ينشر قيد تصفير محاسبي حقيقي بالسيرفر — ننتظر تأكيده الفعلي
+  // مباشرة، لا تفاؤلي محلي (بعكس الشهري)، لأنها عملية مالية حقيقية
+  showToast(lang==='ar'?'⏳ جارٍ إقفال السنة ونشر قيد التصفير...':'⏳ Closing the year and posting the closing entry...');
+  try {
+    const res = await window._cloudApiFetch('POST', '/api/closed-periods', {
+      period_type: 'year', period_key: key,
+      closed_by_name: currentUser?.full_name||currentUser?.username||''
+    });
+    if (!res?.success || !res.data) throw new Error(res?.message || (lang==='ar'?'تعذّر الإقفال':'Failed to close'));
+    const dbNow = getDB();
+    if(!dbNow.closed_periods) dbNow.closed_periods=[];
+    dbNow.closed_periods.push({
+      id: res.data.id, period_type: res.data.period_type, period_key: res.data.period_key,
+      closed_by_name: res.data.closed_by_name, created_at: res.data.created_at
+    });
+    saveDB(dbNow);
+    logActivity('المحاسبة', `إقفال سنة ${key}${res.closingEntry?` — قيد تصفير ${res.closingEntry.entry_no}`:''}`);
+    showToast(res.closingEntry
+      ? `✅ ${lang==='ar'?`تم إقفال سنة ${key} ونشر قيد التصفير ${res.closingEntry.entry_no}`:`Year ${key} closed, closing entry ${res.closingEntry.entry_no} posted`}`
+      : `✅ ${lang==='ar'?`تم إقفال سنة ${key} (بلا نشاط إيرادات/مصروفات لتصفيته)`:`Year ${key} closed (no revenue/expense activity to close)`}`);
+    renderPage();
+  } catch (e) {
+    showToast(`❌ ${e?.message || (lang==='ar'?'تعذّر إقفال السنة':'Failed to close the year')}`, 'error');
+  }
 }
 
 function reopenPeriod(id) {
@@ -6544,12 +6597,14 @@ function reopenPeriod(id) {
   const ov = document.createElement('div');
   ov.className = 'modal-bg'; ov.style.zIndex='99999';
   ov.innerHTML = `
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+    <div class="modal" data-action="" style="max-width:400px;">
       <div class="modal-head">
         <h3>🔓 ${lang==='ar'?'فتح فترة':'Reopen Period'}: ${sanitize(cp.period_key)}</h3>
         <button class="icon-btn" id="rp-close">${icon('x',18)}</button>
       </div>
-      <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${lang==='ar'?'أدخل كلمة مرور تجاوز الإقفال لتأكيد فتح هذه الفترة:':'Enter the period-closing override password to confirm reopening this period:'}</p>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;">${cp.period_type==='year'
+        ? (lang==='ar'?'فتح سنة مُقفلة يحذف قيد التصفير المحاسبي المرتبط بها أيضًا. أدخل كلمة مرور تجاوز الإقفال لتأكيد فتح هذه السنة:':'Reopening a closed year also deletes its linked closing journal entry. Enter the period-closing override password to confirm:')
+        : (lang==='ar'?'أدخل كلمة مرور تجاوز الإقفال لتأكيد فتح هذه الفترة:':'Enter the period-closing override password to confirm reopening this period:')}</p>
       <input class="input" type="password" id="rp-pass" placeholder="${lang==='ar'?'كلمة مرور التجاوز':'Override password'}" style="margin-bottom:10px;" />
       <div id="rp-err" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none;"></div>
       <div style="display:flex;gap:8px;">
@@ -6561,6 +6616,7 @@ function reopenPeriod(id) {
   refreshIcons();
   const close=()=>ov.remove();
   ov.addEventListener('click', close);
+  ov.querySelector('.modal').addEventListener('click', e => e.stopPropagation());
   ov.querySelector('#rp-close').onclick=close;
   ov.querySelector('#rp-cancel').onclick=close;
   ov.querySelector('#rp-confirm').onclick=async()=>{
@@ -6571,15 +6627,22 @@ function reopenPeriod(id) {
     btn.disabled=true; btn.textContent=lang==='ar'?'جارٍ التحقق...':'Verifying...';
     try{
       const res=await window._cloudApiFetch('POST','/api/closed-periods/verify-override',{password:pass});
-      if(res?.success){
-        ov.remove();
-        const dbNow=getDB();
-        dbNow.closed_periods=(dbNow.closed_periods||[]).filter(x=>String(x.id)!==String(id));
-        saveDB(dbNow);
-        logActivity('المحاسبة', `فتح فترة ${cp.period_key}`);
-        showToast(`✅ ${lang==='ar'?'تم فتح الفترة':'Period reopened'}`);
-        renderPage();
-      } else { throw new Error(); }
+      if(!res?.success) throw new Error();
+
+      if (cp.period_type === 'year') {
+        // سنة: حذف مباشر من السيرفر بالانتظار (يعكس قيد التصفير المرتبط أيضًا)
+        // — لا تفاؤلي محلي هنا، بعكس فتح شهر
+        btn.textContent=lang==='ar'?'جارٍ الفتح...':'Reopening...';
+        await window._cloudApiFetch('DELETE', `/api/closed-periods/${cp.id}`);
+      }
+
+      ov.remove();
+      const dbNow=getDB();
+      dbNow.closed_periods=(dbNow.closed_periods||[]).filter(x=>String(x.id)!==String(id));
+      saveDB(dbNow);
+      logActivity('المحاسبة', `فتح فترة ${cp.period_key}`);
+      showToast(`✅ ${lang==='ar'?'تم فتح الفترة':'Period reopened'}`);
+      renderPage();
     }catch(e){
       errEl.textContent=e?.message || (lang==='ar'?'كلمة المرور غير صحيحة':'Incorrect password');
       errEl.style.display='block';
@@ -9987,9 +10050,9 @@ function saveVoucher(type, printAfter=true) {
     }
   }
 
-  guardClosedPeriod(el('v-date')?.value||new Date().toISOString().slice(0,10), () => _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal));
+  guardClosedPeriod(el('v-date')?.value||new Date().toISOString().slice(0,10), (overrideToken) => _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal, overrideToken));
 }
-function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal) {
+function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal, overrideToken) {
   const db = getDB();
   const _voucherParty = partyVal || el('v-party').value;
   // نفضّل المعرّف اللي التقطناه وقت اختيار الطرف من القائمة (partyIdVal) —
@@ -10012,6 +10075,7 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
 
   if(!db.receipts) db.receipts=[];
   db.receipts.push(voucher);
+  if (overrideToken) window._periodOverrideTokens[`vouchers:${voucher.id}`] = overrideToken;
 
   // 1. Update treasury
   db.treasury.balance += isReceipt ? amount : -amount;
@@ -10098,23 +10162,27 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     // (voucher.applied_amount) — قد يقل عن amount لو تجاوز السند ما هو مستحق عليه
     const rcvEntries = [{ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount }];
     postCustomerReceivable(db, rcvEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
-    db.journal.push({
+    const _vJournalEntry = {
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
       entries: rcvEntries,
       ref: voucher.voucher_no
-    });
+    };
+    db.journal.push(_vJournalEntry);
+    if (overrideToken) window._periodOverrideTokens[`journal:${_vJournalEntry.id}`] = overrideToken;
   } else {
     // Dr. Accounts Payable / Cr. Cash — نفس المبدأ بالعكس
     const payEntries = [];
     postSupplierPayable(db, payEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
     payEntries.push({ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount });
-    db.journal.push({
+    const _vJournalEntry = {
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند صرف ${voucher.voucher_no} — ${voucher.party}`,
       entries: payEntries,
       ref: voucher.voucher_no
-    });
+    };
+    db.journal.push(_vJournalEntry);
+    if (overrideToken) window._periodOverrideTokens[`journal:${_vJournalEntry.id}`] = overrideToken;
   }
   db.nextId.journal = (db.nextId.journal||1)+1;
 
@@ -10525,9 +10593,9 @@ function saveReturn(type) {
   }
 
   const partyIdVal = Number(el('rt-party-id')?.value)||null;
-  guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), () => _saveReturnActual(type, amount, linkedId, partyIdVal));
+  guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), (overrideToken) => _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken));
 }
-function _saveReturnActual(type, amount, linkedId, partyIdVal) {
+function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
   const db=getDB();
   const isSales=type==='sales';
   const num=db.nextId.return_||1; db.nextId.return_=num+1;
@@ -10565,6 +10633,7 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal) {
 
   if(!db.returns) db.returns=[];
   db.returns.push(ret);
+  if (overrideToken) window._periodOverrideTokens[`returns:${ret.id}`] = overrideToken;
 
   // 1. تقسيم أثر المرتجع بين الخزينة (الجزء المسدّد فعليًا) ورصيد العميل/المورد (الجزء الآجل)
   //    بحسب حالة سداد الفاتورة/فاتورة الشراء المرتبطة — يغطي نقدي/آجل/جزئي بنفس المعادلة:
@@ -10644,12 +10713,14 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal) {
       salesRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:returnCogsReversal});
       salesRetEntries.push({account:lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'credit', amount:returnCogsReversal});
     }
-    db.journal.push({
+    const _retJournalEntry = {
       id:db.nextId.journal++, date:new Date().toISOString(),
       description:`مرتجع مبيعات ${ret.return_no} — ${ret.party}`,
       entries:salesRetEntries,
       ref:ret.return_no
-    });
+    };
+    db.journal.push(_retJournalEntry);
+    if (overrideToken) window._periodOverrideTokens[`journal:${_retJournalEntry.id}`] = overrideToken;
     // 4. Update linked invoice if exists
     if(linkedId) {
       const inv=db.invoices.find(i=>i.id===linkedId);
@@ -10666,12 +10737,14 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal) {
     postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease', undefined, ret.party_id);
     purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
     purRetEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'credit', amount:vat});
-    db.journal.push({
+    const _retJournalEntry = {
       id:db.nextId.journal++, date:new Date().toISOString(),
       description:`مرتجع مشتريات ${ret.return_no} — ${ret.party}`,
       entries:purRetEntries,
       ref:ret.return_no
-    });
+    };
+    db.journal.push(_retJournalEntry);
+    if (overrideToken) window._periodOverrideTokens[`journal:${_retJournalEntry.id}`] = overrideToken;
     // Update linked purchase if exists
     if(linkedId) {
       const pur=db.purchases.find(p=>p.id===linkedId);
@@ -12525,7 +12598,7 @@ function renderJournal(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'القيود اليومية':'Journal Entries'}</div>
-      ${has('reports.view')?`<button class="btn btn-primary" onclick="showJournalModal()">${icon('plus',16)} ${lang==='ar'?'قيد يدوي':'Manual Entry'}</button>`:''}
+      ${has('reports.view')?`<button class="btn btn-primary" data-action="showJournalModal">${icon('plus',16)} ${lang==='ar'?'قيد يدوي':'Manual Entry'}</button>`:''}
     </div>
     <div class="card">
       <div class="tbl-wrap"><table class="tbl">
@@ -12561,20 +12634,20 @@ function showJournalModal() {
   const accounts = db.accounts||[];
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal modal-lg" onclick="event.stopPropagation()">
-      <div class="modal-head"><h3>📒 ${lang==='ar'?'قيد يومي جديد':'New Journal Entry'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal modal-lg" data-action="">
+      <div class="modal-head"><h3>📒 ${lang==='ar'?'قيد يومي جديد':'New Journal Entry'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'التاريخ':'Date'}</label><input class="input" type="date" id="je-date" value="${new Date().toISOString().slice(0,10)}" /></div>
         <div><label class="form-label">${lang==='ar'?'البيان':'Description'} *</label><input class="input" id="je-desc" /></div>
       </div>
       <div style="margin-bottom:8px;font-weight:800;">${lang==='ar'?'سطور القيد:':'Entry Lines:'}</div>
       <div id="je-lines"></div>
-      <button class="btn btn-outline btn-sm" onclick="addJELine()" style="margin-bottom:12px;">${icon('plus',14)} ${lang==='ar'?'إضافة سطر':'Add Line'}</button>
+      <button class="btn btn-outline btn-sm" data-action="addJELine" style="margin-bottom:12px;">${icon('plus',14)} ${lang==='ar'?'إضافة سطر':'Add Line'}</button>
       <div id="je-balance" style="padding:10px;border-radius:8px;text-align:center;font-weight:800;margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-full" onclick="saveJournalEntry()">${lang==='ar'?'حفظ القيد':'Save Entry'}</button>
-        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+        <button class="btn btn-primary btn-full" data-action="saveJournalEntry">${lang==='ar'?'حفظ القيد':'Save Entry'}</button>
+        <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
       </div>
     </div>
   </div>`;
@@ -12587,19 +12660,28 @@ function renderJELines() {
   const accounts=db.accounts||[];
   lines.innerHTML=window._jEntries.map((e,i)=>`
     <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
-      <select class="select" onchange="window._jEntries[${i}].account=this.options[this.selectedIndex].text;window._jEntries[${i}].account_code=this.value;renderJEBalance()">
+      <select class="select" data-onchange-el="jeSetAccount" data-onchange-el-args="[${i}]">
         <option value="">${lang==='ar'?'اختر حساب':'Select account'}</option>
         ${accounts.map(a=>`<option value="${a.code}" ${a.code===e.account_code?'selected':''}>${a.code} - ${sanitize(a.name)}</option>`).join('')}
       </select>
-      <select class="select" onchange="window._jEntries[${i}].side=this.value;renderJEBalance()">
+      <select class="select" data-onchange="jeSetSide" data-onchange-args="[${i}]">
         <option value="debit" ${e.side==='debit'?'selected':''}>${lang==='ar'?'مدين':'Debit'}</option>
         <option value="credit" ${e.side==='credit'?'selected':''}>${lang==='ar'?'دائن':'Credit'}</option>
       </select>
-      <input class="input" type="number" value="${e.amount}" placeholder="0" oninput="window._jEntries[${i}].amount=Number(this.value);renderJEBalance()" />
-      ${window._jEntries.length>2?`<button class="icon-btn" style="width:34px;height:34px;" onclick="window._jEntries.splice(${i},1);renderJELines()">${icon('trash-2',14)}</button>`:'<div></div>'}
+      <input class="input" type="number" value="${e.amount}" placeholder="0" data-oninput="jeSetAmount" data-oninput-args="[${i}]" />
+      ${window._jEntries.length>2?`<button class="icon-btn" style="width:34px;height:34px;" data-action="jeRemoveLine" data-args="[${i}]">${icon('trash-2',14)}</button>`:'<div></div>'}
     </div>`).join('');
   renderJEBalance();
 }
+
+function jeSetAccount(selectEl, i) {
+  window._jEntries[i].account = selectEl.options[selectEl.selectedIndex].text;
+  window._jEntries[i].account_code = selectEl.value;
+  renderJEBalance();
+}
+function jeSetSide(val, i) { window._jEntries[i].side = val; renderJEBalance(); }
+function jeSetAmount(val, i) { window._jEntries[i].amount = Number(val); renderJEBalance(); }
+function jeRemoveLine(i) { window._jEntries.splice(i,1); renderJELines(); }
 
 function addJELine() { window._jEntries.push({account:'',account_code:'',side:'credit',amount:0}); renderJELines(); }
 
@@ -12621,17 +12703,22 @@ function renderJEBalance() {
 
 function saveJournalEntry() {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB();
   if(!el('je-desc')?.value){showToast(lang==='ar'?'البيان مطلوب':'Description required','error');return;}
   const debits=window._jEntries.filter(e=>e.side==='debit').reduce((s,e)=>s+e.amount,0);
   const credits=window._jEntries.filter(e=>e.side==='credit').reduce((s,e)=>s+e.amount,0);
   if(Math.abs(Math.round(debits*100)-Math.round(credits*100))>1){showToast(lang==='ar'?'القيد غير متوازن':'Entry not balanced','error');return;}
+  guardClosedPeriod(el('je-date').value, (overrideToken) => _saveJournalEntryActual(overrideToken));
+}
+function _saveJournalEntryActual(overrideToken) {
+  const db=getDB();
   if(!db.journal)db.journal=[];
   if(!db.nextId.journal)db.nextId.journal=1;
   const entry={id:db.nextId.journal++,date:new Date(el('je-date').value).toISOString(),
     description:el('je-desc').value,entries:[...window._jEntries],ref:'MANUAL',
     created_by:currentUser?.username,created_at:new Date().toISOString()};
-  db.journal.push(entry);saveDB(db);
+  db.journal.push(entry);
+  if (overrideToken) window._periodOverrideTokens[`journal:${entry.id}`] = overrideToken;
+  saveDB(db);
   logActivity('قيود يومية',`قيد يدوي #${entry.id} — ${entry.description}`);
   showToast(`✅ ${lang==='ar'?'تم حفظ القيد':'Entry saved'}`);
   closeModal();renderPage();
@@ -17287,11 +17374,11 @@ async function runAISearchQuery(q) {
   // ═══════════════════════════════════════════════════════
   // 1. HTTP CLIENT
   // ═══════════════════════════════════════════════════════
-  async function apiFetch(method, path, body) {
+  async function apiFetch(method, path, body, extraHeaders) {
     const token = localStorage.getItem(TOKEN_KEY);
     const opts  = {
       method,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...(extraHeaders || {}) },
       body: body ? JSON.stringify(body) : undefined
     };
     let res = await fetch(API_BASE + path, opts);
@@ -17317,7 +17404,7 @@ async function runAISearchQuery(q) {
         return null;
       }
     }
-    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message||'API error'); }
+    if (!res.ok) { const e = await res.json().catch(()=>({})); const err = new Error(e.message||'API error'); err.code = e.code; throw err; }
     return res.json();
   }
 
@@ -18160,6 +18247,8 @@ async function runAISearchQuery(q) {
           // "جزئي" ليست بالقائمة، فكانت تُسجَّل كأنه لم يُدفع شيء نهائيًا رغم دفع
           // paid_amount فعليًا. نرسلها كـ"آجل" ثم نسجّل المبلغ المدفوع بطلب منفصل
           const _isPartialCreate = p.payment_method === 'جزئي';
+          const _pTok = window._periodOverrideTokens[`purchases:${p.id}`];
+          delete window._periodOverrideTokens[`purchases:${p.id}`];
           const res = await apiFetch('POST', '/api/purchases', {
             client_local_id: p.id,
             supplier_id:   _sup2?.id || null,
@@ -18173,7 +18262,7 @@ async function runAISearchQuery(q) {
               const _pr=_ldb2.products.find(x=>x.id===it.product_id)||_ldb2.products.find(x=>x.name===it.name);
               return {product_id:_pr?.id||it.product_id||null, name:it.name||_pr?.name||'', qty:parseFloat(it.qty)||1, unit_cost:parseFloat(it.price||it.unit_price||it.unit_cost||0)};
             }).filter(it=>it.name||it.product_id)
-          }).catch(e => { console.warn('purchase create:', e.message); return null; });
+          }, _pTok ? { 'X-Period-Override-Token': _pTok } : undefined).catch(e => { console.warn('purchase create:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
             if (res.data.purchase_no) {
@@ -18361,7 +18450,9 @@ async function runAISearchQuery(q) {
         const old = (prev.receipts || []).find(o => o.id === v.id);
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create voucher', v.voucher_no);
-          const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v)).catch(e => { console.warn('voucher sync:', e.message); return null; });
+          const _vTok = window._periodOverrideTokens[`vouchers:${v.id}`];
+          delete window._periodOverrideTokens[`vouchers:${v.id}`];
+          const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v), _vTok ? { 'X-Period-Override-Token': _vTok } : undefined).catch(e => { console.warn('voucher sync:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id);
             // رقم السند الرسمي (عدّاد مستقل لكل شركة بالسيرفر) يختلف عن الرقم
@@ -18467,10 +18558,12 @@ async function runAISearchQuery(q) {
         if (_prevJournal.find(x => x.id === j.id)) continue;
 
         if (SYNC_LOG) console.log('→ API: journal entry', j.description);
+        const _jTok = window._periodOverrideTokens[`journal:${j.id}`];
+        delete window._periodOverrideTokens[`journal:${j.id}`];
         const res = await apiFetch('POST', '/api/journal', {
           description: j.description || '', ref: j.ref || null, date: j.date || new Date().toISOString(),
           entries: j.entries || []
-        }).catch(e => { console.warn('journal entry sync:', e.message); return null; });
+        }, _jTok ? { 'X-Period-Override-Token': _jTok } : undefined).catch(e => { console.warn('journal entry sync:', e.message); return null; });
 
         if (res?.data?.id) {
           try {
@@ -18501,6 +18594,8 @@ async function runAISearchQuery(q) {
         if (_prevReturns.find(x => x.id === r.id)) continue;
 
         if (SYNC_LOG) console.log('→ API: return', r.return_no);
+        const _rTok = window._periodOverrideTokens[`returns:${r.id}`];
+        delete window._periodOverrideTokens[`returns:${r.id}`];
         const res = await apiFetch('POST', '/api/returns', {
           client_local_id: r.id,
           type: r.type === 'sales' ? 'sales' : 'purchases',
@@ -18511,7 +18606,7 @@ async function runAISearchQuery(q) {
           linked_purchase_id: r.type === 'purchases' ? (r.linked_id || null) : null,
           date: r.date || new Date().toISOString().slice(0, 10),
           payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0
-        }).catch(e => { console.warn('return sync:', e.message); return null; });
+        }, _rTok ? { 'X-Period-Override-Token': _rTok } : undefined).catch(e => { console.warn('return sync:', e.message); return null; });
 
         if (res?.data?.id) {
           try {

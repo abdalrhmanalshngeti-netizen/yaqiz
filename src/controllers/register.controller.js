@@ -125,6 +125,7 @@ exports.register = async (req, res, next) => {
       ['2210','ضريبة المدخلات','Input VAT','التزامات',false,'2000'],
       ['2300','الالتزامات الدورية','Periodic Obligations','التزامات',false,'2000'],
       ['3000','حقوق الملكية','Equity','حقوق الملكية',true,null],
+      ['3100','أرباح مرحّلة','Retained Earnings','حقوق الملكية',false,'3000'],
       ['4000','الإيرادات','Revenue','إيرادات',true,null],
       ['4100','إيرادات المبيعات','Sales Revenue','إيرادات',false,'4000'],
       ['4200','مرتجعات المبيعات','Sales Returns','إيرادات',false,'4000'],

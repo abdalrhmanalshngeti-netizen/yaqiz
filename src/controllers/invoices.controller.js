@@ -11,6 +11,8 @@ const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
+const periodClose = require('../services/periodClose.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 exports.list = async (req, res, next) => {
   try {
@@ -121,6 +123,14 @@ exports.create = async (req, res, next) => {
         await client.query('ROLLBACK');
         return res.status(404).json({ success: false, message: 'العميل غير موجود' });
       }
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, company_id, date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     // فرع الفاتورة: مصرَّح صراحة بالطلب (نقطة بيع/فرع مُختار) وإلا فرع البائع

@@ -4,6 +4,7 @@ const branch = require('../services/branch.service');
 const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const periodClose = require('../services/periodClose.service');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
@@ -61,6 +62,14 @@ exports.create = async (req, res, next) => {
       const { rows } = await client.query(`SELECT id, branch_id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' }); }
       linkedPurchase = rows[0];
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, company_id, date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     const retSeqN = await nextDocNumber(client, company_id, 'return');

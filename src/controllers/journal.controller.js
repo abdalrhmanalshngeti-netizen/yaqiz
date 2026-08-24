@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const periodClose = require('../services/periodClose.service');
 
 // يحدد نوع الحساب الافتراضي لأي كود غير معروف بالاعتماد على الرقم الأول
 // (1=أصول، 2=التزامات، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات) — احتياطي فقط
@@ -75,6 +76,14 @@ exports.create = async (req, res, next) => {
     if (Math.abs(debitCents - creditCents) > 1) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'القيد غير متوازن — المدين لا يساوي الدائن' });
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     const jeSeqN = await nextDocNumber(client, req.user.company_id, 'entry');

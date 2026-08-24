@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { todayLocalDateStr } = require('../utils/date.util');
 const { nextDocNumber } = require('../services/docNumber.service');
+const periodClose = require('../services/periodClose.service');
 
 // ملاحظة: هذا الكنترولر يحفظ سند القبض/الصرف نفسه فقط (للحفاظ عليه بين الأجهزة
 // وعدم فقدانه) — لا يُعيد تطبيق أثره على الفاتورة/رصيد العميل، لأن ذلك يُزامَن
@@ -65,6 +66,14 @@ exports.create = async (req, res, next) => {
     if (linked_purchase_id) {
       const { rows } = await client.query(`SELECT id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
       if (rows[0]) safeLinkedPurchaseId = linked_purchase_id;
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, company_id, date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     const seqN = await nextDocNumber(client, company_id, 'voucher');

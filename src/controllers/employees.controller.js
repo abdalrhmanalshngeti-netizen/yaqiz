@@ -2,6 +2,7 @@ const db     = require('../config/db');
 const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const periodClose = require('../services/periodClose.service');
 
 // حقول قائمة الموظفين — تُستثنى national_id وiqama_no وiban من قائمة الكل
 const LIST_FIELDS = `id, company_id, employee_no, name, position, department,
@@ -202,6 +203,14 @@ exports.markPayrollPaid = async (req, res, next) => {
     );
     if (!p) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'كشف الراتب غير موجود' }); }
     if (p.status === 'paid') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'تم الدفع بالفعل' }); }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, payment_date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
 
     await client.query(`
       UPDATE payroll SET status='paid', payment_date=$1, account_id=$2 WHERE id=$3
