@@ -841,11 +841,24 @@ function nextId(db, key) { const id = db.nextId[key]||1; db.nextId[key] = id+1; 
 // ============ فروع/مستودعات: نقطة موحّدة لحل المستودع النشط ============
 // المستخدم الحالي (فرعه) وإلا الفرع الرئيسي — نفس منطق الحل بالباكند
 // (branch.service.js) بالضبط، عشان لا يتعارض الاثنان أبدًا
+let _branchFallbackWarnedFor = null;
 function resolveActiveBranchId() {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
   if (!branches.length) return null;
   let branchId = currentUser?.branch_id;
+  if (branchId && !branches.some(b=>b.id===branchId)) {
+    // فرع المستخدم المخصَّص كان موجودًا لكن صار غير نشط الآن (تعطّل) — الرجوع
+    // للفرع الرئيسي هنا مقصود (لا نوقف المستخدم عن العمل)، لكن يستاهل تنبيهه
+    // مرة وحدة (لا كل رسم صفحة) بدل ما يسجّل عمليات على فرع مختلف عن فرعه
+    // الحقيقي بصمت تام
+    if (_branchFallbackWarnedFor !== branchId && typeof showToast === 'function') {
+      showToast(lang==='ar'
+        ? '⚠️ فرعك المخصَّص معطَّل حاليًا — تعمل الآن على الفرع الرئيسي مؤقتًا'
+        : '⚠️ Your assigned branch is inactive — working on the main branch temporarily', 'error');
+      _branchFallbackWarnedFor = branchId;
+    }
+  }
   if (!branchId || !branches.some(b=>b.id===branchId)) {
     branchId = (branches.find(b=>b.is_main) || branches[0]).id;
   }
@@ -11844,7 +11857,6 @@ async function showNotifications(){
       <div class="modal-head" style="position:sticky;top:0;z-index:1;background:var(--card);">
         <h3>🔔 ${lang==='ar'?'الإشعارات':'Notifications'} ${totalBadge>0?`<span class="badge badge-red" style="font-size:12px;">${totalBadge}</span>`:''}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
-          ${apiNotifs?.length>0?`<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;" data-action="markAllNotifsRead">${lang==='ar'?'قراءة الكل':'Mark all read'}</button>`:''}
           <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
         </div>
       </div>
@@ -11859,7 +11871,7 @@ async function showNotifications(){
         :apiNotifs.length>0?`
           ${alerts.length>0?`<div style="height:1px;background:var(--border);margin:12px 0;"></div>`:''}
           <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'إشعارات التسعير':'Pricing Notifications'}</div>
-          ${apiNotifs.map(n=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${n.is_read?'transparent':'rgba(59,130,246,.08)'};border-radius:10px;border:1px solid ${n.is_read?'var(--border)':'rgba(59,130,246,.25)'};" data-action="markNotifRead" data-args="${JSON.stringify([n.id])}">
+          ${apiNotifs.map(n=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${n.is_read?'transparent':'rgba(59,130,246,.08)'};border-radius:10px;border:1px solid ${n.is_read?'var(--border)':'rgba(59,130,246,.25)'};">
             <div style="width:36px;height:36px;border-radius:8px;background:${n.is_read?'#334155':'#3b82f6'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">💰</div>
             <div style="flex:1;">
               <div style="font-weight:800;font-size:13px;color:${n.is_read?'var(--text-main)':'#93c5fd'}">${n.title||'تحديث سعر'}</div>
@@ -11880,23 +11892,18 @@ async function showNotifications(){
   if (window._cloudApiFetch) {
     try {
       const res = await window._cloudApiFetch('GET', '/api/notifications');
-      renderNotifModal(res?.data || []);
+      const apiNotifs = res?.data || [];
+      renderNotifModal(apiNotifs);
+      // مجرد ما يفتح المالك النافذة ويشوف نص الرسالة (معروض كامل بالقائمة
+      // مباشرة، بلا حاجة لفتح كل رسالة لحالها)، تُعتبر مقروءة تلقائيًا — لا
+      // تحتاج قرارًا/ضغطة إضافية منه (لا لكل رسالة ولا زر "قراءة الكل")
+      if (apiNotifs.some(n => !n.is_read)) {
+        window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').then(() => _updateNotifBadge()).catch(() => {});
+      }
     } catch(e) { renderNotifModal([]); }
   } else {
     renderNotifModal([]);
   }
-}
-
-async function markNotifRead(id) {
-  const rowEl = this instanceof HTMLElement ? this : null;
-  if (rowEl) { rowEl.style.background='transparent'; rowEl.style.borderColor='var(--border)'; const dot=rowEl.querySelector('[style*="8px;background:#3b82f6"]'); if(dot)dot.remove(); }
-  if (window._cloudApiFetch) window._cloudApiFetch('PUT', `/api/notifications/${id}/read`).catch(()=>{});
-  _updateNotifBadge();
-}
-
-async function markAllNotifsRead() {
-  if (window._cloudApiFetch) await window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').catch(()=>{});
-  showNotifications();
 }
 
 async function _updateNotifBadge() {
@@ -17974,6 +17981,15 @@ async function runAISearchQuery(q) {
       // مزامنة بيانات الشركة في الإعدادات
       if (meRes?.data) {
         const m = meRes.data;
+        // فرع المستخدم الحالي قد يغيّره المالك بأي وقت (نقل موظف لفرع آخر) —
+        // كان currentUser لا يتحدّث إلا بتسجيل دخول جديد/إعادة تحميل الصفحة،
+        // فيبقى الموظف يسجّل عمليات على فرعه القديم طول الجلسة بأكملها حتى لو
+        // تغيّر فعليًا. /api/auth/me يرجّع فرع المستخدم الحقيقي الحالي مباشرة
+        // من قاعدة البيانات، ونحدّثه هنا كل دورة سحب دورية (٦٠ث) بدل الانتظار
+        if (currentUser && m.id === currentUser.id && m.branch_id !== currentUser.branch_id) {
+          currentUser.branch_id = m.branch_id;
+          try { localStorage.setItem('yaqiz_user', JSON.stringify(currentUser)); } catch (e) {}
+        }
         db.settings = db.settings || {};
         if (m.company_name)    db.settings.company_name = m.company_name;
         if (m.company_vat)     db.settings.vat_number   = m.company_vat;

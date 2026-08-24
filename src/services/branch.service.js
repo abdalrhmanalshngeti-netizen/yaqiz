@@ -1,3 +1,5 @@
+const db = require('../config/db');
+
 // يحل فرعًا (أو الفرع الرئيسي إن لم يُحدَّد) إلى مستودعه الوحيد الحالي —
 // نقطة موحّدة يستخدمها كل من المشتريات والفواتير والتعديل اليدوي للمخزون
 // بدل ما كل مسار يكرر نفس منطق الحل بنفسه.
@@ -63,4 +65,42 @@ exports.resolveWarehouseForUser = async (client, company_id, user_id, explicitBr
     [user_id, company_id]
   );
   return exports.resolveWarehouseForBranch(client, company_id, u?.branch_id || null);
+};
+
+// المشتريات والمرتجعات تُحفَظ محليًا بالمتصفح فورًا وتُزامَن مع السيرفر لاحقًا
+// بخلفية منفصلة (لا انتظار فوري لرد السيرفر، بعكس الفواتير) — فلو رُفض
+// الفرع هنا (403/404)، المستخدم اللي أنشأ العملية شافها "ناجحة" بجهازه ولا
+// يعرف إنها لم تصل السيرفر إطلاقًا، ونفس الفرع الخاطئ يتكرر رفضه بكل محاولة
+// إعادة مزامنة لاحقة فلا تتعافى تلقائيًا أبدًا. صاحب الشركة (الوحيد اللي
+// يقدر يصلّح فرع الموظف أو حالة الفرع) لازم يُبلَّغ صراحة، لا مجرد console.warn
+// (نفس نمط notifyIncompleteSellerData بـzatca.service.js: إشعار واحد لكل
+// مالك، بلا تكرار طالما فيه إشعار سابق من نفس النوع غير مقروء)
+exports.notifyBranchAuthFailure = async (companyId, actingUserId, docTypeLabel, reasonMessage) => {
+  try {
+    const { rows: [existing] } = await db.query(
+      `SELECT id FROM notifications WHERE company_id = $1 AND type = 'branch_sync_rejected' AND is_read = false LIMIT 1`,
+      [companyId]
+    );
+    if (existing) return;
+    const { rows: owners } = await db.query(
+      `SELECT id FROM users WHERE company_id = $1 AND role = 'owner' AND active = true`,
+      [companyId]
+    );
+    if (!owners.length) return;
+    const { rows: [actor] } = await db.query(
+      `SELECT full_name, username FROM users WHERE id = $1 AND company_id = $2`,
+      [actingUserId, companyId]
+    );
+    const actorName = actor?.full_name || actor?.username || 'مستخدم';
+    const message = `عملية (${docTypeLabel}) أنشأها "${actorName}" لم تصل للسيرفر بسبب مشكلة بالفرع (${reasonMessage}) — ستبقى ظاهرة "ناجحة" بجهاز "${actorName}" لكنها لن تُزامَن تلقائيًا أبدًا بهذا الفرع. تحقق من فرع الموظف أو حالة الفرع من الإعدادات، وأعد إدخال العملية يدويًا إذا لزم.`;
+    for (const owner of owners) {
+      await db.query(
+        `INSERT INTO notifications (company_id, user_id, type, title, message, link)
+         VALUES ($1,$2,'branch_sync_rejected','عملية لم تُزامَن بسبب الفرع',$3,'/VVIP.html#settings')`,
+        [companyId, owner.id, message]
+      );
+    }
+  } catch (e) {
+    console.error('[branch] failed to notify owner of branch sync rejection:', e.message);
+  }
 };

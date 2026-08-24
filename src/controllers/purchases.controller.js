@@ -102,9 +102,19 @@ exports.create = async (req, res, next) => {
     // كانت مشتريات بضاعة فعلية (أدناه). هذا المسار يستدعي resolveWarehouseForBranch
     // مباشرة (لا resolveWarehouseForUser) فكان يقبل أي branch_id من أي مستخدم
     // بلا أي تحقق صلاحية إطلاقًا — نتحقق صراحة هنا قبل الحل
-    await branch.assertBranchAuthorized(client, company_id, req.user.sub, req.user.role, req.body.branch_id);
-    const { branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
-      await branch.resolveWarehouseForBranch(client, company_id, req.body.branch_id);
+    let resolvedBranchId, resolvedWarehouseId;
+    try {
+      await branch.assertBranchAuthorized(client, company_id, req.user.sub, req.user.role, req.body.branch_id);
+      ({ branch_id: resolvedBranchId, warehouse_id: resolvedWarehouseId } =
+        await branch.resolveWarehouseForBranch(client, company_id, req.body.branch_id));
+    } catch (branchErr) {
+      await client.query('ROLLBACK');
+      // هذا المسار يصل غالبًا من مزامنة خلفية لا انتظار فوري لرد المستخدم
+      // (المشتريات محفوظة محليًا مسبقًا) — لازم صاحب الشركة يُبلَّغ صراحة،
+      // راجع تعليق notifyBranchAuthFailure لتفصيل السبب
+      await branch.notifyBranchAuthFailure(company_id, user_id, 'مشترى', branchErr.message).catch(() => {});
+      return res.status(branchErr.status || 400).json({ success: false, message: branchErr.message });
+    }
 
     if (supplier_id) {
       const { rows: [supRow] } = await client.query(

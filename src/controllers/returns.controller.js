@@ -126,9 +126,18 @@ exports.create = async (req, res, next) => {
     // مشتريات ما كان يُنقِص المخزون بالسيرفر أبدًا، ويعود الرقم القديم بصمت
     // بأول مزامنة دورية تالية رغم ظهور المرتجع "ناجحًا" بالواجهة)
     if (type === 'purchases' && product_id) {
-      const { warehouse_id } = linkedPurchase
-        ? await branch.resolveWarehouseForBranch(client, company_id, linkedPurchase.branch_id, false)
-        : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id);
+      let warehouse_id;
+      try {
+        ({ warehouse_id } = linkedPurchase
+          ? await branch.resolveWarehouseForBranch(client, company_id, linkedPurchase.branch_id, false)
+          : await branch.resolveWarehouseForUser(client, company_id, req.user.sub, req.body.branch_id));
+      } catch (branchErr) {
+        await client.query('ROLLBACK');
+        // نفس حالة المشتريات: المرتجعات محفوظة محليًا مسبقًا وتُزامَن لاحقًا
+        // بخلفية منفصلة — راجع تعليق notifyBranchAuthFailure
+        await branch.notifyBranchAuthFailure(company_id, req.user.sub, 'مرتجع مشتريات', branchErr.message).catch(() => {});
+        return res.status(branchErr.status || 400).json({ success: false, message: branchErr.message });
+      }
       // تكلفة العكس الحقيقية (FIFO) من stock.deduct نفسها — لا القيمة المُرسَلة
       // من الـclient بلا أي تحقق
       const { totalCost } = await stock.deduct(client, {
