@@ -1002,7 +1002,7 @@ function renderLogin() {
   el('app').innerHTML = `
   <div class="login-bg">
     <div style="position:absolute;top:20px;${lang==='ar'?'left':'right'}:20px;z-index:2;">
-      <button class="icon-btn" onclick="toggleLang()" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.25);color:white;">
+      <button class="icon-btn" data-action="toggleLang" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.25);color:white;">
         ${icon('globe',18)} <span style="margin-inline-start:6px;font-weight:700;font-size:13px;">${lang==='ar'?'EN':'ع'}</span>
       </button>
     </div>
@@ -1018,11 +1018,11 @@ function renderLogin() {
         <label class="form-label">${t('password')}</label>
         <div style="position:relative;">
           <input id="l-pass" class="input" type="password" value="" autocomplete="current-password" style="padding-inline-end:40px;" />
-          <button type="button" onclick="togglePw()" id="pw-btn" style="position:absolute;${lang==='ar'?'left':'right'}:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);">${icon('eye',18)}</button>
+          <button type="button" data-action="togglePw" id="pw-btn" style="position:absolute;${lang==='ar'?'left':'right'}:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);">${icon('eye',18)}</button>
         </div>
       </div>
       <div id="l-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;background:#fee2e2;padding:10px;border-radius:8px;"></div>
-      <button class="btn btn-primary btn-full" onclick="doLogin()" style="padding:12px;font-size:14px;">
+      <button class="btn btn-primary btn-full" data-action="doLogin" style="padding:12px;font-size:14px;">
         ${icon('shield-check',18)} ${t('loginBtn')}
       </button>
       <button class="hover-gray-btn" data-action="showSupportModal" style="width:100%;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;border-radius:10px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s;">
@@ -1044,14 +1044,14 @@ function togglePw() {
 function showSupportModal() {
   const mc = el('modal-container') || (() => { const d=document.createElement('div'); d.id='modal-container'; document.body.appendChild(d); return d; })();
   mc.innerHTML = `
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)this.parentElement.innerHTML=''">
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px;width:min(460px,95vw);max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;" data-action="closeModal">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px;width:min(460px,95vw);max-height:90vh;overflow-y:auto;" data-action="">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
         <div>
           <div style="font-size:17px;font-weight:900;color:#f8fafc;">🎧 ${lang==='ar'?'الدعم الفني':'Technical Support'}</div>
           <div style="font-size:12px;color:#64748b;margin-top:3px;">${lang==='ar'?'سنتواصل معك في أقرب وقت ممكن':'We will contact you as soon as possible'}</div>
         </div>
-        <button onclick="el('modal-container').innerHTML=''" style="background:none;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1;">✕</button>
+        <button data-action="closeModal" style="background:none;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1;">✕</button>
       </div>
 
       <div id="sup-err" style="display:none;background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;font-weight:700;"></div>
@@ -1078,7 +1078,7 @@ function showSupportModal() {
       <div style="font-size:11px;color:#475569;margin-bottom:14px;text-align:center;">
         ${lang==='ar'?'جميع الحقول المشار إليها بـ':'All fields marked'} <span style="color:#ef4444">*</span> ${lang==='ar'?'إلزامية':'are required'}
       </div>
-      <button id="sup-btn" onclick="sendSupportModal()" class="btn btn-primary btn-full" style="padding:13px;font-size:14px;">
+      <button id="sup-btn" data-action="sendSupportModal" class="btn btn-primary btn-full" style="padding:13px;font-size:14px;">
         ${icon('send',16)} ${lang==='ar'?'إرسال طلب الدعم':'Send Support Request'}
       </button>
     </div>
@@ -1548,7 +1548,7 @@ function renderCSButton() {
   if(!root) return;
 
   root.innerHTML = `
-  <button onclick="toggleCS()" style="
+  <button data-action="toggleCS" style="
     position:fixed;bottom:24px;${lang==='ar'?'left':'right'}:24px;
     width:54px;height:54px;border-radius:999px;
     background:linear-gradient(135deg,var(--primary),#7c3aed);
@@ -1572,33 +1572,33 @@ function renderCSButton() {
     <div style="padding:14px 16px;background:linear-gradient(135deg,var(--primary),#7c3aed);color:white;flex-shrink:0;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          ${_cs.dept?`<button onclick="csBack()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:inherit;">← رجوع</button>`:''}
+          ${_cs.dept?`<button data-action="csBack" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:inherit;">← رجوع</button>`:''}
           <div>
             <div style="font-weight:900;font-size:14px;">🎧 خدمة العملاء</div>
             ${_cs.dept?`<div style="font-size:11px;opacity:.8;">${_cs.dept.label}${_cs.sub?' › '+_cs.sub.label:''}</div>`:'<div style="font-size:11px;opacity:.8;">كيف نساعدك؟</div>'}
           </div>
         </div>
-        <button onclick="toggleCS()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+        <button data-action="toggleCS" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
       </div>
       ${!_cs.dept?`
       <div style="display:flex;gap:6px;">
-        <button onclick="csSetTab('support')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+        <button data-action="csSetTab" data-args='["support"]' style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
           background:${_cs.tab==='support'?'white':'rgba(255,255,255,.2)'};
           color:${_cs.tab==='support'?'var(--primary)':'white'};">
           🆘 دعم
         </button>
-        <button onclick="csSetTab('ai')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+        <button data-action="csSetTab" data-args='["ai"]' style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
           background:${_cs.tab==='ai'?'white':'rgba(255,255,255,.2)'};
           color:${_cs.tab==='ai'?'var(--primary)':'white'};">
           🤖 مساعد فوري
         </button>
-        <button onclick="csSetTab('tickets')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+        <button data-action="csSetTab" data-args='["tickets"]' style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
           background:${_cs.tab==='tickets'?'white':'rgba(255,255,255,.2)'};
           color:${_cs.tab==='tickets'?'var(--primary)':'white'};">
           🎫 تذاكري ${myTickets.length>0?`(${myTickets.length})`:''}
         </button>
         ${currentUser.role==='owner'&&pendingCount>0?`
-        <button onclick="csSetTab('inbox')" style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+        <button data-action="csSetTab" data-args='["inbox"]' style="flex:1;padding:6px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
           background:${_cs.tab==='inbox'?'white':'rgba(255,255,255,.2)'};
           color:${_cs.tab==='inbox'?'#dc2626':'white'};">
           🚨 الوارد (${pendingCount})
@@ -1652,7 +1652,7 @@ function renderCSBody(db, myTickets) {
       <div style="font-size:12px;color:var(--primary);font-weight:700;margin-bottom:6px;">📌 ${sanitize(e.path)}</div>
       ${e.note?`<div style="font-size:12px;color:var(--text-muted);background:var(--bg);padding:8px;border-radius:8px;margin-bottom:8px;">"${sanitize(e.note)}"</div>`:''}
       <input id="cs-reply-${e.id}" class="input" placeholder="رد على المستخدم (اختياري)..." style="font-size:12px;margin-bottom:8px;" />
-      <button onclick="csCloseEscalation(${e.id})" style="width:100%;padding:8px;background:#22c55e;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;">
+      <button data-action="csCloseEscalation" data-args="[${e.id}]" style="width:100%;padding:8px;background:#22c55e;color:white;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;">
         ✓ تم المعالجة
       </button>
     </div>`).join('');
@@ -1687,8 +1687,8 @@ function renderCSBody(db, myTickets) {
     <textarea id="cs-other-text" class="input" rows="4" style="margin-bottom:12px;resize:none;font-size:13px;"
       placeholder="اشرح مشكلتك بالتفصيل..."></textarea>
     <div style="display:flex;gap:8px;">
-      <button onclick="csSubmitOther()" style="flex:1;padding:10px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">إرسال</button>
-      <button onclick="csBack()" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-family:inherit;cursor:pointer;color:var(--text-main);">إلغاء</button>
+      <button data-action="csSubmitOther" style="flex:1;padding:10px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">إرسال</button>
+      <button data-action="csBack" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-family:inherit;cursor:pointer;color:var(--text-main);">إلغاء</button>
     </div>`;
   }
 
@@ -1729,7 +1729,7 @@ function renderCSBody(db, myTickets) {
     <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">الأولوية</div>
     <div style="display:flex;gap:6px;" id="cs-priority-btns">
       ${[['normal','عادية','#64748b'],['medium','متوسطة','#f59e0b'],['high','عاجلة','#ef4444']].map(([v,l,c])=>`
-      <button onclick="csSetPriority('${v}')" id="cs-pri-${v}" style="
+      <button data-action="csSetPriority" data-args='["${v}"]' id="cs-pri-${v}" style="
         flex:1;padding:7px 4px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;
         border:1.5px solid ${v==='normal'?c:'var(--border)'};
         background:${v==='normal'?c+'20':'var(--bg)'};
@@ -1741,21 +1741,23 @@ function renderCSBody(db, myTickets) {
     width:100%;padding:10px 12px;margin-bottom:10px;
     background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
     color:var(--text-main);font-family:inherit;font-size:12px;resize:none;outline:none;"
-    onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+    data-onfocus="csNoteFocus" data-onblur="csNoteBlur"></textarea>
 
   <div style="display:flex;gap:8px;">
-    <button onclick="csEscalate()" style="
+    <button data-action="csEscalate" style="
       flex:1;padding:11px;background:linear-gradient(135deg,#f97316,#ef4444);
       color:white;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
       🚨 إرسال للدعم
     </button>
-    <button onclick="csSolved()" style="
+    <button data-action="csSolved" style="
       flex:1;padding:11px;background:var(--bg);border:1.5px solid var(--success);
       color:var(--success);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
       ✅ حُلّت
     </button>
   </div>`;
 }
+function csNoteFocus() { this.style.borderColor='var(--primary)'; }
+function csNoteBlur() { this.style.borderColor='var(--border)'; }
 
 let _csPriority = 'normal';
 function csSetPriority(v) {
@@ -1844,9 +1846,10 @@ function csEscalate() {
       <div style="font-size:44px;margin-bottom:12px;">🎫</div>
       <div style="font-weight:900;font-size:15px;margin-bottom:6px;">تم إرسال تذكرتك</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6;">وصلت مشكلتك لفريق الدعم<br>يمكنك متابعة حالتها من تبويب "تذاكري"</div>
-      <button onclick="csSetTab('tickets');_cs.dept=null;renderCSButton();" style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
+      <button data-action="csViewTicketsAfterEscalate" style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
     </div>`;
 }
+function csViewTicketsAfterEscalate() { csSetTab('tickets'); _cs.dept=null; renderCSButton(); }
 
 function csSubmitOther() {
   const text=(document.getElementById('cs-other-text')?.value||'').trim();
@@ -1864,7 +1867,7 @@ function csSubmitOther() {
 
 function csSolved() {
   const body=document.getElementById('cs-body');
-  if(body) body.innerHTML=`<div style="text-align:center;padding:28px 16px;"><div style="font-size:44px;margin-bottom:12px;">🎉</div><div style="font-weight:900;font-size:15px;margin-bottom:6px;">ممتاز!</div><div style="font-size:12px;color:var(--text-muted);">سعداء بحل مشكلتك.</div><button onclick="csBack()" style="margin-top:16px;padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">حسناً</button></div>`;
+  if(body) body.innerHTML=`<div style="text-align:center;padding:28px 16px;"><div style="font-size:44px;margin-bottom:12px;">🎉</div><div style="font-weight:900;font-size:15px;margin-bottom:6px;">ممتاز!</div><div style="font-size:12px;color:var(--text-muted);">سعداء بحل مشكلتك.</div><button data-action="csBack" style="margin-top:16px;padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">حسناً</button></div>`;
 }
 
 function resetCS() {
@@ -1898,10 +1901,10 @@ function renderCsAiTab() {
     <div id="cs-ai-msgs" style="flex:1;overflow-y:auto;margin-bottom:10px;">${msgHtml}</div>
     <div style="display:flex;gap:6px;margin-bottom:8px;">
       <input id="cs-ai-inp" class="input" placeholder="اكتب مشكلتك..." style="flex:1;font-size:13px;"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();csAiSend();}" ${_csAiChat.loading?'disabled':''} />
-      <button onclick="csAiSend()" ${_csAiChat.loading?'disabled':''} style="padding:0 14px;background:var(--primary);color:white;border:none;border-radius:10px;cursor:pointer;font-size:15px;">➤</button>
+        data-enter-action="csAiSend" ${_csAiChat.loading?'disabled':''} />
+      <button data-action="csAiSend" ${_csAiChat.loading?'disabled':''} style="padding:0 14px;background:var(--primary);color:white;border:none;border-radius:10px;cursor:pointer;font-size:15px;">➤</button>
     </div>
-    <button onclick="csAiEscalate()" style="
+    <button data-action="csAiEscalate" style="
       width:100%;padding:10px;background:linear-gradient(135deg,#f97316,#ef4444);
       color:white;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;">
       🚨 ما حلّت مشكلتي — حوّلها لتذكرة دعم
@@ -1969,7 +1972,7 @@ function csAiEscalate() {
       <div style="font-size:44px;margin-bottom:12px;">🎫</div>
       <div style="font-weight:900;font-size:15px;margin-bottom:6px;">تم إرسال تذكرتك</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px;line-height:1.6;">أرفقنا محادثتك مع المساعد الفوري عشان فريق الدعم يشوفها مباشرة<br>تقدر تتابع حالتها من تبويب "تذاكري"</div>
-      <button onclick="csSetTab('tickets')" style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
+      <button data-action="csSetTab" data-args='["tickets"]' style="padding:10px 24px;background:var(--primary);color:white;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;">عرض تذاكري</button>
     </div>`;
 }
 
@@ -2036,7 +2039,7 @@ function renderAIChatButton() {
       </div>`).join('');
 
   root.innerHTML = `
-  <button onclick="toggleAIChat()" style="
+  <button data-action="toggleAIChat" style="
     position:fixed;bottom:24px;${side}:90px;
     width:54px;height:54px;border-radius:999px;
     background:linear-gradient(135deg,#6366f1,#8b5cf6);
@@ -2055,7 +2058,7 @@ function renderAIChatButton() {
     border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.25);
     z-index:999;overflow:hidden;transition:max-height .25s ease,min-height .25s ease;">
 
-    <div onclick="toggleAIChatMin()" style="
+    <div data-action="toggleAIChatMin" style="
       padding:12px 14px;
       background:${plan==='pro'?'linear-gradient(135deg,#7c3aed,#6d28d9,#4f46e5)':'linear-gradient(135deg,#3b82f6,#6366f1)'};
       color:white;flex-shrink:0;cursor:pointer;user-select:none;">
@@ -2071,9 +2074,9 @@ function renderAIChatButton() {
           </div>
         </div>
         <div style="display:flex;gap:5px;">
-          ${plan==='pro'?`<button onclick="event.stopPropagation();if(confirm('${lang==='ar'?'مسح سجل المحادثات؟':'Clear chat history?'}'))_aiClearHistory()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="${lang==='ar'?'مسح المحادثات':'Clear history'}">🗑</button>`:''}
-          <button onclick="event.stopPropagation();toggleAIChatMin()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>
-          <button onclick="event.stopPropagation();closeAIChat()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
+          ${plan==='pro'?`<button data-action="aiClearHistoryWithConfirm" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="${lang==='ar'?'مسح المحادثات':'Clear history'}">🗑</button>`:''}
+          <button data-action="toggleAIChatMin" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>
+          <button data-action="closeAIChat" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
       </div>
     </div>
@@ -2086,8 +2089,8 @@ function renderAIChatButton() {
     <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;background:var(--card-bg);">
       <input id="ai-chat-inp" class="input" placeholder="${lang==='ar'?'اسأل عن حساباتك...':'Ask about your accounts...'}"
         style="flex:1;padding:8px 12px;font-size:13px;border-radius:10px;"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAIMsg();}" />
-      <button onclick="sendAIMsg()" style="
+        data-onkeydown="aiInputKeydown" />
+      <button data-action="sendAIMsg" style="
         background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;
         border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:18px;
         flex-shrink:0;">↑</button>
@@ -2112,6 +2115,10 @@ function toggleAIChat() {
 
 function closeAIChat() { _aiChat.open = false; renderAIChatButton(); }
 function toggleAIChatMin() { _aiChat.minimized = !_aiChat.minimized; renderAIChatButton(); }
+function aiClearHistoryWithConfirm() {
+  if (confirm(lang==='ar'?'مسح سجل المحادثات؟':'Clear chat history?')) _aiClearHistory();
+}
+function aiInputKeydown(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendAIMsg(); } }
 
 async function sendAIMsg() {
   const inp = document.getElementById('ai-chat-inp');
@@ -7645,11 +7652,11 @@ function currentReportData() {
 function showReportDrillDownModal(title, subtitle, columns, rows) {
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:760px;">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:760px;">
       <div class="modal-head">
         <h3>${icon('list',18)} ${title}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="padding:0 20px 20px;">
         ${subtitle?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${subtitle}</div>`:''}
@@ -8382,8 +8389,8 @@ function saveBankBalance() {
 
 function addBankAdjustment() {
   const mc=el('modal-container');
-  mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
-    <div class="modal-head"><h3>${lang==='ar'?'إضافة بند تسوية':'Add Item'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+  mc.innerHTML=`<div class="modal-bg" data-action="closeModal"><div class="modal" data-action="" style="max-width:420px;">
+    <div class="modal-head"><h3>${lang==='ar'?'إضافة بند تسوية':'Add Item'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
     <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'البيان':'Description'} *</label><input class="input" id="ba-desc" /></div>
     <div class="form-row">
       <div><label class="form-label">${lang==='ar'?'المبلغ':'Amount'} *</label><input class="input" type="number" id="ba-amount" value="0" /></div>
@@ -8396,8 +8403,8 @@ function addBankAdjustment() {
     </div>
     <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'التاريخ':'Date'}</label><input class="input" type="date" id="ba-date" value="${new Date().toISOString().slice(0,10)}" /></div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary btn-full" onclick="saveBankAdj()">${lang==='ar'?'حفظ':'Save'}</button>
-      <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      <button class="btn btn-primary btn-full" data-action="saveBankAdj">${lang==='ar'?'حفظ':'Save'}</button>
+      <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
     </div>
   </div></div>`;
   refreshIcons();
@@ -8425,11 +8432,11 @@ function removeBankAdj(idx) {
 function showBankStatementImport() {
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:420px;">
       <div class="modal-head">
         <h3>📥 ${lang==='ar'?'استيراد كشف حساب بنكي':'Import Bank Statement'}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="padding:0 4px 8px;display:flex;flex-direction:column;gap:12px;">
         <p style="font-size:13px;color:var(--text-muted);margin:0 0 4px;">
@@ -8442,7 +8449,7 @@ function showBankStatementImport() {
             <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع PDF أو صورة للكشف':'Upload Statement PDF or Photo'}</span>
             <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'يقرأه الذكاء الاصطناعي تلقائيًا — نفس الميزة المستخدمة لتفريغ الفواتير':'Read automatically by AI — same feature used for invoice extraction'}</span>
           </span>
-          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" onchange="handleBankStatementAIImport(this)" />
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" data-onchange-el="handleBankStatementAIImport" />
         </label>
 
         <label class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;cursor:pointer;border-color:#3b82f6;color:#3b82f6;">
@@ -8451,10 +8458,10 @@ function showBankStatementImport() {
             <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع ملف Excel/CSV جاهز من البنك':'Upload Excel/CSV Straight From Bank'}</span>
             <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'لو البنك يصدّره جاهز — يُقرأ مباشرة بدون ذكاء اصطناعي':'If your bank exports one directly — read instantly, no AI needed'}</span>
           </span>
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleBankStatementImport(this)" />
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" data-onchange-el="handleBankStatementImport" />
         </label>
 
-        <button onclick="downloadBankStatementTemplate()" class="btn btn-outline btn-sm" style="align-self:flex-start;color:var(--text-muted);border-color:var(--border);">
+        <button data-action="downloadBankStatementTemplate" class="btn btn-outline btn-sm" style="align-self:flex-start;color:var(--text-muted);border-color:var(--border);">
           ${icon('download',13)} ${lang==='ar'?'أو حمّل نموذج فارغ لتعبئته يدويًا':'Or download a blank template to fill manually'}
         </button>
 
@@ -11716,10 +11723,10 @@ function showPartyStatement(partyId, partyType) {
   rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
   let running=0;
   const rowsWithBalance=rows.map(r=>{running+=r.debit-r.credit; return {...r,balance:running};});
-  mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal modal-lg" onclick="event.stopPropagation()">
+  mc.innerHTML=`<div class="modal-bg" data-action="closeModal"><div class="modal modal-lg" data-action="">
     <div class="modal-head">
       <h3>📊 ${lang==='ar'?'كشف حساب':'Statement'}: ${sanitize(partyName)}</h3>
-      <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+      <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
     </div>
     <div class="tbl-wrap"><table class="tbl">
       <thead><tr>
@@ -11752,8 +11759,8 @@ function showPartyStatement(partyId, partyType) {
       </tr></tfoot>
     </table></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-primary" onclick="printPartyStatement('${escJsAttr(partyName)}')">${icon('printer',14)} ${lang==='ar'?'طباعة':'Print'}</button>
-      <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إغلاق':'Close'}</button>
+      <button class="btn btn-primary" data-action="printPartyStatement" data-args="${JSON.stringify([partyName]).replace(/"/g,'&quot;')}">${icon('printer',14)} ${lang==='ar'?'طباعة':'Print'}</button>
+      <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إغلاق':'Close'}</button>
     </div>
   </div></div>`;
   refreshIcons();
@@ -12099,7 +12106,7 @@ function showShiftSummary(onConfirm) {
   const mc = el('modal-container');
   mc.innerHTML = `
   <div class="modal-bg">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:440px;">
+    <div class="modal" data-action="" style="max-width:440px;">
       <div class="modal-head">
         <h3>⏱️ ${lang==='ar'?'ملخص الوردية':'Shift Summary'}</h3>
       </div>
@@ -12164,7 +12171,7 @@ function showShiftSummary(onConfirm) {
         <button class="btn btn-danger btn-full" id="ss-confirm-btn">
           ${icon('log-out',16)} ${lang==='ar'?'حفظ وتأكيد الخروج':'Save & Confirm Logout'}
         </button>
-        <button class="btn btn-outline" onclick="closeModal()">
+        <button class="btn btn-outline" data-action="closeModal">
           ${lang==='ar'?'رجوع':'Back'}
         </button>
       </div>
@@ -12843,16 +12850,16 @@ function addLoyaltyPoints(customerName, amount, customerId) {
 function showAddPointsModal() {
   const db=getDB();
   const mc=el('modal-container');
-  mc.innerHTML=`<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-head"><h3>${lang==='ar'?'إضافة نقاط يدوي':'Add Points Manually'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+  mc.innerHTML=`<div class="modal-bg" data-action="closeModal"><div class="modal" data-action="">
+    <div class="modal-head"><h3>${lang==='ar'?'إضافة نقاط يدوي':'Add Points Manually'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
     <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'العميل':'Customer'}</label>
       <input class="input" id="ap-cust" list="ap-list" />
       <datalist id="ap-list">${db.customers.map(c=>`<option value="${sanitize(c.name)}">`).join('')}</datalist>
     </div>
     <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'عدد النقاط':'Points'}</label><input class="input" type="number" id="ap-pts" value="0" /></div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary btn-full" onclick="saveManualPoints()">${lang==='ar'?'إضافة':'Add'}</button>
-      <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      <button class="btn btn-primary btn-full" data-action="saveManualPoints">${lang==='ar'?'إضافة':'Add'}</button>
+      <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
     </div>
   </div></div>`;
   refreshIcons();
@@ -12936,11 +12943,11 @@ function printShiftReport(shiftId) {
 function showExcelImportModal(type) {
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:400px;">
       <div class="modal-head">
         <h3>📊 ${lang==='ar'?'استيراد Excel':'Import Excel'}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="padding:0 4px 8px;display:flex;flex-direction:column;gap:12px;">
 
@@ -12949,7 +12956,7 @@ function showExcelImportModal(type) {
         </p>
 
         <!-- تحميل النموذج -->
-        <button onclick="downloadTemplate('${type}')" class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;border-color:#16a34a;color:#16a34a;">
+        <button data-action="downloadTemplate" data-args="${JSON.stringify([type]).replace(/"/g,'&quot;')}" class="btn btn-outline" style="padding:16px;display:flex;align-items:center;gap:14px;text-align:${lang==='ar'?'right':'left'};justify-content:flex-start;border-color:#16a34a;color:#16a34a;">
           <span style="font-size:28px;line-height:1;">📥</span>
           <span>
             <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'تحميل نموذج Excel':'Download Excel Template'}</span>
@@ -12964,7 +12971,7 @@ function showExcelImportModal(type) {
             <span style="display:block;font-weight:800;font-size:14px;">${lang==='ar'?'رفع ملف Excel':'Upload Excel File'}</span>
             <span style="font-size:11px;opacity:0.7;">${lang==='ar'?'.xlsx / .xls / .csv — ارفع الملف المعبأ':'.xlsx / .xls / .csv — upload your filled file'}</span>
           </span>
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(this,'${type}','excel')" />
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none;" data-onchange-el="handleImportFile" data-onchange-el-args="${JSON.stringify([type,'excel']).replace(/"/g,'&quot;')}" />
         </label>
 
         <div id="import-preview" style="display:none;margin-top:4px;"></div>
@@ -14338,32 +14345,34 @@ function renderSubscriptionModalHTML() {
   const p = SUB_PRICING[_subModalPlan];
   const total   = _subModalCycle === 'annual' ? p.annual : p.monthly;
   const savings = (p.monthly * 12) - p.annual;
-  return `<div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:460px;">
-      <div class="modal-head"><h3>🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+  return `<div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:460px;">
+      <div class="modal-head"><h3>🚀 ${lang==='ar'?'ترقية / تجديد الاشتراك':'Upgrade / Renew Subscription'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
       <div style="padding:0 20px 20px;">
         <label class="form-label">${lang==='ar'?'الباقة':'Plan'}</label>
         <div style="display:flex;gap:8px;margin-bottom:14px;">
           ${Object.entries(SUB_PRICING).map(([k,v])=>`
-            <button class="btn btn-sm ${k===_subModalPlan?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalPlan='${k}';_refreshSubscriptionModal();">${v.icon} ${lang==='ar'?v.label:v.labelEn}</button>
+            <button class="btn btn-sm ${k===_subModalPlan?'btn-primary':'btn-outline'}" style="flex:1;" data-action="setSubModalPlan" data-args="${JSON.stringify([k]).replace(/"/g,'&quot;')}">${v.icon} ${lang==='ar'?v.label:v.labelEn}</button>
           `).join('')}
         </div>
         <label class="form-label">${lang==='ar'?'دورة الاشتراك':'Billing Cycle'}</label>
         <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <button class="btn btn-sm ${_subModalCycle==='monthly'?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalCycle='monthly';_refreshSubscriptionModal();">${lang==='ar'?'شهري':'Monthly'}</button>
-          <button class="btn btn-sm ${_subModalCycle==='annual'?'btn-primary':'btn-outline'}" style="flex:1;" onclick="_subModalCycle='annual';_refreshSubscriptionModal();">${lang==='ar'?'سنوي':'Annual'}</button>
+          <button class="btn btn-sm ${_subModalCycle==='monthly'?'btn-primary':'btn-outline'}" style="flex:1;" data-action="setSubModalCycle" data-args='["monthly"]'>${lang==='ar'?'شهري':'Monthly'}</button>
+          <button class="btn btn-sm ${_subModalCycle==='annual'?'btn-primary':'btn-outline'}" style="flex:1;" data-action="setSubModalCycle" data-args='["annual"]'>${lang==='ar'?'سنوي':'Annual'}</button>
         </div>
         <div style="background:var(--bg);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
           <div style="font-size:28px;font-weight:900;color:var(--primary);">${fmtMoney(total)} <span style="font-size:13px;color:var(--text-muted);">${lang==='ar'?'ر.س':'SAR'}</span></div>
           ${_subModalCycle==='annual'&&savings>0?`<div style="font-size:12px;color:var(--success);font-weight:700;margin-top:4px;">💚 ${lang==='ar'?`توفّر ${fmtMoney(savings)} ر.س سنويًا مقارنة بالشهري`:`Save ${fmtMoney(savings)} SAR/year vs. monthly`}</div>`:''}
         </div>
         <div id="sub-modal-err" style="display:none;color:var(--danger);font-size:12px;margin-bottom:10px;text-align:center;"></div>
-        <button class="btn btn-primary btn-full" id="sub-pay-btn" onclick="paySubscription()">💳 ${lang==='ar'?'ادفع الآن':'Pay Now'}</button>
+        <button class="btn btn-primary btn-full" id="sub-pay-btn" data-action="paySubscription">💳 ${lang==='ar'?'ادفع الآن':'Pay Now'}</button>
         <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:10px;">🔒 ${lang==='ar'?'دفع آمن عبر Moyasar':'Secure payment via Moyasar'}</p>
       </div>
     </div>
   </div>`;
 }
+function setSubModalPlan(k) { _subModalPlan = k; _refreshSubscriptionModal(); }
+function setSubModalCycle(c) { _subModalCycle = c; _refreshSubscriptionModal(); }
 
 async function paySubscription() {
   const btn   = el('sub-pay-btn');
@@ -14554,11 +14563,11 @@ function quickReceipt(invoiceId) {
   const remaining = inv.grand_total - (inv.paid_amount||0);
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="">
       <div class="modal-head">
         <h3>📥 ${lang==='ar'?'تحصيل سريع':'Quick Receipt'} — ${inv.invoice_no}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="background:var(--primary-soft);padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>${lang==='ar'?'العميل:':'Customer:'}</span><b>${sanitize(inv.customer_name)}</b></div>
@@ -14578,9 +14587,9 @@ function quickReceipt(invoiceId) {
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-primary btn-full" onclick="saveQuickReceipt(${invoiceId})">${lang==='ar'?'تحصيل وطباعة سند':'Collect & Print'}</button>
-        <button class="btn btn-outline" onclick="saveQuickReceipt(${invoiceId},false)">${lang==='ar'?'تحصيل فقط':'Collect Only'}</button>
-        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+        <button class="btn btn-primary btn-full" data-action="saveQuickReceipt" data-args="[${invoiceId}]">${lang==='ar'?'تحصيل وطباعة سند':'Collect & Print'}</button>
+        <button class="btn btn-outline" data-action="saveQuickReceipt" data-args="[${invoiceId},false]">${lang==='ar'?'تحصيل فقط':'Collect Only'}</button>
+        <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
       </div>
     </div>
   </div>`;
@@ -14663,11 +14672,11 @@ function quickPayPurchase(purchaseId) {
   if(remaining<=0){showToast(lang==='ar'?'الفاتورة مسددة بالكامل':'Invoice fully paid');return;}
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:460px;">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:460px;">
       <div class="modal-head">
         <h3>💳 ${lang==='ar'?'سداد فاتورة مورد':'Pay Supplier Invoice'} — ${p.invoice_no||'#'+p.id}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="background:var(--primary-soft);padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px;display:flex;flex-direction:column;gap:5px;">
         <div style="display:flex;justify-content:space-between;"><span>${lang==='ar'?'المورد:':'Supplier:'}</span><b>${sanitize(p.vendor)}</b></div>
@@ -14691,8 +14700,8 @@ function quickPayPurchase(purchaseId) {
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-primary btn-full" onclick="saveQuickPayPurchase(${purchaseId})">${lang==='ar'?'تأكيد السداد':'Confirm Payment'}</button>
-        <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إلغاء':'Cancel'}</button>
+        <button class="btn btn-primary btn-full" data-action="saveQuickPayPurchase" data-args="[${purchaseId}]">${lang==='ar'?'تأكيد السداد':'Confirm Payment'}</button>
+        <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
       </div>
     </div>
   </div>`;
@@ -14828,16 +14837,16 @@ function showBarcodeGenerator() {
   const db=getDB();
   const mc=el('modal-container');
   mc.innerHTML=`
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal modal-lg" onclick="event.stopPropagation()">
-      <div class="modal-head"><h3>🔲 ${lang==='ar'?'مولد الباركود':'Barcode Generator'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button></div>
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal modal-lg" data-action="">
+      <div class="modal-head"><h3>🔲 ${lang==='ar'?'مولد الباركود':'Barcode Generator'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
       <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
         <select class="select" id="bc-product" style="flex:1;">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
           ${db.products.map(p=>`<option value="${p.id}">${sanitize(p.name)} — ${sanitize(p.code)}</option>`).join('')}
         </select>
         <input class="input" type="number" id="bc-count" value="1" min="1" max="50" style="width:80px;" placeholder="${lang==='ar'?'عدد':'Count'}" />
-        <button class="btn btn-primary" onclick="generateBarcodePrint()">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
+        <button class="btn btn-primary" data-action="generateBarcodePrint">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
       </div>
       <div id="bc-preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:12px;background:var(--bg);border-radius:10px;min-height:100px;">
         <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:30px;">${lang==='ar'?'اختر منتجاً لمعاينة الباركود':'Select a product to preview'}</div>
@@ -16944,31 +16953,37 @@ function openAIExtractModal(docType = 'invoice') {
 
   const mc = el('modal-container');
   mc.innerHTML = `
-  <div class="modal-bg" onclick="closeModal()">
-    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;">
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:500px;">
       <div class="modal-head">
         <h3 style="color:#6366f1;">${icon('sparkles',18)} ${lang==='ar'?'تفريغ مستند بالذكاء الاصطناعي':'AI Document Extraction'}</h3>
-        <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+        <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
       </div>
       <div style="padding:0 20px 20px;">
         <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
           ${lang==='ar'?'ارفع صورة فاتورة أو إيصال وسيستخرج الذكاء الاصطناعي بياناته تلقائياً.':'Upload an invoice or receipt image and AI will extract data automatically.'}
         </p>
         <div id="ai-extract-drop" style="border:2px dashed #6366f1;border-radius:12px;padding:32px;text-align:center;cursor:pointer;background:var(--primary-soft);"
-          onclick="el('ai-extract-file').click()"
-          ondragover="event.preventDefault();this.style.background='#e0e7ff'"
-          ondragleave="this.style.background='var(--primary-soft)'"
-          ondrop="event.preventDefault();this.style.background='var(--primary-soft)';handleAIExtractDrop(event,'${docType}')">
+          data-action="aiExtractDropZoneClick"
+          data-ondragover="aiExtractDropZoneDragOver"
+          data-ondragleave="aiExtractDropZoneDragLeave"
+          data-ondrop="aiExtractDropZoneDrop" data-ondrop-args="${JSON.stringify([docType]).replace(/"/g,'&quot;')}">
           <div style="font-size:36px;margin-bottom:8px;">📷</div>
           <div style="font-weight:700;color:var(--primary);">${lang==='ar'?'اضغط لاختيار صورة أو اسحب وأفلت':'Click to upload or drag & drop'}</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">JPG, PNG, WEBP — ${lang==='ar'?'حجم أقصى 10 ميجا':'Max 10MB'}</div>
         </div>
-        <input type="file" id="ai-extract-file" accept="image/*" style="display:none;" onchange="handleAIExtractFile('${docType}',this.files[0])"/>
+        <input type="file" id="ai-extract-file" accept="image/*" style="display:none;" data-onchange-el="handleAIExtractFileFromInput" data-onchange-el-args="${JSON.stringify([docType]).replace(/"/g,'&quot;')}"/>
         <div id="ai-extract-status" style="margin-top:12px;font-size:13px;text-align:center;min-height:20px;"></div>
       </div>
     </div>
   </div>`;
 }
+
+function aiExtractDropZoneClick() { el('ai-extract-file').click(); }
+function aiExtractDropZoneDragOver(e) { e.preventDefault(); this.style.background='#e0e7ff'; }
+function aiExtractDropZoneDragLeave() { this.style.background='var(--primary-soft)'; }
+function aiExtractDropZoneDrop(e, docType) { e.preventDefault(); this.style.background='var(--primary-soft)'; handleAIExtractDrop(e, docType); }
+function handleAIExtractFileFromInput(inputEl, docType) { handleAIExtractFile(docType, inputEl.files[0]); }
 
 function handleAIExtractDrop(event, docType) {
   const file = event.dataTransfer.files[0];
@@ -17018,11 +17033,11 @@ async function handleSilentAIImport(file, docType) {
     }
   } catch (err) {
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:360px;text-align:center;padding:32px;">
         <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:13px;color:var(--danger);margin-bottom:16px;">${err.message}</div>
-        <button class="btn btn-primary" onclick="closeModal()">${lang==='ar'?'حسناً':'OK'}</button>
+        <button class="btn btn-primary" data-action="closeModal">${lang==='ar'?'حسناً':'OK'}</button>
       </div>
     </div>`;
   }
@@ -17054,12 +17069,12 @@ async function handleAIExtractFile(docType, file) {
     openPurchaseFormWithAIData(result.data, result.usage);
   } catch (err) {
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;text-align:center;padding:32px 24px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:400px;text-align:center;padding:32px 24px;">
         <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
         <div style="font-weight:700;color:var(--danger);margin-bottom:8px;">${lang==='ar'?'لم يتمكن الذكاء الاصطناعي من قراءة الفاتورة':'AI could not read the invoice'}</div>
         <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">${err.message}</div>
-        <button class="btn btn-primary" onclick="closeModal()">${lang==='ar'?'حسناً':'OK'}</button>
+        <button class="btn btn-primary" data-action="closeModal">${lang==='ar'?'حسناً':'OK'}</button>
       </div>
     </div>`;
   }
@@ -17158,11 +17173,11 @@ async function runAIAnalysis() {
     const usageHint = result.usage ? `<span style="font-size:11px;color:var(--text-muted);">(${result.usage.used}/${result.usage.limit} ${lang==='ar'?'هذا الشهر':'this month'})</span>` : '';
     const analysisHtml = (result.analysis||'').replace(/\n/g,'<br>');
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:600px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:600px;">
         <div class="modal-head">
           <h3 style="color:#6366f1;">${icon('sparkles',18)} ${lang==='ar'?'التحليل المالي الذكي':'AI Financial Analysis'} ${usageHint}</h3>
-          <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+          <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
         </div>
         <div style="padding:0 20px 20px;">
           <div style="background:var(--primary-soft);border-radius:12px;padding:20px;line-height:1.9;font-size:14px;">
@@ -17176,12 +17191,12 @@ async function runAIAnalysis() {
     </div>`;
   } catch (err) {
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:400px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:400px;">
         <div style="padding:24px;text-align:center;">
           <div style="font-size:32px;">⚠️</div>
           <p style="color:var(--danger);">${err.message}</p>
-          <button class="btn btn-primary" onclick="closeModal()" style="margin-top:12px;">${lang==='ar'?'إغلاق':'Close'}</button>
+          <button class="btn btn-primary" data-action="closeModal" style="margin-top:12px;">${lang==='ar'?'إغلاق':'Close'}</button>
         </div>
       </div>
     </div>`;
@@ -17239,18 +17254,18 @@ async function runAISearchQuery(q) {
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.message || 'خطأ');
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:520px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:520px;">
         <div class="modal-head">
           <h3 style="color:#4f46e5;">🤖 ${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}</h3>
-          <button class="icon-btn" onclick="closeModal()">${icon('x',18)}</button>
+          <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
         </div>
         <div style="padding:0 20px 8px;font-size:12px;color:var(--text-muted);">"${q}"</div>
         <div style="padding:0 20px 20px;font-size:14px;line-height:2;color:var(--text-main);">
           ${(data.answer||'').replace(/\n/g,'<br>')}
         </div>
         <div style="padding:0 20px 20px;text-align:end;">
-          <button class="btn btn-outline" onclick="closeModal()">${lang==='ar'?'إغلاق':'Close'}</button>
+          <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إغلاق':'Close'}</button>
         </div>
       </div>
     </div>`;
@@ -17258,11 +17273,11 @@ async function runAISearchQuery(q) {
   } catch (err) {
     const msg = err.name==='AbortError'?(lang==='ar'?'انتهت المهلة':'Timed out'):err.message;
     mc.innerHTML = `
-    <div class="modal-bg" onclick="closeModal()">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:360px;text-align:center;padding:32px;">
+    <div class="modal-bg" data-action="closeModal">
+      <div class="modal" data-action="" style="max-width:360px;text-align:center;padding:32px;">
         <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:13px;color:var(--danger);margin-bottom:16px;">${msg}</div>
-        <button class="btn btn-primary" onclick="closeModal()">${lang==='ar'?'حسناً':'OK'}</button>
+        <button class="btn btn-primary" data-action="closeModal">${lang==='ar'?'حسناً':'OK'}</button>
       </div>
     </div>`;
   }
@@ -19061,11 +19076,11 @@ async function runAISearchQuery(q) {
       const d = document.createElement('div'); d.id = 'modal-container'; document.body.appendChild(d); return d;
     })();
     mc.innerHTML = `
-    <div class="modal-bg" onclick="if(event.target===this)closeModal()" style="display:flex;align-items:center;justify-content:center;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998">
-    <div class="modal" style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:min(480px,95vw);max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div class="modal-bg" data-action="closeModal" style="display:flex;align-items:center;justify-content:center;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998">
+    <div class="modal" data-action="" style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px;width:min(480px,95vw);max-height:90vh;overflow-y:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <h3 style="font-size:18px;font-weight:900;color:#f8fafc">🏢 تسجيل منشأة جديدة</h3>
-        <button onclick="closeModal()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button>
+        <button data-action="closeModal" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button>
       </div>
       <div id="_reg_err" style="display:none;background:#fee2e2;color:#dc2626;padding:10px;border-radius:8px;margin-bottom:12px;font-size:13px;"></div>
 
@@ -19103,8 +19118,8 @@ async function runAISearchQuery(q) {
       </div>
 
       <div style="display:flex;gap:10px">
-        <button id="_r_submit" onclick="_doRegister()" class="btn btn-primary btn-full" style="padding:12px;font-size:14px">إنشاء الحساب</button>
-        <button onclick="closeModal()" class="btn btn-outline" style="padding:12px;min-width:90px">إلغاء</button>
+        <button id="_r_submit" data-action="_doRegister" class="btn btn-primary btn-full" style="padding:12px;font-size:14px">إنشاء الحساب</button>
+        <button data-action="closeModal" class="btn btn-outline" style="padding:12px;min-width:90px">إلغاء</button>
       </div>
     </div></div>`;
   };
