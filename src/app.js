@@ -3,6 +3,7 @@ const express     = require('express');
 const helmet      = require('helmet');
 const cors        = require('cors');
 const compression = require('compression');
+const crypto      = require('crypto');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
@@ -10,6 +11,15 @@ const app = express();
 // ── Security & parsing ────────────────────────────────────────
 const isProduction = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
+
+// nonce عشوائي جديد لكل طلب — يسمح للسكربتات المضمّنة الحقيقية بـVVIP.html
+// بالتنفيذ (تحمل نفس الـnonce بوسم <script>) بينما أي سكربت مُحقَن عبر XSS
+// (لا يعرف الـnonce الصحيح مسبقًا) يُرفَض تلقائيًا — يُستخدَم بكل من CSP أدناه
+// وراوت VVIP.html نفسه (injectScriptNonce)
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
 
 // إعادة توجيه HTTP → HTTPS في الإنتاج
 if (isProduction) {
@@ -27,10 +37,15 @@ app.use(helmet({
       defaultSrc:    ["'self'"],
       // إزالة unpkg.com — غير مُستخدَم إطلاقًا بأي صفحة (تأكَّد بالبحث بكل public/)،
       // كان سماحًا زائدًا بلا أي فائدة فعلية. cdnjs/jsdelivr لا تزالان مطلوبتان
-      // فعليًا (JsBarcode، qrcodejs، xlsx). إزالة unsafe-inline/unsafe-eval نفسها
-      // تحتاج إعادة هيكلة منفصلة كبيرة (كل onclick="" بالتطبيق + كود JS المضمَّن
-      // بالصفحة نفسها) — خارج نطاق هذا التخفيف الآمن البسيط
-      scriptSrc:     ["'self'", "'unsafe-inline'", "'unsafe-eval'",
+      // فعليًا (JsBarcode، qrcodejs، xlsx).
+      // 'unsafe-inline' أُزيلت من scriptSrc واستُبدلت بـnonce عشوائي لكل طلب
+      // (يُحقَن بوسم <script> الفعلية عبر راوت VVIP.html) — أي متصفح حديث يتجاهل
+      // 'unsafe-inline' تلقائيًا لو وُجد nonce بنفس التوجيه (سلوك موثّق بمواصفة
+      // CSP)، فهذا يغلق فعليًا احتمال تنفيذ <script> خارجي يُحقَن عبر XSS مستقبلي
+      // (لا يعرف الـnonce الصحيح مسبقًا) بلا أي تعديل على onclick="" إطلاقًا.
+      // scriptSrcAttr (خصائص onclick=""...) تبقى 'unsafe-inline' كما هي — إزالتها
+      // تحتاج تحويل آلاف الأزرار بالتطبيق لـaddEventListener، مشروع منفصل أكبر
+      scriptSrc:     ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`, "'unsafe-eval'",
                       "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
@@ -66,6 +81,24 @@ app.use(cors({
 // ── خدمة الـ public files (api-client.js, manifest.json, sw.js) ──
 const staticPath = require('path').join(__dirname, '..', 'public');
 app.use('/public', require('express').static(staticPath));
+
+// يرسل صفحة HTML ثابتة بعد حقن الـnonce الخاص بهذا الطلب بكل وسم <script>
+// مضمَّن فعليًا (بلا src) — أي صفحة فيها سكربت مضمّن ولا تمرّ من هنا ستنكسر
+// تحت CSP الجديد (scriptSrc ما عاد فيه 'unsafe-inline'). يُخزَّن محتوى كل ملف
+// بالذاكرة بعد أول قراءة (الملفات لا تتغيّر أثناء تشغيل السيرفر، وأي تعديل
+// فعلي يحتاج إعادة تشغيل على أي حال — نفس افتراض res.sendFile السابق تمامًا)
+const fs = require('fs');
+const htmlTemplateCache = new Map();
+function sendHtmlWithNonce(filePath, req, res) {
+  let template = htmlTemplateCache.get(filePath);
+  if (!template) {
+    template = fs.readFileSync(filePath, 'utf8');
+    htmlTemplateCache.set(filePath, template);
+  }
+  const html = template.replace(/<script(?![^>]*\bsrc=)/g, `<script nonce="${res.locals.cspNonce}"`);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+}
 
 // sw.js يجب أن يُقدَّم من / لأن scope يعتمد على المسار
 app.get('/sw.js', (_, res) => {
@@ -125,29 +158,29 @@ app.get('/sitemap.xml', (_, res) => {
   res.setHeader('Content-Type', 'application/xml');
   res.sendFile(require('path').join(staticPath, 'sitemap.xml'));
 });
-app.get('/', (_, res) => {
+app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.sendFile(require('path').join(staticPath, 'index.html'));
+  sendHtmlWithNonce(require('path').join(staticPath, 'index.html'), req, res);
 });
 app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
 app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));
-app.get('/subscribe', (_, res) => {
+app.get('/subscribe', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.sendFile(require('path').join(staticPath, 'subscribe.html'));
+  sendHtmlWithNonce(require('path').join(staticPath, 'subscribe.html'), req, res);
 });
-app.get('/reset-password',   (_, res) => res.sendFile(require('path').join(staticPath, 'reset-password.html')));
+app.get('/reset-password',   (req, res) => sendHtmlWithNonce(require('path').join(staticPath, 'reset-password.html'), req, res));
 app.get('/payment/callback', require('./controllers/payments.controller').verifyCallback);
-app.get('/VVIP.html',(_, res) => {
+app.get('/VVIP.html',(req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.sendFile(require('path').join(staticPath, 'VVIP.html'));
+  sendHtmlWithNonce(require('path').join(staticPath, 'VVIP.html'), req, res);
 });
 // /admin — لا يُعاد توجيهه للخارج، التحقق من المصادقة يتم داخل الصفحة عبر JWT
-app.get('/admin', (_, res) => {
+app.get('/admin', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-  res.sendFile(require('path').join(staticPath, 'admin.html'));
+  sendHtmlWithNonce(require('path').join(staticPath, 'admin.html'), req, res);
 });
 
 // ── Error handler ────────────────────────────────────────────
