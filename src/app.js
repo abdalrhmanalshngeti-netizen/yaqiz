@@ -62,6 +62,11 @@ app.use(helmet({
       connectSrc:    ["'self'"],
       workerSrc:     ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
       frameSrc:      ["'none'"],
+      // Phase 4: السياسة أعلاه مُفعَّلة (enforce) بالفعل منذ المراحل 1-2، لا
+      // Report-Only — هذا التوجيه إضافة مراقبة فوقها فقط: أي مخالفة تحصل
+      // بترافيك إنتاج حقيقي (متصفحات/إضافات لم تغطّها Playwright) تُسجَّل
+      // بلوجات السيرفر بدل المرور بصمت، دون إضعاف الحظر الفعلي القائم أصلًا
+      reportUri:     ['/api/csp-report'],
     }
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
@@ -117,6 +122,7 @@ app.use(apiLimiter);
 app.get('/health', (_, res) => res.json({ status: 'ok', time: new Date() }));
 
 // ── Routes ───────────────────────────────────────────────────
+app.use('/api/csp-report', require('./routes/cspReport.routes'));
 app.use('/api/register',  require('./routes/register.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
 app.use('/api/print',     require('./routes/print.routes'));
