@@ -576,15 +576,18 @@ exports.cancel = async (req, res, next) => {
         + (creditNote ? ` — إشعار دائن ${creditNote.note_no}` : '')
     });
 
-    // تصديق فوري "أفضل جهد" لإشعار الدائن لدى الهيئة — كانت createCreditNote
-    // تبني وتوقّع الإشعار محليًا فقط بلا أي إرسال فعلي إطلاقًا (submitCreditNoteBestEffort
-    // موجودة أصلًا بـzatcaSubmit.service.js لكن لم يستدعها أي مكان بالكود)
-    if (creditNote) {
+    // تصديق فوري "أفضل جهد" لإشعار الدائن لدى الهيئة — فقط لو ما انصدّق فعليًا
+    // أعلاه داخل createCreditNote (فاتورة قياسية + شهادة سارية = حجب متزامن)،
+    // وإلا يُرسَل مرتين — نفس الحارس المطبَّق على الفاتورة الأصلية بـexports.create
+    if (creditNote && creditNote.zatca_status !== 'cleared' && creditNote.zatca_status !== 'reported') {
       submitCreditNoteBestEffort(creditNote.id, req.user.company_id, (inv.invoice_type || 'simplified') === 'simplified').catch(() => {});
     }
 
   } catch (err) {
     await client.query('ROLLBACK');
+    if (err.code === 'zatca_clearance_failed') {
+      return res.status(err.status).json({ success: false, code: err.code, message: err.message, zatca_error: err.zatca_error });
+    }
     next(err);
   } finally {
     client.release();

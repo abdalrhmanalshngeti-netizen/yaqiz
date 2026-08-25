@@ -11,6 +11,7 @@ const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaH
 const { buildXadesSignature, embedSignature, embedQR } = require('./zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
 const zatcaOnboarding = require('./zatcaOnboarding.service');
+const { submitCreditNote } = require('./zatcaSubmit.service');
 const { nextDocNumber } = require('./docNumber.service');
 
 /**
@@ -81,8 +82,10 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
 
   // بناء XML + توقيع + QR — نفس مسار الفاتورة العادية بالضبط، بلا تأثير على
   // إنشاء المستند نفسه لو فشل (يُسجَّل تحذير فقط، تمامًا كما مع الفواتير)
+  let companyRow = null;
+  let credential = null;
   try {
-    const { rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]);
+    ({ rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]));
     let customerRow = null;
     if (referenceInvoice.customer_id) {
       customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [referenceInvoice.customer_id])).rows[0];
@@ -101,7 +104,7 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
 
     let finalXml = xml;
     let qrBase64 = null;
-    let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
+    credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
     if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
     if (credential) {
       try {
@@ -133,6 +136,26 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     }
   } catch (xmlErr) {
     console.error(`[ZATCA] credit note ${note_no} XML generation failed:`, xmlErr.message);
+  }
+
+  // حجب إشعارات الدائن لفواتير قياسية (غير مبسّطة) حتى تصديق فعلي من الهيئة —
+  // نفس القرار المطبَّق أصلًا على الفاتورة القياسية نفسها بـinvoices.controller.js
+  // exports.create (submitInvoice الحاجزة). قبل هذا الإصلاح، إشعار الدائن لفاتورة
+  // قياسية كان يمر دائمًا بمسار "أفضل جهد" غير حاجز فقط (submitCreditNoteBestEffort
+  // بعد الرد للعميل) — بعكس الفاتورة الأصلية التي يعكسها، فيمكن أن تُلغى/تُرجَع
+  // فاتورة قياسية مصدَّقة فعليًا بمستند دائن لا يصل الهيئة أبدًا لو فشل الإرسال
+  // اللاحق بصمت. لو لا توجد شهادة CSID سارية أصلًا (!credential) لا حجب —
+  // نفس الاستثناء المطبَّق على الفاتورة الأصلية.
+  const isSimplifiedNote = (note.invoice_type || 'simplified') === 'simplified';
+  if (!isSimplifiedNote && credential) {
+    const clearResult = await submitCreditNote(client, companyRow, note, false, credential);
+    if (!clearResult.success) {
+      throw Object.assign(
+        new Error('تعذّر تصديق إشعار الدائن لدى هيئة الزكاة والضريبة والجمارك — لم تُحفَظ العملية. تحقق من الاتصال وأعد المحاولة.'),
+        { status: 502, code: 'zatca_clearance_failed', zatca_error: clearResult.error || null }
+      );
+    }
+    note.zatca_status = clearResult.status;
   }
 
   // حارس أمان: لو صار خطأ DB حقيقي (لا JS بحت) داخل try/catch أعلاه (استعلام
