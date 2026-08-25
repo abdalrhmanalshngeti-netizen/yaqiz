@@ -831,7 +831,7 @@ async function showAIQuestionsModal(companyId, companyName, feature) {
     </div>
     <div id="ai-questions-body" style="padding:20px 28px;"><div class="loader"><span class="spinner"></span></div></div>
   </div>`;
-  ov.onclick = closeAIQuestionsModal;
+  ov.onclick = e => { if (e.target === ov) closeAIQuestionsModal(); };
   document.body.appendChild(ov);
   try {
     const res = await apiFetch(`/api/admin/ai-usage/companies/${companyId}/questions?feature=${feature}`);
@@ -1260,7 +1260,11 @@ function promptImpersonationReason(id, name){
       <button data-action="closeReasonModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
-  ov.onclick=closeReasonModal;
+  // إغلاق عند الضغط على الخلفية نفسها فقط — لا أي نقرة داخل المودال (كانت
+  // تُغلق المودال حتى عند الضغط على حقل النص/الزر، لأن onclick على الخلفية
+  // يُنفَّذ أثناء الفقاعة قبل الوصول للمستند وقارئ data-action، فيزيل حقل
+  // النص من DOM قبل قراءة قيمته — يبدو وكأن السبب "لم يُكتب" رغم كتابته فعليًا)
+  ov.onclick = e => { if (e.target === ov) closeReasonModal(); };
   document.body.appendChild(ov);
   $('reason-input')?.focus();
 }
@@ -1305,7 +1309,7 @@ async function showCompanyModal(id){
   ov.innerHTML=`<div id="co-modal-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:20px;padding:0;max-width:700px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:40px;text-align:center;color:var(--muted)"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
-  ov.onclick=closeCoModal;
+  ov.onclick = e => { if (e.target === ov) closeCoModal(); };
   document.body.appendChild(ov);
   try{
     const res=await apiFetch(`/api/admin/companies/${id}`);
@@ -1593,7 +1597,7 @@ function showMyAccountModal(){
       <div id="myacc-sessions"><div style="text-align:center;padding:10px;color:var(--muted);font-size:12px;">جاري التحميل...</div></div>
     </div>
   </div>`;
-  ov.onclick=closeMyAccountModal;
+  ov.onclick = e => { if (e.target === ov) closeMyAccountModal(); };
   document.body.appendChild(ov);
   const toggle=()=>{ const sensitive=$('myacc-email').value.trim()||$('myacc-newpass').value; $('myacc-current-wrap').style.display=sensitive?'block':'none'; };
   $('myacc-email').addEventListener('input',toggle);
@@ -1661,7 +1665,7 @@ function showDisable2FAModal(){
       <button data-action="closeDisable2FAModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
-  ov.onclick=closeDisable2FAModal;
+  ov.onclick = e => { if (e.target === ov) closeDisable2FAModal(); };
   document.body.appendChild(ov);
 }
 async function confirmDisable2FA(){
@@ -1777,7 +1781,7 @@ function showAddEmployeeModal(){
       <button data-action="closeEmployeeModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
-  ov.onclick=closeEmployeeModal;
+  ov.onclick = e => { if (e.target === ov) closeEmployeeModal(); };
   document.body.appendChild(ov);
 }
 async function saveNewEmployee(){
@@ -1815,7 +1819,7 @@ function showEditEmployeeModal(id){
     </div>
     <button data-action="promptResetPassword" data-args="${JSON.stringify([id,emp.full_name]).replace(/"/g,'&quot;')}" style="width:100%;margin-top:10px;padding:9px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#fbbf24;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">🔒 إعادة تعيين كلمة المرور</button>
   </div>`;
-  ov.onclick=closeEmployeeModal;
+  ov.onclick = e => { if (e.target === ov) closeEmployeeModal(); };
   document.body.appendChild(ov);
 }
 async function saveEmployeeEdit(id){
@@ -1847,7 +1851,7 @@ function promptResetPassword(id,name){
       <button data-action="closeResetPassModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
-  ov.onclick=closeResetPassModal;
+  ov.onclick = e => { if (e.target === ov) closeResetPassModal(); };
   document.body.appendChild(ov);
   $('reset-pass-input')?.focus();
 }
@@ -1896,7 +1900,7 @@ async function viewTeamMemberActivity(id){
   ov.innerHTML=`<div id="team-activity-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:16px;padding:24px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;">
     <div style="text-align:center;padding:30px;color:var(--muted);"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
-  ov.onclick=closeTeamActivityModal;
+  ov.onclick = e => { if (e.target === ov) closeTeamActivityModal(); };
   document.body.appendChild(ov);
   try{
     const res=await apiFetch(`/api/admin/my-team/${id}/activity`);
@@ -2075,7 +2079,7 @@ async function openTicketDetail(id){
   ov.innerHTML=`<div id="ticket-modal-box" data-action="" style="background:#111d33;border:1px solid #243352;border-radius:20px;width:100%;max-width:860px;max-height:92vh;overflow-y:auto;box-shadow:0 40px 120px rgba(0,0,0,.8);">
     <div style="padding:40px;text-align:center;color:var(--muted)"><span class="spinner"></span> جاري التحميل...</div>
   </div>`;
-  ov.onclick=closeTicketModal;
+  ov.onclick = e => { if (e.target === ov) closeTicketModal(); };
   document.body.appendChild(ov);
   try{
     const res=await apiFetch(`/api/admin/tickets/${id}`);
