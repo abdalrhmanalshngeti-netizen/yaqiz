@@ -78,6 +78,17 @@ function buyerIdentification(customer) {
   return null;
 }
 
+// عميل B2B حقيقي (رقم ضريبي/سجل تجاري مُدخَل يدويًا وقت الفاتورة) بلا سجل عميل
+// محفوظ (customer_id) كانت بياناته الضريبية تُحذَف بصمت من XML — الاستعلام كان
+// يجيب صف customers فقط لما customer_id موجود، فتبقى customerRow=null ويسقط
+// buyerIdentification()/PartyTaxScheme كليًا رغم توفر customer_vat بالفاتورة
+// نفسها. نبني كائن عميل مؤقت من الحقول المُدخَلة يدويًا لو ما فيه سجل محفوظ.
+function resolveCustomerForXml(savedCustomerRow, fallbackName, fallbackVat) {
+  if (savedCustomerRow) return savedCustomerRow;
+  if (fallbackName || fallbackVat) return { name: fallbackName || null, vat_number: fallbackVat || null };
+  return null;
+}
+
 function validateSeller(company) {
   const errors = [];
   if (!company.vat_number || !/^3\d{13}3$/.test(company.vat_number)) {
@@ -358,4 +369,4 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   return { xml, warnings };
 }
 
-module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller, notifyIncompleteSellerData };
+module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller, notifyIncompleteSellerData, resolveCustomerForXml };

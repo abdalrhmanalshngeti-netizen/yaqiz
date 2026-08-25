@@ -6,7 +6,7 @@
 // (zatca.service: buildInvoiceXML مع docKind='credit_note')، نفس التوقيع
 // الرقمي إن وُجدت شهادة CSID سارية، ونفس توليد رمز QR للمرحلة الثانية.
 const crypto = require('crypto');
-const { buildInvoiceXML, notifyIncompleteSellerData } = require('./zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('./zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('./zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
@@ -87,6 +87,7 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     if (referenceInvoice.customer_id) {
       customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [referenceInvoice.customer_id])).rows[0];
     }
+    customerRow = resolveCustomerForXml(customerRow, referenceInvoice.customer_name, referenceInvoice.customer_vat);
     const xmlItems = items.map(it => ({ ...it, vat_rate: it.vat_rate ?? 15, vat_category_code: it.vat_category_code || 'S' }));
     // buildInvoiceXML يتوقع كائنًا بشكل "فاتورة" — نمرر صف الإشعار مع تسميته
     // كـinvoice_no ليظهر بعنصر cbc:ID، ونمرر رقم الفاتورة الأصلية بـlinked_invoice_no

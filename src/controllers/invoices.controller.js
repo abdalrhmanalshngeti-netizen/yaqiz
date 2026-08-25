@@ -3,7 +3,7 @@ const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
-const { buildInvoiceXML, notifyIncompleteSellerData } = require('../services/zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
@@ -96,6 +96,16 @@ exports.create = async (req, res, next) => {
     if (!items.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة منتج واحد على الأقل' });
+    }
+
+    // الفاتورة الضريبية القياسية (غير المبسّطة) يجب تحديد هوية المشتري بها وفق
+    // متطلبات الهيئة — لم يكن هناك أي فحص، فكان بالإمكان إنشاء فاتورة "tax"
+    // بلا عميل محفوظ ولا اسم مُدخَل يدويًا، فيخرج XML بعميل "عميل نقدي" مجهول
+    // على فاتورة يُفترض بها تعريف الطرف الآخر. الفاتورة المبسّطة (نقاط البيع)
+    // تبقى بلا أي قيد كالمعتاد — هذا النوع بالتحديد مصمَّم أصلًا للعميل المجهول
+    if ((invoice_type || 'simplified') !== 'simplified' && !customer_id && !String(customer_name || '').trim()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'الفاتورة الضريبية القياسية تتطلب تحديد بيانات المشتري (اختيار عميل محفوظ أو إدخال اسم العميل على الأقل)' });
     }
 
     // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ فاتورة
@@ -268,6 +278,7 @@ exports.create = async (req, res, next) => {
       if (customer_id) {
         customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [customer_id])).rows[0];
       }
+      customerRow = resolveCustomerForXml(customerRow, customer_name, customer_vat);
       const xmlItems = processedItems.map(it => ({
         ...it, vat_rate: it.tax_rate ?? 15, vat_category_code: it.vat_category_code || 'S',
       }));
