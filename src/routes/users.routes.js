@@ -10,11 +10,15 @@ router.use(auth);
 // قبل مسار /:id عشان توضيح النية، لا يتعارض معه لاختلاف عدد الأجزاء بالمسار
 router.put ('/me/tours-seen', ctrl.updateToursSeen);
 
-router.get ('/',       can('settings.view'),   ctrl.list);
-router.post('/',       can('settings.edit'),   ctrl.create);
-router.get ('/:id',    can('settings.view'),   ctrl.getOne);
-router.put ('/:id',    can('settings.edit'),   ctrl.update);
-router.delete('/:id',  can('settings.edit'),   ctrl.remove);
+// كانت مقيَّدة بـsettings.edit/settings.view بدل users.view/users.manage
+// المخصَّصتين لهذا الغرض تحديدًا — نفس الخلط الحاصل بـemployees.routes.js
+// (راجع تعليقه)؛ الواجهة أصلًا تتحقق من has('users.manage') لإظهار أزرار
+// إدارة المستخدمين، فكانت هذي الصلاحية عديمة الفائدة عمليًا لأي دور غير المالك
+router.get ('/',       can('users.view'),      ctrl.list);
+router.post('/',       can('users.manage'),    ctrl.create);
+router.get ('/:id',    can('users.view'),      ctrl.getOne);
+router.put ('/:id',    can('users.manage'),    ctrl.update);
+router.delete('/:id',  can('users.manage'),    ctrl.remove);
 // أي موظف مسجّل دخول يقدر يغيّر كلمة مروره الخاصة — الكنترولر نفسه يتحقق
 // من كلمة المرور الحالية للتغيير الذاتي، ويشترط صلاحية owner لتغيير كلمة مرور غيره.
 // لا نشترط settings.edit هنا وإلا صار موظف عادي بلا هذي الصلاحية غير قادر

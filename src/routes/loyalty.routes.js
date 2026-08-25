@@ -8,8 +8,8 @@ router.use(auth);
 router.use(requireFeature('loyalty'));
 
 router.get ('/',          can('customers.view'),   ctrl.get);
-router.put ('/settings',  can('customers.edit'), ctrl.updateSettings);
-router.post('/points',    can('customers.edit'), ctrl.addPoints);
-router.post('/redeem',    can('customers.edit'), ctrl.redeem);
+router.put ('/settings',  can('customers.manage'), ctrl.updateSettings);
+router.post('/points',    can('customers.manage'), ctrl.addPoints);
+router.post('/redeem',    can('customers.manage'), ctrl.redeem);
 
 module.exports = router;
