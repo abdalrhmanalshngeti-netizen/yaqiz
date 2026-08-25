@@ -55,6 +55,19 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير بالإنجليزية' });
     }
 
+    // كان يُقبَل أي نص بلا أي تحقق من الصيغة — رقم ضريبي/سجل تجاري خاطئ الصيغة
+    // يبقى مخزَّنًا بصمت لحين أول محاولة إصدار شهادة هيئة فعلية (validateSeller
+    // بـzatca.service.js)، بعد إنشاء فواتير حقيقية ربما. كلاهما اختياري عند
+    // التسجيل (تحقق فقط لو أُدخِل فعلًا)
+    if (vat_number && !/^3\d{13}3$/.test(vat_number)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'الرقم الضريبي يجب أن يكون 15 رقمًا ويبدأ وينتهي بالرقم 3' });
+    }
+    if (cr_number && !/^\d{10}$/.test(cr_number)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'رقم السجل التجاري يجب أن يكون 10 أرقام' });
+    }
+
     // تحقق من تكرار اسم المستخدم
     const { rows: existing } = await client.query(
       `SELECT id FROM users WHERE username = $1`, [username]

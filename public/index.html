@@ -799,11 +799,11 @@
       <div class="frow">
         <div class="fgroup">
           <label>رقم السجل التجاري</label>
-          <input type="text" id="f-cr" placeholder="1234567890">
+          <input type="text" id="f-cr" placeholder="1234567890" pattern="\d{10}" maxlength="10" title="10 أرقام">
         </div>
         <div class="fgroup">
           <label>الرقم الضريبي VAT</label>
-          <input type="text" id="f-vt" placeholder="300…">
+          <input type="text" id="f-vt" placeholder="300…" pattern="3\d{13}3" maxlength="15" title="15 رقمًا، يبدأ وينتهي بالرقم 3">
         </div>
       </div>
       <div class="fgroup" style="display:flex;align-items:center;gap:8px;margin-top:.4rem">

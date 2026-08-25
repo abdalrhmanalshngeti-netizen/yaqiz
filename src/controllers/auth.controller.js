@@ -6,6 +6,10 @@ const db     = require('../config/db');
 const ACCESS_TTL  = '8h';
 const REFRESH_TTL = '30d';
 
+// هاش bcrypt ثابت (وهمي، لا يطابق أي كلمة مرور حقيقية) — يُستخدم فقط لإبقاء
+// زمن استجابة تسجيل الدخول ثابتًا سواء وُجد اسم المستخدم أو لا (راجع exports.login)
+const DUMMY_PASSWORD_HASH = '$2b$12$C6UzMDM.H6dfI/f/IKcEeOgOEufIWNZTeIQZOMuVYUD/qA6M0EHKC';
+
 // sess = معرّف صف user_sessions — يُتحقق منه بكل طلب (middleware/auth.js) عشان
 // إلغاء جلسة محددة من "أجهزتي" يسري فوراً، مو ينتظر انتهاء صلاحية التوكن (8 ساعات)
 function signAccess(user, sessionId) {
@@ -65,8 +69,13 @@ exports.login = async (req, res, next) => {
       LIMIT 1
     `, [username]);
 
-    const user  = rows[0];
-    const valid = user && await bcrypt.compare(password, user.password_hash);
+    const user = rows[0];
+    // bcrypt.compare يجب أن يُستدعى دائمًا بنفس التكلفة، سواء وُجد المستخدم أو
+    // لا — قبل هذا، عدم وجود المستخدم كان يتخطى bcrypt.compare كليًا (short-
+    // circuit)، فيرجع الرد أسرع بشكل قابل للقياس من حالة "مستخدم موجود لكن كلمة
+    // مرور خاطئة" (تستدعي bcrypt.compare فعليًا، ~عشرات المللي ثانية إضافية).
+    // فرق زمني كهذا يسمح بتخمين وجود اسم مستخدم حقيقي دون أي رسالة خطأ مختلفة
+    const valid = await bcrypt.compare(password, user?.password_hash || DUMMY_PASSWORD_HASH) && !!user;
 
     // تسجيل المحاولة
     await db.query(
@@ -206,8 +215,21 @@ exports.refreshToken = async (req, res, next) => {
       });
     }
 
+    // تدوير توكن التجديد نفسه بكل استخدام — كان نفس الـrefreshToken يبقى صالحًا
+    // لكامل الـ30 يومًا بلا أي تغيّر، فلو سُرق (تسريب سجلّات، XSS، جهاز مشترك)
+    // يبقى المهاجم قادرًا على تجديد جلسته طوال المدة كاملة بلا أي وسيلة كشف أو
+    // حد. الآن كل استدعاء لهذا المسار يُبطل التوكن القديم فورًا (تحديث
+    // token_hash بنفس صف الجلسة) ويُصدر توكنًا جديدًا بدله — استخدام التوكن
+    // القديم لاحقًا (من أي طرف: المستخدم الحقيقي أو المهاجم، أيهما تأخر) يفشل
+    // بـ"جلسة منتهية" لعدم تطابقه مع الصف المحدَّث، فيصبح التسريب محدود الأثر
+    // بدل صالح شهرًا كاملًا
+    const newRefreshToken = signRefresh(rows[0].id);
+    await db.query(
+      `UPDATE user_sessions SET token_hash = $1, expires_at = NOW() + INTERVAL '30 days' WHERE id = $2`,
+      [newRefreshToken, rows[0].session_id]
+    );
     const newAccessToken = signAccess(rows[0], rows[0].session_id);
-    res.json({ success: true, accessToken: newAccessToken });
+    res.json({ success: true, accessToken: newAccessToken, refreshToken: newRefreshToken });
 
   } catch (err) { next(err); }
 };

@@ -17462,6 +17462,9 @@ async function runAISearchQuery(q) {
       if (!r.ok) return false;
       const d = await r.json();
       localStorage.setItem(TOKEN_KEY, d.accessToken);
+      // السيرفر يُدوّر (rotate) توكن التجديد نفسه بكل استخدام الآن — لازم نخزّن
+      // النسخة الجديدة، وإلا المحاولة التالية تفشل لأن القديم صار مُبطَلاً
+      if (d.refreshToken) localStorage.setItem(REFRESH_KEY, d.refreshToken);
       return true;
     } catch { return false; }
   }

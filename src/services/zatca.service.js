@@ -50,6 +50,22 @@ function invoiceTypeCodeFor(docKind) {
 
 function schemeIdForVat() { return 'VAT'; }
 
+// PaymentMeansCode (UN/CEFACT UNCL4461 D.16B) — كانت تُختزَل لحالتين فقط
+// ('نقدي'=10، وكل شيء آخر=42 "تحويل لحساب بنكي" حتى لو كانت بطاقة أو شيك أو
+// آجل). القيم أدناه تطابق نفس نصوص طرق الدفع الفعلية المستخدَمة بالنظام
+// (BANK_METHODS بـtreasury.controller.js وغيره). 1="أداة غير محدَّدة" احتياطي
+// آمن لأي قيمة غير معروفة، بدل الافتراض الخاطئ "تحويل بنكي" لكل شيء
+const PAYMENT_MEANS_CODES = {
+  'نقدي': '10', cash: '10',
+  'شبكة': '48', 'بطاقة': '48', card: '48',
+  'تحويل': '30', 'تحويل بنكي': '30', transfer: '30', bank: '30',
+  'شيك': '20', cheque: '20', check: '20',
+  'آجل': '1', credit: '1',
+};
+function paymentMeansCode(paymentMethod) {
+  return PAYMENT_MEANS_CODES[String(paymentMethod || '').trim()] || '1';
+}
+
 // مخطط تعريف البائع حسب الحقول المتوفرة فعليًا (CRN هو الأشيع بالسجل التجاري)
 function sellerIdentification(company) {
   return { schemeID: 'CRN', id: company.cr_number || company.vat_number || '' };
@@ -255,7 +271,7 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   // وسيلة الدفع
   if (invoice.payment_method) {
     root.ele(NS.cac, 'cac:PaymentMeans')
-      .ele(NS.cbc, 'cbc:PaymentMeansCode').txt(invoice.payment_method === 'نقدي' ? '10' : '42');
+      .ele(NS.cbc, 'cbc:PaymentMeansCode').txt(paymentMeansCode(invoice.payment_method));
   }
 
   // خصم على مستوى المستند (إن وُجد)
