@@ -15,9 +15,12 @@ router.post('/transfer',          can('treasury.manage'), ctrl.transfer);
 router.get ('/moves',             can('treasury.view'),   ctrl.listMoves);
 router.post('/move',              can('treasury.manage'), ctrl.addMove);
 
-// Vouchers
-router.get ('/vouchers',          can('receipts.view'),   ctrl.listVouchers);
-router.post('/vouchers',          can('receipts.manage'), ctrl.createVoucher);
-router.get ('/vouchers/:id',      can('receipts.view'),   ctrl.getVoucher);
+// السندات فعليًا: /api/vouchers (vouchers.routes.js) فقط — ذاك المسار الوحيد
+// الذي تستدعيه الواجهة (VVIP.html) فعلًا. كان يوجد هنا ثلاثة مسارات مطابقة
+// بالاسم (/vouchers) لكن كنترولر مختلف كليًا (treasury.controller.js) لم
+// يستدعِه أي كود حي إطلاقًا، وعلى عكس مسار vouchers.routes.js الحقيقي كان
+// يحرّك رصيد الخزينة والعميل/المورد مباشرة بلا أي قيد يومية مقابل — أي
+// استخدام مستقبلي له كان سيكسر تطابق الميزانية العمومية/قائمة الدخل بدفتر
+// اليومية بصمت. أُزيل بالكامل بدل إصلاحه لعدم وجود أي مستهلك حقيقي له.
 
 module.exports = router;
