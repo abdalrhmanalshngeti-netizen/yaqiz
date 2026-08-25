@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -72,6 +73,10 @@ exports.update = async (req, res, next) => {
     // يُكتَب إلا عبر معالج الأرصدة الافتتاحية صراحة (علامة opening_balance_write)
     const balanceParam = opening_balance_write === true && balance != null ? parseFloat(balance) : null;
 
+    const { rows: [oldSup] } = balanceParam != null
+      ? await db.query(`SELECT balance FROM suppliers WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id])
+      : { rows: [null] };
+
     const { rows } = await db.query(`
       UPDATE suppliers SET
         code          = COALESCE($1,  code),
@@ -95,16 +100,33 @@ exports.update = async (req, res, next) => {
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المورد غير موجود' });
     res.json({ success: true, data: rows[0] });
+
+    if (balanceParam != null) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'supplier_balance_write',
+        entityType: 'supplier', entityId: rows[0].id, ip: req.ip,
+        oldValues: { balance: oldSup?.balance }, newValues: { balance: rows[0].balance },
+        details: `تصحيح رصيد افتتاحي للمورد ${rows[0].name}: من ${oldSup?.balance} إلى ${rows[0].balance}`
+      });
+    }
   } catch (err) { next(err); }
 };
 
 exports.remove = async (req, res, next) => {
   try {
-    await db.query(
-      `UPDATE suppliers SET is_active = false WHERE id = $1 AND company_id = $2`,
+    const { rows: [sup] } = await db.query(
+      `UPDATE suppliers SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING name`,
       [req.params.id, req.user.company_id]
     );
     res.json({ success: true });
+
+    if (sup) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'supplier_deactivate',
+        entityType: 'supplier', entityId: req.params.id, ip: req.ip,
+        details: `تعطيل مورد: ${sup.name}`
+      });
+    }
   } catch (err) { next(err); }
 };
 

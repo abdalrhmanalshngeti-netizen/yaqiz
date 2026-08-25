@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 // أقصى عدد فروع نشطة (شامل الفرع الرئيسي) لكل باقة — يطابق PLAN_BRANCH_LIMITS
 // بالواجهة تمامًا (نفس نمط PLAN_USER_LIMITS بـ users.controller.js)
@@ -122,6 +123,13 @@ exports.create = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: { ...branch, warehouse } });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'branch_create',
+      entityType: 'branch', entityId: branch.id, ip: req.ip,
+      newValues: { name, branch_number },
+      details: `فرع جديد: ${name} (${branch_number})`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -158,7 +166,7 @@ exports.remove = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'حذف الفروع للمالك فقط' });
     }
     const { rows: [branch] } = await db.query(
-      `SELECT is_main FROM branches WHERE id = $1 AND company_id = $2`,
+      `SELECT is_main, name FROM branches WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]
     );
     if (!branch) return res.status(404).json({ success: false, message: 'الفرع غير موجود' });
@@ -176,6 +184,12 @@ exports.remove = async (req, res, next) => {
     await db.query(`UPDATE branches SET is_active = false WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]);
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'branch_deactivate',
+      entityType: 'branch', entityId: req.params.id, ip: req.ip,
+      details: `تعطيل فرع: ${branch.name}`
+    });
   } catch (err) { next(err); }
 };
 

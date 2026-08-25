@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -79,6 +80,10 @@ exports.update = async (req, res, next) => {
     // الرصيد لا يُحدَّث هنا إلا عبر معالج الأرصدة الافتتاحية صراحة (العلامة أدناه)
     const balanceParam = opening_balance_write === true && balance != null ? parseFloat(balance) : null;
 
+    const { rows: [oldCust] } = balanceParam != null
+      ? await db.query(`SELECT balance FROM customers WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id])
+      : { rows: [null] };
+
     const { rows } = await db.query(`
       UPDATE customers SET
         code             = COALESCE($1,  code),
@@ -109,16 +114,35 @@ exports.update = async (req, res, next) => {
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     res.json({ success: true, data: rows[0] });
+
+    // نسجّل فقط تصحيح رصيد افتتاحي فعلي (نادر، حسّاس) — لا كل تعديل بيانات
+    // اتصال روتيني (بنفس مبدأ عدم إغراق السجل المطبَّق بكل الكنترولرات الأخرى)
+    if (balanceParam != null) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'customer_balance_write',
+        entityType: 'customer', entityId: rows[0].id, ip: req.ip,
+        oldValues: { balance: oldCust?.balance }, newValues: { balance: rows[0].balance },
+        details: `تصحيح رصيد افتتاحي للعميل ${rows[0].name}: من ${oldCust?.balance} إلى ${rows[0].balance}`
+      });
+    }
   } catch (err) { next(err); }
 };
 
 exports.remove = async (req, res, next) => {
   try {
-    await db.query(
-      `UPDATE customers SET is_active = false WHERE id = $1 AND company_id = $2`,
+    const { rows: [cust] } = await db.query(
+      `UPDATE customers SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING name`,
       [req.params.id, req.user.company_id]
     );
     res.json({ success: true });
+
+    if (cust) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'customer_deactivate',
+        entityType: 'customer', entityId: req.params.id, ip: req.ip,
+        details: `تعطيل عميل: ${cust.name}`
+      });
+    }
   } catch (err) { next(err); }
 };
 

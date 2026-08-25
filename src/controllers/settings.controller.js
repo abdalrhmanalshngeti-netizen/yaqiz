@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 // إعدادات عامة على مستوى الشركة (مفتاح/قيمة) — تُقرأ لأي مستخدم مسجّل دخول
 // بالشركة (مثلاً الموظف يحتاج يعرف هل الضريبة مفعّلة عشان يبني الفاتورة صح)،
@@ -38,5 +39,14 @@ exports.upsert = async (req, res, next) => {
       `, [req.user.company_id, key, JSON.stringify(value)]);
     }
     res.json({ success: true });
+
+    // نسجّل أسماء المفاتيح المتغيّرة فقط، لا القيم — بعضها كتل JSON ضخمة
+    // (opening_balances_data) لا فائدة تدقيقية بتخزينها كاملة بسجل النشاط
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'settings_update',
+      entityType: 'settings', entityId: null, ip: req.ip,
+      newValues: { keys: entries.map(([k]) => k) },
+      details: `تعديل إعدادات الشركة: ${entries.map(([k]) => k).join('، ')}`
+    });
   } catch (err) { next(err); }
 };

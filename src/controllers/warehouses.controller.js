@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -61,6 +62,13 @@ exports.create = async (req, res, next) => {
     `, [req.user.company_id, branch_id, name, code || null]);
 
     res.status(201).json({ success: true, data: warehouse });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'warehouse_create',
+      entityType: 'warehouse', entityId: warehouse.id, ip: req.ip,
+      newValues: { name, branch_id },
+      details: `مستودع جديد: ${name}`
+    });
   } catch (err) { next(err); }
 };
 
