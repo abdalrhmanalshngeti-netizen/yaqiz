@@ -186,13 +186,26 @@ exports.create = async (req, res, next) => {
       });
     }
 
+    // الشركة غير المسجّلة ضريبيًا (vat_enabled=false بإعدادات الشركة) كانت
+    // تعتمد كليًا على العميل لإرسال tax_rate=0 لكل بند — لا فحص سيرفري. أي
+    // مسار عميل لا يطبّق هذا (مسار مزامنة قديم، عميل مختلف مستقبلًا) كان يُنتج
+    // فاتورة ضريبية كاملة لشركة غير مسجّلة أصلًا. نتحقق الآن من إعداد الشركة
+    // الفعلي بالسيرفر ونفرضه بصرف النظر عمّا أرسله العميل
+    const { rows: [vatSetting] } = await client.query(
+      `SELECT value FROM settings WHERE company_id = $1 AND key = 'vat_enabled'`,
+      [company_id]
+    );
+    let companyVatEnabled = true;
+    try { companyVatEnabled = vatSetting ? JSON.parse(vatSetting.value) !== false : true; } catch { companyVatEnabled = true; }
+
     // ── حساب المبالغ ──────────────────────────
     let subtotal = 0;
     const processedItems = items.map(item => {
+      const tax_rate = companyVatEnabled ? parseFloat(item.tax_rate ?? 15) : 0;
       const line_total = parseFloat(item.qty) * parseFloat(item.unit_price) - parseFloat(item.discount || 0);
-      const vat_amount = line_total * (parseFloat(item.tax_rate ?? 15) / 100);
+      const vat_amount = line_total * (tax_rate / 100);
       subtotal += line_total;
-      return { ...item, line_total, vat_amount };
+      return { ...item, line_total, vat_amount, tax_rate };
     });
 
     const disc_val    = parseFloat(discount_value || 0);
@@ -279,8 +292,13 @@ exports.create = async (req, res, next) => {
         customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [customer_id])).rows[0];
       }
       customerRow = resolveCustomerForXml(customerRow, customer_name, customer_vat);
+      // كانت كل الأصناف تُصنَّف S (قياسية) افتراضيًا حتى لو الشركة غير مسجّلة
+      // ضريبيًا أصلًا — فيخرج XML بسطر "قياسي" بنسبة 0% (مخالف لقواعد الهيئة
+      // BR-S-* التي تشترط نسبة >0 لفئة S). خارج نطاق الضريبة (O) هو التصنيف
+      // الصحيح لشركة غير مسجّلة، بصرف النظر عمّا أرسله العميل بكل بند
       const xmlItems = processedItems.map(it => ({
-        ...it, vat_rate: it.tax_rate ?? 15, vat_category_code: it.vat_category_code || 'S',
+        ...it, vat_rate: it.tax_rate ?? 15,
+        vat_category_code: it.vat_category_code || (companyVatEnabled ? 'S' : 'O'),
       }));
       const { xml, warnings } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,
