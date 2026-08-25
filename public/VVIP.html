@@ -9703,12 +9703,18 @@ function confirmObligationPayment(id, type, amount, method) {
   // ── تسجيل مصروف OPEX ─────────────────────────────────────
   if(!db.purchases)db.purchases=[];
   if(!db.nextId)db.nextId={};
+  // كان يفترض دائمًا إن المبلغ المدفوع شامل ضريبة 15% ويفكّكه بهذا الافتراض
+  // بصرف النظر عن كون الشركة مسجّلة بالضريبة أصلًا أم لا — نفس فحص vat_enabled
+  // (إعداد الشركة العام) المستخدَم أصلًا بـsavePurchase لمصروف opex الإداري.
+  // شركة غير مسجّلة ضريبيًا: كامل المبلغ مصروف، لا ضريبة مدخلات على الإطلاق
+  const _vatOnObligation = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
+  const _oblBase = _vatOnObligation ? Math.round(amount/1.15*100)/100 : amount;
+  const _oblVat  = _vatOnObligation ? Math.round((amount-_oblBase)*100)/100 : 0;
   db.purchases.push({
     id:nextId(db,'purchase'),
     vendor:o.vendor||o.name, description:`${type==='full'?(lang==='ar'?'سداد كامل':'Full payment'):(lang==='ar'?'سداد جزئي':'Partial payment')}: ${o.name}`,
     category:o.category, purchase_type:'opex',
-    amount:Math.round(amount/1.15*100)/100,
-    vat:Math.round((amount-amount/1.15)*100)/100,
+    amount:_oblBase, vat:_oblVat,
     total:amount, payment_method:method, paid_amount:amount,
     supplier_ref:`OBL-${id}`, notes:'',
     created_at:new Date().toISOString(), items:[]
@@ -9724,14 +9730,13 @@ function confirmObligationPayment(id, type, amount, method) {
   // و"رواتب وتعويضات" لحساب 5100 (تكلفة البضاعة المباعة) — تصادم أكواد حقيقي
   // كان يُدخل مبالغ الإيجار ضمن مرتجعات المشتريات ومبالغ الرواتب ضمن COGS
   const _accCode='5200';
+  const _journalEntries=[{account:o.category, account_code:_accCode, side:'debit', amount:_oblBase}];
+  if(_oblVat>0) _journalEntries.push({account:'ضريبة المدخلات', account_code:'2210', side:'debit', amount:_oblVat});
+  _journalEntries.push({account:'النقدية والخزينة', account_code:'1100', side:'credit', amount});
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`${lang==='ar'?'سداد التزام':'Obligation'}: ${o.name} — ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}`,
-    entries:[
-      {account:o.category,         account_code:_accCode, side:'debit',  amount:Math.round(amount/1.15*100)/100},
-      {account:'ضريبة المدخلات',   account_code:'2210',   side:'debit',  amount:Math.round((amount-amount/1.15)*100)/100},
-      {account:'النقدية والخزينة', account_code:'1100',   side:'credit', amount},
-    ],
+    entries:_journalEntries,
     ref:`OBL-${id}`
   });
 
