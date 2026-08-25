@@ -243,20 +243,44 @@ exports.create = async (req, res, next) => {
 };
 
 exports.remove = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
-    const { rows: [ret] } = await db.query(
+    await client.query('BEGIN');
+    // كان هذا الحذف بلا أي فحص إقفال فترة إطلاقًا — يحذف صف المرتجع بلا أي أثر
+    // للتعديل الذي سبّبه (المخزون/الرصيد/إشعار الدائن تُعكَس محليًا بالمتصفح
+    // فقط قبل استدعاء هذا المسار)، حتى لو المرتجع من فترة مُقفَلة محاسبيًا
+    const { rows: [existing] } = await client.query(
+      `SELECT date, return_no, type, amount FROM returns WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!existing) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'المرتجع غير موجود' });
+    }
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, existing.date, req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+    const { rows: [ret] } = await client.query(
       `DELETE FROM returns WHERE id = $1 AND company_id = $2 RETURNING *`,
       [req.params.id, req.user.company_id]
     );
+    await client.query('COMMIT');
     res.json({ success: true });
 
-    if (ret) {
-      logAudit({
-        companyId: req.user.company_id, userId: req.user.sub, action: 'return_delete',
-        entityType: 'return', entityId: ret.id, ip: req.ip,
-        oldValues: { return_no: ret.return_no, type: ret.type, amount: ret.amount },
-        details: `حذف مرتجع ${ret.type === 'sales' ? 'مبيعات' : 'مشتريات'}: ${ret.return_no} — ${Number(ret.amount).toFixed(2)} ر.س`
-      });
-    }
-  } catch (err) { next(err); }
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'return_delete',
+      entityType: 'return', entityId: ret.id, ip: req.ip,
+      oldValues: { return_no: ret.return_no, type: ret.type, amount: ret.amount },
+      details: `حذف مرتجع ${ret.type === 'sales' ? 'مبيعات' : 'مشتريات'}: ${ret.return_no} — ${Number(ret.amount).toFixed(2)} ر.س`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };

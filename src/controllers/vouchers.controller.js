@@ -113,12 +113,31 @@ exports.create = async (req, res, next) => {
 // الهيئة بشأن عدم حذف الفواتير المُصدرة؛ هذا مستند محاسبي داخلي فقط، والحذف هنا
 // يطابق تمامًا سلوك الواجهة المحلية (deleteReceipt) التي تعكس أثره ثم تحذفه.
 exports.remove = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
-    const { rows: [voucher] } = await db.query(
+    await client.query('BEGIN');
+    // كان هذا الحذف بلا أي فحص إقفال فترة إطلاقًا — نفس فجوة returns.controller.js
+    // exports.remove بالضبط: السند يُحذف بلا مانع حتى لو من فترة مُقفَلة محاسبيًا
+    const { rows: [existing] } = await client.query(
+      `SELECT date FROM vouchers WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!existing) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'السند غير موجود' });
+    }
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, existing.date, req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+    const { rows: [voucher] } = await client.query(
       `DELETE FROM vouchers WHERE id = $1 AND company_id = $2 RETURNING *`,
       [req.params.id, req.user.company_id]
     );
-    if (!voucher) return res.status(404).json({ success: false, message: 'السند غير موجود' });
+    await client.query('COMMIT');
     res.json({ success: true });
 
     logAudit({
@@ -127,5 +146,10 @@ exports.remove = async (req, res, next) => {
       oldValues: { voucher_no: voucher.voucher_no, type: voucher.type, amount: voucher.amount },
       details: `حذف سند ${voucher.type === 'receipt' ? 'قبض' : 'صرف'}: ${voucher.voucher_no} — ${Number(voucher.amount).toFixed(2)} ر.س`
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };

@@ -487,6 +487,16 @@ exports.cancel = async (req, res, next) => {
     if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
     if (inv.status === 'cancelled') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'الفاتورة ملغاة بالفعل' }); }
 
+    // كان الإلغاء بلا أي فحص إقفال فترة إطلاقًا (بعكس الإنشاء) — يعكس المخزون
+    // ورصيد العميل وينشئ إشعار دائن حقيقي لفاتورة من سنة/شهر مُقفَل محاسبيًا
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, inv.date, req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+
     await client.query(`UPDATE invoices SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [inv.id]);
 
     // إرجاع المخزون — لنفس مستودع فرع الفاتورة وقت البيع (وليس فرع المستخدم

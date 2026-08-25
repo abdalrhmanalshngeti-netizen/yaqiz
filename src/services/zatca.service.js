@@ -176,9 +176,17 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   const allowanceTotal = round2(invoice.discount_amount || 0);
   const chargeTotal = 0; // لا توجد رسوم إضافية على مستوى المستند بالنموذج الحالي
   const vatBreakdown = buildVatBreakdown(items, allowanceTotal, chargeTotal);
-  const totalTaxable = round2(vatBreakdown.reduce((s, g) => s + g.taxable, 0));
+  // مجموع بنود الفاتورة الخام (قبل خصم المستند) — BT-106، يجب أن يطابق حرفيًا
+  // مجموع كل InvoiceLine/LineExtensionAmount أدناه (BR-CO-10). كان يُستخدَم
+  // totalTaxable (بعد طرح الخصم) بدلاً منه بـLegalMonetaryTotal/LineExtensionAmount،
+  // فيكسر BR-CO-13 (TaxExclusiveAmount = LineExtensionAmount − AllowanceTotalAmount
+  // + ChargeTotalAmount) لأي فاتورة فيها خصم على مستوى المستند — ترفضها الهيئة
+  const lineExtensionTotal = round2(items.reduce((s, it) => s + Number(it.line_total || 0), 0));
   const totalTax = round2(vatBreakdown.reduce((s, g) => s + g.tax, 0));
-  const taxExclusive = round2((invoice.subtotal || totalTaxable) - allowanceTotal + chargeTotal);
+  // نحسبها من lineExtensionTotal (لا invoice.subtotal المنفصل بقاعدة البيانات)
+  // عمدًا — يضمن التطابق الحسابي الداخلي للـXML نفسه (BR-CO-13) بصرف النظر عن
+  // أي تفاوت طفيف محتمل بين عمود subtotal المخزَّن ومجموع بنود XML الفعلية
+  const taxExclusive = round2(lineExtensionTotal - allowanceTotal + chargeTotal);
   const taxInclusive = round2(taxExclusive + totalTax);
   const payable = round2(taxInclusive - Number(invoice.paid_amount_prepaid || 0));
 
@@ -306,7 +314,7 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
 
   // LegalMonetaryTotal
   const totals = root.ele(NS.cac, 'cac:LegalMonetaryTotal');
-  totals.ele(NS.cbc, 'cbc:LineExtensionAmount').att('currencyID', 'SAR').txt(money(totalTaxable));
+  totals.ele(NS.cbc, 'cbc:LineExtensionAmount').att('currencyID', 'SAR').txt(money(lineExtensionTotal));
   totals.ele(NS.cbc, 'cbc:TaxExclusiveAmount').att('currencyID', 'SAR').txt(money(taxExclusive));
   totals.ele(NS.cbc, 'cbc:TaxInclusiveAmount').att('currencyID', 'SAR').txt(money(taxInclusive));
   totals.ele(NS.cbc, 'cbc:AllowanceTotalAmount').att('currencyID', 'SAR').txt(money(allowanceTotal));
