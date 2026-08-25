@@ -57,12 +57,63 @@ exports.create = async (req, res, next) => {
       const { rows } = await client.query(`SELECT * FROM invoices WHERE id = $1 AND company_id = $2`, [linked_invoice_id, company_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة المرتبطة غير موجودة' }); }
       linkedInvoice = rows[0];
+
+      // منع تزوير مرتجع بمبلغ يتجاوز الفاتورة الأصلية (أو ما تبقى منها بعد
+      // مرتجعات سابقة) — قبل هذا الإصلاح كان amount/qty يُقبَل من الـclient بلا
+      // أي تحقق مقابل الفاتورة، وموظف بصلاحية returns.manage البسيطة يقدر
+      // يُنشئ مرتجعًا بمبلغ ضخم فيتولّد له إشعار دائن حقيقي يُرسَل فعليًا
+      // للهيئة (submitCreditNoteBestEffort)
+      const { rows: [priorReturns] } = await client.query(
+        `SELECT COALESCE(SUM(amount),0) AS total FROM returns WHERE company_id = $1 AND linked_invoice_id = $2 AND type = 'sales'`,
+        [company_id, linked_invoice_id]
+      );
+      const remainingReturnable = Math.round((parseFloat(linkedInvoice.grand_total) - parseFloat(priorReturns.total)) * 100) / 100;
+      if (Math.round(parseFloat(amount) * 100) / 100 > remainingReturnable + 0.01) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `مبلغ المرتجع (${parseFloat(amount).toFixed(2)} ر.س) أكبر من المتبقي القابل للإرجاع بهذه الفاتورة (${remainingReturnable.toFixed(2)} ر.س)`
+        });
+      }
+      if (product_id && qty) {
+        const { rows: [origItem] } = await client.query(
+          `SELECT COALESCE(SUM(qty),0) AS qty FROM invoice_items WHERE invoice_id = $1 AND product_id = $2`,
+          [linked_invoice_id, product_id]
+        );
+        const { rows: [priorQty] } = await client.query(
+          `SELECT COALESCE(SUM(qty),0) AS qty FROM returns WHERE company_id = $1 AND linked_invoice_id = $2 AND product_id = $3 AND type = 'sales'`,
+          [company_id, linked_invoice_id, product_id]
+        );
+        const remainingQty = parseFloat(origItem.qty) - parseFloat(priorQty.qty);
+        if (parseFloat(qty) > remainingQty + 0.001) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            message: `الكمية المرتجعة أكبر من الكمية المتبقية القابلة للإرجاع لهذا الصنف بالفاتورة (المتبقي: ${remainingQty})`
+          });
+        }
+      }
     }
     let linkedPurchase = null;
     if (linked_purchase_id) {
-      const { rows } = await client.query(`SELECT id, branch_id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
+      const { rows } = await client.query(`SELECT id, branch_id, total FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' }); }
       linkedPurchase = rows[0];
+
+      // نفس منطق التحقق أعلاه لمرتجعات المبيعات — دفاع بعمق حتى لو ما فيه
+      // مخاطرة تصديق ZATCA هنا (مرتجعات المشتريات لا تُنشئ إشعار دائن)
+      const { rows: [priorPReturns] } = await client.query(
+        `SELECT COALESCE(SUM(amount),0) AS total FROM returns WHERE company_id = $1 AND linked_purchase_id = $2 AND type = 'purchases'`,
+        [company_id, linked_purchase_id]
+      );
+      const remainingPReturnable = Math.round((parseFloat(linkedPurchase.total) - parseFloat(priorPReturns.total)) * 100) / 100;
+      if (Math.round(parseFloat(amount) * 100) / 100 > remainingPReturnable + 0.01) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `مبلغ مرتجع المشتريات (${parseFloat(amount).toFixed(2)} ر.س) أكبر من المتبقي القابل للإرجاع بهذه الفاتورة (${remainingPReturnable.toFixed(2)} ر.س)`
+        });
+      }
     }
 
     const periodCheck = await periodClose.assertPeriodNotClosed(

@@ -164,6 +164,13 @@ exports.update = async (req, res, next) => {
         req.params.id, req.user.company_id]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+    // تعطيل الموظف (active=false) كان لا يُنهي جلسته الحالية — يبقى شغّالاً
+    // فعليًا لين ٨ ساعات (مدة صلاحية accessToken) رغم "تعطيله" ظاهريًا بالواجهة.
+    // نفس آلية إبطال الجلسات الفورية المستخدمة أصلًا بتغيير كلمة المرور
+    // (middleware/auth.js يتحقق من وجود صف user_sessions بكل طلب)
+    if (active === false) {
+      await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
+    }
     res.json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
 };
@@ -177,6 +184,7 @@ exports.remove = async (req, res, next) => {
       `UPDATE users SET active = false WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]
     );
+    await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     res.json({ success: true });
   } catch (err) { next(err); }
 };

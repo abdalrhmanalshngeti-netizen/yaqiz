@@ -7958,12 +7958,14 @@ function renderProductsReport(d, db) {
       if(!productSales[key]) productSales[key]={name:item.name,qty:0,revenue:0,cost:0};
       productSales[key].qty += item.qty||0;
       productSales[key].revenue += item.line_total||0;
+      // التكلفة الفعلية (FIFO) وقت هذا البيع تحديدًا لو مسجَّلة — أدق من سعر
+      // الشراء الحالي للمنتج، اللي قد يكون تغيّر كليًا منذ ذاك البيع. احتياطي
+      // بسعر الشراء الحالي فقط لفواتير قديمة بلا تكلفة مسجَّلة (قبل هذا الإصلاح)،
+      // على مستوى كل بند على حدة — لا الصنف كله لو فيه مزيج قديم/جديد
+      const prod = item.id!=null ? db.products.find(p=>p.id===item.id) : db.products.find(p=>p.name===item.name);
+      const unitCost = item.cost!=null ? item.cost : (prod?.buy_price||0);
+      productSales[key].cost += (item.qty||0) * unitCost;
     });
-  });
-  db.products.forEach(p=>{
-    const key = `id:${p.id}`;
-    if(productSales[key]) productSales[key].cost = productSales[key].qty * p.buy_price;
-    else if(productSales[`name:${p.name}`]) productSales[`name:${p.name}`].cost = productSales[`name:${p.name}`].qty * p.buy_price;
   });
   const rows = Object.values(productSales)
     .map(r=>({...r, profit:r.revenue-r.cost, margin:r.revenue>0?((r.revenue-r.cost)/r.revenue*100):0}))
@@ -17526,7 +17528,11 @@ async function runAISearchQuery(q) {
       customer_id:   inv.customer_id||null,
       items: (inv.items||[]).map(it => ({
         id: it.product_id||null, name: it.product_name, qty: parseFloat(it.qty),
-        price: parseFloat(it.unit_price), line_total: parseFloat(it.line_total)
+        price: parseFloat(it.unit_price), line_total: parseFloat(it.line_total),
+        // التكلفة الفعلية (FIFO) وقت البيع — السيرفر يخزّنها أصلًا بكل بند فاتورة
+        // (invoice_items.unit_cost)، كانت تُهمَل هنا فيضطر تقرير الربحية يستخدم
+        // سعر الشراء الحالي للمنتج بدل التكلفة الحقيقية وقت البيع
+        cost: it.unit_cost != null ? parseFloat(it.unit_cost) : null
       })),
       subtotal:       parseFloat(inv.subtotal)||0,
       discount:       parseFloat(inv.discount_amount)||0,

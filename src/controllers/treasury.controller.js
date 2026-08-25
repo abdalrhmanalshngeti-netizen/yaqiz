@@ -1,6 +1,8 @@
 const db = require('../config/db');
 const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
+const periodClose = require('../services/periodClose.service');
+const { todayLocalDateStr } = require('../utils/date.util');
 
 // طرق الدفع التي تُقيَّد على الحساب البنكي بدل الصندوق النقدي
 const BANK_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
@@ -144,6 +146,18 @@ exports.transfer = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'الرصيد غير كافي' });
     }
 
+    // لا يوجد حقل تاريخ بهذا الطلب (يُسجَّل دومًا بـNOW())، فالفحص هنا ضد تاريخ
+    // اليوم فقط — لكن كان هذا الكنترولر بالكامل بلا أي فحص إقفال فترات إطلاقًا
+    // (بعكس الفواتير/المشتريات/السندات/المرتجعات/القيود/الرواتب)، فتحويل بين
+    // حسابين يبقى ممكنًا حتى داخل شهر/سنة أُقفلت للتو بنفس اليوم
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+
     const newFrom = parseFloat(from.balance) - parseFloat(amount);
     const newTo   = parseFloat(to.balance)   + parseFloat(amount);
 
@@ -176,6 +190,14 @@ exports.addMove = async (req, res, next) => {
     if (!['in', 'out'].includes(type) || !amount) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     const { branch_id: resolvedBranchId } =
@@ -282,6 +304,14 @@ exports.createVoucher = async (req, res, next) => {
     if (!type || !amount || !account_id) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'النوع والمبلغ والحساب مطلوبة' });
+    }
+
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, date || todayLocalDateStr(), req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
     const vchSeqN = await nextDocNumber(client, req.user.company_id, 'voucher');

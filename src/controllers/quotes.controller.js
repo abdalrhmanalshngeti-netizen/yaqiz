@@ -237,6 +237,19 @@ exports.convert = async (req, res, next) => {
     const invSeqN = await nextDocNumber(client, company_id, 'invoice');
     const invoice_no = `INV-${String(invSeqN).padStart(6, '0')}`;
 
+    // نوع الفاتورة كان دائمًا 'simplified' مهما كان العميل — عرض سعر لعميل B2B
+    // حقيقي (رقم ضريبي/سجل تجاري) يتحول بشكل خاطئ لمبسّطة عند الهيئة. نستنتجه
+    // تلقائيًا من بيانات العميل (نفس القيمة 'tax' المستخدَمة أصلًا بشاشة الفاتورة
+    // اليدوية لهذا النوع بالضبط — راجع VVIP.html #ni-type)
+    let invoiceType = 'simplified';
+    if (quote.customer_id) {
+      const { rows: [custForType] } = await client.query(
+        `SELECT vat_number, cr_number FROM customers WHERE id = $1 AND company_id = $2`,
+        [quote.customer_id, company_id]
+      );
+      if (custForType?.vat_number || custForType?.cr_number) invoiceType = 'tax';
+    }
+
     // فاتورة محوّلة من عرض سعر تبقى جزءًا من نفس سلسلة ICV/PIH الموحّدة —
     // بدون هذا كانت تُترك بلا UUID/ICV/تجزئة إطلاقًا فتنكسر تسلسل السلسلة
     // القانوني (BR-KSA-26) لأي شركة تستخدم عروض الأسعار
@@ -250,13 +263,13 @@ exports.convert = async (req, res, next) => {
          subtotal, discount_amount, vat_amount, grand_total, paid_amount,
          payment_method, notes, zatca_status, created_by,
          zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id)
-      VALUES ($1,$2,'simplified',$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13,$14)
+      VALUES ($1,$2,$15,$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13,$14)
       RETURNING *
     `, [company_id, invoice_no,
         quote.customer_id || null, quote.customer_name,
         quote.subtotal, quote.vat_amount, quote.grand_total,
         `محوّل من ${quote.quote_no}`, user_id,
-        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId]);
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId, invoiceType]);
 
     // النسبة الفعلية للعرض (قد تكون 0 لو الضريبة معطَّلة أو العرض بدون ضريبة
     // أصلاً) — quote_items لا تخزّن نسبة لكل بند، فنشتقها من إجمالي العرض

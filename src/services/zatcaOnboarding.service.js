@@ -14,6 +14,7 @@
 const crypto = require('crypto');
 const forge = require('node-forge');
 const cryptoUtil = require('../utils/crypto.util');
+const { validateSeller } = require('./zatca.service');
 
 // نقاط اتصال الهيئة — بيئة المحاكاة (Simulation) هي المتاحة للمطورين قبل الإنتاج
 const ZATCA_ENDPOINTS = {
@@ -156,6 +157,18 @@ async function zatcaFetch(url, { method = 'POST', headers = {}, body } = {}) {
  * يدويًا من بوابة فاتورة لحساب الشركة الحقيقي — لا بديل آلي لهذه الخطوة.
  */
 async function requestComplianceCSID(client, company, otp, environment = 'sandbox') {
+  // كانت بيانات البائع الناقصة (عنوان/رقم ضريبي غير مكتمل) تمر بلا أي مانع
+  // حتى إصدار شهادة الإنتاج — رغم إن نفس الفحص (validateSeller) موجود أصلًا
+  // ويُستخدم فقط لتحذيرات صامتة بالسجلّ عند بناء XML كل فاتورة. شهادة صادرة
+  // لبيانات ناقصة عمليًا عديمة الفائدة (كل فاتورة ستُرفض من الهيئة لاحقًا على
+  // BR-KSA-09/37/40/66)، فنمنع إصدارها من الأساس بدل اكتشاف الفشل لاحقًا فاتورة
+  // فاتورة
+  const sellerWarnings = validateSeller(company);
+  if (sellerWarnings.length) {
+    const err = new Error(`بيانات الشركة غير مكتملة لإصدار شهادة الفوترة الإلكترونية: ${sellerWarnings.join('، ')}`);
+    err.code = 'INCOMPLETE_SELLER_DATA';
+    throw err;
+  }
   const { csrBase64, privateKeyPem } = buildCsr(company, {});
   const url = `${ZATCA_ENDPOINTS[environment]}/compliance`;
 
@@ -193,6 +206,15 @@ async function requestComplianceCSID(client, company, otp, environment = 'sandbo
  * نفسها للمصادقة (Basic Auth: username=certificate binary token, password=secret).
  */
 async function requestProductionCSID(client, company, environment = 'sandbox') {
+  // نفس فحص اكتمال البيانات أعلى requestComplianceCSID — دفاع بعمق لحالة
+  // نادرة: بيانات الشركة كانت مكتملة وقت الامتثال ثم تغيّرت (مثلاً حذف
+  // العنوان من الإعدادات) قبل طلب شهادة الإنتاج تحديدًا
+  const sellerWarnings = validateSeller(company);
+  if (sellerWarnings.length) {
+    const err = new Error(`بيانات الشركة غير مكتملة لإصدار شهادة الفوترة الإلكترونية: ${sellerWarnings.join('، ')}`);
+    err.code = 'INCOMPLETE_SELLER_DATA';
+    throw err;
+  }
   const { rows: [compliance] } = await client.query(`
     SELECT * FROM zatca_credentials
     WHERE company_id = $1 AND csid_type = 'compliance' AND is_active = true

@@ -14,6 +14,35 @@
 const db = require('../config/db');
 const { ZATCA_ENDPOINTS, getActiveCredential } = require('./zatcaOnboarding.service');
 
+// كان رفض الهيئة لفاتورة/إشعار دائن (submit "أفضل جهد" غير الحاجز) يظهر فقط
+// كـzatca_status='rejected' بالسجل الصامت — ما فيه أي إشعار يوصل لصاحب الحساب،
+// فتختفي الفاتورة المرفوضة عمليًا من أي متابعة إلى أن يفتح أحد سجلّات السيرفر.
+// نفس نمط notifyIncompleteSellerData/notifyBranchAuthFailure بالضبط (dedup
+// طالما فيه إشعار سابق من نفس النوع غير مقروء)
+async function notifyZatcaRejection(companyId, docTypeLabel, docNo, reasonMessage) {
+  try {
+    const { rows: [existing] } = await db.query(
+      `SELECT id FROM notifications WHERE company_id = $1 AND type = 'zatca_rejected' AND is_read = false LIMIT 1`,
+      [companyId]
+    );
+    if (existing) return;
+    const { rows: owners } = await db.query(
+      `SELECT id FROM users WHERE company_id = $1 AND role = 'owner' AND active = true`,
+      [companyId]
+    );
+    const message = `رفضت هيئة الزكاة والضريبة والجمارك ${docTypeLabel} ${docNo} — السبب: ${reasonMessage || 'غير محدد'}. راجع بيانات الاعتماد والمستند وأعد الإرسال.`;
+    for (const owner of owners) {
+      await db.query(
+        `INSERT INTO notifications (company_id, user_id, type, title, message, link)
+         VALUES ($1,$2,'zatca_rejected','مستند مرفوض من الهيئة',$3,'/VVIP.html#sales')`,
+        [companyId, owner.id, message]
+      );
+    }
+  } catch (e) {
+    console.error('[ZATCA] failed to notify owner of rejection:', e.message);
+  }
+}
+
 // مهلة زمنية إلزامية (راجع نفس التعليق بـzatcaOnboarding.service.js) — بوابة
 // الهيئة المعلَّقة بلا هذا كانت تُبقي طلب الإرسال معلَّقًا للأبد
 async function zatcaFetch(url, { certPem, secret, body }) {
@@ -153,6 +182,7 @@ async function submitInvoiceBestEffort(invoiceId, companyId) {
     const result = await submitInvoice(db, company, invoice, credential);
     if (!result.success) {
       console.warn(`[ZATCA auto-submit] invoice ${invoice.invoice_no} rejected/failed:`, result.error);
+      await notifyZatcaRejection(companyId, 'الفاتورة', invoice.invoice_no, result.error);
     }
   } catch (err) {
     console.error(`[ZATCA auto-submit] unexpected error for invoice ${invoiceId}:`, err.message);
@@ -177,6 +207,7 @@ async function submitCreditNoteBestEffort(noteId, companyId, isSimplified) {
     const result = await submitCreditNote(db, company, note, isSimplified, credential);
     if (!result.success) {
       console.warn(`[ZATCA auto-submit] credit note ${note.note_no} rejected/failed:`, result.error);
+      await notifyZatcaRejection(companyId, 'إشعار الدائن', note.note_no, result.error);
     }
   } catch (err) {
     console.error(`[ZATCA auto-submit] unexpected error for credit note ${noteId}:`, err.message);

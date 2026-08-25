@@ -30,6 +30,9 @@ exports.requestCompliance = async (req, res, next) => {
     res.json({ success: true, message: 'تم إصدار شهادة الامتثال بنجاح', data: result });
   } catch (err) {
     console.error('[ZATCA onboarding] compliance CSID failed:', err.message);
+    if (err.code === 'INCOMPLETE_SELLER_DATA') {
+      return res.status(400).json({ success: false, code: err.code, message: err.message });
+    }
     res.status(502).json({ success: false, message: `فشل الاتصال بالهيئة: ${err.message}` });
   }
 };
@@ -44,6 +47,9 @@ exports.requestProduction = async (req, res, next) => {
     res.json({ success: true, message: 'تم إصدار شهادة الإنتاج بنجاح', data: result });
   } catch (err) {
     console.error('[ZATCA onboarding] production CSID failed:', err.message);
+    if (err.code === 'INCOMPLETE_SELLER_DATA') {
+      return res.status(400).json({ success: false, code: err.code, message: err.message });
+    }
     res.status(502).json({ success: false, message: `فشل الاتصال بالهيئة: ${err.message}` });
   }
 };

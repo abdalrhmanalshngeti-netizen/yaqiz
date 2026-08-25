@@ -122,6 +122,22 @@ exports.create = async (req, res, next) => {
 
     let closingEntry = null;
     if (period_type === 'year') {
+      // إقفال سنة أقدم بعد ما سنة أحدث منها مُقفَلة أصلاً يضاعف احتساب الربح/الخسارة
+      // بالأرباح المرحّلة: قيد إقفال السنة الأحدث يُحسَب تراكميًا (كل ما قبل نهايتها)
+      // فيشمل نشاط السنة الأقدم أصلاً ضمنيًا؛ إقفالها لاحقًا بشكل منفصل يُصفّر نفس
+      // الأرصدة مرة ثانية وينقل نفس الربح/الخسارة لحساب 3100 مرتين. نفس منطق فحص
+      // الترتيب المستخدم أصلًا بفتح الفترات (exports.remove أدناه) لكن بالاتجاه المعاكس
+      const { rows: [laterClosedYear] } = await client.query(
+        `SELECT 1 FROM closed_periods WHERE company_id = $1 AND period_type = 'year' AND period_key > $2 LIMIT 1`,
+        [company_id, period_key]
+      );
+      if (laterClosedYear) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'لا يمكن إقفال هذه السنة — توجد سنة مالية أحدث مُقفَلة بالفعل. افتح السنوات الأحدث أولاً قبل إقفال سنة أقدم.'
+        });
+      }
       closingEntry = await postYearClosingEntry(client, company_id, user_id, period_key, row.id);
     }
 
