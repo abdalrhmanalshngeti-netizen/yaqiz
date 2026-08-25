@@ -6,6 +6,7 @@ const { submitCreditNoteBestEffort } = require('../services/zatcaSubmit.service'
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const periodClose = require('../services/periodClose.service');
+const logAudit = require('../middleware/logger');
 
 // ملاحظة: هذا الكنترولر يحفظ سجل المرتجع نفسه فقط. أثره على رصيد العميل/المورد
 // (تقسيم الخزينة/الرصيد حسب حالة سداد الفاتورة المرتبطة) يُزامَن مسبقاً عبر
@@ -219,6 +220,14 @@ exports.create = async (req, res, next) => {
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: ret, credit_note_no: creditNote?.note_no || null });
 
+    logAudit({
+      companyId: company_id, userId: req.user.sub, action: 'return_create',
+      entityType: 'return', entityId: ret.id, ip: req.ip,
+      newValues: { return_no: ret.return_no, type, amount, linked_invoice_id, linked_purchase_id },
+      details: `مرتجع ${type === 'sales' ? 'مبيعات' : 'مشتريات'} جديد: ${ret.return_no} — ${Number(amount).toFixed(2)} ر.س`
+        + (creditNote ? ` — إشعار دائن ${creditNote.note_no}` : '')
+    });
+
     // تصديق فوري "أفضل جهد" لإشعار الدائن لدى الهيئة — راجع نفس التعليق
     // بـinvoices.controller.js exports.cancel (submitCreditNoteBestEffort كانت
     // موجودة جاهزة لكن بلا أي مستدعٍ لها بالكود قبل هذا الإصلاح)
@@ -235,7 +244,19 @@ exports.create = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    await db.query(`DELETE FROM returns WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id]);
+    const { rows: [ret] } = await db.query(
+      `DELETE FROM returns WHERE id = $1 AND company_id = $2 RETURNING *`,
+      [req.params.id, req.user.company_id]
+    );
     res.json({ success: true });
+
+    if (ret) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'return_delete',
+        entityType: 'return', entityId: ret.id, ip: req.ip,
+        oldValues: { return_no: ret.return_no, type: ret.type, amount: ret.amount },
+        details: `حذف مرتجع ${ret.type === 'sales' ? 'مبيعات' : 'مشتريات'}: ${ret.return_no} — ${Number(ret.amount).toFixed(2)} ر.س`
+      });
+    }
   } catch (err) { next(err); }
 };

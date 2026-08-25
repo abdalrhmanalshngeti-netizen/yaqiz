@@ -3,6 +3,7 @@ const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const periodClose = require('../services/periodClose.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const logAudit = require('../middleware/logger');
 
 // طرق الدفع التي تُقيَّد على الحساب البنكي بدل الصندوق النقدي
 const BANK_METHODS = ['شبكة', 'تحويل', 'تحويل بنكي', 'شيك', 'card', 'transfer', 'bank', 'cheque', 'check'];
@@ -174,6 +175,13 @@ exports.transfer = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'treasury_transfer',
+      entityType: 'treasury_account', entityId: from_id, ip: req.ip,
+      newValues: { from_id, to_id, amount },
+      details: `تحويل ${Number(amount).toFixed(2)} ر.س من ${from.name} إلى ${to.name}`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -218,6 +226,13 @@ exports.addMove = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true, data: { ...move, balance: newBal } });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'treasury_move',
+      entityType: 'treasury_account', entityId: acct.id, ip: req.ip,
+      newValues: { type, amount, description },
+      details: `حركة خزينة يدوية (${type === 'in' ? 'إيداع' : 'سحب'}): ${Number(amount).toFixed(2)} ر.س — ${description || ''}`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -364,6 +379,13 @@ exports.createVoucher = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: voucher });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'voucher_create',
+      entityType: 'voucher', entityId: voucher.id, ip: req.ip,
+      newValues: { voucher_no, type, amount, party_name },
+      details: `سند ${type === 'receipt' ? 'قبض' : 'صرف'} جديد: ${voucher_no} — ${Number(amount).toFixed(2)} ر.س`
+    });
 
   } catch (err) {
     await client.query('ROLLBACK');

@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const onboarding = require('../services/zatcaOnboarding.service');
 const { submitInvoice, submitCreditNote } = require('../services/zatcaSubmit.service');
+const logAudit = require('../middleware/logger');
 
 exports.status = async (req, res, next) => {
   try {
@@ -28,6 +29,13 @@ exports.requestCompliance = async (req, res, next) => {
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
     const result = await onboarding.requestComplianceCSID(db, company, otp, environment || 'sandbox');
     res.json({ success: true, message: 'تم إصدار شهادة الامتثال بنجاح', data: result });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'zatca_compliance_issued',
+      entityType: 'zatca_credential', entityId: null, ip: req.ip,
+      newValues: { environment: environment || 'sandbox' },
+      details: `إصدار شهادة امتثال ZATCA (${environment || 'sandbox'})`
+    });
   } catch (err) {
     console.error('[ZATCA onboarding] compliance CSID failed:', err.message);
     if (err.code === 'INCOMPLETE_SELLER_DATA') {
@@ -45,6 +53,13 @@ exports.requestProduction = async (req, res, next) => {
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
     const result = await onboarding.requestProductionCSID(db, company, req.body.environment || 'sandbox');
     res.json({ success: true, message: 'تم إصدار شهادة الإنتاج بنجاح', data: result });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'zatca_production_issued',
+      entityType: 'zatca_credential', entityId: null, ip: req.ip,
+      newValues: { environment: req.body.environment || 'sandbox' },
+      details: `إصدار شهادة إنتاج ZATCA (${req.body.environment || 'sandbox'})`
+    });
   } catch (err) {
     console.error('[ZATCA onboarding] production CSID failed:', err.message);
     if (err.code === 'INCOMPLETE_SELLER_DATA') {

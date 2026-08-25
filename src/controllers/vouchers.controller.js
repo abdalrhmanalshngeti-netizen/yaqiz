@@ -2,6 +2,7 @@ const db = require('../config/db');
 const { todayLocalDateStr } = require('../utils/date.util');
 const { nextDocNumber } = require('../services/docNumber.service');
 const periodClose = require('../services/periodClose.service');
+const logAudit = require('../middleware/logger');
 
 // ملاحظة: هذا الكنترولر يحفظ سند القبض/الصرف نفسه فقط (للحفاظ عليه بين الأجهزة
 // وعدم فقدانه) — لا يُعيد تطبيق أثره على الفاتورة/رصيد العميل، لأن ذلك يُزامَن
@@ -93,6 +94,13 @@ exports.create = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: voucher });
+
+    logAudit({
+      companyId: company_id, userId: user_id, action: 'voucher_create',
+      entityType: 'voucher', entityId: voucher.id, ip: req.ip,
+      newValues: { voucher_no, type, amount, party_name },
+      details: `سند ${type === 'receipt' ? 'قبض' : 'صرف'} جديد: ${voucher_no} — ${Number(amount).toFixed(2)} ر.س`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -106,11 +114,18 @@ exports.create = async (req, res, next) => {
 // يطابق تمامًا سلوك الواجهة المحلية (deleteReceipt) التي تعكس أثره ثم تحذفه.
 exports.remove = async (req, res, next) => {
   try {
-    const { rowCount } = await db.query(
-      `DELETE FROM vouchers WHERE id = $1 AND company_id = $2`,
+    const { rows: [voucher] } = await db.query(
+      `DELETE FROM vouchers WHERE id = $1 AND company_id = $2 RETURNING *`,
       [req.params.id, req.user.company_id]
     );
-    if (!rowCount) return res.status(404).json({ success: false, message: 'السند غير موجود' });
+    if (!voucher) return res.status(404).json({ success: false, message: 'السند غير موجود' });
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'voucher_delete',
+      entityType: 'voucher', entityId: voucher.id, ip: req.ip,
+      oldValues: { voucher_no: voucher.voucher_no, type: voucher.type, amount: voucher.amount },
+      details: `حذف سند ${voucher.type === 'receipt' ? 'قبض' : 'صرف'}: ${voucher.voucher_no} — ${Number(voucher.amount).toFixed(2)} ر.س`
+    });
   } catch (err) { next(err); }
 };

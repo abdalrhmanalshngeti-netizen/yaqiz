@@ -3,6 +3,7 @@ const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const periodClose = require('../services/periodClose.service');
+const logAudit = require('../middleware/logger');
 
 // حقول قائمة الموظفين — تُستثنى national_id وiqama_no وiban من قائمة الكل
 const LIST_FIELDS = `id, company_id, employee_no, name, position, department,
@@ -67,6 +68,13 @@ exports.create = async (req, res, next) => {
         salary || 0, allowances || 0, start_date, bank_name, iban, client_local_id || null]);
 
     res.status(201).json({ success: true, data: rows[0] });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'employee_create',
+      entityType: 'employee', entityId: rows[0].id, ip: req.ip,
+      newValues: { name: rows[0].name, salary: rows[0].salary },
+      details: `موظف جديد: ${rows[0].name} — راتب ${Number(rows[0].salary).toFixed(2)} ر.س`
+    });
   } catch (err) { next(err); }
 };
 
@@ -74,6 +82,12 @@ exports.update = async (req, res, next) => {
   try {
     const { name, position, department, phone, email,
             salary, allowances, status, bank_name, iban, end_date } = req.body;
+
+    const { rows: [oldEmp] } = await db.query(
+      `SELECT name, salary, allowances, status FROM employees WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+
     const { rows } = await db.query(`
       UPDATE employees SET
         name        = COALESCE($1,  name),
@@ -94,16 +108,38 @@ exports.update = async (req, res, next) => {
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'الموظف غير موجود' });
     res.json({ success: true, data: rows[0] });
+
+    // نسجّل فقط لو تغيّر راتب أو حالة فعليًا — تجنّبًا لإغراق السجل بتعديلات
+    // بيانات اتصال روتينية (هاتف/إيميل) لا قيمة تدقيقية حقيقية لها
+    if (oldEmp && (salary !== undefined && Number(salary) !== Number(oldEmp.salary) || status !== undefined && status !== oldEmp.status)) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'employee_update',
+        entityType: 'employee', entityId: rows[0].id, ip: req.ip,
+        oldValues: { salary: oldEmp.salary, status: oldEmp.status },
+        newValues: { salary: rows[0].salary, status: rows[0].status },
+        details: `تعديل بيانات الموظف: ${rows[0].name}`
+          + (salary !== undefined && Number(salary) !== Number(oldEmp.salary) ? ` — الراتب من ${oldEmp.salary} إلى ${rows[0].salary}` : '')
+          + (status !== undefined && status !== oldEmp.status ? ` — الحالة من ${oldEmp.status} إلى ${rows[0].status}` : '')
+      });
+    }
   } catch (err) { next(err); }
 };
 
 exports.remove = async (req, res, next) => {
   try {
-    await db.query(
-      `UPDATE employees SET status = 'terminated', end_date = CURRENT_DATE WHERE id = $1 AND company_id = $2`,
+    const { rows: [removed] } = await db.query(
+      `UPDATE employees SET status = 'terminated', end_date = CURRENT_DATE WHERE id = $1 AND company_id = $2 RETURNING name`,
       [req.params.id, req.user.company_id]
     );
     res.json({ success: true });
+
+    if (removed) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'employee_terminate',
+        entityType: 'employee', entityId: req.params.id, ip: req.ip,
+        details: `إنهاء خدمة موظف: ${removed.name}`
+      });
+    }
   } catch (err) { next(err); }
 };
 
@@ -194,6 +230,13 @@ exports.generatePayroll = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: created });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'payroll_generate',
+      entityType: 'payroll', entityId: null, ip: req.ip,
+      newValues: { month, year, employees_count: created.length },
+      details: `إنشاء كشف رواتب ${month}/${year} — ${created.length} موظف`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -245,6 +288,13 @@ exports.markPayrollPaid = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'payroll_pay',
+      entityType: 'payroll', entityId: p.id, ip: req.ip,
+      newValues: { net_salary: p.net_salary, account_id },
+      details: `صرف راتب ${p.payroll_no} (${p.period_month}/${p.period_year}) — ${Number(p.net_salary).toFixed(2)} ر.س`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

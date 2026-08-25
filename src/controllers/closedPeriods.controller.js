@@ -2,6 +2,7 @@ const db     = require('../config/db');
 const bcrypt = require('bcrypt');
 const { nextDocNumber } = require('../services/docNumber.service');
 const periodClose = require('../services/periodClose.service');
+const logAudit = require('../middleware/logger');
 
 // يرجّع حساب "أرباح مرحّلة" (3100) بدليل حسابات الشركة، ينشئه تلقائياً تحت
 // مجموعة 3000 لو لسه ما وصلته migration 054 (نفس نمط resolveAccountId
@@ -143,6 +144,14 @@ exports.create = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: row, closingEntry });
+
+    logAudit({
+      companyId: company_id, userId: user_id, action: 'period_close',
+      entityType: 'closed_period', entityId: row.id, ip: req.ip,
+      newValues: { period_type, period_key },
+      details: `إقفال ${period_type === 'year' ? 'سنة مالية' : 'شهر'}: ${period_key}`
+        + (closingEntry ? ` — قيد إقفال ${closingEntry.entry_no}` : '')
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -184,6 +193,13 @@ exports.remove = async (req, res, next) => {
     await client.query(`DELETE FROM closed_periods WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id]);
     await client.query('COMMIT');
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'period_reopen',
+      entityType: 'closed_period', entityId: period.id, ip: req.ip,
+      oldValues: { period_type: period.period_type, period_key: period.period_key },
+      details: `فتح ${period.period_type === 'year' ? 'سنة مالية' : 'شهر'} مُقفَل مسبقًا: ${period.period_key}`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

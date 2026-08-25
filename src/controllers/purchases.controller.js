@@ -4,6 +4,7 @@ const branch = require('../services/branch.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const periodClose = require('../services/periodClose.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const logAudit = require('../middleware/logger');
 
 exports.list = async (req, res, next) => {
   try {
@@ -265,6 +266,13 @@ exports.create = async (req, res, next) => {
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: purchase });
 
+    logAudit({
+      companyId: company_id, userId: user_id, action: 'purchase_create',
+      entityType: 'purchase', entityId: purchase.id, ip: req.ip,
+      newValues: { purchase_no: purchase.purchase_no, total, supplier_id, status: purchStatus },
+      details: `فاتورة شراء جديدة: ${purchase.purchase_no} — ${Number(total).toFixed(2)} ر.س`
+    });
+
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
@@ -340,6 +348,14 @@ exports.addPayment = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.json({ success: true, paid: paying, remaining: newRem, status: newStatus });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'purchase_payment',
+      entityType: 'purchase', entityId: pur.id, ip: req.ip,
+      oldValues: { paid_amount: pur.paid_amount, status: pur.status },
+      newValues: { paid_amount: newPaid, status: newStatus },
+      details: `سداد ${paying.toFixed(2)} ر.س على فاتورة شراء ${pur.purchase_no}`
+    });
 
   } catch (err) {
     await client.query('ROLLBACK');

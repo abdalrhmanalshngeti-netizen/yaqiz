@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const db     = require('../config/db');
+const logAudit = require('../middleware/logger');
 
 const SAFE_FIELDS = `id, username, full_name, email, phone, role,
   permissions, pos_access, shift_enabled, active, last_login, created_at, tours_seen, branch_id`;
@@ -87,6 +88,13 @@ exports.create = async (req, res, next) => {
     `, [req.user.company_id, rows[0].id, `مستخدم جديد: ${rows[0].full_name} (${rows[0].role})`]).catch(() => {});
 
     res.status(201).json({ success: true, data: rows[0] });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'user_create',
+      entityType: 'user', entityId: rows[0].id, ip: req.ip,
+      newValues: { username: rows[0].username, role: rows[0].role, permissions: rows[0].permissions },
+      details: `مستخدم جديد: ${rows[0].full_name} (${rows[0].username}, ${rows[0].role})`
+    });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'اسم المستخدم مستخدم بالفعل' });
@@ -148,6 +156,11 @@ exports.update = async (req, res, next) => {
       }
     }
 
+    const { rows: [oldUser] } = await db.query(
+      `SELECT ${SAFE_FIELDS} FROM users WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+
     const { rows } = await db.query(`
       UPDATE users SET
         full_name     = COALESCE($1, full_name),
@@ -172,6 +185,16 @@ exports.update = async (req, res, next) => {
       await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     }
     res.json({ success: true, data: rows[0] });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'user_update',
+      entityType: 'user', entityId: rows[0].id, ip: req.ip,
+      oldValues: { role: oldUser?.role, permissions: oldUser?.permissions, active: oldUser?.active },
+      newValues: { role: rows[0].role, permissions: rows[0].permissions, active: rows[0].active },
+      details: `تعديل بيانات المستخدم: ${rows[0].full_name} (${rows[0].username})`
+        + (active === false ? ' — تعطيل الحساب' : '')
+        + (role !== undefined && role !== oldUser?.role ? ` — تغيير الدور إلى ${role}` : '')
+    });
   } catch (err) { next(err); }
 };
 
@@ -180,12 +203,21 @@ exports.remove = async (req, res, next) => {
     if (parseInt(req.params.id) === req.user.sub) {
       return res.status(400).json({ success: false, message: 'لا يمكنك حذف حسابك الخاص' });
     }
-    await db.query(
-      `UPDATE users SET active = false WHERE id = $1 AND company_id = $2`,
+    const { rows: [removedUser] } = await db.query(
+      `UPDATE users SET active = false WHERE id = $1 AND company_id = $2 RETURNING username, full_name`,
       [req.params.id, req.user.company_id]
     );
     await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     res.json({ success: true });
+
+    if (removedUser) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'user_delete',
+        entityType: 'user', entityId: req.params.id, ip: req.ip,
+        oldValues: { username: removedUser.username },
+        details: `حذف/تعطيل مستخدم: ${removedUser.full_name} (${removedUser.username})`
+      });
+    }
   } catch (err) { next(err); }
 };
 
@@ -243,5 +275,13 @@ exports.changePassword = async (req, res, next) => {
     if (!rowCount) return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
     await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     res.json({ success: true });
+
+    if (!isSelf) {
+      logAudit({
+        companyId: req.user.company_id, userId: req.user.sub, action: 'user_password_reset',
+        entityType: 'user', entityId: req.params.id, ip: req.ip,
+        details: `المالك غيّر كلمة مرور مستخدم آخر (id=${req.params.id})`
+      });
+    }
   } catch (err) { next(err); }
 };

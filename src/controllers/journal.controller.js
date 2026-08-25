@@ -2,6 +2,7 @@ const db = require('../config/db');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const periodClose = require('../services/periodClose.service');
+const logAudit = require('../middleware/logger');
 
 // يحدد نوع الحساب الافتراضي لأي كود غير معروف بالاعتماد على الرقم الأول
 // (1=أصول، 2=التزامات، 3=حقوق ملكية، 4=إيرادات، 5=مصروفات) — احتياطي فقط
@@ -135,7 +136,7 @@ exports.remove = async (req, res, next) => {
     // كان هذا الحذف بلا أي فحص إقفال فترة إطلاقًا (بعكس كل نقاط الكتابة
     // الأخرى) — يسمح بحذف قيد نهائي من سنة/شهر مُقفَل محاسبيًا
     const { rows: [entry] } = await client.query(
-      `SELECT date FROM journal_entries WHERE id = $1 AND company_id = $2`,
+      `SELECT date, entry_no, description FROM journal_entries WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]
     );
     if (!entry) {
@@ -155,6 +156,13 @@ exports.remove = async (req, res, next) => {
     );
     await client.query('COMMIT');
     res.json({ success: true });
+
+    logAudit({
+      companyId: req.user.company_id, userId: req.user.sub, action: 'journal_delete',
+      entityType: 'journal_entry', entityId: req.params.id, ip: req.ip,
+      oldValues: { entry_no: entry.entry_no, date: entry.date, description: entry.description },
+      details: `حذف قيد يومية: ${entry.entry_no} — ${entry.description || ''}`
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
