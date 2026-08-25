@@ -163,8 +163,19 @@ exports.generatePayroll = async (req, res, next) => {
       const override = overrides.find(o => o.employee_id === emp.id) || {};
       const overtime   = parseFloat(override.overtime   || 0);
       const deductions = parseFloat(override.deductions || 0);
-      const gosi_emp   = parseFloat(emp.salary) * 0.1;
-      const gosi_er    = parseFloat(emp.salary) * 0.12;
+      // نسب GOSI الفعلية (نظام التأمينات الاجتماعية الموسّع، مشتركون بعد
+      // 2024-07-03): 10.75% حصة الموظف + 12.75% حصة صاحب العمل (يوليو–ديسمبر
+      // 2026؛ ترتفع 0.5% كل يوليو). كانت 10%/12% ثابتة بلا مصدر واضح — لا تطابق
+      // لا النظام القديم (9.75%/11.75%) ولا الجديد. الوعاء يُحدَّد بسقف اشتراك
+      // GOSI الرسمي 45,000 ر.س/شهريًا (راتب أساسي فقط حاليًا — allowances لا
+      // تشمل بدل سكن منفصل بعد بهذا النظام، فتبقى مستبعدة من الوعاء كسابقًا).
+      // ⚠️ لا يزال يفترض كل موظف "نظام جديد" وسعودي — تمييز غير السعودي (2%
+      // على صاحب العمل فقط، بلا خصم موظف) وتحديد النظام القديم/الجديد الفعلي
+      // (تاريخ تسجيل GOSI الحقيقي، غير متوفر بالنظام) يبقيان مؤجَّلين بقرار
+      // صريح — لا تُعرض هذي الأرقام كصحيحة 100% لموظف غير سعودي
+      const gosiBase   = Math.min(parseFloat(emp.salary), 45000);
+      const gosi_emp   = gosiBase * 0.1075;
+      const gosi_er    = gosiBase * 0.1275;
       const net        = parseFloat(emp.salary) + parseFloat(emp.allowances) + overtime - deductions - gosi_emp;
 
       const { rows: [p] } = await client.query(`

@@ -806,6 +806,10 @@
           <input type="text" id="f-vt" placeholder="300…">
         </div>
       </div>
+      <div class="fgroup" style="display:flex;align-items:center;gap:8px;margin-top:.4rem">
+        <input type="checkbox" id="f-vat-reg" checked style="width:auto;margin:0">
+        <label for="f-vat-reg" style="margin:0;font-weight:400;font-size:.85rem">شركتي مسجّلة بضريبة القيمة المضافة (VAT) — إن لم تكن مسجّلاً، الفواتير لن تحتسب الضريبة تلقائيًا (يمكن تفعيلها لاحقًا من الإعدادات)</label>
+      </div>
       <button type="submit" class="btn-submit" id="regBtn">إنشاء الحساب</button>
       <p style="text-align:center;font-size:.78rem;color:#94a3b8;margin-top:.9rem">
         بالتسجيل توافق على
@@ -904,6 +908,7 @@ async function doReg(e) {
     const body={company_name:co,username:un,password:pw,full_name:fn,contact_phone:ph,plan};
     if(cr) body.cr_number=cr;
     if(vt) body.vat_number=vt;
+    body.vat_registered = document.getElementById('f-vat-reg').checked;
     const res  = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data = await res.json();
     if(data.success){

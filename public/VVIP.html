@@ -12618,7 +12618,7 @@ function renderJournal(c) {
   <div>
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'القيود اليومية':'Journal Entries'}</div>
-      ${has('reports.view')?`<button class="btn btn-primary" data-action="showJournalModal">${icon('plus',16)} ${lang==='ar'?'قيد يدوي':'Manual Entry'}</button>`:''}
+      ${has('accounts.manage')?`<button class="btn btn-primary" data-action="showJournalModal">${icon('plus',16)} ${lang==='ar'?'قيد يدوي':'Manual Entry'}</button>`:''}
     </div>
     <div class="card">
       <div class="tbl-wrap"><table class="tbl">
@@ -16750,7 +16750,10 @@ function renderOpeningBalancesSettings(c) {
     +'<div class="card-head"><h3>📋 الأرصدة الافتتاحية</h3>'
     +'<div style="display:flex;gap:8px;align-items:center;">'
     +(date?'<span style="font-size:11px;color:var(--text-muted);">بتاريخ: '+fmtDate(date)+'</span>':'')
-    +'<button class="btn btn-outline btn-sm" data-action="showOpeningBalancesWizard" data-args="[true]">✎ تعديل</button>'
+    // تعديل الأرصدة الافتتاحية يحذف القيد الافتتاحي القديم ويُنشئ آخر بدله
+    // (obSaveAll، عند isEdit) — نفس فعل حذف قيد يومية، فيُقيَّد بنفس صلاحية
+    // إدارة الحسابات المستخدَمة الآن بـDELETE /api/journal/:id
+    +(has('accounts.manage')?'<button class="btn btn-outline btn-sm" data-action="showOpeningBalancesWizard" data-args="[true]">✎ تعديل</button>':'')
     +'</div></div>'
     +'<div class="card-pad">'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">'

@@ -129,11 +129,36 @@ exports.create = async (req, res, next) => {
 };
 
 exports.remove = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
-    await db.query(
+    await client.query('BEGIN');
+    // كان هذا الحذف بلا أي فحص إقفال فترة إطلاقًا (بعكس كل نقاط الكتابة
+    // الأخرى) — يسمح بحذف قيد نهائي من سنة/شهر مُقفَل محاسبيًا
+    const { rows: [entry] } = await client.query(
+      `SELECT date FROM journal_entries WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!entry) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'القيد غير موجود' });
+    }
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, req.user.company_id, entry.date, req.headers['x-period-override-token']
+    );
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+    await client.query(
       `DELETE FROM journal_entries WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]
     );
+    await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };

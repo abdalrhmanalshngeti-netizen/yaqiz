@@ -20,7 +20,12 @@ exports.register = async (req, res, next) => {
       // بيانات المالك
       username, password, full_name, phone, email,
       // الباقة المختارة
-      plan: chosenPlan
+      plan: chosenPlan,
+      // هل الشركة مسجّلة فعليًا بضريبة القيمة المضافة — سؤال بسيط بنموذج
+      // التسجيل (public/index.html، checkbox f-vat-reg). قبل هذا كل شركة جديدة
+      // تبدأ بالضريبة مفعّلة افتراضيًا (15%) بلا أي سؤال، حتى لو كانت أصغر من
+      // حد التسجيل الإلزامي بالضريبة فعليًا وما قررت التسجيل اختياريًا بعد
+      vat_registered
     } = req.body;
     const plan = ['basic','growth','pro'].includes(chosenPlan) ? chosenPlan : 'basic';
 
@@ -85,6 +90,15 @@ exports.register = async (req, res, next) => {
         ($1,'company_name',$2)
       ON CONFLICT (company_id, key) DO NOTHING
     `, [company.id, company_name]);
+    // لو صرّح صراحة إنه غير مسجّل بالضريبة، نطفئ vat_enabled من البداية بدل
+    // تركها مفعّلة افتراضيًا (المفتاح غائب = مفعّل بمنطق العميل الحالي) —
+    // المالك يقدر يفعّلها لاحقًا من الإعدادات فور تسجيله بالضريبة فعليًا
+    if (vat_registered === false) {
+      await client.query(`
+        INSERT INTO settings (company_id, key, value) VALUES ($1,'vat_enabled','false')
+        ON CONFLICT (company_id, key) DO UPDATE SET value = EXCLUDED.value
+      `, [company.id]);
+    }
 
     // 4. حساب الصندوق الرئيسي (كاش) + الحساب البنكي — لفصل تحصيلات الشبكة/التحويل عن النقد تلقائياً
     const { rows: [cashAccount] } = await client.query(`
