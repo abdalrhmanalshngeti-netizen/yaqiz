@@ -70,7 +70,14 @@ exports.update = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
             email, address, city, credit_limit, payment_terms, is_active, balance,
-            street_name, building_number, district, postal_code, country_code } = req.body;
+            street_name, building_number, district, postal_code, country_code,
+            opening_balance_write } = req.body;
+
+    // مزامنة أي تعديل عادي (رقم جوال، عنوان...) ترسل كامل نسخة العميل المحلية
+    // بما فيها balance المخزَّن بذاك الجهاز — لو جهاز ثاني غيّر الرصيد الحقيقي
+    // بفاتورة/سند بينهما، هذا الحقل يكون قديمًا ويكتب فوق الرصيد الصحيح بالسيرفر.
+    // الرصيد لا يُحدَّث هنا إلا عبر معالج الأرصدة الافتتاحية صراحة (العلامة أدناه)
+    const balanceParam = opening_balance_write === true && balance != null ? parseFloat(balance) : null;
 
     const { rows } = await db.query(`
       UPDATE customers SET
@@ -96,7 +103,7 @@ exports.update = async (req, res, next) => {
       RETURNING *
     `, [code, name, name_en, vat_number, cr_number, phone, email,
         address, city, credit_limit, payment_terms, is_active,
-        balance != null ? parseFloat(balance) : null,
+        balanceParam,
         req.params.id, req.user.company_id,
         street_name || null, building_number || null, district || null, postal_code || null, country_code || null]);
 

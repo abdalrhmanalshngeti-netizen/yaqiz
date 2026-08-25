@@ -125,7 +125,7 @@ exports.create = async (req, res, next) => {
     }
 
     const baseAmount = parseFloat(amount || 0);
-    const vatAmount  = parseFloat(vat_amount || baseAmount * 0.15);
+    const vatAmount  = parseFloat(vat_amount ?? baseAmount * 0.15);
     const total      = baseAmount + vatAmount;
 
     const CASH_METHODS = ['cash', 'نقدي', 'شبكة', 'bank', 'بنك', 'تحويل', 'بطاقة', 'network', 'card'];

@@ -57,10 +57,24 @@ exports.create = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { description, ref, date, entries = [] } = req.body;
+    const { description, ref, date, entries = [], client_local_id } = req.body;
     if (!entries.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة سطر واحد على الأقل' });
+    }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ قيدًا
+    // مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح، بنفس
+    // نمط بقية المستندات (راجع 053_client_local_id_dedup.sql)
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT id, description, reference, date FROM journal_entries WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) {
+        await client.query('COMMIT');
+        return res.status(201).json({ success: true, data: { id: existing.id, description: existing.description, ref: existing.reference, date: existing.date, entries } });
+      }
     }
     const debit  = entries.filter(e => e.side === 'debit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     const credit = entries.filter(e => e.side === 'credit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -90,10 +104,10 @@ exports.create = async (req, res, next) => {
     const entry_no = `JE-${String(jeSeqN).padStart(6, '0')}`;
 
     const { rows: [entry] } = await client.query(
-      `INSERT INTO journal_entries (company_id, entry_no, description, reference, date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      `INSERT INTO journal_entries (company_id, entry_no, description, reference, date, created_by, client_local_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [req.user.company_id, entry_no, description || '', ref || null,
-       date || todayLocalDateStr(), req.user.sub]
+       date || todayLocalDateStr(), req.user.sub, client_local_id || null]
     );
 
     for (const e of entries) {

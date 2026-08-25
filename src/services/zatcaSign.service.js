@@ -120,4 +120,16 @@ function embedSignature(invoiceXml, ublExtensionsXml) {
   return invoiceXml.replace('<ext:UBLExtensions/>', ublExtensionsXml);
 }
 
-module.exports = { buildXadesSignature, embedSignature, c14n, sha256Base64 };
+// يحقن رمز QR (base64) مكان عنصر EmbeddedDocumentBinaryObject الفارغ الموسوم
+// بمعرّف QR الذي وضعه zatca.service.js — نفس أسلوب الاستبدال النصي لـembedSignature
+// بالضبط. نبحث تحديدًا عن الشظية التالية لـ<cbc:ID>QR</cbc:ID> (وليس أي عنصر
+// EmbeddedDocumentBinaryObject فارغ آخر بالمستند، مثل PIH لو كانت تجزئته فارغة)
+function embedQR(invoiceXml, qrBase64) {
+  const qrPlaceholder = /(<cbc:ID>QR<\/cbc:ID>\s*<cac:Attachment>\s*<cbc:EmbeddedDocumentBinaryObject mimeCode="text\/plain")\/>/;
+  if (!qrPlaceholder.test(invoiceXml)) {
+    throw new Error('لم يُعثر على عنصر QR الفارغ داخل XML — تأكد أن الفاتورة وُلِّدت عبر zatca.service.js');
+  }
+  return invoiceXml.replace(qrPlaceholder, `$1>${qrBase64}</cbc:EmbeddedDocumentBinaryObject>`);
+}
+
+module.exports = { buildXadesSignature, embedSignature, embedQR, c14n, sha256Base64 };

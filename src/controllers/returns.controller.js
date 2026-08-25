@@ -2,6 +2,7 @@ const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { createCreditNote } = require('../services/creditNote.service');
+const { submitCreditNoteBestEffort } = require('../services/zatcaSubmit.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const periodClose = require('../services/periodClose.service');
@@ -166,6 +167,13 @@ exports.create = async (req, res, next) => {
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: ret, credit_note_no: creditNote?.note_no || null });
+
+    // تصديق فوري "أفضل جهد" لإشعار الدائن لدى الهيئة — راجع نفس التعليق
+    // بـinvoices.controller.js exports.cancel (submitCreditNoteBestEffort كانت
+    // موجودة جاهزة لكن بلا أي مستدعٍ لها بالكود قبل هذا الإصلاح)
+    if (creditNote) {
+      submitCreditNoteBestEffort(creditNote.id, company_id, (linkedInvoice?.invoice_type || 'simplified') === 'simplified').catch(() => {});
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

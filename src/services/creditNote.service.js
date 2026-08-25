@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const { buildInvoiceXML, notifyIncompleteSellerData } = require('./zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaHash.service');
-const { buildXadesSignature, embedSignature } = require('./zatcaSign.service');
+const { buildXadesSignature, embedSignature, embedQR } = require('./zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
 const zatcaOnboarding = require('./zatcaOnboarding.service');
 const { nextDocNumber } = require('./docNumber.service');
@@ -114,6 +114,7 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
           publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
           caSignatureDer: extractCaSignature(cert.raw),
         });
+        finalXml = embedQR(finalXml, qrBase64);
       } catch (signErr) {
         console.error(`[ZATCA] credit note ${note_no} signing/QR failed:`, signErr.message);
       }

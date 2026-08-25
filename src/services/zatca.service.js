@@ -175,7 +175,7 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   // مكان امتداد التوقيع الرقمي (XAdES) — يُملأ بالخطوة 5، تُرك بنية فاضية الآن حتى لا يتغيّر شكل المستند لاحقًا
   root.ele(NS.ext, 'ext:UBLExtensions');
 
-  root.ele(NS.cbc, 'cbc:ProfileID').txt('reporting:1.0');
+  root.ele(NS.cbc, 'cbc:ProfileID').txt(isSimplified ? 'reporting:1.0' : 'standard:1.0');
   root.ele(NS.cbc, 'cbc:ID').txt(String(invoice.invoice_no));
   root.ele(NS.cbc, 'cbc:UUID').txt(invoice.zatca_uuid || invoice.uuid);
   root.ele(NS.cbc, 'cbc:IssueDate').txt(issueDateStr);
@@ -200,6 +200,16 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
     .ele(NS.cbc, 'cbc:ID').txt('PIH').up()
     .ele(NS.cac, 'cac:Attachment')
       .ele(NS.cbc, 'cbc:EmbeddedDocumentBinaryObject').att('mimeCode', 'text/plain').txt(previousInvoiceHash || '');
+
+  // QR — عنصر فارغ الآن (بلا نص)، يُملأ لاحقًا بـ embedQR (zatcaSign.service.js)
+  // بنفس أسلوب حقن ext:UBLExtensions الفارغ بالتوقيع — بعد حساب رمز QR الفعلي،
+  // الذي يعتمد على التوقيع نفسه فلا يمكن حسابه هنا وقت بناء الـXML. لا يؤثر على
+  // حساب التجزئة (canonicalizeForHash بـzatcaHash.service.js يحذف أي
+  // AdditionalDocumentReference معرّفه QR قبل التجزئة بصرف النظر عن محتواه)
+  root.ele(NS.cac, 'cac:AdditionalDocumentReference')
+    .ele(NS.cbc, 'cbc:ID').txt('QR').up()
+    .ele(NS.cac, 'cac:Attachment')
+      .ele(NS.cbc, 'cbc:EmbeddedDocumentBinaryObject').att('mimeCode', 'text/plain').txt('');
 
   // AccountingSupplierParty (البائع)
   const sellerId = sellerIdentification(company);

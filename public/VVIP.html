@@ -16643,13 +16643,16 @@ function obSaveAll() {
     if (isEdit) {
       (oldData.customers||[]).forEach(c => {
         const ex = _obFindPartyMatch(db.customers, c);
-        if (ex) ex.balance = Math.round(((ex.balance||0)-c.balance)*100)/100;
+        if (ex) { ex.balance = Math.round(((ex.balance||0)-c.balance)*100)/100; ex._obBalanceWrite = true; }
       });
     }
     _obData.customers.forEach(c => {
       const ex = _obFindPartyMatch(db.customers, c);
-      if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; c.id = ex.id; }
-      else { const newId = nextId(db,'customer'); db.customers.push({ id:newId, name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString() }); c.id = newId; }
+      // علامة عابرة تلتقطها حلقة مزامنة العملاء لترسل opening_balance_write:true
+      // — بدونها السيرفر يتجاهل الرصيد المرسَل عمدًا (حماية من الكتابة فوق رصيد
+      // حقيقي بتعديل حقل عادي، راجع customers.controller.js exports.update)
+      if (ex) { ex.balance = Math.round(((ex.balance||0)+c.balance)*100)/100; c.id = ex.id; ex._obBalanceWrite = true; }
+      else { const newId = nextId(db,'customer'); db.customers.push({ id:newId, name:c.name, phone:'', email:'', address:'', balance:c.balance, created_at:new Date().toISOString(), _obBalanceWrite:true }); c.id = newId; }
     });
   }
 
@@ -16659,13 +16662,13 @@ function obSaveAll() {
   if (isEdit) {
     (oldData.suppliers||[]).forEach(s => {
       const ex = _obFindPartyMatch(db.suppliers, s);
-      if (ex) ex.balance = Math.round(((ex.balance||0)-s.balance)*100)/100;
+      if (ex) { ex.balance = Math.round(((ex.balance||0)-s.balance)*100)/100; ex._obBalanceWrite = true; }
     });
   }
   _obData.suppliers.forEach(s => {
     const ex = _obFindPartyMatch(db.suppliers, s);
-    if (ex) { ex.balance = Math.round(((ex.balance||0)+s.balance)*100)/100; s.id = ex.id; }
-    else { const newId = nextId(db,'supplier'); db.suppliers.push({ id:newId, name:s.name, phone:'', email:'', address:'', balance:s.balance, created_at:new Date().toISOString() }); s.id = newId; }
+    if (ex) { ex.balance = Math.round(((ex.balance||0)+s.balance)*100)/100; s.id = ex.id; ex._obBalanceWrite = true; }
+    else { const newId = nextId(db,'supplier'); db.suppliers.push({ id:newId, name:s.name, phone:'', email:'', address:'', balance:s.balance, created_at:new Date().toISOString(), _obBalanceWrite:true }); s.id = newId; }
   });
 
   // القيود المحاسبية الافتتاحية — عند التعديل نحذف القيد الافتتاحي القديم أولًا
@@ -18204,15 +18207,19 @@ async function runAISearchQuery(q) {
                        balance: c.balance || 0, is_active: c.is_active !== false,
                        street_name: c.street_name || null, building_number: c.building_number || null,
                        district: c.district || null, city: c.city || null, postal_code: c.postal_code || null };
+        // السيرفر يتجاهل balance بالتحديث افتراضيًا (حماية من كتابة رصيد قديم فوق
+        // رصيد حقيقي غيّره جهاز آخر) — إلا لو معالج الأرصدة الافتتاحية علّم هذا
+        // السجل صراحة، عندها نرسل العلامة ونحذفها بعد نجاح المزامنة فقط
+        if (c._obBalanceWrite) body.opening_balance_write = true;
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
-          if (res?.data?.id) { if (res.data.id !== c.id) _replaceLocalId('customers', c.id, res.data.id); }
+          if (res?.data?.id) { if (res.data.id !== c.id) _replaceLocalId('customers', c.id, res.data.id); delete c._obBalanceWrite; }
           else _revertSnapEntity('customers', c.id, null);
         } else if (JSON.stringify(c) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update customer', c.name);
           const ok = await apiFetch('PUT', `/api/customers/${c.id}`, body).then(()=>true).catch(e => { console.warn('customer update:', e.message); return false; });
-          if (!ok) _revertSnapEntity('customers', c.id, old);
+          if (!ok) _revertSnapEntity('customers', c.id, old); else delete c._obBalanceWrite;
         }
       }
       for (const old of prev.customers || []) {
@@ -18229,15 +18236,18 @@ async function runAISearchQuery(q) {
         const body = { client_local_id: s.id, name: s.name, phone: s.phone, email: s.email,
                        address: s.address, vat_number: s.vat_num,
                        balance: s.balance || 0, is_active: s.is_active !== false };
+        // نفس منطق العملاء: السيرفر يتجاهل balance بالتحديث افتراضيًا، إلا بعلامة
+        // معالج الأرصدة الافتتاحية صراحة (راجع suppliers.controller.js exports.update)
+        if (s._obBalanceWrite) body.opening_balance_write = true;
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });
-          if (res?.data?.id) { if (res.data.id !== s.id) _replaceLocalId('suppliers', s.id, res.data.id); }
+          if (res?.data?.id) { if (res.data.id !== s.id) _replaceLocalId('suppliers', s.id, res.data.id); delete s._obBalanceWrite; }
           else _revertSnapEntity('suppliers', s.id, null);
         } else if (JSON.stringify(s) !== JSON.stringify(old)) {
           if (SYNC_LOG) console.log('→ API: update supplier', s.name);
           const ok = await apiFetch('PUT', `/api/suppliers/${s.id}`, body).then(()=>true).catch(e => { console.warn('supplier update:', e.message); return false; });
-          if (!ok) _revertSnapEntity('suppliers', s.id, old);
+          if (!ok) _revertSnapEntity('suppliers', s.id, old); else delete s._obBalanceWrite;
         }
       }
       for (const old of prev.suppliers || []) {
@@ -18606,7 +18616,7 @@ async function runAISearchQuery(q) {
         delete window._periodOverrideTokens[`journal:${j.id}`];
         const res = await apiFetch('POST', '/api/journal', {
           description: j.description || '', ref: j.ref || null, date: j.date || new Date().toISOString(),
-          entries: j.entries || []
+          entries: j.entries || [], client_local_id: j.id
         }, _jTok ? { 'X-Period-Override-Token': _jTok } : undefined).catch(e => { console.warn('journal entry sync:', e.message); return null; });
 
         if (res?.data?.id) {

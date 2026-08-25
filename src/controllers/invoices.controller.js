@@ -5,12 +5,12 @@ const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
 const { buildInvoiceXML, notifyIncompleteSellerData } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
-const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
+const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
-const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
+const { submitInvoice, submitInvoiceBestEffort, submitCreditNoteBestEffort } = require('../services/zatcaSubmit.service');
 const periodClose = require('../services/periodClose.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 
@@ -259,8 +259,11 @@ exports.create = async (req, res, next) => {
     // لا نمنع إنشاء الفاتورة إن كانت بيانات البائع المُهيكلة ناقصة (شركات قديمة
     // لم تُكمل عنوانها بعد) — الفاتورة تبقى صالحة محاسبيًا، وتحذيرات الاكتمال
     // تُسجَّل فقط لتنبيه المالك قبل أي إرسال فعلي مستقبلي للهيئة (الخطوة 6)
+    let companyRowForClearance = null;
+    let credentialForClearance = null;
     try {
       const { rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]);
+      companyRowForClearance = companyRow;
       let customerRow = null;
       if (customer_id) {
         customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1`, [customer_id])).rows[0];
@@ -279,6 +282,7 @@ exports.create = async (req, res, next) => {
       let qrBase64 = null;
       let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
       if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
+      credentialForClearance = credential;
       if (credential) {
         try {
           const { ublExtensionsXml, signatureValue } = buildXadesSignature({
@@ -291,6 +295,7 @@ exports.create = async (req, res, next) => {
             publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
             caSignatureDer: extractCaSignature(cert.raw),
           });
+          finalXml = embedQR(finalXml, qrBase64);
         } catch (signErr) {
           console.error(`[ZATCA] signing/QR failed for invoice ${invoice_no}:`, signErr.message);
         }
@@ -309,6 +314,27 @@ exports.create = async (req, res, next) => {
     } catch (xmlErr) {
       // خطأ بتوليد XML لا يجب أن يمنع تسجيل عملية بيع حقيقية — يُسجَّل فقط
       console.error(`[ZATCA] XML generation failed for invoice ${invoice_no}:`, xmlErr.message);
+    }
+
+    // ── حجب فواتير B2B القياسية (غير المبسّطة) حتى تصديق فعلي من الهيئة ──────
+    // قرار صريح: لا حفظ محلي جزئي بانتظار إرسال لاحق لفاتورة ضريبية قياسية —
+    // إن كانت الشركة أهّلت شهادة CSID فعليًا (credential) ولم تُصدَّق الفاتورة
+    // فورًا، تُلغى العملية كاملة بدل حفظها "معلَّقة" بصمت. الفواتير المبسّطة/POS
+    // تبقى بمسار "أفضل جهد" غير حاجز بعد الرد (submitInvoiceBestEffort أسفل).
+    // لو الشركة لم تُكمل تأهيل الهيئة أصلًا (!credential) لا حجب — الحالة
+    // الشائعة اليوم لمعظم الشركات، والفاتورة تُحفَظ بلا توقيع/QR كسلوكها الحالي.
+    if ((invoice.invoice_type || 'simplified') !== 'simplified' && credentialForClearance) {
+      const clearResult = await submitInvoice(client, companyRowForClearance, invoice, credentialForClearance);
+      if (!clearResult.success) {
+        await client.query('ROLLBACK');
+        return res.status(502).json({
+          success: false,
+          code: 'zatca_clearance_failed',
+          message: 'تعذّر تصديق الفاتورة الضريبية القياسية لدى هيئة الزكاة والضريبة والجمارك — لم تُحفَظ الفاتورة. تحقق من الاتصال وأعد المحاولة.',
+          zatca_error: clearResult.error || null,
+        });
+      }
+      invoice.zatca_status = clearResult.status;
     }
 
     // ── تحديث رصيد العميل ────────────────────
@@ -342,9 +368,12 @@ exports.create = async (req, res, next) => {
       details: `إنشاء فاتورة ${invoice_no} — ${Number(grand).toFixed(2)} ر.س`
     });
 
-    // تصديق فوري "أفضل جهد" للفواتير القياسية (غير المبسّطة) لدى الهيئة —
-    // بلا انتظار وبلا أي تأثير على استجابة الطلب أعلاه (راجع تعليق الدالة)
-    submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
+    // تصديق فوري "أفضل جهد" للفواتير القياسية (غير المبسّطة) لدى الهيئة — فقط
+    // لو ما انصدّقت فعليًا أعلاه أصلًا (بلا credential وقت الإنشاء)، وإلا
+    // تُرسَل الفاتورة نفسها للهيئة مرتين (الحجب أعلاه ينتظر الرد فعليًا الآن)
+    if (!((invoice.invoice_type || 'simplified') !== 'simplified' && credentialForClearance)) {
+      submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
+    }
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -507,6 +536,13 @@ exports.cancel = async (req, res, next) => {
       details: `إلغاء فاتورة ${inv.invoice_no} — ${Number(inv.grand_total).toFixed(2)} ر.س`
         + (creditNote ? ` — إشعار دائن ${creditNote.note_no}` : '')
     });
+
+    // تصديق فوري "أفضل جهد" لإشعار الدائن لدى الهيئة — كانت createCreditNote
+    // تبني وتوقّع الإشعار محليًا فقط بلا أي إرسال فعلي إطلاقًا (submitCreditNoteBestEffort
+    // موجودة أصلًا بـzatcaSubmit.service.js لكن لم يستدعها أي مكان بالكود)
+    if (creditNote) {
+      submitCreditNoteBestEffort(creditNote.id, req.user.company_id, (inv.invoice_type || 'simplified') === 'simplified').catch(() => {});
+    }
 
   } catch (err) {
     await client.query('ROLLBACK');

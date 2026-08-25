@@ -65,7 +65,12 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number,
-            phone, email, address, city, payment_terms, is_active, balance } = req.body;
+            phone, email, address, city, payment_terms, is_active, balance,
+            opening_balance_write } = req.body;
+
+    // نفس منطق customers.controller.js: تجاهل balance بالمزامنة العامة، لا
+    // يُكتَب إلا عبر معالج الأرصدة الافتتاحية صراحة (علامة opening_balance_write)
+    const balanceParam = opening_balance_write === true && balance != null ? parseFloat(balance) : null;
 
     const { rows } = await db.query(`
       UPDATE suppliers SET
@@ -85,7 +90,7 @@ exports.update = async (req, res, next) => {
       RETURNING *
     `, [code, name, name_en, vat_number, cr_number, phone, email,
         address, city, payment_terms, is_active,
-        balance != null ? parseFloat(balance) : null,
+        balanceParam,
         req.params.id, req.user.company_id]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المورد غير موجود' });

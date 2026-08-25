@@ -53,12 +53,21 @@ exports.dashboard = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// كانت تحسب vat_collected/vat_deductible (الأرقام الفعلية المُستخدَمة للإقرار)
+// من جداول invoices/purchases الخام مباشرة — يتجاهل أي أثر مرتجع أو إشعار
+// دائن كليًا (لا تُوجَد بهذي الجداول أصلًا)، فيختلف دائمًا عن صافي حسابي
+// الضريبة (2200 مخرجات/2210 مدخلات) بدفتر اليومية المعروض بالميزانية العمومية
+// — تقريران لنفس البيانات بأرقام مختلفة، والمُستخدَم فعليًا لتقديم الإقرار هو
+// الأقل دقة. الآن تُحسب الأرقام الفعلية من دفتر اليومية مباشرة (نفس منهجية
+// exports.balanceSheet بالضبط)، فتشمل أي مرتجع/إشعار دائن تلقائيًا (يمر بنفس
+// الحسابين أصلًا) وتطابق الميزانية العمومية دائمًا. الحقول الوصفية
+// (taxable_sales, invoice_count...) تبقى من الجداول الخام كسياق فقط.
 exports.vatReport = async (req, res, next) => {
   try {
     const { from, to } = req.query;
     const cid = req.user.company_id;
 
-    const [salesVat, purchasesVat] = await Promise.all([
+    const [salesVat, purchasesVat, journalVat] = await Promise.all([
       db.query(`
         SELECT
           COALESCE(SUM(taxable_amount),0) AS taxable_sales,
@@ -80,11 +89,26 @@ exports.vatReport = async (req, res, next) => {
           AND ($2::date IS NULL OR date >= $2)
           AND ($3::date IS NULL OR date <= $3)
       `, [cid, from || null, to || null]),
+
+      db.query(`
+        SELECT ji.account_code,
+          SUM(CASE WHEN ji.side='debit'  THEN ji.amount ELSE 0 END) AS debit,
+          SUM(CASE WHEN ji.side='credit' THEN ji.amount ELSE 0 END) AS credit
+        FROM journal_items ji
+        JOIN journal_entries je ON je.id = ji.entry_id
+        WHERE je.company_id = $1 AND ji.account_code IN ('2200','2210')
+          AND ($2::date IS NULL OR je.date >= $2)
+          AND ($3::date IS NULL OR je.date <= $3)
+        GROUP BY ji.account_code
+      `, [cid, from || null, to || null]),
     ]);
 
-    const collected  = parseFloat(salesVat.rows[0].vat_collected);
-    const deductible = parseFloat(purchasesVat.rows[0].vat_deductible);
-    const net_vat    = collected - deductible;
+    const jBal = {};
+    journalVat.rows.forEach(r => { jBal[r.account_code] = { debit: parseFloat(r.debit), credit: parseFloat(r.credit) }; });
+    const get = code => jBal[code] || { debit: 0, credit: 0 };
+    const collected  = get('2200').credit - get('2200').debit;  // دائن-طبيعي (مخرجات)
+    const deductible = get('2210').debit  - get('2210').credit; // مدين-طبيعي (مدخلات)
+    const net_vat     = collected - deductible;
 
     res.json({
       success: true,

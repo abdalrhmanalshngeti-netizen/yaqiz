@@ -6,7 +6,7 @@ const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { buildInvoiceXML, notifyIncompleteSellerData } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
-const { buildXadesSignature, embedSignature } = require('../services/zatcaSign.service');
+const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
@@ -344,6 +344,7 @@ exports.convert = async (req, res, next) => {
             publicKeyDer: cert.publicKey.export({ type: 'spki', format: 'der' }),
             caSignatureDer: extractCaSignature(cert.raw),
           });
+          finalXml = embedQR(finalXml, qrBase64);
         } catch (signErr) {
           console.error(`[ZATCA] signing/QR failed for converted invoice ${invoice_no}:`, signErr.message);
         }
