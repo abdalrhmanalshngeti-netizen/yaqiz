@@ -221,10 +221,13 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   // مكان امتداد التوقيع الرقمي (XAdES) — يُملأ بالخطوة 5، تُرك بنية فاضية الآن حتى لا يتغيّر شكل المستند لاحقًا
   root.ele(NS.ext, 'ext:UBLExtensions');
 
-  // القيمتان الوحيدتان اللي تعرفهما الهيئة لـBusinessProcessType هما
-  // reporting:1.0 (مبسّطة، إبلاغ لاحق) وclearance:1.0 (قياسية، تصديق فوري) —
-  // 'standard:1.0' لم تكن قيمة حقيقية إطلاقًا (BR-KSA-EN16931-01)
-  root.ele(NS.cbc, 'cbc:ProfileID').txt(isSimplified ? 'reporting:1.0' : 'clearance:1.0');
+  // 'standard:1.0' لم تكن قيمة حقيقية إطلاقًا. اختُبِر هذا تجريبيًا (لا تخمينًا)
+  // ضد أداة الهيئة الرسمية (SDK 3.0.8 و3.4.8 كلاهما): 'clearance:1.0' يفشل
+  // أيضًا بنفس القاعدة BR-KSA-EN16931-01 — القيمة الوحيدة اللي تقبلها أداة
+  // التحقق فعليًا لأي نوع مستند (مبسّط أو قياسي) هي 'reporting:1.0' دون
+  // استثناء؛ فحص الامتثال (compliance check) بمسار الإبلاغ دائمًا بصرف النظر
+  // عن نوع الفاتورة النهائي، على ما يبدو
+  root.ele(NS.cbc, 'cbc:ProfileID').txt('reporting:1.0');
   root.ele(NS.cbc, 'cbc:ID').txt(String(invoice.invoice_no));
   root.ele(NS.cbc, 'cbc:UUID').txt(invoice.zatca_uuid || invoice.uuid);
   root.ele(NS.cbc, 'cbc:IssueDate').txt(issueDateStr);
@@ -265,6 +268,14 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
     .ele(NS.cbc, 'cbc:ID').txt('QR').up()
     .ele(NS.cac, 'cac:Attachment')
       .ele(NS.cbc, 'cbc:EmbeddedDocumentBinaryObject').att('mimeCode', 'text/plain').txt('');
+
+  // عنصر مرجعي ثابت (KSA-15) يشير إلى التوقيع الفعلي داخل ext:UBLExtensions —
+  // القيمتان ثابتتان دائمًا حرفيًا حسب معيار الهيئة (BR-KSA-28/29/30/60)، لا
+  // تعتمدان على الفاتورة. كان غيابه بالكامل يجعل أداة تحقق الهيئة تفشل بإيجاد
+  // أي "ختم تشفيري" بالمستند رغم وجود توقيع XAdES فعلي داخل UBLExtensions
+  root.ele(NS.cac, 'cac:Signature')
+    .ele(NS.cbc, 'cbc:ID').txt('urn:oasis:names:specification:ubl:signature:Invoice').up()
+    .ele(NS.cbc, 'cbc:SignatureMethod').txt('urn:oasis:names:specification:ubl:dsig:enveloped:xades');
 
   // AccountingSupplierParty (البائع)
   const sellerId = sellerIdentification(company);
