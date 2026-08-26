@@ -149,11 +149,22 @@ function buildVatBreakdown(items, allowanceTotal = 0, chargeTotal = 0) {
     g.taxable += Number(it.line_total || 0);
     g.tax += Number(it.vat_amount || 0);
   }
-  // البند 9.6: مبلغ الرسوم/الخصومات على مستوى المستند يُضاف لأول فئة قياسية إن وُجدت خصومات عامة
+  // البند 9.6: مبلغ الرسوم/الخصومات على مستوى المستند — كان يُضاف بالكامل لفئة
+  // واحدة فقط (أول فئة قياسية، أو أول فئة موجودة) بدل توزيعه تناسبيًا. هذا
+  // يجعل مجموع الضريبة هنا (المُستخدَم لاحقًا برمز QR عبر invoice.vat_amount)
+  // يختلف عن القيمة الفعلية المحفوظة بقاعدة البيانات، والتي تُحسب بتحجيم كل
+  // الأصناف بنفس النسبة (taxable/subtotal) — نوزّع الخصم/الرسوم هنا تناسبيًا
+  // حسب حصة كل فئة من القيمة الخام قبل التعديل، فتتطابق الصيغتان حسابيًا
+  // (يمكن إثباته جبريًا: كل فئة تُضرَب بنفس نسبة taxExclusive/lineExtensionTotal)
   if ((allowanceTotal || chargeTotal) && groups.size) {
-    const std = [...groups.values()].find(g => g.code === 'S') || [...groups.values()][0];
-    std.taxable += (chargeTotal - allowanceTotal);
-    std.tax = round2(std.taxable * (std.rate / 100));
+    const totalRawTaxable = [...groups.values()].reduce((s, g) => s + g.taxable, 0);
+    const netAdjustment = chargeTotal - allowanceTotal;
+    if (totalRawTaxable > 0) {
+      for (const g of groups.values()) {
+        g.taxable += netAdjustment * (g.taxable / totalRawTaxable);
+        g.tax = round2(g.taxable * (g.rate / 100));
+      }
+    }
   }
   return [...groups.values()].map(g => ({
     ...g, taxable: round2(g.taxable), tax: round2(g.tax),

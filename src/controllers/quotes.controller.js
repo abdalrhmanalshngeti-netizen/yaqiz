@@ -4,12 +4,12 @@ const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
-const { buildInvoiceXML, notifyIncompleteSellerData } = require('../services/zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
-const { submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
+const { submitInvoice, submitInvoiceBestEffort } = require('../services/zatcaSubmit.service');
 
 const STATUS_AR = { draft:'معلق', sent:'مرسل', accepted:'مقبول', rejected:'مرفوض' };
 const STATUS_EN = { 'معلق':'draft','مرسل':'sent','مقبول':'accepted','مرفوض':'rejected' };
@@ -250,6 +250,23 @@ exports.convert = async (req, res, next) => {
       if (custForType?.vat_number || custForType?.cr_number) invoiceType = 'tax';
     }
 
+    // الشركة ممكن تكون عطّلت الضريبة *بعد* إنشاء عرض السعر — نتحقق من الإعداد
+    // الفعلي وقت التحويل نفسه بدل الوثوق بنسبة محفوظة بعرض قديم، نفس فحص
+    // companyVatEnabled المطبَّق أصلًا بـinvoices.controller.js create(). يجب
+    // تطبيقه على قيم الفاتورة المُدرَجة نفسها (vat_amount/grand_total) لا فقط
+    // على XML الهيئة — وإلا يبقى سجل الفاتورة المحاسبي يحمل ضريبة الشركة
+    // معطّلة أصلًا (تضارب مباشر بين قاعدة البيانات وXML المبني منها لاحقًا)
+    const { rows: [vatSetting] } = await client.query(
+      `SELECT value FROM settings WHERE company_id = $1 AND key = 'vat_enabled'`,
+      [company_id]
+    );
+    let companyVatEnabled = true;
+    try { companyVatEnabled = vatSetting ? JSON.parse(vatSetting.value) !== false : true; } catch { companyVatEnabled = true; }
+    // عروض الأسعار بلا خصم على مستوى المستند إطلاقًا (لا discount_amount بجدول
+    // quotes) — فـgrand_total = subtotal + vat_amount دائمًا، تبسيط آمن هنا
+    const insertVatAmount  = companyVatEnabled ? parseFloat(quote.vat_amount) : 0;
+    const insertGrandTotal = companyVatEnabled ? parseFloat(quote.grand_total) : parseFloat(quote.subtotal);
+
     // فاتورة محوّلة من عرض سعر تبقى جزءًا من نفس سلسلة ICV/PIH الموحّدة —
     // بدون هذا كانت تُترك بلا UUID/ICV/تجزئة إطلاقًا فتنكسر تسلسل السلسلة
     // القانوني (BR-KSA-26) لأي شركة تستخدم عروض الأسعار
@@ -267,14 +284,14 @@ exports.convert = async (req, res, next) => {
       RETURNING *
     `, [company_id, invoice_no,
         quote.customer_id || null, quote.customer_name,
-        quote.subtotal, quote.vat_amount, quote.grand_total,
+        quote.subtotal, insertVatAmount, insertGrandTotal,
         `محوّل من ${quote.quote_no}`, user_id,
         zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId, invoiceType]);
 
     // النسبة الفعلية للعرض (قد تكون 0 لو الضريبة معطَّلة أو العرض بدون ضريبة
     // أصلاً) — quote_items لا تخزّن نسبة لكل بند، فنشتقها من إجمالي العرض
     // نفسه بدل فرض 15% دائمًا (كان يفرض ضريبة على عرض بلا ضريبة إطلاقًا)
-    const effectiveVatRate = parseFloat(quote.subtotal) > 0
+    const effectiveVatRate = (companyVatEnabled && parseFloat(quote.subtotal) > 0)
       ? parseFloat(quote.vat_amount) / parseFloat(quote.subtotal)
       : 0;
     const processedItems = items.map(item => ({
@@ -321,20 +338,25 @@ exports.convert = async (req, res, next) => {
     if (quote.customer_id) {
       await client.query(
         `UPDATE customers SET balance = balance + $1 WHERE id = $2 AND company_id = $3`,
-        [quote.grand_total, quote.customer_id, company_id]
+        [insertGrandTotal, quote.customer_id, company_id]
       );
     }
 
     // ── توليد XML الفاتورة (المرحلة الثانية) — بنفس منطق invoices.controller.js
     // create()، غير حاجب لعملية التحويل لو فشل (نفس تعامل الفاتورة العادية) ──
+    let companyRowForClearance = null;
+    let credentialForClearance = null;
     try {
       const { rows: [companyRow] } = await client.query(`SELECT * FROM companies WHERE id = $1`, [company_id]);
+      companyRowForClearance = companyRow;
       let customerRow = null;
       if (quote.customer_id) {
         customerRow = (await client.query(`SELECT * FROM customers WHERE id = $1 AND company_id = $2`, [quote.customer_id, company_id])).rows[0];
       }
+      customerRow = resolveCustomerForXml(customerRow, quote.customer_name, null);
       const xmlItems = processedItems.map(it => ({
-        ...it, vat_rate: Math.round(effectiveVatRate * 10000) / 100, vat_category_code: 'S',
+        ...it, vat_rate: Math.round(effectiveVatRate * 10000) / 100,
+        vat_category_code: companyVatEnabled ? 'S' : 'O',
       }));
       const { xml, warnings } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,
@@ -345,6 +367,7 @@ exports.convert = async (req, res, next) => {
       let qrBase64 = null;
       let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
       if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
+      credentialForClearance = credential;
       if (credential) {
         try {
           const { ublExtensionsXml, signatureValue } = buildXadesSignature({
@@ -377,6 +400,24 @@ exports.convert = async (req, res, next) => {
       console.error(`[ZATCA] XML generation failed for converted invoice ${invoice_no}:`, xmlErr.message);
     }
 
+    // ── حجب فواتير B2B القياسية (غير المبسّطة) حتى تصديق فعلي من الهيئة —
+    // نفس القرار والمنطق المطبَّق أصلًا بـinvoices.controller.js create()، كان
+    // مفقودًا كليًا هنا فتحويل عرض سعر لعميل ضريبي يحفظ فاتورة قياسية نهائيًا
+    // حتى لو فشل تصديقها لدى الهيئة لاحقًا ──
+    if (invoiceType !== 'simplified' && credentialForClearance) {
+      const clearResult = await submitInvoice(client, companyRowForClearance, invoice, credentialForClearance);
+      if (!clearResult.success) {
+        await client.query('ROLLBACK');
+        return res.status(502).json({
+          success: false,
+          code: 'zatca_clearance_failed',
+          message: 'تعذّر تصديق الفاتورة الضريبية القياسية لدى هيئة الزكاة والضريبة والجمارك — لم تُحفَظ الفاتورة. تحقق من الاتصال وأعد المحاولة.',
+          zatca_error: clearResult.error || null,
+        });
+      }
+      invoice.zatca_status = clearResult.status;
+    }
+
     await client.query(
       `UPDATE quotes SET status='accepted', converted_invoice_id=$1 WHERE id=$2`,
       [invoice.id, req.params.id]
@@ -385,9 +426,11 @@ exports.convert = async (req, res, next) => {
     await client.query('COMMIT');
     res.json({ success: true, data: { ...invoice, items: processedItems } });
 
-    // تصديق فوري "أفضل جهد" للفواتير القياسية الناتجة عن تحويل عرض سعر —
-    // نفس مبدأ invoices.controller.js create() بالضبط
-    submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
+    // تصديق فوري "أفضل جهد" للفواتير القياسية الناتجة عن تحويل عرض سعر — فقط
+    // لو ما انصدّقت فعليًا أعلاه (بلا credential وقت التحويل)، وإلا تُرسَل مرتين
+    if (!(invoiceType !== 'simplified' && credentialForClearance)) {
+      submitInvoiceBestEffort(invoice.id, company_id).catch(() => {});
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

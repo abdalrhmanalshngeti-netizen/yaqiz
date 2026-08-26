@@ -140,19 +140,21 @@ exports.submitCreditNoteToZatca = async (req, res, next) => {
 };
 
 // قائمة أحدث المستندات (فواتير + إشعارات دائن) الموقّعة محليًا وغير المُرسلة
-// للهيئة بعد — تغذّي واجهة "الإرسال اليدوي" بتبويب ربط الهيئة بالإعدادات
+// للهيئة بعد — تغذّي واجهة "الإرسال اليدوي" بتبويب ربط الهيئة بالإعدادات.
+// كانت تستثني 'rejected' عمدًا فيختفي أي مستند رُفض مرة من هذي القائمة للأبد
+// (بلا أي وسيلة لملاحظته أو إعادة محاولته يدويًا) — أُضيف الآن صراحة
 exports.pendingDocuments = async (req, res, next) => {
   try {
     const { rows: invoices } = await db.query(`
       SELECT id, invoice_no AS doc_no, 'invoice' AS doc_type, grand_total, date, zatca_status
       FROM invoices
-      WHERE company_id = $1 AND xml_content IS NOT NULL AND (zatca_status IS NULL OR zatca_status = 'pending')
+      WHERE company_id = $1 AND xml_content IS NOT NULL AND (zatca_status IS NULL OR zatca_status IN ('pending','rejected'))
       ORDER BY icv DESC NULLS LAST LIMIT 50
     `, [req.user.company_id]);
     const { rows: notes } = await db.query(`
       SELECT id, note_no AS doc_no, 'credit_note' AS doc_type, grand_total, date, zatca_status
       FROM credit_notes
-      WHERE company_id = $1 AND xml_content IS NOT NULL AND (zatca_status IS NULL OR zatca_status = 'pending')
+      WHERE company_id = $1 AND xml_content IS NOT NULL AND (zatca_status IS NULL OR zatca_status IN ('pending','rejected'))
       ORDER BY icv DESC NULLS LAST LIMIT 50
     `, [req.user.company_id]);
     const merged = [...invoices, ...notes].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);

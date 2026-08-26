@@ -165,13 +165,18 @@ async function submitCreditNote(client, company, note, isSimplified, credential)
 // لا تحجز اتصالًا مخصَّصًا من المسبح — db.query يفتح/يُنهي اتصالًا لكل استعلام
 // منفرد فورًا، فلا يبقى أي اتصال محجوزًا طوال مدة انتظار رد الهيئة (submitInvoice
 // نفسه لا يحتاج معاملة صريحة، يكتب حالة النتيجة دائمًا بعد انتهاء الاتصال الخارجي)
-async function submitInvoiceBestEffort(invoiceId, companyId) {
+// includeSimplified: يسمح لمجدول الإرسال الدوري (zatcaScheduler.service.js)
+// بإعادة استخدام نفس الدالة (بحث الاعتماد، فحص xml_content، تسجيل الرفض) لفواتير
+// مبسّطة أيضًا — الاستدعاءات الحالية كلها بلا هذا الخيار، فسلوكها الحالي (تجاهل
+// المبسّطة) يبقى بلا أي تغيير
+async function submitInvoiceBestEffort(invoiceId, companyId, { includeSimplified = false } = {}) {
   if (!invoiceId || !companyId) return;
   try {
     const { rows: [invoice] } = await db.query(
       `SELECT * FROM invoices WHERE id = $1 AND company_id = $2`, [invoiceId, companyId]
     );
-    if (!invoice || (invoice.invoice_type || 'simplified') === 'simplified') return;
+    if (!invoice) return;
+    if ((invoice.invoice_type || 'simplified') === 'simplified' && !includeSimplified) return;
     if (!invoice.xml_content) return; // لم يُوقَّع أصلًا (بلا شهادة CSID سارية) — لا شيء نرسله
 
     let credential = await getActiveCredential(db, companyId, 'production');
@@ -190,9 +195,11 @@ async function submitInvoiceBestEffort(invoiceId, companyId) {
 }
 
 // نفس مبدأ submitInvoiceBestEffort أعلاه بالضبط، لكن لإشعار دائن — isSimplified
-// يُمرَّر من المستدعي لأنه محسوب مسبقًا هناك من نوع الفاتورة المرجعية
-async function submitCreditNoteBestEffort(noteId, companyId, isSimplified) {
-  if (!noteId || !companyId || isSimplified) return;
+// يُمرَّر من المستدعي لأنه محسوب مسبقًا هناك من نوع الفاتورة المرجعية (يُستخدَم
+// أيضًا لاختيار نقطة نهاية الهيئة الصحيحة داخل submitCreditNote، فيبقى مطلوبًا
+// حتى مع includeSimplified). includeSimplified: نفس الغرض بـsubmitInvoiceBestEffort
+async function submitCreditNoteBestEffort(noteId, companyId, isSimplified, { includeSimplified = false } = {}) {
+  if (!noteId || !companyId || (isSimplified && !includeSimplified)) return;
   try {
     const { rows: [note] } = await db.query(
       `SELECT * FROM credit_notes WHERE id = $1 AND company_id = $2`, [noteId, companyId]

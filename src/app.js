@@ -246,4 +246,13 @@ app.listen(PORT, () => {
   seedPlatformAdmin();
 });
 
+// إرسال دوري تلقائي لمستندات الهيئة المعلَّقة/المرفوضة (فواتير مبسّطة بلا أي
+// مسار إرسال تلقائي سابقًا، ومستندات فشلت مرة ولم تُعَد محاولتها أبدًا) — كل
+// 20 دقيقة هامش أمان واسع لمهلة الـ24 ساعة الإلزامية لإبلاغ الفواتير المبسّطة.
+// لا حاجة لمكتبة جدولة خارجية لعملية Node واحدة، setInterval كافية.
+const { runPendingZatcaSubmissions } = require('./services/zatcaScheduler.service');
+setInterval(() => {
+  runPendingZatcaSubmissions().catch(err => console.error('[ZATCA scheduler]', err.message));
+}, 20 * 60 * 1000);
+
 module.exports = app;

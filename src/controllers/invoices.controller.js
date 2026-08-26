@@ -298,7 +298,11 @@ exports.create = async (req, res, next) => {
       // الصحيح لشركة غير مسجّلة، بصرف النظر عمّا أرسله العميل بكل بند
       const xmlItems = processedItems.map(it => ({
         ...it, vat_rate: it.tax_rate ?? 15,
-        vat_category_code: it.vat_category_code || (companyVatEnabled ? 'S' : 'O'),
+        // شركة مسجّلة ضريبيًا مع صنف بنسبة 0% صريحة (منتج مُعرَّف صراحة كذلك)
+        // كان يُصنَّف S (قياسي) بنسبة 0% — مخالف لقاعدة الهيئة BR-S-06 التي
+        // تشترط نسبة موجبة لفئة S. صفري التصنيف (Z) هو الصحيح هنا، مختلف عن
+        // حالة الشركة غير المسجّلة أصلًا (O، خارج النطاق)
+        vat_category_code: it.vat_category_code || (!companyVatEnabled ? 'O' : (Number(it.tax_rate) === 0 ? 'Z' : 'S')),
       }));
       const { xml, warnings } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,

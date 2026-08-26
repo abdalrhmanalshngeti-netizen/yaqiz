@@ -628,6 +628,11 @@ function _getDbKey() {
   } catch(e) {}
   return DB_KEY; // وضع محلي بدون JWT
 }
+// نفس نطاق مفتاح الـDB (شركة واحدة لكل مفتاح)، لكن لقطة "_snap" منفصلة —
+// راجع تعليق _hasPendingLocalChanges لسبب وجود _snap أصلًا
+function _getSnapKey() {
+  return _getDbKey() + '_snap';
+}
 // ═══════ إقفال الفترات المحاسبية ═══════
 function _periodKey(dateStr, type) {
   const d = new Date(dateStr); if(isNaN(d)) return null;
@@ -17400,7 +17405,17 @@ async function runAISearchQuery(q) {
   const SYNC_LOG    = false; // true لرؤية تفاصيل الـ sync في console
 
   // ── رصيد الـ DB السابق للمقارنة ──────────────────────────
+  // كانت _snap متغيّر ذاكرة فقط (يتصفّر لـnull عند أي إعادة تحميل للصفحة) —
+  // فلو سجل أُنشئ محليًا وقت انقطاع الاتصال، وأُعيد تحميل الصفحة (أو رجع
+  // الاتصال بنفس اللحظة) قبل نجاح دفعه للسيرفر، أول سحب بيانات بعد الإقلاع
+  // يعتبر كل شي "غير معدَّل" (_snap فارغ) ويستبدله بالكامل برد السيرفر —
+  // يُمحى السجل غير المُزامَن نهائيًا بصمت. نسترجعها الآن من localStorage
+  // (نفس نمط yaqiz_user/التوكنات) بدل البدء من null دائمًا كل إقلاع
   let _snap = null;
+  try { _snap = JSON.parse(localStorage.getItem(_getSnapKey()) || 'null'); } catch(e) { _snap = null; }
+  function _persistSnap() {
+    try { localStorage.setItem(_getSnapKey(), JSON.stringify(_snap)); } catch(e) {}
+  }
   // هل يوجد تعديل محلي (إنشاء/تحديث) على هذا الكيان لم يُؤكَّد وصوله للسيرفر
   // بعد؟ نقارن الحالة الحالية بآخر لقطة (_snap) — وهي بالضبط ما نعتقد أنه
   // مؤكَّد بالسيرفر (تُصحَّح فورًا عند فشل أي دفعة عبر _revertSnapEntity/
@@ -18141,6 +18156,7 @@ async function runAISearchQuery(q) {
 
       _origSaveDB(db); // لا تستخدم saveDB الـ hooked حتى لا تُطلق _diffAndPush بناءً على بيانات API
       _snap = JSON.parse(JSON.stringify(db));
+      _persistSnap();
       if (SYNC_LOG) console.log('✅ API data loaded into localStorage');
     } catch (e) {
       console.warn('⚠️ Could not load from API:', e.message);
@@ -18220,6 +18236,10 @@ async function runAISearchQuery(q) {
       } else if (idx >= 0) {
         _snap[entityKey][idx] = JSON.parse(JSON.stringify(oldRecord));
       }
+      // مسار فشل نادر (ليس كل تعديل ناجح) — تكلفة حفظه الآن مقبولة، ويضمن
+      // بقاء نسخة _snap المحفوظة بـlocalStorage متطابقة مع نسخة الذاكرة حتى
+      // لو انقطع المستخدم بعد فشل مزامنة مباشرة (راجع _persistSnap)
+      _persistSnap();
     } catch (e) { /* ignore */ }
   }
 
@@ -18234,11 +18254,12 @@ async function runAISearchQuery(q) {
       if (!_snap[entityKey].find(x => x.id === oldRecord.id)) {
         _snap[entityKey].push(JSON.parse(JSON.stringify(oldRecord)));
       }
+      _persistSnap();
     } catch (e) { /* ignore */ }
   }
 
   function _schedulSync(newDB) {
-    if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); return; }
+    if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); _persistSnap(); return; }
     setTimeout(() => _attemptSync(), 100);
   }
 
@@ -18251,6 +18272,7 @@ async function runAISearchQuery(q) {
     const latestDB = getDB();
     const prev = _snap;
     _snap = JSON.parse(JSON.stringify(latestDB));
+    _persistSnap();
     _diffAndPush(latestDB, prev);
   }
 
@@ -18950,6 +18972,9 @@ async function runAISearchQuery(q) {
         body: JSON.stringify({ refreshToken: rt })
       }).catch(() => {});
     }
+    // لازم نحذف لقطة _snap المحفوظة *قبل* حذف التوكن — _getSnapKey() يعتمد
+    // عليه لتحديد مفتاح الشركة الصحيح؛ وإلا تبقى لقطة قديمة بلا داعٍ بالتخزين
+    try { localStorage.removeItem(_getSnapKey()); } catch(e) {}
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     _snap = null;
