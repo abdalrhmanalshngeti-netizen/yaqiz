@@ -30,6 +30,7 @@ exports.getOne = async (req, res, next) => {
 };
 
 exports.create = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
     const { username, password, full_name, email, phone,
             role, permissions, pos_access, shift_enabled, branch_id, all_branches } = req.body;
@@ -37,7 +38,7 @@ exports.create = async (req, res, next) => {
     const effectiveBranchId = all_branches ? null : (branch_id || null);
 
     if (effectiveBranchId) {
-      const { rows: [b] } = await db.query(
+      const { rows: [b] } = await client.query(
         `SELECT id FROM branches WHERE id = $1 AND company_id = $2`, [effectiveBranchId, req.user.company_id]
       );
       if (!b) return res.status(400).json({ success: false, message: 'الفرع غير موجود' });
@@ -53,16 +54,25 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير بالإنجليزية' });
     }
 
-    const { rows: [co] } = await db.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
+    // حساب الهاش (عملية بطيئة بالتصميم) قبل فتح المعاملة/القفل عمدًا — تقليلًا
+    // لمدة حجز قفل صف الشركة أدناه لأقل وقت ممكن
+    const hash = await bcrypt.hash(password, 12);
+
+    await client.query('BEGIN');
+    // قفل صف الشركة يمنع تجاوز حد الباقة عند طلبين متزامنين لإضافة مستخدم
+    // (تبويبين مفتوحين، نقرة مزدوجة) — بدونه، كلاهما يقرأ نفس العدّاد قبل
+    // إدراج أي منهما ويتجاوزان الحد سويًا بمستخدم واحد زيادة
+    const { rows: [co] } = await client.query(`SELECT plan FROM companies WHERE id = $1 FOR UPDATE`, [req.user.company_id]);
     let plan = co?.plan || 'basic';
     if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
     const limit = PLAN_USER_LIMITS[plan];
     if (limit) {
-      const { rows: [{ count }] } = await db.query(
+      const { rows: [{ count }] } = await client.query(
         `SELECT COUNT(*)::int AS count FROM users WHERE company_id = $1`,
         [req.user.company_id]
       );
       if (count >= limit) {
+        await client.query('ROLLBACK');
         return res.status(403).json({
           success: false,
           code: 'USER_LIMIT_REACHED',
@@ -71,8 +81,7 @@ exports.create = async (req, res, next) => {
       }
     }
 
-    const hash = await bcrypt.hash(password, 12);
-    const { rows } = await db.query(`
+    const { rows } = await client.query(`
       INSERT INTO users
         (company_id, username, password_hash, full_name, email, phone,
          role, permissions, pos_access, shift_enabled, branch_id, all_branches)
@@ -83,6 +92,7 @@ exports.create = async (req, res, next) => {
       role || 'cashier', permissions || [], pos_access || false, shift_enabled || false,
       effectiveBranchId, !!all_branches
     ]);
+    await client.query('COMMIT');
 
     db.query(`
       INSERT INTO platform_log (event_type, company_id, user_id, description)
@@ -98,10 +108,13 @@ exports.create = async (req, res, next) => {
       details: `مستخدم جديد: ${rows[0].full_name} (${rows[0].username}, ${rows[0].role})`
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'اسم المستخدم مستخدم بالفعل' });
     }
     next(err);
+  } finally {
+    client.release();
   }
 };
 

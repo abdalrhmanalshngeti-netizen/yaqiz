@@ -3,6 +3,7 @@ const jwt              = require('jsonwebtoken');
 const crypto           = require('crypto');
 const db               = require('../config/db');
 const { sendMail }     = require('../services/email.service');
+const { escapeHtml }   = require('../utils/html.util');
 
 const PLATFORM_OWNER_EMAIL = 'abdalrhmanalshngeti@gmail.com';
 
@@ -146,11 +147,13 @@ exports.register = async (req, res, next) => {
       ['1300','المخزون','Inventory','أصول',false,'1000'],
       ['1350','بضاعة بالطريق','Goods in Transit','أصول',false,'1000'],
       ['1500','الأصول الثابتة','Fixed Assets','أصول',false,'1000'],
+      ['1250','دفعات مقدمة لموردين','Supplier Advances','أصول',false,'1000'],
       ['2000','الالتزامات','Liabilities','التزامات',true,null],
       ['2100','الذمم الدائنة','Accounts Payable','التزامات',false,'2000'],
       ['2200','ضريبة القيمة المضافة','VAT Payable','التزامات',false,'2000'],
       ['2210','ضريبة المدخلات','Input VAT','التزامات',false,'2000'],
       ['2300','الالتزامات الدورية','Periodic Obligations','التزامات',false,'2000'],
+      ['2160','دفعات عملاء مقدمة','Customer Advances','التزامات',false,'2000'],
       ['3000','حقوق الملكية','Equity','حقوق الملكية',true,null],
       ['3100','أرباح مرحّلة','Retained Earnings','حقوق الملكية',false,'3000'],
       ['4000','الإيرادات','Revenue','إيرادات',true,null],
@@ -222,12 +225,12 @@ exports.register = async (req, res, next) => {
       <div class="wrap">
         <div class="header">🏢 تسجيل منشأة جديدة في يقظ</div>
         <div class="body">
-          <div class="row"><span class="label">اسم المنشأة</span><span class="val">${company_name}</span></div>
-          <div class="row"><span class="label">اسم المالك</span><span class="val">${full_name} (@${username})</span></div>
-          ${contact_email ? `<div class="row"><span class="label">البريد الإلكتروني</span><span class="val">${contact_email}</span></div>` : ''}
-          ${contact_phone ? `<div class="row"><span class="label">رقم الجوال</span><span class="val">${contact_phone}</span></div>` : ''}
-          ${city ? `<div class="row"><span class="label">المدينة</span><span class="val">${city}</span></div>` : ''}
-          ${vat_number ? `<div class="row"><span class="label">الرقم الضريبي</span><span class="val">${vat_number}</span></div>` : ''}
+          <div class="row"><span class="label">اسم المنشأة</span><span class="val">${escapeHtml(company_name)}</span></div>
+          <div class="row"><span class="label">اسم المالك</span><span class="val">${escapeHtml(full_name)} (@${escapeHtml(username)})</span></div>
+          ${contact_email ? `<div class="row"><span class="label">البريد الإلكتروني</span><span class="val">${escapeHtml(contact_email)}</span></div>` : ''}
+          ${contact_phone ? `<div class="row"><span class="label">رقم الجوال</span><span class="val">${escapeHtml(contact_phone)}</span></div>` : ''}
+          ${city ? `<div class="row"><span class="label">المدينة</span><span class="val">${escapeHtml(city)}</span></div>` : ''}
+          ${vat_number ? `<div class="row"><span class="label">الرقم الضريبي</span><span class="val">${escapeHtml(vat_number)}</span></div>` : ''}
           <div class="row"><span class="label">الباقة</span><span class="val">${{basic:'أساسي',growth:'نمو',pro:'احترافي'}[plan]||plan}</span></div>
           <div class="row"><span class="label">تاريخ التسجيل</span><span class="val">${new Date().toLocaleString('ar-SA')}</span></div>
         </div>

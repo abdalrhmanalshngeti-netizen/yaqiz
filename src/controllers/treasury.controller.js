@@ -53,8 +53,18 @@ exports.createAccount = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { name, type, bank_name, account_number, iban, balance, is_default, branch_id } = req.body;
+    const { name, type, bank_name, account_number, iban, balance, is_default, branch_id, client_local_id } = req.body;
     if (!name) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'اسم الحساب مطلوب' }); }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ حساب
+    // خزينة مكرَّرًا — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM treasury_accounts WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
+    }
 
     // ربط الحساب بفرع مُحدَّد — owner فقط (مثلاً حساب بنكي مخصَّص لفرع لاحقًا)
     let safeBranchId = null;
@@ -71,10 +81,10 @@ exports.createAccount = async (req, res, next) => {
 
     const { rows } = await client.query(`
       INSERT INTO treasury_accounts
-        (company_id, name, type, bank_name, account_number, iban, balance, is_default, branch_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (company_id, name, type, bank_name, account_number, iban, balance, is_default, branch_id, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING *
-    `, [req.user.company_id, name, type || 'cash', bank_name, account_number, iban, balance || 0, !!is_default, safeBranchId]);
+    `, [req.user.company_id, name, type || 'cash', bank_name, account_number, iban, balance || 0, !!is_default, safeBranchId, client_local_id || null]);
 
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: rows[0] });
@@ -126,10 +136,21 @@ exports.transfer = async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { from_id, to_id, amount, description } = req.body;
+    const { from_id, to_id, amount, description, client_local_id } = req.body;
     if (!from_id || !to_id || !amount || from_id === to_id) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'بيانات التحويل غير صحيحة' });
+    }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن يُحوَّل
+    // المبلغ مرتين — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح.
+    // التحويل يُنشئ صف حركة واحدًا فقط (بالحساب المصدر)، فيكفي فحصه وحده
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT id FROM treasury_moves WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.json({ success: true }); }
     }
 
     const { rows: [from] } = await client.query(
@@ -169,9 +190,9 @@ exports.transfer = async (req, res, next) => {
     await client.query(`
       INSERT INTO treasury_moves
         (company_id, account_id, type, amount, balance_before, balance_after,
-         description, transfer_to_id, created_by)
-      VALUES ($1,$2,'transfer',$3,$4,$5,$6,$7,$8)
-    `, [req.user.company_id, from_id, amount, from.balance, newFrom, desc, to_id, req.user.sub]);
+         description, transfer_to_id, created_by, client_local_id)
+      VALUES ($1,$2,'transfer',$3,$4,$5,$6,$7,$8,$9)
+    `, [req.user.company_id, from_id, amount, from.balance, newFrom, desc, to_id, req.user.sub, client_local_id || null]);
 
     await client.query('COMMIT');
     res.json({ success: true });
@@ -194,10 +215,20 @@ exports.addMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { type, amount, description, reference, payment_method, source_type } = req.body;
+    const { type, amount, description, reference, payment_method, source_type, client_local_id } = req.body;
     if (!['in', 'out'].includes(type) || !amount) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });
+    }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تُنشئ حركة
+    // خزينة مكرَّرة — نتعرّف على المحاولة السابقة عبر المعرّف المحلي بالمتصفح
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM treasury_moves WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.json({ success: true, data: existing }); }
     }
 
     const periodCheck = await periodClose.assertPeriodNotClosed(
@@ -219,10 +250,10 @@ exports.addMove = async (req, res, next) => {
 
     await client.query(`UPDATE treasury_accounts SET balance = $1 WHERE id = $2`, [newBal, acct.id]);
     const { rows: [move] } = await client.query(`
-      INSERT INTO treasury_moves (company_id, account_id, type, amount, balance_before, balance_after, description, reference, source_type, payment_method, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      INSERT INTO treasury_moves (company_id, account_id, type, amount, balance_before, balance_after, description, reference, source_type, payment_method, created_by, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       RETURNING *
-    `, [req.user.company_id, acct.id, type, amount, acct.balance, newBal, description || '', reference || '', source_type || 'manual', payment_method || null, req.user.sub]);
+    `, [req.user.company_id, acct.id, type, amount, acct.balance, newBal, description || '', reference || '', source_type || 'manual', payment_method || null, req.user.sub, client_local_id || null]);
 
     await client.query('COMMIT');
     res.json({ success: true, data: { ...move, balance: newBal } });

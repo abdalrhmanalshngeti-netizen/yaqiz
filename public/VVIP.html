@@ -741,6 +741,12 @@ function getDB() {
         if (!d.accounts.some(a=>a.code==='5900')) {
           d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'5900', name:'مصاريف أخرى', name_en:'Other Expenses', type:'مصروفات', is_group:false, parent:11 });
         }
+        if (!d.accounts.some(a=>a.code==='2160')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'2160', name:'دفعات عملاء مقدمة', name_en:'Customer Advances', type:'التزامات', is_group:false, parent:5 });
+        }
+        if (!d.accounts.some(a=>a.code==='1250')) {
+          d.accounts.push({ id: (Math.max(0,...d.accounts.map(a=>a.id||0))+1), code:'1250', name:'دفعات مقدمة لموردين', name_en:'Supplier Advances', type:'أصول', is_group:false, parent:1 });
+        }
       }
       _healNextIdCounters(d);
       return d;
@@ -824,6 +830,8 @@ function initDB() {
       { id:13, code:'5200', name:'المصاريف التشغيلية',    name_en:'Operating Expenses',    type:'مصروفات',       is_group:false, parent:11 },
       { id:21, code:'5300', name:'مرتجعات المشتريات',     name_en:'Purchase Returns',      type:'مصروفات',       is_group:false, parent:11 },
       { id:22, code:'5900', name:'مصاريف أخرى',           name_en:'Other Expenses',        type:'مصروفات',       is_group:false, parent:11 },
+      { id:23, code:'2160', name:'دفعات عملاء مقدمة',     name_en:'Customer Advances',     type:'التزامات',      is_group:false, parent:5 },
+      { id:24, code:'1250', name:'دفعات مقدمة لموردين',   name_en:'Supplier Advances',     type:'أصول',          is_group:false, parent:1 },
     ],
     settings: {
       company_name: '',
@@ -10258,11 +10266,18 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
   // 3. Record accounting entry
   if(!db.journal) db.journal=[];
   if(isReceipt) {
-    // Dr. Cash / Cr. Accounts Receivable — القيد بكامل مبلغ السند المُستلم فعليًا
-    // نقدًا، بينما رصيد العميل ينخفض فقط بالمبلغ المُطبَّق حقًا على فواتيره
-    // (voucher.applied_amount) — قد يقل عن amount لو تجاوز السند ما هو مستحق عليه
+    // Dr. Cash (كامل المبلغ المُستلم فعليًا) / Cr. Accounts Receivable (المبلغ
+    // المُطبَّق فعلاً على فواتير العميل، voucher.applied_amount) — كان يُقيَّد
+    // الحساب الأخير بكامل amount حتى لو تجاوز السند ما هو مستحق على العميل،
+    // فالفائض يختفي من رصيد العميل (يتوقف عند صفر) بينما يبقى مُقيَّدًا بحساب
+    // الذمم المدينة العام بلا أي نسبة لأي عميل — نضيفه الآن كسطر منفصل بحساب
+    // "دفعات عملاء مقدمة" ليبقى مرئيًا ومتوازنًا بدل الاختفاء
+    const _rcvOverpaid = Math.round((amount - (voucher.applied_amount ?? amount)) * 100) / 100;
     const rcvEntries = [{ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount }];
-    postCustomerReceivable(db, rcvEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
+    postCustomerReceivable(db, rcvEntries, voucher.party, voucher.applied_amount, 'decrease', voucher.applied_amount, voucher.party_id);
+    if (_rcvOverpaid > 0) {
+      rcvEntries.push({ account: lang==='ar'?'دفعات عملاء مقدمة':'Customer Advances', account_code:'2160', side:'credit', amount:_rcvOverpaid });
+    }
     const _vJournalEntry = {
       id: (db.nextId.journal||1), date: new Date().toISOString(),
       description: `سند قبض ${voucher.voucher_no} — ${voucher.party}`,
@@ -10272,9 +10287,14 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     db.journal.push(_vJournalEntry);
     if (overrideToken) window._periodOverrideTokens[`journal:${_vJournalEntry.id}`] = overrideToken;
   } else {
-    // Dr. Accounts Payable / Cr. Cash — نفس المبدأ بالعكس
+    // نفس مبدأ سند القبض أعلاه بالعكس — Dr. Accounts Payable (المُطبَّق فعلاً
+    // فقط) / Dr. "دفعات مقدمة لموردين" (الفائض إن وُجد) / Cr. Cash (الكامل)
+    const _payOverpaid = Math.round((amount - (voucher.applied_amount ?? amount)) * 100) / 100;
     const payEntries = [];
-    postSupplierPayable(db, payEntries, voucher.party, amount, 'decrease', voucher.applied_amount, voucher.party_id);
+    postSupplierPayable(db, payEntries, voucher.party, voucher.applied_amount, 'decrease', voucher.applied_amount, voucher.party_id);
+    if (_payOverpaid > 0) {
+      payEntries.push({ account: lang==='ar'?'دفعات مقدمة لموردين':'Supplier Advances', account_code:'1250', side:'debit', amount:_payOverpaid });
+    }
     payEntries.push({ account: lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount });
     const _vJournalEntry = {
       id: (db.nextId.journal||1), date: new Date().toISOString(),
@@ -18728,7 +18748,8 @@ async function runAISearchQuery(q) {
           const res = await apiFetch('POST', '/api/treasury/move', {
             type: m.type, amount: m.amount,
             description: m.description || '', reference: m.reference || '',
-            payment_method: m.method || null, branch_id: m.branch_id || null
+            payment_method: m.method || null, branch_id: m.branch_id || null,
+            client_local_id: m.id
           }).catch(e => { console.warn('treasury move sync:', e.message); return null; });
 
           if (res?.data?.id) {
@@ -18838,7 +18859,8 @@ async function runAISearchQuery(q) {
           if (SYNC_LOG) console.log('→ API: create PO', po.po_no);
           const res = await apiFetch('POST', '/api/purchase-orders', {
             supplier_name: po.supplier || '', items: po.items || [],
-            notes: po.notes || '', expected_date: po.expected_delivery || null, status: po.status
+            notes: po.notes || '', expected_date: po.expected_delivery || null, status: po.status,
+            client_local_id: po.id
           }).catch(e => { console.warn('PO create sync:', e.message); return null; });
           if (res?.data?.id) {
             try {

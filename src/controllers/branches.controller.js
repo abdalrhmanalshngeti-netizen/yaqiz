@@ -46,13 +46,17 @@ exports.create = async (req, res, next) => {
 
     await client.query('BEGIN');
 
+    // قفل صف الشركة *قبل* عدّ الفروع — لازم يكون الترتيب هكذا بالضبط: لو عددنا
+    // الفروع قبل القفل، طلبان متزامنان (تبويبان، نقرة مزدوجة) يقرآن نفس العدد
+    // القديم قبل أي إدراج، فيتجاوزان حد الباقة سويًا بفرع واحد زيادة رغم القفل
+    const { rows: [co] } = await client.query(`SELECT plan, branch_limit_override FROM companies WHERE id = $1 FOR UPDATE`, [req.user.company_id]);
+
     const { rows: [{ count }] } = await client.query(
       `SELECT COUNT(*)::int AS count FROM branches WHERE company_id = $1`,
       [req.user.company_id]
     );
     const isFirstBranch = count === 0;
 
-    const { rows: [co] } = await client.query(`SELECT plan, branch_limit_override FROM companies WHERE id = $1`, [req.user.company_id]);
     let plan = co?.plan || 'basic';
     if (plan === 'trial' || plan === 'free' || plan === 'starter') plan = 'basic';
     // تجاوز يدوي من لوحة الإدارة يحل محل حد الباقة بالكامل لهذي الشركة تحديدًا
