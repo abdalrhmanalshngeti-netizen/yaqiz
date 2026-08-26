@@ -6165,7 +6165,10 @@ function showAddEntity(type, id) {
         <div><label class="form-label">${lang==='ar'?'الحي':'District'}</label><input class="input" id="ent-district" value="${sanitize(existing?.district||'')}" /></div>
         <div><label class="form-label">${lang==='ar'?'المدينة':'City'}</label><input class="input" id="ent-city" value="${sanitize(existing?.city||'')}" /></div>
       </div>
-      <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'الرمز البريدي':'Postal Code'}</label><input class="input" id="ent-postal" maxlength="5" style="max-width:200px;" value="${sanitize(existing?.postal_code||'')}" /></div>
+      <div class="form-row" style="margin-bottom:16px;">
+        <div><label class="form-label">${lang==='ar'?'الرمز البريدي':'Postal Code'}</label><input class="input" id="ent-postal" maxlength="5" value="${sanitize(existing?.postal_code||'')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'الرقم الإضافي':'Additional #'}</label><input class="input" id="ent-additional" maxlength="4" value="${sanitize(existing?.additional_number||'')}" /></div>
+      </div>
       ` : ''}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary btn-full" data-action="saveEntity" data-args="${JSON.stringify(id?[type,id]:[type]).replace(/"/g,'&quot;')}">${t('save')}</button>
@@ -6206,6 +6209,7 @@ function saveEntity(type, id) {
     district:        el('ent-district')?.value || '',
     city:            el('ent-city')?.value || '',
     postal_code:     el('ent-postal')?.value || '',
+    additional_number: el('ent-additional')?.value || '',
   } : {};
 
   if (isEdit) {
@@ -14366,7 +14370,7 @@ function renderSettingsGeneral(c) {
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'الرمز البريدي (5 أرقام)':'Postal Code (5 digits)'}</label><input class="input" id="s-postal" maxlength="5" value="${sanitize(s.postal_code)}" /></div>
-        <div></div>
+        <div><label class="form-label">${lang==='ar'?'الرقم الإضافي (4 أرقام)':'Additional Number (4 digits)'}</label><input class="input" id="s-additional" maxlength="4" value="${sanitize(s.additional_number)}" /></div>
       </div>
     </div></div>
     ${has('settings.manage')?`<button class="btn btn-primary" style="align-self:flex-start;" data-action="saveSettings">${t('save')}</button>`:''}
@@ -14544,6 +14548,7 @@ function saveSettings() {
   const district        = el('s-district')?.value||'';
   const city            = el('s-city')?.value||'';
   const postal_code     = el('s-postal')?.value||'';
+  const additional_number = el('s-additional')?.value||'';
 
   // العنوان الوطني المُهيكل مطلوب فعليًا فقط للشركات المسجَّلة بضريبة القيمة
   // المضافة (المرحلة الثانية تخصّها تحديدًا) — لا نُلزم به شركة بلا رقم ضريبي
@@ -14560,6 +14565,10 @@ function saveSettings() {
       showToast(lang==='ar'?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits','error');
       return;
     }
+    if (!/^\d{4}$/.test(additional_number.trim())) {
+      showToast(lang==='ar'?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits','error');
+      return;
+    }
   } else {
     // حتى بدون تسجيل ضريبي، لو كتب المستخدم رقم مبنى/رمز بريدي جزئيًا نتأكد
     // من صحة الصيغة بدل حفظ قيمة غير صالحة تفشل لاحقًا وقت تفعيل الضريبة
@@ -14571,17 +14580,21 @@ function saveSettings() {
       showToast(lang==='ar'?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits','error');
       return;
     }
+    if (additional_number.trim() && !/^\d{4}$/.test(additional_number.trim())) {
+      showToast(lang==='ar'?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits','error');
+      return;
+    }
   }
 
   db.settings = { ...db.settings, company_name, vat_number, cr_number, phone, address,
-    street_name, building_number, district, city, postal_code };
+    street_name, building_number, district, city, postal_code, additional_number };
   saveDB(db);
   showToast(`✅ ${t('save')}`);
   // مزامنة مع API (للمالك فقط)
   if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
     window._cloudApiFetch('PUT', '/api/auth/company', {
       company_name, vat_number, cr_number, address, contact_phone: phone,
-      street_name, building_number, district, city, postal_code
+      street_name, building_number, district, city, postal_code, additional_number
     }).catch(e => console.warn('Company sync:', e.message));
   }
   renderShell();
@@ -17536,6 +17549,7 @@ async function runAISearchQuery(q) {
       if (d.company_building)db.settings.building_number = d.company_building;
       if (d.company_district)db.settings.district        = d.company_district;
       if (d.company_postal_code) db.settings.postal_code = d.company_postal_code;
+      if (d.company_additional_number) db.settings.additional_number = d.company_additional_number;
       if (d.plan)            { db.settings.plan = d.plan; db.settings.plan_expires_at = d.subscription_expires_at||null; }
       db.settings.branch_limit_override = (d.branch_limit_override ?? null);
       window._origSaveDB ? window._origSaveDB(db) : window.saveDB(db);
@@ -17756,7 +17770,8 @@ async function runAISearchQuery(q) {
       loyalty_points: parseInt(c.loyalty_points)||0,
       is_active: c.is_active!==false,
       street_name: c.street_name||'', building_number: c.building_number||'',
-      district: c.district||'', city: c.city||'', postal_code: c.postal_code||''
+      district: c.district||'', city: c.city||'', postal_code: c.postal_code||'',
+      additional_number: c.additional_number||''
     };
   }
 
@@ -18180,6 +18195,7 @@ async function runAISearchQuery(q) {
         if (m.company_building)db.settings.building_number = m.company_building;
         if (m.company_district)db.settings.district        = m.company_district;
         if (m.company_postal_code) db.settings.postal_code = m.company_postal_code;
+        if (m.company_additional_number) db.settings.additional_number = m.company_additional_number;
         if (m.plan)            db.settings.plan          = m.plan;
         if (m.subscription_expires_at) db.settings.plan_expires_at = m.subscription_expires_at;
         db.settings.branch_limit_override = (m.branch_limit_override ?? null);
@@ -18390,7 +18406,8 @@ async function runAISearchQuery(q) {
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
                        balance: c.balance || 0, is_active: c.is_active !== false,
                        street_name: c.street_name || null, building_number: c.building_number || null,
-                       district: c.district || null, city: c.city || null, postal_code: c.postal_code || null };
+                       district: c.district || null, city: c.city || null, postal_code: c.postal_code || null,
+                       additional_number: c.additional_number || null };
         // السيرفر يتجاهل balance بالتحديث افتراضيًا (حماية من كتابة رصيد قديم فوق
         // رصيد حقيقي غيّره جهاز آخر) — إلا لو معالج الأرصدة الافتتاحية علّم هذا
         // السجل صراحة، عندها نرسل العلامة ونحذفها بعد نجاح المزامنة فقط
@@ -19017,6 +19034,7 @@ async function runAISearchQuery(q) {
       if (apiUser.company_building)db.settings.building_number = apiUser.company_building;
       if (apiUser.company_district)db.settings.district        = apiUser.company_district;
       if (apiUser.company_postal_code) db.settings.postal_code = apiUser.company_postal_code;
+      if (apiUser.company_additional_number) db.settings.additional_number = apiUser.company_additional_number;
       if (apiUser.plan)            db.settings.plan          = apiUser.plan;
       if (apiUser.subscription_expires_at) db.settings.plan_expires_at = apiUser.subscription_expires_at;
       db.settings.branch_limit_override = (apiUser.branch_limit_override ?? null);

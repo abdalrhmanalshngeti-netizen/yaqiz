@@ -37,7 +37,7 @@ exports.create = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
             email, address, city, credit_limit, payment_terms, balance,
-            street_name, building_number, district, postal_code, country_code, client_local_id } = req.body;
+            street_name, building_number, additional_number, district, postal_code, country_code, client_local_id } = req.body;
 
     if (!name) return res.status(400).json({ success: false, message: 'اسم العميل مطلوب' });
 
@@ -55,13 +55,17 @@ exports.create = async (req, res, next) => {
       INSERT INTO customers
         (company_id, code, name, name_en, vat_number, cr_number,
          phone, email, address, city, credit_limit, payment_terms, balance,
-         street_name, building_number, district, postal_code, country_code, client_local_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         street_name, building_number, district, postal_code, country_code, client_local_id, additional_number)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       RETURNING *
     `, [req.user.company_id, code, name, name_en, vat_number, cr_number,
         phone, email, address, city, credit_limit || 0, payment_terms || 30, parseFloat(balance) || 0,
-        street_name || null, building_number || null, district || null, postal_code || null, country_code || 'SA',
-        client_local_id || null]);
+        // country_code لا يُفرَض افتراضيًا لـ'SA' — عميل بلا أي بيانات عنوان
+        // حقيقية (أشيع حالة بعميل POS عابر) ما يفترَض إنه "سعودي" قسرًا؛ هذا
+        // كان يجعل الفاتورة المبسّطة تُصنَّف المشتري "SA" رغم عدم توفر رمز
+        // بريدي فعلي، فتخالف BR-KSA-67 (يشترط رمزًا بريديًا حال كانت الدولة SA)
+        street_name || null, building_number || null, district || null, postal_code || null, country_code || null,
+        client_local_id || null, additional_number || null]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
@@ -71,7 +75,7 @@ exports.update = async (req, res, next) => {
   try {
     const { code, name, name_en, vat_number, cr_number, phone,
             email, address, city, credit_limit, payment_terms, is_active, balance,
-            street_name, building_number, district, postal_code, country_code,
+            street_name, building_number, additional_number, district, postal_code, country_code,
             opening_balance_write } = req.body;
 
     // مزامنة أي تعديل عادي (رقم جوال، عنوان...) ترسل كامل نسخة العميل المحلية
@@ -103,14 +107,16 @@ exports.update = async (req, res, next) => {
         building_number  = COALESCE($17, building_number),
         district         = COALESCE($18, district),
         postal_code      = COALESCE($19, postal_code),
-        country_code     = COALESCE($20, country_code)
+        country_code     = COALESCE($20, country_code),
+        additional_number = COALESCE($21, additional_number)
       WHERE id = $14 AND company_id = $15
       RETURNING *
     `, [code, name, name_en, vat_number, cr_number, phone, email,
         address, city, credit_limit, payment_terms, is_active,
         balanceParam,
         req.params.id, req.user.company_id,
-        street_name || null, building_number || null, district || null, postal_code || null, country_code || null]);
+        street_name || null, building_number || null, district || null, postal_code || null, country_code || null,
+        additional_number || null]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'العميل غير موجود' });
     res.json({ success: true, data: rows[0] });

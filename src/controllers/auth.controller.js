@@ -59,6 +59,7 @@ exports.login = async (req, res, next) => {
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,
              c.street_name AS company_street, c.building_number AS company_building,
+             c.additional_number AS company_additional_number,
              c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
              c.plan AS company_plan, c.subscription_expires_at, c.branch_limit_override,
@@ -318,6 +319,7 @@ exports.me = async (req, res, next) => {
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,
              c.street_name AS company_street, c.building_number AS company_building,
+             c.additional_number AS company_additional_number,
              c.district AS company_district, c.postal_code AS company_postal_code,
              c.contact_email AS company_email,
              c.plan AS plan, c.subscription_expires_at, c.branch_limit_override
@@ -340,13 +342,17 @@ exports.updateCompany = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'هذه الميزة للمالك فقط' });
     }
     const { company_name, vat_number, cr_number, address, city, contact_phone, contact_email,
-            street_name, building_number, district, postal_code, country_code } = req.body;
+            street_name, building_number, additional_number, district, postal_code, country_code } = req.body;
 
-    // صيغة العنوان الوطني (رقم المبنى/الرمز البريدي) مطلوبة بمعيار سبل السعودي
-    // ولازمة لتوليد QR فاتورة صحيح بالمرحلة الثانية — نتحقق منها هنا كخط دفاع
-    // أخير حتى لو تجاوز طلب مباشر للـ API التحقق الموجود بالواجهة
+    // صيغة العنوان الوطني (رقم المبنى/الرمز البريدي/الرقم الإضافي) مطلوبة
+    // بمعيار سبل السعودي ولازمة لتوليد QR فاتورة صحيح بالمرحلة الثانية —
+    // نتحقق منها هنا كخط دفاع أخير حتى لو تجاوز طلب مباشر للـ API التحقق
+    // الموجود بالواجهة
     if (building_number !== undefined && building_number !== null && building_number !== '' && !/^\d{4}$/.test(String(building_number))) {
       return res.status(400).json({ success: false, message: 'رقم المبنى يجب أن يكون 4 أرقام بالضبط' });
+    }
+    if (additional_number !== undefined && additional_number !== null && additional_number !== '' && !/^\d{4}$/.test(String(additional_number))) {
+      return res.status(400).json({ success: false, message: 'الرقم الإضافي يجب أن يكون 4 أرقام بالضبط' });
     }
     if (postal_code !== undefined && postal_code !== null && postal_code !== '' && !/^\d{5}$/.test(String(postal_code))) {
       return res.status(400).json({ success: false, message: 'الرمز البريدي يجب أن يكون 5 أرقام بالضبط' });
@@ -354,23 +360,25 @@ exports.updateCompany = async (req, res, next) => {
 
     await db.query(`
       UPDATE companies SET
-        name            = COALESCE($1, name),
-        vat_number      = COALESCE($2, vat_number),
-        cr_number       = COALESCE($3, cr_number),
-        address         = COALESCE($4, address),
-        city            = COALESCE($5, city),
-        contact_phone   = COALESCE($6, contact_phone),
-        contact_email   = COALESCE($7, contact_email),
-        street_name     = COALESCE($9, street_name),
-        building_number = COALESCE($10, building_number),
-        district        = COALESCE($11, district),
-        postal_code     = COALESCE($12, postal_code),
-        country_code    = COALESCE($13, country_code)
+        name              = COALESCE($1, name),
+        vat_number        = COALESCE($2, vat_number),
+        cr_number         = COALESCE($3, cr_number),
+        address           = COALESCE($4, address),
+        city              = COALESCE($5, city),
+        contact_phone     = COALESCE($6, contact_phone),
+        contact_email     = COALESCE($7, contact_email),
+        street_name       = COALESCE($9, street_name),
+        building_number   = COALESCE($10, building_number),
+        district          = COALESCE($11, district),
+        postal_code       = COALESCE($12, postal_code),
+        country_code      = COALESCE($13, country_code),
+        additional_number = COALESCE($14, additional_number)
       WHERE id = $8
     `, [company_name||null, vat_number||null, cr_number||null,
         address||null, city||null, contact_phone||null, contact_email||null,
         req.user.company_id,
-        street_name||null, building_number||null, district||null, postal_code||null, country_code||null]);
+        street_name||null, building_number||null, district||null, postal_code||null, country_code||null,
+        additional_number||null]);
     res.json({ success: true });
   } catch (err) { next(err); }
 };

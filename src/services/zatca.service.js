@@ -221,7 +221,10 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   // مكان امتداد التوقيع الرقمي (XAdES) — يُملأ بالخطوة 5، تُرك بنية فاضية الآن حتى لا يتغيّر شكل المستند لاحقًا
   root.ele(NS.ext, 'ext:UBLExtensions');
 
-  root.ele(NS.cbc, 'cbc:ProfileID').txt(isSimplified ? 'reporting:1.0' : 'standard:1.0');
+  // القيمتان الوحيدتان اللي تعرفهما الهيئة لـBusinessProcessType هما
+  // reporting:1.0 (مبسّطة، إبلاغ لاحق) وclearance:1.0 (قياسية، تصديق فوري) —
+  // 'standard:1.0' لم تكن قيمة حقيقية إطلاقًا (BR-KSA-EN16931-01)
+  root.ele(NS.cbc, 'cbc:ProfileID').txt(isSimplified ? 'reporting:1.0' : 'clearance:1.0');
   root.ele(NS.cbc, 'cbc:ID').txt(String(invoice.invoice_no));
   root.ele(NS.cbc, 'cbc:UUID').txt(invoice.zatca_uuid || invoice.uuid);
   root.ele(NS.cbc, 'cbc:IssueDate').txt(issueDateStr);
@@ -229,6 +232,12 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   root.ele(NS.cbc, 'cbc:InvoiceTypeCode').att('name', txCode).txt(typeCode);
   if (invoice.notes) root.ele(NS.cbc, 'cbc:Note').txt(invoice.notes);
   root.ele(NS.cbc, 'cbc:DocumentCurrencyCode').txt('SAR');
+  // TaxCurrencyCode إلزامي فعليًا (BR-KSA-68) بصرف النظر عن قيمته — أزلته
+  // سابقًا ظنًا إنه سبب BR-KSA-EN16931-09، لكن حذفه كسر BR-KSA-68 بدلًا من
+  // ذلك؛ تأكَّد أن BR-KSA-EN16931-09 ذاتها اختبارها الفعلي بملف الـschematron
+  // المرفق بأداة الهيئة (SDK 3.0.8, 2022) يفحص كل المستند بلا نطاق مجموعة
+  // ضريبية محدَّدة (`//` بدل نطاق `TaxSubtotal` نفسه) — عيب معروف بإصدارات
+  // قديمة من الأداة، يخالف حتى فاتورة SAR-فقط بسيطة تمامًا. نُبقي العنصر.
   root.ele(NS.cbc, 'cbc:TaxCurrencyCode').txt('SAR');
 
   if (docKind === 'credit_note' || docKind === 'debit_note') {
@@ -265,6 +274,10 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   const sAddr = supplier.ele(NS.cac, 'cac:PostalAddress');
   sAddr.ele(NS.cbc, 'cbc:StreetName').txt(company.street_name || '');
   sAddr.ele(NS.cbc, 'cbc:BuildingNumber').txt(company.building_number || '');
+  // الرقم الإضافي (KSA-23) — عنصر منفصل عن رقم المبنى، إلزامي بالعنوان الوطني
+  // السعودي (BR-KSA-09/64)؛ ترتيبه بعد BuildingNumber وقبل CitySubdivisionName
+  // حسب UBL-CommonAggregateComponents-2.1.xsd
+  sAddr.ele(NS.cbc, 'cbc:PlotIdentification').txt(company.additional_number || '');
   sAddr.ele(NS.cbc, 'cbc:CitySubdivisionName').txt(company.district || '');
   sAddr.ele(NS.cbc, 'cbc:CityName').txt(company.city || '');
   sAddr.ele(NS.cbc, 'cbc:PostalZone').txt(company.postal_code || '');
@@ -285,10 +298,19 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
     const cAddr = custParty.ele(NS.cac, 'cac:PostalAddress');
     cAddr.ele(NS.cbc, 'cbc:StreetName').txt(customer?.street_name || customer?.address || '');
     if (customer?.building_number) cAddr.ele(NS.cbc, 'cbc:BuildingNumber').txt(customer.building_number);
+    if (customer?.additional_number) cAddr.ele(NS.cbc, 'cbc:PlotIdentification').txt(customer.additional_number);
     if (customer?.district) cAddr.ele(NS.cbc, 'cbc:CitySubdivisionName').txt(customer.district);
     cAddr.ele(NS.cbc, 'cbc:CityName').txt(customer?.city || '');
     if (customer?.postal_code) cAddr.ele(NS.cbc, 'cbc:PostalZone').txt(customer.postal_code);
-    cAddr.ele(NS.cac, 'cac:Country').ele(NS.cbc, 'cbc:IdentificationCode').txt(customer?.country_code || 'SA');
+    // فاتورة قياسية (B2B) تتطلب دولة المشتري دائمًا (BR-KSA-63/10). أما
+    // المبسّطة فلا نفرض "SA" افتراضيًا إلا لو عندنا رمز بريدي فعلي يدعمها —
+    // عميل POS عابر بلا أي بيانات عنوان كان يُصنَّف "سعودي" قسرًا فتشترط
+    // القاعدة رمزًا بريديًا لا نملكه أصلًا (BR-KSA-67)
+    if (!isSimplified || customer?.postal_code) {
+      cAddr.ele(NS.cac, 'cac:Country').ele(NS.cbc, 'cbc:IdentificationCode').txt(customer?.country_code || 'SA');
+    } else if (customer?.country_code) {
+      cAddr.ele(NS.cac, 'cac:Country').ele(NS.cbc, 'cbc:IdentificationCode').txt(customer.country_code);
+    }
   }
   if (customer?.vat_number) {
     custParty.ele(NS.cac, 'cac:PartyTaxScheme')
@@ -298,10 +320,20 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   custParty.ele(NS.cac, 'cac:PartyLegalEntity')
     .ele(NS.cbc, 'cbc:RegistrationName').txt(customer?.name || invoice.customer_name || 'عميل نقدي');
 
-  // وسيلة الدفع
-  if (invoice.payment_method) {
-    root.ele(NS.cac, 'cac:PaymentMeans')
-      .ele(NS.cbc, 'cbc:PaymentMeansCode').txt(paymentMeansCode(invoice.payment_method));
+  // تاريخ التوريد الفعلي (KSA-5) — إلزامي بالفاتورة الضريبية القياسية
+  // (BR-KSA-15). المنصة لا تفرّق بين تاريخ البيع وتاريخ التوريد (POS/فاتورة
+  // يدوية، تسليم فوري دائمًا)، فنستخدم نفس تاريخ الإصدار
+  root.ele(NS.cac, 'cac:Delivery').ele(NS.cbc, 'cbc:ActualDeliveryDate').txt(issueDateStr);
+
+  // وسيلة الدفع — إلزامية أيضًا لإشعار دائن/مدين حتى بلا وسيلة دفع محدَّدة،
+  // لأنها الموضع الوحيد (PaymentMeans/InstructionNote) الذي تشترط الهيئة عليه
+  // سبب إصدار الإشعار (BR-KSA-17)؛ paymentMeansCode(undefined) ترجع كودًا
+  // افتراضيًا آمنًا ('1') فلا خطر من غياب payment_method هنا
+  const isCreditOrDebitNote = docKind === 'credit_note' || docKind === 'debit_note';
+  if (invoice.payment_method || isCreditOrDebitNote) {
+    const pm = root.ele(NS.cac, 'cac:PaymentMeans');
+    pm.ele(NS.cbc, 'cbc:PaymentMeansCode').txt(paymentMeansCode(invoice.payment_method));
+    if (isCreditOrDebitNote) pm.ele(NS.cbc, 'cbc:InstructionNote').txt(invoice.reason || '');
   }
 
   // خصم على مستوى المستند (إن وُجد)
