@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 const db  = require('../config/db');
 
+// نفس سر توكنات الإدمن بـadmin.controller.js — يجب أن يطابقه بالضبط لفك
+// التوقيع بنجاح (fallback لـJWT_SECRET لو ADMIN_JWT_SECRET غير مضبوط بعد)
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
+
 // يتحقق من هوية موظف لوحة الإدارة، ثم يجلب الدور/الصلاحيات/حالة التفعيل
 // دائماً من القاعدة (لا نثق بما كان محفوظاً بالتوكن وقت تسجيل الدخول) — بهذا
 // أي تعديل صلاحيات أو تعطيل حساب موظف يسري فوراً من أول طلب تالي، بدون
@@ -14,7 +18,7 @@ module.exports = async function superAdminAuth(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, ADMIN_JWT_SECRET);
     if (!payload.is_super_admin) {
       return res.status(403).json({ success: false, message: 'هذه الصفحة للمدير العام فقط' });
     }

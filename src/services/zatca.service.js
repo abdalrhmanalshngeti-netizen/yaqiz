@@ -349,7 +349,7 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
     const code = it.vat_category_code || 'S';
     const rate = code === 'Z' || code === 'E' || code === 'O' ? 0 : Number(it.vat_rate ?? 15);
     const lineNet = round2(it.line_total);
-    const lineVat = round2(it.vat_amount || (lineNet * rate / 100));
+    const lineVat = round2(it.vat_amount ?? (lineNet * rate / 100));
     const qty = Number(it.qty || 1);
     const unitPrice = qty ? round2((lineNet + round2(it.discount || 0)) / qty) : lineNet;
 

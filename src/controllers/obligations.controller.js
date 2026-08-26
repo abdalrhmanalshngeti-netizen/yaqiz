@@ -1,5 +1,9 @@
 const db = require('../config/db');
 
+// نفس القيم الوحيدة التي تعرضها قائمة الاختيار بالواجهة — أي قيمة أخرى نص حر
+// غير معروف قد يُستخدم لاحقًا كمدخل غير موثوق (مثلاً لو عُرض يومًا بلا تعقيم)
+const ALLOWED_FREQUENCIES = ['شهري', 'أسبوعي', 'ربع سنوي', 'نصف سنوي', 'سنوي'];
+
 exports.list = async (req, res, next) => {
   try {
     const { rows } = await db.query(
@@ -14,6 +18,9 @@ exports.create = async (req, res, next) => {
   try {
     const { name, category, amount, frequency, next_due, vendor, status } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'اسم الالتزام مطلوب' });
+    if (frequency && !ALLOWED_FREQUENCIES.includes(frequency)) {
+      return res.status(400).json({ success: false, message: 'تكرار غير صالح' });
+    }
 
     const { rows } = await db.query(`
       INSERT INTO obligations (company_id, name, category, amount, frequency, next_due, vendor, status)
@@ -29,6 +36,9 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const { name, category, amount, frequency, next_due, vendor, status } = req.body;
+    if (frequency && !ALLOWED_FREQUENCIES.includes(frequency)) {
+      return res.status(400).json({ success: false, message: 'تكرار غير صالح' });
+    }
 
     const { rows } = await db.query(`
       UPDATE obligations SET

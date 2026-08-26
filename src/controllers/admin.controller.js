@@ -6,6 +6,12 @@ const QRCode = require('qrcode');
 const db     = require('../config/db');
 const { sendMail, resetPasswordTemplate } = require('../services/email.service');
 
+// سر مخصَّص لتوكنات لوحة الإدارة، منفصل عن JWT_SECRET (توكنات المستأجرين) —
+// كانا يشتركان نفس السر ويميّزهما فقط شكل الـpayload (is_super_admin). الآن
+// كلاهما مفصولان تشفيريًا لو ضُبط ADMIN_JWT_SECRET بالبيئة؛ لو لم يُضبط بعد
+// (مثل الإنتاج الحالي)، fallback شفاف لـJWT_SECRET يبقي السلوك مطابقًا تمامًا
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
+
 const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate', 'ai_usage'];
 
 // ينشئ جلسة كاملة (سطر admin_sessions + توكن نهائي) — يُستدعى من تسجيل الدخول
@@ -21,7 +27,7 @@ async function issueFullSession(admin, req) {
 
   const token = jwt.sign(
     { sub: admin.id, is_super_admin: true, email: admin.email, name: admin.full_name, sess: session.id },
-    process.env.JWT_SECRET,
+    ADMIN_JWT_SECRET,
     { expiresIn: '12h' }
   );
   return {
@@ -52,7 +58,7 @@ exports.login = async (req, res, next) => {
     if (admin.totp_enabled) {
       const tempToken = jwt.sign(
         { sub: admin.id, purpose: '2fa_pending' },
-        process.env.JWT_SECRET,
+        ADMIN_JWT_SECRET,
         { expiresIn: '5m' }
       );
       return res.json({ success: true, requires_2fa: true, temp_token: tempToken });
@@ -73,7 +79,7 @@ exports.verify2FALogin = async (req, res, next) => {
 
     let payload;
     try {
-      payload = jwt.verify(temp_token, process.env.JWT_SECRET);
+      payload = jwt.verify(temp_token, ADMIN_JWT_SECRET);
     } catch {
       return res.status(401).json({ success: false, message: 'انتهت صلاحية الجلسة المؤقتة، سجّل الدخول مجدداً' });
     }

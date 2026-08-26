@@ -7655,20 +7655,35 @@ function calcReportData(db, filterFn) {
   const vatNet = vatOutput - vatInput;
   const salesReturnsAmt = rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
   const revenue = invs.reduce((s,i)=>s+i.subtotal,0) - salesReturnsAmt;
+  const journalInPeriod = filterFn ? (db.journal||[]).filter(filterFn) : (db.journal||[]);
+  // مرتجعات المشتريات (5300) حساب مقابل لتكلفة البضاعة المباعة، لا مصروف
+  // تشغيلي عادي — تُخصَم من COGS هنا (بدل احتسابها ضمن المصاريف التشغيلية
+  // أدناه) عشان "مجمل الربح" يعكس التكلفة الحقيقية للبضاعة المباعة صافية من
+  // مرتجعاتها، بنفس مبدأ خصم مرتجعات المبيعات (4200) من الإيراد أعلاه. صافي
+  // الربح النهائي لا يتغيّر بأي الحالتين (نفس المبلغ، بند مختلف فقط)
+  const purchaseReturnsNet = journalInPeriod.reduce((s,entry)=>
+    s + (entry.entries||[]).reduce((es,line)=>{
+      if (line.account_code === '5300') {
+        return es + (line.side==='debit' ? (line.amount||0) : -(line.amount||0));
+      }
+      return es;
+    }, 0)
+  , 0);
   // تكلفة البضاعة المباعة الحقيقية (FIFO وقت البيع) — مو إجمالي المشتريات بالفترة
   const cogs = invs.reduce((s,i)=>s+(i.cogs_total||0),0)
-    - rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0);
+    - rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0)
+    + purchaseReturnsNet;
   const grossProfit = revenue - cogs;
   // كل حسابات المصروفات (5xxx) عدا تكلفة البضاعة المباعة (5100، محسوبة أعلاه
-  // من الفواتير مباشرة) — مصدرها دفتر اليومية مباشرة لا مصفوفة المشتريات فقط،
-  // عشان تشمل الرواتب وحركات الخزينة اليدوية والتزامات مدفوعة (كلها تُنشئ قيد
-  // يومية لكنها لا تُنشئ سطر "مشتريات")، بدل ما تفوتها كما كان يحصل — فيتعارض
-  // صافي الربح هنا مع صافي الربح المحسوب بالميزانية العمومية (نفس البيانات
-  // بالضبط، من مصدرين مختلفين)
-  const journalInPeriod = filterFn ? (db.journal||[]).filter(filterFn) : (db.journal||[]);
+  // من الفواتير مباشرة) ومرتجعات المشتريات (5300، خُصمت من COGS أعلاه) —
+  // مصدرها دفتر اليومية مباشرة لا مصفوفة المشتريات فقط، عشان تشمل الرواتب
+  // وحركات الخزينة اليدوية والتزامات مدفوعة (كلها تُنشئ قيد يومية لكنها لا
+  // تُنشئ سطر "مشتريات")، بدل ما تفوتها كما كان يحصل — فيتعارض صافي الربح هنا
+  // مع صافي الربح المحسوب بالميزانية العمومية (نفس البيانات بالضبط، من
+  // مصدرين مختلفين)
   const expenses = journalInPeriod.reduce((s,entry)=>
     s + (entry.entries||[]).reduce((es,line)=>{
-      if (line.account_code && line.account_code[0]==='5' && line.account_code!=='5100') {
+      if (line.account_code && line.account_code[0]==='5' && line.account_code!=='5100' && line.account_code!=='5300') {
         return es + (line.side==='debit' ? (line.amount||0) : -(line.amount||0));
       }
       return es;
@@ -9610,7 +9625,7 @@ function renderObligations(c) {
             <td><b>${sanitize(o.name)}</b></td>
             <td style="color:var(--text-muted);">${sanitize(o.vendor)||'-'}</td>
             <td><span class="badge ${catColors[o.category]||'badge-gray'}">${sanitize(o.category)}</span></td>
-            <td><span class="badge ${freqColors[o.frequency]||'badge-gray'}">${o.frequency}</span></td>
+            <td><span class="badge ${freqColors[o.frequency]||'badge-gray'}">${sanitize(o.frequency)}</span></td>
             <td style="font-weight:800;color:var(--primary);">${fmtMoney(o.amount)}</td>
             <td>
               <div style="font-weight:700;">${fmtDate(o.next_due)}</div>
@@ -12569,8 +12584,11 @@ function renderBalanceSheet(c) {
 
   // ── نتيجة الأعمال (كل حسابات الإيرادات 4xxx والمصروفات 5xxx) ──
   const netRevenue = codesStarting('4').reduce((s,cd)=>s+creditNormal(cd),0);
-  const netCOGS    = debitNormal('5100');
-  const netOPEX    = codesStarting('5').filter(cd=>cd!=='5100').reduce((s,cd)=>s+debitNormal(cd),0);
+  // 5300 (مرتجعات المشتريات) حساب مقابل لـCOGS لا مصروف تشغيلي — يُخصَم من
+  // netCOGS هنا (رصيده debitNormal سالب غالبًا) بدل احتسابه ضمن netOPEX، بنفس
+  // مبدأ خصم مرتجعات المشتريات بقائمة الدخل أعلاه. صافي الربح لا يتغيّر
+  const netCOGS    = debitNormal('5100') + debitNormal('5300');
+  const netOPEX    = codesStarting('5').filter(cd=>cd!=='5100' && cd!=='5300').reduce((s,cd)=>s+debitNormal(cd),0);
   const grossProfit = netRevenue - netCOGS;
   const netProfit   = grossProfit - netOPEX;
   const isProfit    = netProfit >= 0;
