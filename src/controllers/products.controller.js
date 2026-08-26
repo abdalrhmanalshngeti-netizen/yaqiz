@@ -233,7 +233,7 @@ exports.manualMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { type, qty, reason, source, reference, warehouse_id } = req.body;
+    const { type, qty, reason, source, reference, warehouse_id, client_local_id } = req.body;
 
     if (!['in','out'].includes(type) || !qty || qty <= 0) {
       await client.query('ROLLBACK');
@@ -243,6 +243,17 @@ exports.manualMove = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'المستودع مطلوب' });
     }
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن تخصم/تضيف
+    // المخزون الحقيقي مرتين — نتعرّف على المحاولة السابقة عبر المعرّف المحلي
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM stock_moves WHERE company_id = $1 AND client_local_id = $2`,
+        [req.user.company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.json({ success: true, data: existing }); }
+    }
+
     const { rows: [wh] } = await client.query(
       `SELECT id FROM warehouses WHERE id = $1 AND company_id = $2 AND is_active = true`,
       [warehouse_id, req.user.company_id]
@@ -255,7 +266,8 @@ exports.manualMove = async (req, res, next) => {
       warehouse_id,
       qty, reason, source, reference,
       source_type: 'manual', source_id: null,
-      user_id: req.user.sub
+      user_id: req.user.sub,
+      client_local_id: client_local_id || null
     };
 
     let move;

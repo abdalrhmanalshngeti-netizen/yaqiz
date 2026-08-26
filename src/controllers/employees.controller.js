@@ -370,7 +370,15 @@ exports.openShift = async (req, res, next) => {
     `, [req.user.company_id, req.user.sub, opening_cash || 0, resolvedBranchId, resolvedPosPointId]);
 
     res.status(201).json({ success: true, data: rows[0] });
-  } catch (err) { next(err); }
+  } catch (err) {
+    // فحص "existing" أعلاه بلا قفل — سباق حقيقي بين طلبين متزامنين (نقرة
+    // مزدوجة/إعادة محاولة) يتجاوزه، فيرتطم بفهرس idx_shifts_one_open_per_user
+    // الفريد بدلًا من ذلك. نُرجع نفس رسالة "وردية مفتوحة بالفعل" بدل خطأ 500 عام
+    if (err.code === '23505') {
+      return res.status(400).json({ success: false, message: 'لديك وردية مفتوحة بالفعل' });
+    }
+    next(err);
+  }
 };
 
 exports.closeShift = async (req, res, next) => {

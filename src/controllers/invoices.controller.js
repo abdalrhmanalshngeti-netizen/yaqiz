@@ -3,7 +3,7 @@ const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
-const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('../services/zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
@@ -304,17 +304,20 @@ exports.create = async (req, res, next) => {
         // حالة الشركة غير المسجّلة أصلًا (O، خارج النطاق)
         vat_category_code: it.vat_category_code || (!companyVatEnabled ? 'O' : (Number(it.tax_rate) === 0 ? 'Z' : 'S')),
       }));
-      const { xml, warnings } = buildInvoiceXML({
+      const { xml, warnings, totalTax, taxInclusive } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,
       });
+      warnIfQrTotalsMismatch('invoice', invoice_no, { totalTax, taxInclusive }, invoice.grand_total, invoice.vat_amount);
       const invoiceHash = computeInvoiceHash(xml);
 
       // إن كانت الشركة أكملت تأهيل CSID (الخطوة 4) نوقّع الفاتورة رقميًا فورًا؛
       // غير ذلك تبقى الفاتورة بلا توقيع كما كانت — لا نمنع البيع لعدم اكتمال التأهيل
       let finalXml = xml;
       let qrBase64 = null;
-      let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
-      if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
+      // شهادة compliance مخوَّلة فقط لخطوة الفحص المبدئي لدى الهيئة، لا للتوقيع/
+      // الإرسال الفعلي — الهيئة ترفضه. شركة أكملت الفحص فقط تُعامَل كـ"لم تكتمل
+      // تأهيلها بعد" (نفس !credential أدناه)، بدل توقيع/إرسال سيُرفَض حتمًا
+      const credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
       credentialForClearance = credential;
       if (credential) {
         try {

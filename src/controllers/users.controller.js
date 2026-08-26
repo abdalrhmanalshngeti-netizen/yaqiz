@@ -185,8 +185,13 @@ exports.update = async (req, res, next) => {
     // تعطيل الموظف (active=false) كان لا يُنهي جلسته الحالية — يبقى شغّالاً
     // فعليًا لين ٨ ساعات (مدة صلاحية accessToken) رغم "تعطيله" ظاهريًا بالواجهة.
     // نفس آلية إبطال الجلسات الفورية المستخدمة أصلًا بتغيير كلمة المرور
-    // (middleware/auth.js يتحقق من وجود صف user_sessions بكل طلب)
-    if (active === false) {
+    // (middleware/auth.js يتحقق من وجود صف user_sessions بكل طلب). نفس الفجوة
+    // كانت موجودة لتخفيض/تجريد الدور أو الصلاحيات بالضبط — موظف يُنزَّل من
+    // "مدير" لـ"كاشير" (أو تُسحَب منه صلاحية حساسة) يبقى شغّالاً بصلاحياته
+    // القديمة المُخزَّنة بالتوكن القديم حتى ينتهي صلاحيته طبيعيًا
+    const roleChanged  = role !== undefined && role !== oldUser?.role;
+    const permsChanged = permissions !== undefined && JSON.stringify(permissions) !== JSON.stringify(oldUser?.permissions);
+    if (active === false || roleChanged || permsChanged) {
       await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [req.params.id]);
     }
     res.json({ success: true, data: rows[0] });

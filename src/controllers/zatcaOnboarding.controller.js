@@ -83,10 +83,11 @@ exports.submitInvoiceToZatca = async (req, res, next) => {
     if (!invoice) return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
 
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    let credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
-    if (!credential) credential = await onboarding.getActiveCredential(db, req.user.company_id, 'compliance');
+    // شهادة compliance وحدها لا تكفي للإرسال الفعلي — الهيئة ترفضه، فتُعامَل
+    // نفس معاملة "لا شهادة إطلاقًا" بدل محاولة إرسال ستفشل حتمًا
+    const credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
     if (!credential) {
-      return res.status(400).json({ success: false, message: 'لا توجد شهادة CSID سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
+      return res.status(400).json({ success: false, message: 'لا توجد شهادة إنتاج (production) سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
     }
 
     const result = await submitInvoice(db, company, invoice, credential);
@@ -119,10 +120,10 @@ exports.submitCreditNoteToZatca = async (req, res, next) => {
     const isSimplified = (refInvoice?.invoice_type || 'simplified') === 'simplified';
 
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [req.user.company_id]);
-    let credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
-    if (!credential) credential = await onboarding.getActiveCredential(db, req.user.company_id, 'compliance');
+    // نفس ملاحظة submitInvoiceToZatca أعلاه — لا تراجع لشهادة compliance
+    const credential = await onboarding.getActiveCredential(db, req.user.company_id, 'production');
     if (!credential) {
-      return res.status(400).json({ success: false, message: 'لا توجد شهادة CSID سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
+      return res.status(400).json({ success: false, message: 'لا توجد شهادة إنتاج (production) سارية لهذه الشركة — أكمل تأهيل الهيئة أولًا' });
     }
 
     const result = await submitCreditNote(db, company, note, isSimplified, credential);

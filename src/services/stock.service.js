@@ -10,7 +10,7 @@
 // ترتيب القفل ثابت دائمًا: products → product_stock → stock_lots، لمنع
 // deadlock بين عمليتين متزامنتين على نفس الصنف/المستودع.
 
-exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, source_type, source_id, user_id, reason = 'بيع', reference }) => {
+exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, source_type, source_id, user_id, reason = 'بيع', reference, client_local_id }) => {
   if (!warehouse_id) throw Object.assign(new Error('المستودع مطلوب لتنفيذ عملية المخزون'), { status: 400 });
 
   const { rows: [p] } = await client.query(
@@ -70,14 +70,14 @@ exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, sou
   const { rows: [move] } = await client.query(`
     INSERT INTO stock_moves
       (company_id, product_id, warehouse_id, type, qty, balance_before, balance_after,
-       reason, source_type, source_id, unit_cost, reference, created_by)
-    VALUES ($1,$2,$3,'out',$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       reason, source_type, source_id, unit_cost, reference, created_by, client_local_id)
+    VALUES ($1,$2,$3,'out',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     RETURNING *
-  `, [company_id, product_id, warehouse_id, qty, whQty, newWhQty, reason, source_type, source_id, unitCostAvg, reference, user_id]);
+  `, [company_id, product_id, warehouse_id, qty, whQty, newWhQty, reason, source_type, source_id, unitCostAvg, reference, user_id, client_local_id || null]);
   return { move, totalCost, unitCostAvg };
 };
 
-exports.add = async (client, { company_id, product_id, warehouse_id, qty, unit_cost, source_type, source_id, user_id, reason = 'شراء', source, reference }) => {
+exports.add = async (client, { company_id, product_id, warehouse_id, qty, unit_cost, source_type, source_id, user_id, reason = 'شراء', source, reference, client_local_id }) => {
   if (!warehouse_id) throw Object.assign(new Error('المستودع مطلوب لتنفيذ عملية المخزون'), { status: 400 });
 
   const { rows: [p] } = await client.query(
@@ -114,9 +114,9 @@ exports.add = async (client, { company_id, product_id, warehouse_id, qty, unit_c
   const { rows: [move] } = await client.query(`
     INSERT INTO stock_moves
       (company_id, product_id, warehouse_id, type, qty, balance_before, balance_after,
-       reason, source, source_type, source_id, unit_cost, reference, created_by)
-    VALUES ($1,$2,$3,'in',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       reason, source, source_type, source_id, unit_cost, reference, created_by, client_local_id)
+    VALUES ($1,$2,$3,'in',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
     RETURNING *
-  `, [company_id, product_id, warehouse_id, qty, whQty, newWhQty, reason, source, source_type, source_id, lotCost, reference, user_id]);
+  `, [company_id, product_id, warehouse_id, qty, whQty, newWhQty, reason, source, source_type, source_id, lotCost, reference, user_id, client_local_id || null]);
   return move;
 };

@@ -45,7 +45,7 @@ exports.create = async (req, res, next) => {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ success: false, message: 'نقل البضاعة بين الفروع للمالك فقط' });
     }
-    const { from_warehouse_id, to_warehouse_id, notes, items = [] } = req.body;
+    const { from_warehouse_id, to_warehouse_id, notes, items = [], client_local_id } = req.body;
     if (!from_warehouse_id || !to_warehouse_id) {
       return res.status(400).json({ success: false, message: 'المستودع المصدر والوجهة مطلوبان' });
     }
@@ -59,6 +59,17 @@ exports.create = async (req, res, next) => {
     await client.query('BEGIN');
 
     const { company_id, sub: user_id } = req.user;
+
+    // إعادة إرسال نفس الطلب (استجابة سابقة ضاعت بالشبكة) لا يجب أن ينقل
+    // المخزون الحقيقي مرتين — نتعرّف على المحاولة السابقة عبر المعرّف المحلي
+    if (client_local_id) {
+      const { rows: [existing] } = await client.query(
+        `SELECT * FROM stock_transfers WHERE company_id = $1 AND client_local_id = $2`,
+        [company_id, client_local_id]
+      );
+      if (existing) { await client.query('COMMIT'); return res.status(201).json({ success: true, data: existing }); }
+    }
+
     const { rows: whRows } = await client.query(
       `SELECT id FROM warehouses WHERE id = ANY($1) AND company_id = $2 AND is_active = true`,
       [[from_warehouse_id, to_warehouse_id], company_id]
@@ -72,10 +83,10 @@ exports.create = async (req, res, next) => {
     const transfer_no = `TRF-${String(trfSeqN).padStart(6, '0')}`;
 
     const { rows: [transfer] } = await client.query(`
-      INSERT INTO stock_transfers (company_id, transfer_no, from_warehouse_id, to_warehouse_id, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6)
+      INSERT INTO stock_transfers (company_id, transfer_no, from_warehouse_id, to_warehouse_id, notes, created_by, client_local_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
-    `, [company_id, transfer_no, from_warehouse_id, to_warehouse_id, notes || null, user_id]);
+    `, [company_id, transfer_no, from_warehouse_id, to_warehouse_id, notes || null, user_id, client_local_id || null]);
 
     for (const item of items) {
       if (!item.product_id || !item.qty || item.qty <= 0) continue;

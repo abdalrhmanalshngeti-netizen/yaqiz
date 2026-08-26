@@ -11649,13 +11649,18 @@ function saveStockMove(){
   };
   db.stock_moves.push(move); db.nextId.stock_move=(db.nextId.stock_move||1)+1;
 
-  // قيد محاسبي — قيمة التسوية بسعر تكلفة الصنف الحالي؛ بلا قيد لو ما فيه سعر تكلفة مسجّل
+  // قيد محاسبي — قيمة التسوية بسعر تكلفة الصنف الحالي (آخر سعر شراء) كتقدير
+  // فوري وقت الإدخال؛ لعملية "صادر" تحديدًا، تكلفة FIFO الحقيقية تصل لاحقًا
+  // من السيرفر وقت المزامنة (راجع تصحيح القيد بمعالج مزامنة stock_moves) —
+  // نخزّن معرّف القيد على الحركة نفسها ليُصحَّح لاحقًا بدل بقائه بتقدير خاطئ دائمًا
   const adjValue=Math.round(qty*(prod.buy_price||0)*100)/100;
   if(adjValue>0){
     if(!db.journal)db.journal=[];
     if(!db.nextId.journal)db.nextId.journal=1;
+    const journalId=db.nextId.journal++;
+    move.journal_id=journalId;
     db.journal.push({
-      id:db.nextId.journal++, date:new Date().toISOString(),
+      id:journalId, date:new Date().toISOString(),
       description:`تسوية مخزون يدوية (${move.reason||(type==='in'?'وارد':'صادر')}) — ${opt.dataset.name}`,
       entries: type==='in' ? [
         {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:adjValue},
@@ -11764,7 +11769,8 @@ function saveStockTransfer(){
 
   window._cloudApiFetch?.('POST', '/api/stock-transfers', {
     from_warehouse_id: fromId, to_warehouse_id: toId,
-    items: items.map(it=>({product_id:it.product_id,qty:it.qty}))
+    items: items.map(it=>({product_id:it.product_id,qty:it.qty})),
+    client_local_id: transfer.id
   }).then(res => {
     if (res?.data?.id) {
       const _db = getDB();
@@ -17416,6 +17422,32 @@ async function runAISearchQuery(q) {
   function _persistSnap() {
     try { localStorage.setItem(_getSnapKey(), JSON.stringify(_snap)); } catch(e) {}
   }
+  // خزينة/يومية/مرتجعات/سندات/أوامر شراء/ورديات/حركات مخزون كانت تُدمَج إضافةً
+  // فقط (تُضاف السجلات الجديدة من السيرفر، لا يُحذَف محليًا أي سجل حُذف فعليًا
+  // بالسيرفر) — سجل محذوف على جهاز آخر يبقى ظاهرًا محليًا للأبد. أغلب نقاط
+  // النهاية هذي محدودة بعدد أقصى (limit)، فحذف أي غائب عن الدفعة بلا شرط
+  // إضافي خطأ حقيقي: قد يكون سجلًا أقدم من نطاق الدفعة، لا محذوفًا فعليًا.
+  // نحذف محليًا فقط لو السجل مُزامَن مسبقًا (_serverId موجود) وتاريخه يقع
+  // *ضمن* نطاق الدفعة المجلوبة فعليًا (أحدث من أو يساوي أقدم عنصر بالدفعة) —
+  // سجل أقدم من ذلك يبقى بلا حذف (كسلوكه الحالي بالضبط، بلا أي مخاطرة جديدة)
+  function _rowDate(row) {
+    return new Date(row.date || row.created_at || row.start_time);
+  }
+  function _pruneDeletedFromServer(localArr, serverRows) {
+    if (!Array.isArray(localArr) || !localArr.length) return localArr;
+    if (!serverRows || !serverRows.length) return localArr;
+    const serverIds = new Set(serverRows.map(r => r.id));
+    const oldestInBatch = serverRows.reduce((min, r) => {
+      const d = _rowDate(r);
+      return (!isNaN(d) && d < min) ? d : min;
+    }, _rowDate(serverRows[0]));
+    return localArr.filter(item => {
+      if (!item._serverId) return true;
+      if (serverIds.has(item._serverId)) return true;
+      const itemDate = _rowDate(item);
+      return isNaN(itemDate) || itemDate < oldestInBatch;
+    });
+  }
   // هل يوجد تعديل محلي (إنشاء/تحديث) على هذا الكيان لم يُؤكَّد وصوله للسيرفر
   // بعد؟ نقارن الحالة الحالية بآخر لقطة (_snap) — وهي بالضبط ما نعتقد أنه
   // مؤكَّد بالسيرفر (تُصحَّح فورًا عند فشل أي دفعة عبر _revertSnapEntity/
@@ -17884,6 +17916,7 @@ async function runAISearchQuery(q) {
           db.treasury.moves = [..._fromServer, ...db.treasury.moves]
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
+        db.treasury.moves = _pruneDeletedFromServer(db.treasury.moves, moveRes.data);
       }
 
       // ── دفتر اليومية: اسحب أي قيد سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
@@ -17904,6 +17937,7 @@ async function runAISearchQuery(q) {
           db.journal = [..._jFromServer, ...db.journal]
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
+        db.journal = _pruneDeletedFromServer(db.journal, journalRes.data);
       }
 
       // ── المرتجعات: اسحب أي مرتجع سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
@@ -17928,6 +17962,7 @@ async function runAISearchQuery(q) {
           db.returns = [..._rFromServer, ...db.returns]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
+        db.returns = _pruneDeletedFromServer(db.returns, returnsRes.data);
       }
 
       // ── إقفال الفترات المحاسبية: قائمة موحّدة على مستوى الشركة كاملة (وليست
@@ -17978,6 +18013,7 @@ async function runAISearchQuery(q) {
           db.receipts = [..._vFromServer, ...db.receipts]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
+        db.receipts = _pruneDeletedFromServer(db.receipts, vouchersRes.data);
       }
 
       // ── أوامر الشراء: اسحب أي أمر سجّله جهاز ثاني، وحدّث حالة الموجود محلياً ──
@@ -17998,6 +18034,7 @@ async function runAISearchQuery(q) {
             });
           }
         });
+        db.purchase_orders = _pruneDeletedFromServer(db.purchase_orders, poRes.data);
       }
 
       // ── الورديات: اسحب أي وردية من جهاز ثاني، وحدّث حالة/أرقام الموجودة محلياً ──
@@ -18027,6 +18064,7 @@ async function runAISearchQuery(q) {
             });
           }
         });
+        db.shifts = _pruneDeletedFromServer(db.shifts, shiftsRes.data);
       }
 
       // ── حركات المخزون: اسحب أي حركة (تلقائية من فاتورة/مشتريات، أو يدوية من جهاز ثاني)
@@ -18049,6 +18087,7 @@ async function runAISearchQuery(q) {
           db.stock_moves = [..._smFromServer, ...db.stock_moves]
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         }
+        db.stock_moves = _pruneDeletedFromServer(db.stock_moves, stockMovesRes.data);
       }
 
       // ── حالة الاشتراك: هل سبق ودفع فعليًا (مو مجرد تجربة مجانية)؟ ──
@@ -18843,7 +18882,8 @@ async function runAISearchQuery(q) {
         const res = await apiFetch('POST', `/api/products/${_prodSm.id}/move`, {
           type: sm.type, qty: sm.qty, reason: sm.reason || '',
           source: sm.source || '', reference: sm.reference || 'MANUAL',
-          warehouse_id: sm.warehouse_id || null
+          warehouse_id: sm.warehouse_id || null,
+          client_local_id: sm.id
         }).catch(e => { console.warn('stock move sync:', e.message); return null; });
 
         if (res?.data?.id) {
@@ -18853,6 +18893,19 @@ async function runAISearchQuery(q) {
             if (_smv) { _smv._serverId = res.data.id; _origSaveDB(_db); }
             const _ssm = (_snap?.stock_moves || []).find(x => x.id === sm.id);
             if (_ssm) _ssm._serverId = res.data.id;
+
+            // "صادر" فقط: القيد المحلي أُنشئ بتقدير آخر سعر شراء (buy_price) —
+            // السيرفر يرجّع الآن تكلفة FIFO الحقيقية (res.data.unit_cost)، نصحّح
+            // بها مبلغ القيد المحفوظ مسبقًا بدل تركه بتقدير خاطئ دائمًا
+            const realUnitCost = parseFloat(res.data.unit_cost);
+            if (sm.type === 'out' && sm.journal_id != null && !isNaN(realUnitCost)) {
+              const realAdjValue = Math.round(sm.qty * realUnitCost * 100) / 100;
+              const _je = (_db.journal || []).find(j => j.id === sm.journal_id);
+              if (_je && realAdjValue > 0) {
+                _je.entries.forEach(e => { e.amount = realAdjValue; });
+                _origSaveDB(_db);
+              }
+            }
           } catch (e) { /* ignore */ }
         } else {
           _revertSnapEntity('stock_moves', sm.id, null);

@@ -6,7 +6,7 @@
 // (zatca.service: buildInvoiceXML مع docKind='credit_note')، نفس التوقيع
 // الرقمي إن وُجدت شهادة CSID سارية، ونفس توليد رمز QR للمرحلة الثانية.
 const crypto = require('crypto');
-const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('./zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('./zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('./zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
@@ -96,16 +96,17 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     // كـinvoice_no ليظهر بعنصر cbc:ID، ونمرر رقم الفاتورة الأصلية بـlinked_invoice_no
     // ليُستخدم داخل BillingReference (راجع zatca.service.js)
     const noteForXml = { ...note, invoice_no: note.note_no, linked_invoice_no: referenceInvoice.invoice_no };
-    const { xml, warnings } = buildInvoiceXML({
+    const { xml, warnings, totalTax, taxInclusive } = buildInvoiceXML({
       company: companyRow, customer: customerRow, invoice: noteForXml, items: xmlItems,
       previousInvoiceHash, docKind: 'credit_note',
     });
+    warnIfQrTotalsMismatch('credit note', note_no, { totalTax, taxInclusive }, note.grand_total, note.vat_amount);
     const noteHash = computeInvoiceHash(xml);
 
     let finalXml = xml;
     let qrBase64 = null;
+    // لا تراجع لشهادة compliance هنا — راجع نفس الملاحظة بـinvoices.controller.js
     credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
-    if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
     if (credential) {
       try {
         const { ublExtensionsXml, signatureValue } = buildXadesSignature({

@@ -125,8 +125,19 @@ exports.create = async (req, res, next) => {
       if (!supRow) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المورد غير موجود' }); }
     }
 
+    // الشركة غير المسجّلة ضريبيًا (vat_enabled=false) كانت تعتمد كليًا على
+    // العميل لإرسال vat_amount=0 — لا فحص سيرفري، بعكس invoices.controller.js/
+    // quotes.controller.js المُصلَحتين لهذا بالضبط. عميل قديم مخزَّن محليًا (كاش)
+    // أو مسار مزامنة لم يُحدَّث يقدر يرسل ضريبة رغم تعطيلها لاحقًا بإعدادات الشركة
+    const { rows: [vatSetting] } = await client.query(
+      `SELECT value FROM settings WHERE company_id = $1 AND key = 'vat_enabled'`,
+      [company_id]
+    );
+    let companyVatEnabled = true;
+    try { companyVatEnabled = vatSetting ? JSON.parse(vatSetting.value) !== false : true; } catch { companyVatEnabled = true; }
+
     const baseAmount = parseFloat(amount || 0);
-    const vatAmount  = parseFloat(vat_amount ?? baseAmount * 0.15);
+    const vatAmount  = companyVatEnabled ? parseFloat(vat_amount ?? baseAmount * 0.15) : 0;
     const total      = baseAmount + vatAmount;
 
     const CASH_METHODS = ['cash', 'نقدي', 'شبكة', 'bank', 'بنك', 'تحويل', 'بطاقة', 'network', 'card'];

@@ -179,9 +179,11 @@ async function submitInvoiceBestEffort(invoiceId, companyId, { includeSimplified
     if ((invoice.invoice_type || 'simplified') === 'simplified' && !includeSimplified) return;
     if (!invoice.xml_content) return; // لم يُوقَّع أصلًا (بلا شهادة CSID سارية) — لا شيء نرسله
 
-    let credential = await getActiveCredential(db, companyId, 'production');
-    if (!credential) credential = await getActiveCredential(db, companyId, 'compliance');
-    if (!credential) return; // لا تأهيل هيئة بعد — الحالة الشائعة اليوم لمعظم الشركات
+    // شهادة compliance مخوَّلة فقط لخطوة الفحص المبدئي لدى الهيئة، لا للإرسال
+    // الفعلي — الهيئة ترفض أي تصديق/إبلاغ حقيقي بها. شركة أكملت الفحص فقط
+    // (بلا شهادة production) تُعامَل كـ"لم تكتمل تأهيلها بعد" (نفس !credential)
+    const credential = await getActiveCredential(db, companyId, 'production');
+    if (!credential) return; // لا تأهيل production بعد — الحالة الشائعة اليوم لمعظم الشركات
 
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);
     const result = await submitInvoice(db, company, invoice, credential);
@@ -206,8 +208,8 @@ async function submitCreditNoteBestEffort(noteId, companyId, isSimplified, { inc
     );
     if (!note || !note.xml_content) return;
 
-    let credential = await getActiveCredential(db, companyId, 'production');
-    if (!credential) credential = await getActiveCredential(db, companyId, 'compliance');
+    // نفس ملاحظة submitInvoiceBestEffort أعلاه — لا تراجع لشهادة compliance هنا
+    const credential = await getActiveCredential(db, companyId, 'production');
     if (!credential) return;
 
     const { rows: [company] } = await db.query(`SELECT * FROM companies WHERE id = $1`, [companyId]);

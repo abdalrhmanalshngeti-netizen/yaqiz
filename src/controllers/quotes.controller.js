@@ -4,7 +4,7 @@ const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
-const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml } = require('../services/zatca.service');
+const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
 const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
@@ -358,15 +358,16 @@ exports.convert = async (req, res, next) => {
         ...it, vat_rate: Math.round(effectiveVatRate * 10000) / 100,
         vat_category_code: companyVatEnabled ? 'S' : 'O',
       }));
-      const { xml, warnings } = buildInvoiceXML({
+      const { xml, warnings, totalTax, taxInclusive } = buildInvoiceXML({
         company: companyRow, customer: customerRow, invoice, items: xmlItems, previousInvoiceHash,
       });
+      warnIfQrTotalsMismatch('invoice', invoice_no, { totalTax, taxInclusive }, invoice.grand_total, invoice.vat_amount);
       const invoiceHash = computeInvoiceHash(xml);
 
       let finalXml = xml;
       let qrBase64 = null;
-      let credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
-      if (!credential) credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'compliance');
+      // لا تراجع لشهادة compliance هنا — راجع نفس الملاحظة بـinvoices.controller.js
+      const credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
       credentialForClearance = credential;
       if (credential) {
         try {

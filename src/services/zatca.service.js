@@ -377,7 +377,24 @@ function buildInvoiceXML({ company, customer, invoice, items, previousInvoiceHas
   });
 
   const xml = root.end({ prettyPrint: true });
-  return { xml, warnings };
+  // نُعيد الإجماليات المحسوبة فعليًا هنا (لا invoice.grand_total/vat_amount
+  // المخزَّنة بقاعدة البيانات) — تتيح للمستدعي رصد أي انحراف مستقبلي بين
+  // إجمالي XML الفعلي والقيمة المستخدَمة برمز QR قبل تضمينه (راجع embedQR)
+  return { xml, warnings, totalTax, taxInclusive };
 }
 
-module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller, notifyIncompleteSellerData, resolveCustomerForXml };
+// فحص دفاعي بعد إصلاح الانحراف الجذري (توزيع الخصم التناسبي بـbuildVatBreakdown)
+// — يقارن إجمالي XML الفعلي بالقيمة المخزَّنة بالمستند والمستخدَمة لرمز QR،
+// ويسجّل تحذيرًا فقط (لا يمنع أي شي) عند أي تباعد مستقبلي أكبر من سنت واحد،
+// لرصده مبكرًا بدل اكتشافه من شكوى عميل بمطابقة QR للمستند المطبوع
+function warnIfQrTotalsMismatch(docLabel, docNo, xmlTotals, storedGrandTotal, storedVatAmount) {
+  try {
+    const grandDiff = Math.abs(round2(xmlTotals.taxInclusive) - round2(Number(storedGrandTotal || 0)));
+    const vatDiff = Math.abs(round2(xmlTotals.totalTax) - round2(Number(storedVatAmount || 0)));
+    if (grandDiff > 0.01 || vatDiff > 0.01) {
+      console.warn(`[ZATCA] QR/XML total mismatch for ${docLabel} ${docNo}: XML(taxInclusive=${xmlTotals.taxInclusive}, totalTax=${xmlTotals.totalTax}) vs stored(grand_total=${storedGrandTotal}, vat_amount=${storedVatAmount})`);
+    }
+  } catch (e) { /* فحص دفاعي بحت — لا يُفشل أي مسار فعلي */ }
+}
+
+module.exports = { buildInvoiceXML, round2, money, buildTransactionCode, invoiceTypeCodeFor, buildVatBreakdown, validateSeller, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch };
