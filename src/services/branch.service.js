@@ -43,9 +43,18 @@ exports.resolveWarehouseForBranch = async (client, company_id, branch_id, requir
 exports.assertBranchAuthorized = async (client, company_id, user_id, role, explicitBranchId) => {
   if (!explicitBranchId || role === 'owner') return;
   const { rows: [u] } = await client.query(
-    `SELECT branch_id FROM users WHERE id = $1 AND company_id = $2`,
+    `SELECT branch_id, all_branches FROM users WHERE id = $1 AND company_id = $2`,
     [user_id, company_id]
   );
+  // موظف "كل الفروع" مصرَّح له لأي فرع فعلي بنفس شركته — لا مقارنة بفرع ثابت
+  if (u?.all_branches) {
+    const { rows: [b] } = await client.query(
+      `SELECT id FROM branches WHERE id = $1 AND company_id = $2`,
+      [explicitBranchId, company_id]
+    );
+    if (!b) throw Object.assign(new Error('الفرع غير موجود'), { status: 404 });
+    return;
+  }
   if (String(u?.branch_id) !== String(explicitBranchId)) {
     throw Object.assign(new Error('لا يمكنك تسجيل عملية على فرع آخر غير فرعك المخصَّص'), { status: 403 });
   }

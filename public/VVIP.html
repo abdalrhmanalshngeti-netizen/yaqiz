@@ -842,10 +842,27 @@ function nextId(db, key) { const id = db.nextId[key]||1; db.nextId[key] = id+1; 
 // المستخدم الحالي (فرعه) وإلا الفرع الرئيسي — نفس منطق الحل بالباكند
 // (branch.service.js) بالضبط، عشان لا يتعارض الاثنان أبدًا
 let _branchFallbackWarnedFor = null;
+// الفرع المُختار يدويًا بهذي الجلسة (متغيّر صفحة، بلا مزامنة سيرفر — نفس مبدأ
+// invBranchFilter بصفحة المخزون) — يُستخدم فقط لمستخدم "متعدد الفروع"
+// (المالك دائمًا، أو موظف all_branches=true)؛ غيرهم يبقى بفرعه الثابت كالمعتاد
+let _manualActiveBranchId = null;
+function isMultiBranchUser() {
+  return currentUser?.role === 'owner' || !!currentUser?.all_branches;
+}
+function setManualActiveBranchId(id) {
+  _manualActiveBranchId = Number(id) || null;
+  renderPage();
+}
 function resolveActiveBranchId() {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
   if (!branches.length) return null;
+
+  if (isMultiBranchUser()) {
+    if (_manualActiveBranchId && branches.some(b=>b.id===_manualActiveBranchId)) return _manualActiveBranchId;
+    return (branches.find(b=>b.is_main) || branches[0]).id;
+  }
+
   let branchId = currentUser?.branch_id;
   if (branchId && !branches.some(b=>b.id===branchId)) {
     // فرع المستخدم المخصَّص كان موجودًا لكن صار غير نشط الآن (تعطّل) — الرجوع
@@ -919,12 +936,15 @@ function activeBranchStockQty(db, p) {
 }
 
 // حقل اختيار الفرع لنماذج المعاملات (شراء/فاتورة مبيعات عادية) — يظهر فقط
-// لو في أكثر من فرع نشط (يصير إجباريًا وقتها)، وإلا لا يظهر أي شيء ويُحل
-// الفرع الوحيد تلقائيًا بصمت — بلا أي احتكاك للشركات اللي عندها فرع واحد
+// لو في أكثر من فرع نشط *و* المستخدم الحالي متعدد الفروع فعليًا (المالك أو
+// موظف all_branches=true)، وإلا لا يظهر أي شيء ويُحل الفرع الوحيد تلقائيًا
+// بصمت. كانت هذي القائمة تظهر لأي مستخدم بمجرد أن الشركة عندها أكثر من فرع
+// — حتى موظف بفرع ثابت واحد يشوف قائمة بكل فروع الشركة، ولو اختار غير فرعه
+// يُرفض من السيرفر 403 بلا أي منع مسبق بالواجهة
 function branchFieldHtml(inputId, labelOverride, selectedId) {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
-  if (branches.length <= 1) return '';
+  if (branches.length <= 1 || !isMultiBranchUser()) return '';
   const activeId = selectedId || resolveActiveBranchId();
   return `<div style="margin-bottom:12px;"><label class="form-label">${labelOverride||(lang==='ar'?'الفرع / المستودع':'Branch / Warehouse')} <span style="color:#ef4444">*</span></label>
     <select class="select" id="${inputId}">
@@ -1048,10 +1068,12 @@ function renderLogin() {
   refreshIcons();
 }
 
-function togglePw() {
-  const p = el('l-pass');
+function togglePw(inputId, btnId) {
+  const p = el(inputId || 'l-pass');
+  if (!p) return;
   p.type = p.type==='password'?'text':'password';
-  el('pw-btn').innerHTML = icon(p.type==='password'?'eye':'eye-off',18);
+  const btn = el(btnId || 'pw-btn');
+  if (btn) btn.innerHTML = icon(p.type==='password'?'eye':'eye-off',18);
 }
 
 function showSupportModal() {
@@ -2715,10 +2737,18 @@ function renderPOS(sc) {
   const vat = _vatRnd ? afterDisc * 0.15 : 0;
   const total = afterDisc + vat;
 
+  const _posBranches = (db.branches||[]).filter(b=>b.active!==false);
+  const _posActiveBranchId = resolveActiveBranchId();
+  const posBranchPickerHtml = (isMultiBranchUser() && _posBranches.length>1) ? `
+    <div class="tabs" style="margin-bottom:10px;">
+      ${_posBranches.map(b=>`<button class="tab-btn ${b.id===_posActiveBranchId?'active':''}" data-action="setManualActiveBranchId" data-args='${JSON.stringify([b.id])}'>🏬 ${sanitize(b.name)}</button>`).join('')}
+    </div>` : '';
+
   sc.innerHTML = `
   <div class="pos-grid">
     <!-- Right: products -->
     <div class="pos-products-wrap">
+      ${posBranchPickerHtml}
       <!-- Search bar (auto-focused for barcode) -->
       <div style="position:relative;">
         <span style="position:absolute;${lang==='ar'?'right':'left'}:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);">${icon('scan-barcode',18)}</span>
@@ -8700,6 +8730,15 @@ function renderUsers(c) {
   refreshIcons();
 }
 
+// يُظهر/يخفي قائمة اختيار الفرع بنموذج إضافة/تعديل موظف حسب اختيار نطاق الفرع
+// (فرع محدد/كل الفروع) — الراديو نوعه radio فيمرّر onchange الموحَّد .checked
+// لا .value، فنقرأ حالة المجموعة كاملة مباشرة بدل الاعتماد على القيمة الممرَّرة
+function onUBranchScopeChange() {
+  const scope = document.querySelector('input[name="u-branch-scope"]:checked')?.value || 'specific';
+  const wrap = el('u-branch-wrap');
+  if (wrap) wrap.style.display = scope === 'all' ? 'none' : '';
+}
+
 function showUserModal(id) {
   const db = getDB();
   const _uLimit = getPlanUserLimit();
@@ -8804,7 +8843,10 @@ function showUserModal(id) {
       <div class="form-row">
         <div>
           <label class="form-label">${t('password')} ${u?`<span style="font-size:11px;color:var(--text-muted)">(${lang==='ar'?'فارغ = بدون تغيير':'empty = keep'})</span>`:'<span style="color:#ef4444">*</span>'}</label>
-          <input class="input" type="password" id="u-password" placeholder="${lang==='ar'?'8 أحرف + حرف كبير + حرف صغير':'8 chars + upper + lower'}" />
+          <div style="position:relative;">
+            <input class="input" type="password" id="u-password" placeholder="${lang==='ar'?'8 أحرف + حرف كبير + حرف صغير':'8 chars + upper + lower'}" style="padding-inline-end:40px;" />
+            <button type="button" data-action="togglePw" data-args='["u-password","u-pw-btn"]' id="u-pw-btn" style="position:absolute;${lang==='ar'?'left':'right'}:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);">${icon('eye',18)}</button>
+          </div>
           <div id="u-password-err" style="color:#ef4444;font-size:11px;margin-top:3px;display:none"></div>
         </div>
         <div>
@@ -8815,13 +8857,25 @@ function showUserModal(id) {
         </div>
       </div>
 
-      ${getPlanBranchLimit()!==1?`
+      ${(getPlanBranchLimit()!==1 && u?.role!=='owner')?`
       <div style="margin-bottom:16px;">
-        <label class="form-label">${lang==='ar'?'الفرع':'Branch'} ${u?.role!=='owner'?'':`<span style="font-size:11px;color:var(--text-muted);font-weight:400;">(${lang==='ar'?'غير مطلوب للمالك — يشوف كل الفروع':'not needed for owner — sees all branches'})</span>`}</label>
-        <select class="select" id="u-branch">
-          <option value="">${lang==='ar'?'— بدون فرع —':'— No branch —'}</option>
-          ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(b.name)} (#${sanitize(b.branch_number)})</option>`).join('')}
-        </select>
+        <label class="form-label">${lang==='ar'?'نطاق الفرع':'Branch scope'}</label>
+        <div style="display:flex;gap:16px;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="u-branch-scope" value="specific" ${!u?.all_branches?'checked':''} style="accent-color:var(--primary)" data-onchange="onUBranchScopeChange" />
+            ${lang==='ar'?'فرع محدد':'Specific branch'}
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+            <input type="radio" name="u-branch-scope" value="all" ${u?.all_branches?'checked':''} style="accent-color:var(--primary)" data-onchange="onUBranchScopeChange" />
+            ${lang==='ar'?'كل الفروع':'All branches'}
+          </label>
+        </div>
+        <div id="u-branch-wrap" style="${u?.all_branches?'display:none;':''}">
+          <select class="select" id="u-branch">
+            <option value="">${lang==='ar'?'— بدون فرع —':'— No branch —'}</option>
+            ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(b.name)} (#${sanitize(b.branch_number)})</option>`).join('')}
+          </select>
+        </div>
       </div>`:''}
 
       <div style="margin-top:16px;">
@@ -8907,9 +8961,11 @@ function saveUser(id) {
   const role     = (window._jobTitles||{})[title]?.role || 'cashier';
   const perms    = Object.keys(window._permLabels||{}).filter(p=>el('perm-'+p.replace(/\./g,'-'))?.checked);
   const posAccess    = el('u-pos')?.checked||false;
+  const branchScope  = document.querySelector('input[name="u-branch-scope"]:checked')?.value || 'specific';
+  const allBranches  = branchScope === 'all';
   const branchIdRaw  = el('u-branch')?.value||'';
-  const branchId     = branchIdRaw ? Number(branchIdRaw) : null;
-  // تغيير الفرع owner-only بالباكند (وممنوع لو عند المستخدم وردية مفتوحة) —
+  const branchId     = allBranches ? null : (branchIdRaw ? Number(branchIdRaw) : null);
+  // تغيير الفرع/نطاقه owner-only بالباكند (وممنوع لو عند المستخدم وردية مفتوحة) —
   // نرسله فقط لو المُحرِّر الحالي هو المالك، حتى لا يفشل تحديث بقية الحقول
   // (صلاحيات، اسم...) لمستخدم عنده users.manage بدون كونه المالك نفسه
   const isEditorOwner = currentUser?.role === 'owner';
@@ -8983,7 +9039,7 @@ function saveUser(id) {
       u.permissions   = perms;
       u.pos_access    = posAccess;
       u.shift_enabled = shiftEnabled;
-      if (isEditorOwner) u.branch_id = branchId;
+      if (isEditorOwner) { u.branch_id = branchId; u.all_branches = allBranches; }
       if (password) u.password = password;
     }
   } else {
@@ -8997,6 +9053,7 @@ function saveUser(id) {
       pos_access:     posAccess,
       shift_enabled:  shiftEnabled,
       branch_id:      branchId,
+      all_branches:   allBranches,
       active:         true
     });
   }
@@ -9015,7 +9072,7 @@ function saveUser(id) {
           await window._cloudApiFetch('PUT', `/api/users/${id}`, {
             full_name: fullname, role, permissions: perms,
             pos_access: posAccess, shift_enabled: shiftEnabled, active: true,
-            ...(isEditorOwner ? { branch_id: branchId } : {})
+            ...(isEditorOwner ? { branch_id: branchId, all_branches: allBranches } : {})
           });
           if (password) {
             await window._cloudApiFetch('PUT', `/api/users/${id}/password`, { new_password: password });
@@ -9025,7 +9082,7 @@ function saveUser(id) {
           const res = await window._cloudApiFetch('POST', '/api/users', {
             username, password, full_name: fullname, role,
             permissions: perms, pos_access: posAccess, shift_enabled: shiftEnabled,
-            branch_id: branchId
+            branch_id: branchId, all_branches: allBranches
           });
           if (res?.data?.id) {
             // تحديث الـ ID المحلي بـ ID من قاعدة البيانات
@@ -18014,8 +18071,10 @@ async function runAISearchQuery(q) {
         // فيبقى الموظف يسجّل عمليات على فرعه القديم طول الجلسة بأكملها حتى لو
         // تغيّر فعليًا. /api/auth/me يرجّع فرع المستخدم الحقيقي الحالي مباشرة
         // من قاعدة البيانات، ونحدّثه هنا كل دورة سحب دورية (٦٠ث) بدل الانتظار
-        if (currentUser && m.id === currentUser.id && m.branch_id !== currentUser.branch_id) {
+        if (currentUser && m.id === currentUser.id &&
+            (m.branch_id !== currentUser.branch_id || !!m.all_branches !== !!currentUser.all_branches)) {
           currentUser.branch_id = m.branch_id;
+          currentUser.all_branches = !!m.all_branches;
           try { localStorage.setItem('yaqiz_user', JSON.stringify(currentUser)); } catch (e) {}
         }
         db.settings = db.settings || {};
@@ -18071,6 +18130,7 @@ async function runAISearchQuery(q) {
           last_login:   u.last_login,
           tours_seen:   u.tours_seen || {},
           branch_id:    u.branch_id || null,
+          all_branches: u.all_branches || false,
         }));
         // أضف المستخدم الحالي إذا لم يكن في القائمة
         if (currentUser && !apiUsers.find(x => x.id === currentUser.id)) {
@@ -18825,6 +18885,7 @@ async function runAISearchQuery(q) {
         permissions: apiUser.permissions||[], active: true,
         pos_access: apiUser.pos_access, shift_enabled: !!apiUser.shift_enabled,
         branch_id: apiUser.branch_id || null,
+        all_branches: !!apiUser.all_branches,
         tours_seen: apiUser.tours_seen || {}
       };
 
@@ -19025,6 +19086,7 @@ async function runAISearchQuery(q) {
             permissions: me.data.permissions||[], active: true,
             pos_access: me.data.pos_access, shift_enabled: !!me.data.shift_enabled,
             branch_id: me.data.branch_id || null,
+            all_branches: !!me.data.all_branches,
             tours_seen: me.data.tours_seen || {}
           };
           currentUser = u;

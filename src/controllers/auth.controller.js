@@ -129,6 +129,7 @@ exports.login = async (req, res, next) => {
         pos_access:   user.pos_access,
         shift_enabled: user.shift_enabled,
         branch_id:    user.branch_id || null,
+        all_branches: user.all_branches || false,
         company_id:              user.company_id,
         company_name:            user.company_name,
         company_vat:             user.company_vat,
@@ -312,7 +313,7 @@ exports.me = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
       SELECT u.id, u.username, u.full_name, u.role, u.permissions,
-             u.pos_access, u.shift_enabled, u.last_login, u.tours_seen, u.branch_id,
+             u.pos_access, u.shift_enabled, u.last_login, u.tours_seen, u.branch_id, u.all_branches,
              c.name AS company_name, c.vat_number AS company_vat, c.logo_url,
              c.cr_number AS company_cr, c.contact_phone AS company_phone,
              c.address AS company_address, c.city AS company_city,
