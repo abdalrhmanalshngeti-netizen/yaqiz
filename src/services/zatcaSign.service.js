@@ -1,30 +1,32 @@
 // المرحلة الثانية للفوترة الإلكترونية — الخطوة 5: التوقيع الرقمي XAdES-BES
 //
-// ⚠️ حالة التحقق (آخر تحديث: 5 محاولات إصلاح مختلفة، كل واحدة مختبَرة فعليًا
-// ضد أداة الهيئة الرسمية SDK 3.4.8 بشهادة اختبار موقَّعة ذاتيًا):
+// ⚠️ حالة التحقق (آخر تحديث: بعد الحصول على وثيقة الهيئة الرسمية "Security
+// Features Implementation Standards" — كانت مفقودة طوال الجلسة، ثم زوَّدنا
+// إياها المستخدم مباشرة — واختبار مباشر متكرر ضد أداة التحقق الرسمية SDK 3.4.8):
 // ✅ البنية الهيكلية الكاملة (cac:Signature المرجعي + sig:UBLDocumentSignatures/
-//    sac:SignatureInformation المُغلِّف لـds:Signature داخل ext:UBLExtensions)
-//    مؤكَّدة صحيحة 100% — فاتورة موقَّعة بهذا الكود تمر XSD/EN16931/KSA كاملة.
-// ✅ أصلحنا فعليًا (ومؤكَّد بمعزل، عبر اختبار مباشر لسلوك مكتبة xml-crypto)
-//    باغًا حقيقيًا بمكتبة C14N: عند تجزئة عقدة جذرها لا يحتاج فضاءً اسميًا
-//    معيّنًا بينما أحفاده يحتاجونه (موروث من جدّ أبعد خارج نطاق التجزئة)،
-//    المكتبة تكرّر إعلان الفضاء عند كل استخدام بدل إعلانه مرة واحدة بالجذر —
-//    غير مطابق لمعيار C14N إطلاقًا. الحل: إعلان xmlns:ds صراحة على
-//    xades:SignedProperties نفسها. كذلك أعدنا بناء الحساب ليعمل على العقد
-//    الحقيقية المتصلة بشجرة المستند الكاملة (لا شظايا نصية معزولة)، بنفس
-//    أسلوب canonicalizeForHash الناجح أصلًا لحساب PIH.
-// ❌ **رغم كل هذا، لا تزال قيم xadesSignedPropertiesDigestValue/signatureValue/
-//    signingCertificateDigestValue/X509IssuerName "خاطئة" حسب أداة الهيئة —
-//    بلا أي تغيّر ملحوظ عبر 5 محاولات مختلفة وصحيحة كل واحدة على حدة (تحقّقنا
-//    من التطابق الداخلي لكل قيمة بمعزل عن الأداة: CertDigest وSignedProperties
-//    digest كلاهما ذاتي الاتساق 100% مع محتوى الشهادة/الشظية الفعليين).**
-//    هذا يرجّح أن المشكلة المتبقية إما تفصيلة دقيقة غير موثَّقة إلا بملف
-//    "Security Features Implementation Standards" (غير منشور حاليًا رغم البحث
-//    الفعلي)، أو قصور بفحص [SIGNATURE] بهذا الإصدار من الأداة نفسه عند استبدال
-//    شهادتها الافتراضية بشهادة اختبار خارجية عبر config.json. **لا تثق بصحة
-//    التوقيع الفعلي هنا حتى تحقق حقيقي عبر بيئة الهيئة (Sandbox/Simulation)
-//    بحساب Fatoora حقيقي، أو نسخة أخرى من الأداة/توثيق يوضّح هذا التحديدًا.**
-// راجع الذاكرة (zatca_sdk_real_validation_2026_08_26) لتفاصيل كل المحاولات.
+//    sac:SignatureInformation + ds:Transforms على المرجع الأول بالضبط كما تنص
+//    عليه الوثيقة) مؤكَّدة صحيحة 100% — XSD/EN16931/KSA يمرّون كاملين.
+// ✅ **اكتشاف حرج تم إصلاحه**: منحنى EC المستخدم لتوليد المفاتيح كان
+//    secp256k1 (بافتراض خاطئ غير مُتحقَّق من جلسة سابقة) — والصحيح فعليًا P-256
+//    (secp256r1)، مؤكَّد نصًا بالوثيقة الرسمية (قسم 2.2.2، SubjectPublicKeyInfo)
+//    **و**تجريبيًا (محرّك تشفير أداة الهيئة رفض secp256k1 صراحة برسالة "Curve
+//    not supported"). صُحِّح بـzatcaOnboarding.service.js. هذا كان يكسر أي
+//    تحقق تشفيري من الأساس بصرف النظر عن أي إصلاح آخر بهذا الملف.
+// ✅ أصلحنا تنسيق X509IssuerName (فاصلة+مسافة "C=X, O=Y" لا "C=X,O=Y" فقط) —
+//    تأكَّد بمقارنة توقيع حقيقي أنتجته أداة الهيئة نفسها (fatoora -sign بمفتاح
+//    P-256 صحيح)، والخطأ المقابل اختفى فعليًا من نتائج التحقق بعد هذا الإصلاح.
+// ✅ أصلحنا Target بـQualifyingProperties (بلا "#") ليطابق نفس المرجع الحقيقي.
+// ❌ **لا يزال متبقيًا، رغم كل ما سبق**: xadesSignedPropertiesDigestValue/
+//    signatureValue/signingCertificateDigestValue لا تزال "خاطئة" حسب أداة
+//    الهيئة. جرَّبنا فرضية إضافية (بعد ملاحظة إن توقيع أداة الهيئة الحقيقي يحمل
+//    CertDigest بطول 64 بايت لا 32 — يشبه base64(hex-string) بدل base64
+//    القياسي) وطبّقناها فعليًا: **لم تُغيّر شيئًا**، فأُعيدت للتنسيق القياسي.
+//    السبب الجذري المتبقي غير معروف بعد رغم امتلاك الوثيقة الرسمية كاملة الآن
+//    (القسم 2.3.3 لا يذكر أي تفصيلة إضافية تفسّر هذا). **لا تثق بصحة التوقيع
+//    الفعلي هنا حتى تحقق حقيقي عبر بيئة الهيئة (Sandbox/Simulation) بحساب
+//    Fatoora حقيقي فعلي.**
+// راجع الذاكرة (zatca_sdk_real_validation_2026_08_26) لتفاصيل كل المحاولات
+// (أكثر من 9 محاولات مختلفة موثَّقة، بينها اكتشاف حرج واحد فعلي [المنحنى]).
 
 const crypto = require('crypto');
 const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
@@ -42,6 +44,16 @@ function c14n(node) {
 function sha256Base64(input) {
   return crypto.createHash('sha256').update(input, typeof input === 'string' ? 'utf8' : undefined).digest('base64');
 }
+
+// ملاحظة تحقيق مهمة (جُرِّبت واستُبعِدت، موثَّقة هنا لمنع تكرارها): لاحظنا أن
+// توقيع حقيقي أنتجته أداة الهيئة الرسمية نفسها (fatoora -sign) يحمل قيمتي
+// CertDigest وSignedProperties-digest بطول 64 بايت لا 32 عند فك base64 —
+// أي أنها **تبدو** كأنها base64(hex-string) بدل base64(raw-bytes) القياسي.
+// جرّبنا تطبيق هذا التنسيق على قيمنا فعليًا: لم يُغيّر شيئًا بنتيجة أداة
+// التحقق (نفس الأخطاء الثلاثة تمامًا). بما إن المواصفة الرسمية المكتوبة لا
+// تذكر هذا التنسيق إطلاقًا، أبقينا الترميز القياسي (base64 مباشر على البايتات
+// الخام) — الأرجح إن ملاحظة الـ64-بايت مصادفة أو خاصية بتنفيذ SDK الداخلي لا
+// علاقة لها بما يتحقق منه فعليًا فحص [SIGNATURE].
 
 function localName(node) {
   return node.localName || node.nodeName.split(':').pop();
@@ -80,7 +92,11 @@ function buildXadesSignature({ unsignedXml, invoiceHash, certificatePem, private
   const cert = new crypto.X509Certificate(certificatePem);
   const certDerBase64 = Buffer.from(cert.raw).toString('base64');
   const certDigest = sha256Base64(cert.raw);
-  const issuerName = cert.issuer.split('\n').reverse().join(',');
+  // ", " بفاصلة ومسافة — تحقّقنا حرفيًا من هذا بمقارنة توقيع حقيقي أنتجته أداة
+  // الهيئة الرسمية نفسها (fatoora -sign بمفتاح P-256 صحيح): تنسيقها هو
+  // "CN=X, O=Y, C=Z" (بمسافة بعد الفاصلة)، لا "CN=X,O=Y,C=Z" (بلا مسافة) كما
+  // كان عندنا — هذا بالضبط ما كان يسبب "wrong X509IssuerName" بأداة التحقق
+  const issuerName = cert.issuer.split('\n').reverse().join(', ');
   const serialNumber = BigInt('0x' + cert.serialNumber).toString(10);
 
   const signingTime = new Date().toISOString().split('.')[0] + 'Z';
@@ -103,10 +119,22 @@ function buildXadesSignature({ unsignedXml, invoiceHash, certificatePem, private
                   `<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>` +
                   `<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>` +
                   `<ds:Reference Id="invoiceSignedData" URI="">` +
+                    `<ds:Transforms>` +
+                      `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
+                        `<ds:XPath>not(//ancestor-or-self::ext:UBLExtensions)</ds:XPath>` +
+                      `</ds:Transform>` +
+                      `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
+                        `<ds:XPath>not(//ancestor-or-self::cac:Signature)</ds:XPath>` +
+                      `</ds:Transform>` +
+                      `<ds:Transform Algorithm="http://www.w3.org/TR/1999/REC-xpath-19991116">` +
+                        `<ds:XPath>not(//ancestor-or-self::cac:AdditionalDocumentReference[cbc:ID='QR'])</ds:XPath>` +
+                      `</ds:Transform>` +
+                      `<ds:Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>` +
+                    `</ds:Transforms>` +
                     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
                     `<ds:DigestValue>${invoiceHash}</ds:DigestValue>` +
                   `</ds:Reference>` +
-                  `<ds:Reference Type="http://www.w3.org/2000/09/xmldsig#SignatureProperties" URI="#${signedPropsId}">` +
+                  `<ds:Reference Type="http://uri.etsi.org/01903#SignedProperties" URI="#${signedPropsId}">` +
                     `<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>` +
                     `<ds:DigestValue></ds:DigestValue>` +
                   `</ds:Reference>` +
@@ -118,7 +146,7 @@ function buildXadesSignature({ unsignedXml, invoiceHash, certificatePem, private
                   `</ds:X509Data>` +
                 `</ds:KeyInfo>` +
                 `<ds:Object>` +
-                  `<xades:QualifyingProperties Target="#${signatureId}">` +
+                  `<xades:QualifyingProperties Target="${signatureId}">` +
                     `<xades:SignedProperties xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="${signedPropsId}">` +
                       `<xades:SignedSignatureProperties>` +
                         `<xades:SigningTime>${signingTime}</xades:SigningTime>` +

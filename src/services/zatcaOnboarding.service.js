@@ -3,8 +3,17 @@
 //
 // حالة التحقق الحالية:
 // ✅ الصحة التشفيرية والتركيبية لـCSR مُتحقَّقة فعليًا ومستقلة عبر openssl
-//    (openssl req -verify يعطي "Certificate request self-signature verify OK"،
-//    والمنحنى الناتج secp256k1 كما تشترط الهيئة بالضبط).
+//    (openssl req -verify يعطي "Certificate request self-signature verify OK").
+// ✅ **إصلاح حرج**: كان هذا الملف يستخدم منحنى secp256k1 بافتراض (غير مؤكَّد
+//    حينها) إنه "بالضبط ما تشترطه الهيئة" — هذا خطأ فعليًا. وثيقة الهيئة الرسمية
+//    "Security Features Implementation Standards" (قسم 2.2.2، جدول SubjectPublicKeyInfo)
+//    تنص صراحة على P-256 (أي NIST P-256 / secp256r1)، وتأكَّد هذا تجريبيًا أيضًا:
+//    محرّك التشفير Java بأداة الهيئة الرسمية يرفض secp256k1 صراحة برسالة
+//    "Curve not supported: secp256k1" عند محاولة التوقيع به. اكتُشف هذا بعد جلسة
+//    كاملة من محاولات إصلاح فاشلة لعدم تطابق قيم التوقيع (5 محاولات مختلفة، كل
+//    واحدة صحيحة بمعزل عن الأخرى، لم تُغيّر شيئًا) — السبب الجذري الحقيقي طوال
+//    الوقت كان منحنى خاطئ تمامًا، لا أي مشكلة بترميز/تكانونة XML. صُحِّح لـ
+//    'prime256v1' (اسم OpenSSL/Node.js لمنحنى P-256).
 // ⚠️ غير مؤكَّد بعد: القيم الدقيقة لحقول الموضوع (Subject) والامتداد المخصص
 //    (customOID بدالة buildCsr) مقابل ما تتوقعه بوابة الهيئة تحديدًا — هذا لم
 //    يُختبر بعد ضد سيرفرات ZATCA الفعلية لعدم توفر حساب اختبار. قبل أول استخدام
@@ -23,10 +32,11 @@ const ZATCA_ENDPOINTS = {
   production: 'https://gw-fatoora.zatca.gov.sa/e-invoicing/core',
 };
 
-// المنحنى الإهليلجي المطلوب من الهيئة لمفاتيح التوقيع (secp256k1 — يختلف عن P-256
-// الشائع). node-forge لا يدعم توقيع/قراءة مفاتيح EC (RSA فقط بواجهته العليا)،
+// المنحنى الإهليلجي المطلوب من الهيئة لمفاتيح التوقيع: P-256 (NIST P-256 /
+// secp256r1 — اسمه بـOpenSSL/Node.js "prime256v1"؛ راجع الملاحظة الحرجة أعلى
+// الملف). node-forge لا يدعم توقيع/قراءة مفاتيح EC (RSA فقط بواجهته العليا)،
 // لذا نستخدم forge فقط كأداة بناء/ترميز ASN.1 (DER)، ونستخدم وحدة crypto
-// الأصلية بـNode (تدعم secp256k1 فعليًا عبر OpenSSL) لتوليد المفتاح والتوقيع.
+// الأصلية بـNode لتوليد المفتاح والتوقيع.
 const asn1 = forge.asn1;
 const OID = {
   ecPublicKey: '1.2.840.10045.2.1',
@@ -37,7 +47,7 @@ const OID = {
 
 function generateKeyPair() {
   const ec = crypto.generateKeyPairSync('ec', {
-    namedCurve: 'secp256k1',
+    namedCurve: 'prime256v1',
     publicKeyEncoding: { type: 'spki', format: 'der' },
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
@@ -55,7 +65,7 @@ function rdn(oid, value, valueType = asn1.Type.UTF8) {
 
 /**
  * يبني CSR (طلب توقيع شهادة) بحقول الموضوع (Subject) التي تشترطها الهيئة، ويوقّعه
- * فعليًا بخوارزمية ECDSA-secp256k1 مطابقة لما تشترطه الهيئة — تحقّقنا من صحة
+ * فعليًا بخوارزمية ECDSA-P256 مطابقة لما تشترطه الهيئة — تحقّقنا من صحة
  * البنية والتوقيع عبر openssl مباشرة (راجع سكربت الاختبار المرفق بالخطوة).
  * @param {object} company صف الشركة (يحتاج vat_number, name, city على الأقل)
  * @param {object} opts    { commonName, organizationUnit, egsSerial }
