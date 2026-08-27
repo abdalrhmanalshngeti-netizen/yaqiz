@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('./zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('./zatcaHash.service');
-const { buildXadesSignature, embedSignature, embedQR } = require('./zatcaSign.service');
+const { buildXadesSignature, embedQR } = require('./zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('./zatcaQR.service');
 const zatcaOnboarding = require('./zatcaOnboarding.service');
 const { submitCreditNote } = require('./zatcaSubmit.service');
@@ -109,10 +109,10 @@ async function createCreditNote(client, { company_id, referenceInvoice, items, r
     credential = await zatcaOnboarding.getActiveCredential(client, company_id, 'production');
     if (credential) {
       try {
-        const { ublExtensionsXml, signatureValue } = buildXadesSignature({
-          invoiceHash: noteHash, certificatePem: credential.certificatePem, privateKeyPem: credential.privateKeyPem,
+        const { signedXml, signatureValue } = buildXadesSignature({
+          unsignedXml: xml, invoiceHash: noteHash, certificatePem: credential.certificatePem, privateKeyPem: credential.privateKeyPem,
         });
-        finalXml = embedSignature(xml, ublExtensionsXml);
+        finalXml = signedXml;
         const cert = new crypto.X509Certificate(credential.certificatePem);
         qrBase64 = generatePhase2QR({
           company: companyRow, invoice: noteForXml, invoiceHashBase64: noteHash, signatureValueBase64: signatureValue,

@@ -5,7 +5,7 @@ const logAudit = require('../middleware/logger');
 const crypto = require('crypto');
 const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('../services/zatca.service');
 const { nextChainInfo, computeInvoiceHash, commitChainHash } = require('../services/zatcaHash.service');
-const { buildXadesSignature, embedSignature, embedQR } = require('../services/zatcaSign.service');
+const { buildXadesSignature, embedQR } = require('../services/zatcaSign.service');
 const { generatePhase2QR, extractCaSignature } = require('../services/zatcaQR.service');
 const zatcaOnboarding = require('../services/zatcaOnboarding.service');
 const { createCreditNote } = require('../services/creditNote.service');
@@ -321,10 +321,10 @@ exports.create = async (req, res, next) => {
       credentialForClearance = credential;
       if (credential) {
         try {
-          const { ublExtensionsXml, signatureValue } = buildXadesSignature({
-            invoiceHash, certificatePem: credential.certificatePem, privateKeyPem: credential.privateKeyPem,
+          const { signedXml, signatureValue } = buildXadesSignature({
+            unsignedXml: xml, invoiceHash, certificatePem: credential.certificatePem, privateKeyPem: credential.privateKeyPem,
           });
-          finalXml = embedSignature(xml, ublExtensionsXml);
+          finalXml = signedXml;
           const cert = new (require('crypto')).X509Certificate(credential.certificatePem);
           qrBase64 = generatePhase2QR({
             company: companyRow, invoice, invoiceHashBase64: invoiceHash, signatureValueBase64: signatureValue,
