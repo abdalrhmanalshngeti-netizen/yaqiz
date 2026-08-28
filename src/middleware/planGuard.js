@@ -13,7 +13,7 @@ const PLAN_FEATURES = {
   expired: [],
 };
 
-module.exports = function requireFeature(feature) {
+const requireFeature = function requireFeature(feature) {
   return async (req, res, next) => {
     try {
       const { company_id } = req.user;
@@ -45,3 +45,10 @@ module.exports = function requireFeature(feature) {
     } catch (err) { next(err); }
   };
 };
+
+module.exports = requireFeature;
+// مُصدَّرة أيضًا كخاصية على نفس الدالة (بلا كسر أي `require(...)` قائم يستخدمها
+// كدالة مباشرة) — تحتاجها planUpgrade.service.js لمعرفة أي ميزات جديدة تُفتح
+// فعليًا عند ترقية باقة شركة، من نفس القائمة المُستخدَمة لفرض الصلاحيات، بدل
+// نسخة ثانية منفصلة قابلة للتعارض معها مستقبلًا
+module.exports.PLAN_FEATURES = PLAN_FEATURES;

@@ -5,6 +5,7 @@ const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 const db     = require('../config/db');
 const { sendMail, resetPasswordTemplate } = require('../services/email.service');
+const { notifyPlanUpgradeOpeningBalances } = require('../services/planUpgrade.service');
 
 // سر مخصَّص لتوكنات لوحة الإدارة، منفصل عن JWT_SECRET (توكنات المستأجرين) —
 // كانا يشتركان نفس السر ويميّزهما فقط شكل الـpayload (is_super_admin). الآن
@@ -680,6 +681,11 @@ exports.setCompanyPlan = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'باقة غير صالحة' });
     }
 
+    const { rows: [companyBefore] } = await db.query(
+      `SELECT plan FROM companies WHERE id = $1`, [req.params.id]
+    );
+    const oldPlan = companyBefore?.plan;
+
     let rowCount;
     if (expires_at) {
       const expDate = new Date(expires_at);
@@ -703,6 +709,8 @@ exports.setCompanyPlan = async (req, res, next) => {
       INSERT INTO platform_log (event_type, company_id, description, admin_id)
       VALUES ('plan_changed', $1, $2, $3)
     `, [req.params.id, `تغيير الباقة إلى: ${plan} بواسطة ${req.admin.email || req.admin.name}`, req.admin.sub]);
+
+    await notifyPlanUpgradeOpeningBalances(db, req.params.id, oldPlan, plan);
 
     res.json({ success: true, message: `تم تغيير الباقة إلى ${plan}` });
   } catch (err) { next(err); }

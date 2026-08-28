@@ -1,5 +1,6 @@
 const https  = require('https');
 const db     = require('../config/db');
+const { notifyPlanUpgradeOpeningBalances } = require('../services/planUpgrade.service');
 
 const PLAN_PRICES = {
   basic:  { monthly: 199, annual: 2000 },
@@ -151,6 +152,13 @@ exports.verifyCallback = async (req, res) => {
     const plan      = payment.plan;
     const isAnnual  = Number(payment.months) >= 12;
 
+    // نحتاج الباقة القديمة قبل استبدالها — تُستخدَم بعد الالتزام لمعرفة هل
+    // الترقية فتحت قسمًا جديدًا بمعالج الأرصدة الافتتاحية (راجع planUpgrade.service.js)
+    const { rows: [companyBefore] } = await client.query(
+      `SELECT plan FROM companies WHERE id=$1`, [companyId]
+    );
+    const oldPlan = companyBefore?.plan;
+
     // اشتراك سنوي = سنة تقويمية كاملة، مو 12×30 يوم تقريبية
     const expiresInterval = isAnnual ? '1 year' : '1 month';
     await client.query(`
@@ -169,6 +177,8 @@ exports.verifyCallback = async (req, res) => {
       INSERT INTO platform_log (event_type, company_id, description)
       VALUES ('payment_success',$1,$2)
     `, [companyId, `دفع ناجح — باقة ${plan} — ${payment.months} شهر — ${payment.amount} ر.س`]);
+
+    await notifyPlanUpgradeOpeningBalances(client, companyId, oldPlan, plan);
 
     await client.query('COMMIT');
     res.redirect(`${redirectBase}/VVIP.html?subscribed=1`);
