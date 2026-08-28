@@ -2044,7 +2044,10 @@ function csCloseEscalation(id) {
 let _aiChat = { open: false, minimized: false, loading: false };
 let _aiChatHistory = [];
 let _aiDailyUsed = 0;
-const AI_ASSISTANT_DAILY_LIMIT = { basic: 3, growth: 10, pro: 9999 };
+// يطابق ASSISTANT_DAILY الحقيقي بـai.controller.js — كان معروضًا هنا بأرقام
+// قديمة (3/10/9999) لا تطابق الحد الفعلي المُنفَّذ بالسيرفر (5/20/150)، فيرى
+// المستخدم عدّادًا خاطئًا رغم أن الحظر الفعلي يحصل عند الرقم الصحيح فقط
+const AI_ASSISTANT_DAILY_LIMIT = { basic: 5, growth: 20, pro: 150 };
 
 function _aiGetHistoryKey() {
   try { const t=localStorage.getItem('yaqiz_access_token'); if(!t)return null; const p=JSON.parse(atob(t.split('.')[1])); return `ai_hist_${p.company_id}`; } catch{return null;}
