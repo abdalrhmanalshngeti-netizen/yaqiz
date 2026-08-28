@@ -458,7 +458,7 @@
       كل ما تحتاجه لإدارة منشأتك من مكان واحد، بسيرفر داخل المملكة العربية السعودية
     </p>
     <div class="hero-btns">
-      <button class="btn-cta" onclick="openModal()">ابدأ تجربتك المجانية — 15 يوم</button>
+      <button class="btn-cta" data-action="openModal">ابدأ تجربتك المجانية — 15 يوم</button>
       <a href="#pricing" class="btn-ghost-cta">شاهد الباقات والأسعار</a>
     </div>
     <div class="hero-stats">
@@ -605,8 +605,8 @@
     </div>
 
     <div class="cycle-toggle">
-      <button class="cycle-btn active" data-cycle="monthly" onclick="setPricingCycle('monthly')">شهري</button>
-      <button class="cycle-btn" data-cycle="annual" onclick="setPricingCycle('annual')">سنوي <span class="tag">وفّر أكثر</span></button>
+      <button class="cycle-btn active" data-cycle="monthly" data-action="setPricingCycle" data-args='["monthly"]'>شهري</button>
+      <button class="cycle-btn" data-cycle="annual" data-action="setPricingCycle" data-args='["annual"]'>سنوي <span class="tag">وفّر أكثر</span></button>
     </div>
 
     <div class="pricing-row">
@@ -647,7 +647,7 @@
           <li class="muted"><span class="nx">✕</span> التسعير التلقائي للمنتجات</li>
           <li class="muted"><span class="nx">✕</span> تقارير مفصّلة إضافية (منتجات، موردون، إلخ)</li>
         </ul>
-        <button class="btn-plan" onclick="openModal('basic')">ابدأ مجاناً 15 يوم</button>
+        <button class="btn-plan" data-action="openModal" data-args='["basic"]'>ابدأ مجاناً 15 يوم</button>
       </div>
 
       <!-- GROWTH -->
@@ -682,7 +682,7 @@
           <li class="sect">الفريق</li>
           <li><span class="ck">✓</span> حتى 5 مستخدمين</li>
         </ul>
-        <button class="btn-plan" onclick="openModal('growth')">ابدأ مجاناً 15 يوم</button>
+        <button class="btn-plan" data-action="openModal" data-args='["growth"]'>ابدأ مجاناً 15 يوم</button>
       </div>
 
       <!-- PRO -->
@@ -711,7 +711,7 @@
           <li class="sect">الفريق</li>
           <li><span class="ck">✓</span> مستخدمون غير محدودين</li>
         </ul>
-        <button class="btn-plan" onclick="openModal('pro')">ابدأ مجاناً 15 يوم</button>
+        <button class="btn-plan" data-action="openModal" data-args='["pro"]'>ابدأ مجاناً 15 يوم</button>
       </div>
 
     </div>
@@ -726,7 +726,7 @@
 <div class="cta-wrap">
   <h2>جاهز تبدأ إدارة أعمالك باحترافية؟</h2>
   <p>انضم للمنشآت السعودية التي تثق في يقظ لإدارة حساباتها</p>
-  <button class="btn-cta" onclick="openModal()">سجّل الآن — مجاناً</button>
+  <button class="btn-cta" data-action="openModal">سجّل الآن — مجاناً</button>
 </div>
 
 <!-- ══ FOOTER ══ -->
@@ -743,23 +743,23 @@
 <!-- ══ MODAL ══ -->
 <div class="overlay" id="regOverlay">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" data-action="closeModal">✕</button>
     <h2>سجّل شركتك في يقظ</h2>
     <p class="modal-sub">أنشئ حسابك مجاناً — تجربة 15 يوم بكامل مميزات الباقة المختارة</p>
 
     <!-- اختيار الباقة -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;" id="planPicker">
-      <div class="plan-pick" data-plan="basic" onclick="pickPlan('basic')" style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:#f0fdf4;cursor:pointer;text-align:center;transition:.2s;">
+      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]' style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:#f0fdf4;cursor:pointer;text-align:center;transition:.2s;">
         <div style="font-size:20px;">📗</div>
         <div style="font-weight:900;font-size:13px;color:#10b981;margin-top:4px;">أساسية</div>
         <div style="font-size:11px;color:#64748b;font-weight:700;">199 ر.س/شهر</div>
       </div>
-      <div class="plan-pick selected" data-plan="growth" onclick="pickPlan('growth')" style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:#eff6ff;cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.25);">
+      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]' style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:#eff6ff;cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.25);">
         <div style="font-size:20px;">📘</div>
         <div style="font-weight:900;font-size:13px;color:#3b82f6;margin-top:4px;">النمو ⭐</div>
         <div style="font-size:11px;color:#64748b;font-weight:700;">349 ر.س/شهر</div>
       </div>
-      <div class="plan-pick" data-plan="pro" onclick="pickPlan('pro')" style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.6);background:#f5f3ff;cursor:pointer;text-align:center;transition:.2s;">
+      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]' style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.6);background:#f5f3ff;cursor:pointer;text-align:center;transition:.2s;">
         <div style="font-size:20px;">📙</div>
         <div style="font-weight:900;font-size:13px;color:#8b5cf6;margin-top:4px;">احترافية</div>
         <div style="font-size:11px;color:#64748b;font-weight:700;">499 ر.س/شهر</div>
@@ -769,7 +769,7 @@
 
     <div class="malert malert-err" id="mErr"></div>
     <div class="malert malert-ok"  id="mOk"></div>
-    <form id="regForm" onsubmit="doReg(event)" novalidate>
+    <form id="regForm" novalidate>
       <div class="fgroup">
         <label>اسم الشركة / المنشأة *</label>
         <input type="text" id="f-co" placeholder="مثال: مؤسسة النجاح للتجارة" required>
@@ -877,6 +877,20 @@ function closeModal() {
   const b = document.getElementById('regBtn');
   b.textContent = 'إنشاء الحساب'; b.disabled = false;
 }
+
+// بديل onclick="" الممنوعة بسياسة أمان المحتوى (CSP) — مستمع نقر مفوَّض واحد
+// يقرأ data-action (اسم الدالة) وdata-args (مصفوفة JSON للمعاملات)، بنفس
+// النمط المستخدم في تطبيق يقظ الرئيسي
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const fn = window[el.dataset.action];
+  if (typeof fn !== 'function') return;
+  let args = [];
+  if (el.dataset.args) { try { args = JSON.parse(el.dataset.args); } catch (err) { args = []; } }
+  fn.apply(el, args);
+});
+document.getElementById('regForm').addEventListener('submit', doReg);
 document.getElementById('regOverlay').addEventListener('click', e => { if(e.target===document.getElementById('regOverlay')) closeModal(); });
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
 
