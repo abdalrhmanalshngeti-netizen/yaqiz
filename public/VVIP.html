@@ -144,6 +144,12 @@ html[dir="ltr"] .sidebar { border-left: none; border-right: 1px solid var(--sb-b
 .brand-text { font-weight: 900; font-size: 18px; color: var(--sb-text-strong); }
 .brand-sub { font-size: 11px; color: var(--sb-muted); margin-top: -2px; }
 .nav-menu { padding: 12px 8px; flex: 1; }
+.nav-group + .nav-group { margin-top: 14px; }
+.nav-group-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--sb-muted); padding: 0 14px 6px;
+}
+.sidebar.collapsed .nav-group-label { display: none; }
 .nav-item {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 14px; margin-bottom: 2px; border-radius: var(--radius-sm);
@@ -212,19 +218,26 @@ html[dir="ltr"] .sidebar { border-left: none; border-right: 1px solid var(--sb-b
 .stat-card {
   background: var(--card-bg); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 18px;
+  display: grid; grid-template-columns: 30px 1fr; align-items: center;
+  column-gap: 10px; row-gap: 8px;
   position: relative; overflow: hidden; transition: all 0.2s;
 }
-.stat-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); border-color: var(--primary-light); }
-.stat-card::before {
-  content: ''; position: absolute; top: 0; right: 0; left: 0; height: 3px;
-  background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+.stat-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); border-color: var(--primary-light); }
+/* أيقونة صغيرة + تسمية بنفس الصف، ثم الرقم الكبير بصف مستقل يمتد بعرض
+   البطاقة كاملة — نفس هيكلة بطاقات الأرقام بالتصميم الجديد، بدل تكديسها
+   الرأسي القديم (أيقونة كبيرة فوق، تسمية تحتها، رقم تحتها) */
+.stat-icon {
+  grid-column: 1; grid-row: 1; width: 30px; height: 30px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-soft); color: var(--primary); margin-bottom: 0;
 }
-.stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); margin-bottom: 12px; }
 .stat-icon.green { background: #dcfce7; color: var(--success); }
 .stat-icon.amber { background: #fef3c7; color: #d97706; }
 .stat-icon.red { background: #fee2e2; color: var(--danger); }
-.stat-label { font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
-.stat-value { font-size: 22px; font-weight: 900; color: var(--text-main); }
+.stat-label { grid-column: 2; grid-row: 1; font-size: 12.5px; color: var(--text-muted); font-weight: 700; margin-bottom: 0; }
+.stat-value { grid-column: 1 / -1; grid-row: 2; font-size: 24px; font-weight: 900; color: var(--text-main); letter-spacing: -0.4px; }
+/* أي عنصر رابع (نسبة تغيّر، سطر إضافي...) يُمدَّد بعرض البطاقة بصفه الخاص */
+.stat-card > *:nth-child(4) { grid-column: 1 / -1; }
 
 /* Forms */
 .input, .select, textarea.input {
@@ -1261,22 +1274,27 @@ function initDark() {
 
 // ============ SHELL ============
 const allNavItems = [
-  { id:'pos',              icon:'scan-barcode',     perm:'pos.access'      },
-  { id:'dashboard',        icon:'layout-dashboard', perm:'dashboard.view'  },
-  { id:'sales',            icon:'shopping-cart',    perm:'sales.view'      },
-  { id:'purchases',        icon:'package',          perm:'purchases.view'  },
-  { id:'inventory',        icon:'box',              perm:'inventory.view'  },
-  { id:'customers',        icon:'users',            perm:'customers.view'  },
-  { id:'suppliers',        icon:'truck',            perm:'suppliers.view'  },
-  { id:'employees',        icon:'user-check',       perm:'employees.view'  },
-  { id:'treasury',         icon:'wallet',           perm:'treasury.view'   },
-  { id:'receipts',         icon:'receipt',          perm:'receipts.view'   },
-  { id:'quotes',           icon:'file-plus',        perm:'quotes.view'     },
-  { id:'obligations',      icon:'repeat',           perm:'obligations.view'},
-  { id:'accountingReports',icon:'calculator',       perm:'reports.view'    },
-  { id:'reports',          icon:'bar-chart-2',      perm:'reports.view'    },
-  { id:'settings',         icon:'settings',         perm:'settings.view'   },
+  { id:'pos',              icon:'scan-barcode',     perm:'pos.access',       group:'ops'   },
+  { id:'dashboard',        icon:'layout-dashboard', perm:'dashboard.view',   group:'ops'   },
+  { id:'sales',            icon:'shopping-cart',    perm:'sales.view',       group:'ops'   },
+  { id:'purchases',        icon:'package',          perm:'purchases.view',  group:'ops'   },
+  { id:'inventory',        icon:'box',              perm:'inventory.view',  group:'ops'   },
+  { id:'customers',        icon:'users',            perm:'customers.view',  group:'ops'   },
+  { id:'suppliers',        icon:'truck',            perm:'suppliers.view',  group:'ops'   },
+  { id:'employees',        icon:'user-check',       perm:'employees.view',  group:'ops'   },
+  { id:'treasury',         icon:'wallet',           perm:'treasury.view',   group:'ops'   },
+  { id:'receipts',         icon:'receipt',          perm:'receipts.view',   group:'ops'   },
+  { id:'quotes',           icon:'file-plus',        perm:'quotes.view',     group:'ops'   },
+  { id:'obligations',      icon:'repeat',           perm:'obligations.view',group:'acct'  },
+  { id:'accountingReports',icon:'calculator',       perm:'reports.view',    group:'acct'  },
+  { id:'reports',          icon:'bar-chart-2',      perm:'reports.view',    group:'acct'  },
+  { id:'settings',         icon:'settings',         perm:'settings.view',   group:'admin' },
 ];
+const navGroupLabels = {
+  ops:   { ar:'العمليات',   en:'Operations'   },
+  acct:  { ar:'المحاسبة',   en:'Accounting'   },
+  admin: { ar:'الإدارة',    en:'Admin'        },
+};
 
 // ── تعريف الباقات ─────────────────────────────────────
 // 'users'/'returns'/'activity'/'stock_moves'/'accounts' لا يُفتَح لها goTo()
@@ -1423,12 +1441,23 @@ function renderShell() {
   if (!navItems.find(n=>n.id===currentPage)) currentPage = navItems[0]?.id||'dashboard';
   const badges = _getNavBadges();
   const dot = '<span data-nav-dot="1" style="width:7px;height:7px;background:#ef4444;border-radius:50%;flex-shrink:0;margin-inline-start:auto;"></span>';
-  const navHtml = navItems.map(n => `
+  const itemHtml = n => `
     <div class="nav-item ${currentPage===n.id?'active':''}" data-action="goTo" data-args='["${n.id}"]'>
       ${icon(n.icon,18)}
       <span class="nav-label">${navLabels[n.id][lang]}</span>
       ${badges[n.id] && currentPage!==n.id ? dot : ''}
-    </div>`).join('');
+    </div>`;
+  // تجميع عناصر الشريط الجانبي بأقسام مسمّاة (عمليات / محاسبة / إدارة) بدل
+  // قائمة مسطحة واحدة — يسهّل تصفّح الصفحات الكثيرة ويطابق التصميم الجديد
+  const groupOrder = ['ops','acct','admin'];
+  const navHtml = groupOrder.map(g => {
+    const items = navItems.filter(n => n.group === g);
+    if (!items.length) return '';
+    return `<div class="nav-group">
+      <div class="nav-group-label">${navGroupLabels[g][lang]}</div>
+      ${items.map(itemHtml).join('')}
+    </div>`;
+  }).join('');
 
   el('app').innerHTML = `
   <div class="app-shell">
@@ -1447,6 +1476,15 @@ function renderShell() {
         <button class="icon-btn" data-action="toggleSidebar">${icon('menu',18)}</button>
         <div style="display:flex;align-items:center;gap:10px;flex:none;">
           <div class="topbar-title">${(()=>{const s=getDB().settings;return s?.company_name||t('appName');})()}</div>
+          ${(()=>{
+            const branches = (getDB().branches||[]).filter(b=>b.active!==false);
+            if (branches.length <= 1) return '';
+            const label = lang==='ar' ? 'كل الفروع' : 'All branches';
+            return `<div class="topbar-hide-mobile" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:11.5px;font-weight:800;color:var(--text-muted);cursor:default;flex-shrink:0;" title="${lang==='ar'?'عرض تجميعي لكل الفروع حاليًا — اختيار فرع واحد ميزة قادمة':'Combined view of all branches for now — single-branch selection is a planned feature'}">${icon('map-pin',13)} ${label}</div>`;
+          })()}
+          <div class="topbar-hide-mobile" id="cs-topbar-chip" data-action="toggleCS" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:800;color:var(--text-main);cursor:pointer;flex-shrink:0;position:relative;" title="${lang==='ar'?'الدعم الفني':'Support'}">
+            🎧 ${lang==='ar'?'الدعم الفني':'Support'}
+          </div>
         </div>
         <div class="search-wrap" id="search-wrap">
           <span class="search-icon" id="search-mode-icon">${icon('search',15)}</span>
@@ -1458,6 +1496,13 @@ function renderShell() {
             autocomplete="off" />
           <div id="search-dropdown" class="search-dropdown" style="display:none;"></div>
         </div>
+        ${(()=>{
+          const planLabels = { basic:{ar:'أساسي',en:'Basic'}, growth:{ar:'نمو',en:'Growth'}, pro:{ar:'احترافي',en:'Pro'}, expired:{ar:'منتهية',en:'Expired'} };
+          const pl = planLabels[getCurrentPlan()] || planLabels.basic;
+          return `<div class="topbar-hide-mobile" data-action="goTo" data-args='["settings"]' style="display:flex;align-items:center;gap:6px;height:34px;padding:0 13px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:11.5px;font-weight:800;color:var(--text-muted);cursor:pointer;flex-shrink:0;" title="${lang==='ar'?'باقتك الحالية':'Your current plan'}">
+            <span style="width:6px;height:6px;border-radius:99px;background:var(--primary);"></span>${lang==='ar'?pl.ar:pl.en}
+          </div>`;
+        })()}
         <button class="icon-btn" data-action="showNotifications" title="${lang==='ar'?'الإشعارات':'Notifications'}" style="position:relative;" id="notif-bell-btn">
           ${icon('bell',18)}
           <span id="notif-badge" style="position:absolute;top:3px;${lang==='ar'?'left':'right'}:3px;min-width:16px;height:16px;background:var(--danger);border-radius:9px;font-size:9px;font-weight:800;color:#fff;display:${getAlerts().length>0?'flex':'none'};align-items:center;justify-content:center;padding:0 3px;">${getAlerts().length||''}</span>
@@ -1602,19 +1647,19 @@ function renderCSButton() {
   const root = document.getElementById('cs-panel-root');
   if(!root) return;
 
-  root.innerHTML = `
-  <button data-action="toggleCS" style="
-    position:fixed;bottom:24px;${lang==='ar'?'left':'right'}:24px;
-    width:54px;height:54px;border-radius:999px;
-    background:linear-gradient(135deg,var(--primary),#7c3aed);
-    color:white;border:none;cursor:pointer;
-    box-shadow:0 4px 24px rgba(15,118,110,.4);
-    display:flex;align-items:center;justify-content:center;
-    font-size:22px;z-index:1000;transition:.2s;" title="خدمة العملاء">
-    🎧
-    ${pendingCount>0?`<span style="position:absolute;top:-3px;${lang==='ar'?'left':'right'}:-3px;background:#ef4444;color:white;border-radius:999px;min-width:20px;height:20px;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;">${pendingCount}</span>`:''}
-  </button>
+  // زر الدعم الفني نُقل لشريحة بالهيدر بجانب اسم المنشأة (renderShell) — هذا
+  // الجذر يتكفّل فقط بلوحة المحادثة نفسها + شارة العدد الحمراء على الشريحة
+  const chip = document.getElementById('cs-topbar-chip');
+  if (chip) {
+    let dot = chip.querySelector('.cs-pending-dot');
+    if (pendingCount > 0) {
+      if (!dot) { dot = document.createElement('span'); dot.className = 'cs-pending-dot'; chip.appendChild(dot); }
+      dot.style.cssText = `position:absolute;top:-4px;${lang==='ar'?'left':'right'}:-4px;background:#ef4444;color:white;border-radius:999px;min-width:16px;height:16px;font-size:9.5px;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0 3px;`;
+      dot.textContent = pendingCount;
+    } else if (dot) { dot.remove(); }
+  }
 
+  root.innerHTML = `
   <div id="cs-panel" style="
     display:${_cs.open?'flex':'none'};flex-direction:column;
     position:fixed;bottom:90px;${lang==='ar'?'left':'right'}:16px;
@@ -2048,7 +2093,7 @@ function csCloseEscalation(id) {
 // ============ يقظ الذكي — شات بوت عائم ===================
 // ============================================================
 
-let _aiChat = { open: false, minimized: false, loading: false };
+let _aiChat = { open: false, minimized: false, maximized: false, loading: false };
 let _aiChatHistory = [];
 let _aiDailyUsed = 0;
 // يطابق ASSISTANT_DAILY الحقيقي بـai.controller.js — كان معروضًا هنا بأرقام
@@ -2106,15 +2151,21 @@ function renderAIChatButton() {
     display:flex;align-items:center;justify-content:center;
     font-size:24px;z-index:1000;transition:.2s;" title="${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}">🤖</button>
 
-  <div style="
+  <div id="ai-chat-panel" style="
     display:${_aiChat.open ? 'flex' : 'none'};flex-direction:column;
-    position:fixed;bottom:90px;${side}:16px;
-    width:360px;
-    max-height:${_aiChat.minimized ? '54px' : '70vh'};
-    min-height:${_aiChat.minimized ? '54px' : '300px'};
+    ${_aiChat.maximized ? `
+      position:fixed;top:24px;bottom:24px;left:24px;right:24px;
+      width:auto;height:auto;max-height:none;min-height:0;resize:none;
+    ` : `
+      position:fixed;bottom:90px;${side}:16px;
+      width:360px;
+      max-height:${_aiChat.minimized ? '54px' : '70vh'};
+      min-height:${_aiChat.minimized ? '54px' : '300px'};
+      ${_aiChat.minimized ? '' : 'resize:both;overflow:auto;max-width:92vw;min-width:300px;'}
+    `}
     background:var(--card-bg);border:1px solid var(--border);
     border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.25);
-    z-index:999;overflow:hidden;transition:max-height .25s ease,min-height .25s ease;">
+    z-index:999;overflow:${_aiChat.minimized||_aiChat.maximized?'hidden':'auto'};transition:${_aiChat.maximized?'none':'max-height .25s ease,min-height .25s ease'};">
 
     <div data-action="toggleAIChatMin" style="
       padding:12px 14px;
@@ -2133,7 +2184,8 @@ function renderAIChatButton() {
         </div>
         <div style="display:flex;gap:5px;">
           ${plan==='pro'?`<button data-action="aiClearHistoryWithConfirm" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="${lang==='ar'?'مسح المحادثات':'Clear history'}">🗑</button>`:''}
-          <button data-action="toggleAIChatMin" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>
+          <button data-action="toggleAIChatMax" title="${_aiChat.maximized?(lang==='ar'?'استعادة الحجم':'Restore size'):(lang==='ar'?'تكبير':'Maximize')}" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">${_aiChat.maximized?'⤡':'⤢'}</button>
+          ${!_aiChat.maximized?`<button data-action="toggleAIChatMin" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>`:''}
           <button data-action="closeAIChat" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
       </div>
@@ -2173,6 +2225,7 @@ function toggleAIChat() {
 
 function closeAIChat() { _aiChat.open = false; renderAIChatButton(); }
 function toggleAIChatMin() { _aiChat.minimized = !_aiChat.minimized; renderAIChatButton(); }
+function toggleAIChatMax() { _aiChat.maximized = !_aiChat.maximized; if (_aiChat.maximized) _aiChat.minimized = false; renderAIChatButton(); }
 function aiClearHistoryWithConfirm() {
   if (confirm(lang==='ar'?'مسح سجل المحادثات؟':'Clear chat history?')) _aiClearHistory();
 }
@@ -3599,12 +3652,20 @@ function renderInvoicesList(sc) {
                 </td>
                 <td style="font-size:12px;">${fmtDate(i.created_at)}</td>
                 <td>
-                  <div style="font-weight:700;">${sanitize(i.customer_name)}</div>
-                  ${i.customer_vat?`<div style="font-size:10px;color:var(--text-muted);">${i.customer_vat}</div>`:''}
+                  <div style="display:flex;align-items:center;gap:9px;">
+                    <span style="width:28px;height:28px;border-radius:8px;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0;">${sanitize((i.customer_name||'؟')[0])}</span>
+                    <div style="min-width:0;">
+                      <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sanitize(i.customer_name)}</div>
+                      ${i.customer_vat?`<div style="font-size:10px;color:var(--text-muted);">${i.customer_vat}</div>`:''}
+                    </div>
+                  </div>
                 </td>
                 <td>${fmtMoney(i.subtotal)}</td>
                 <td style="color:var(--text-muted);">${fmtMoney(i.vat_total)}</td>
-                <td style="font-weight:800;">${fmtMoney(i.grand_total)}</td>
+                <td>
+                  <div style="font-weight:900;font-size:14px;">${fmtMoney(i.grand_total)}</div>
+                  <div style="font-size:10px;color:var(--text-muted);font-weight:600;">${lang==='ar'?'شامل الضريبة':'incl. VAT'}</div>
+                </td>
                 <td style="color:var(--success);font-weight:700;">
                   ${paid>0?fmtMoney(paid):'-'}
                   ${i.last_voucher_no?`<div style="font-size:10px;color:var(--text-muted);font-weight:400;">📎 ${i.last_voucher_no}</div>`:''}
@@ -3612,7 +3673,9 @@ function renderInvoicesList(sc) {
                 </td>
                 <td style="color:${remaining>0?'var(--danger)':'var(--success)'};font-weight:700;">${remaining>0?fmtMoney(remaining):'✓ مسدد'}</td>
                 <td>
-                  <span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':i.status==='ملغاة'?'badge-gray':'badge-red'}">${i.status}</span>
+                  <span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':i.status==='ملغاة'?'badge-gray':'badge-red'}" style="gap:5px;">
+                    <span style="width:6px;height:6px;border-radius:99px;background:currentColor;flex-shrink:0;"></span>${i.status}
+                  </span>
                 </td>
                 <td>
                   <div style="display:flex;gap:4px;">
