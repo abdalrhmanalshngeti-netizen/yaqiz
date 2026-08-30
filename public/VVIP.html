@@ -12,25 +12,33 @@
 <script src="/public/pdf.min.js"></script>
 <style>
 :root {
-  --primary: #0f766e;
+  --primary: #0d9488;
   --primary-light: #14b8a6;
-  --primary-soft: #ccfbf1;
-  --primary-dark: #134e4a;
+  --primary-soft: #e6f5f3;
+  --primary-dark: #0f766e;
   --accent: #06b6d4;
-  --bg: #f8fafc;
+  --bg: #f4f7fc;
   --card-bg: #ffffff;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: #e6ecf5;
+  --border-strong: #cdd8e8;
   --text-main: #0f172a;
   --text-muted: #64748b;
-  --success: #16a34a;
-  --warning: #f59e0b;
+  --success: #059669;
+  --success-bg: #ecfdf5;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
   --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --info: #1d4ed8;
+  --info-bg: #eff6ff;
+  --neutral: #64748b;
+  --neutral-bg: #f1f5f9;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --shadow: 0 4px 14px -2px rgb(15 23 42 / 0.08);
-  --shadow-lg: 0 12px 32px -4px rgb(15 118 110 / 0.15);
+  --shadow-lg: 0 10px 30px rgba(15,23,42,.08);
+  --shadow-pop: 0 24px 60px rgba(15,23,42,.18);
   --radius: 16px;
-  --radius-sm: 10px;
+  --radius-sm: 12px;
   /* الشريط الجانبي داكن دائمًا بصرف النظر عن وضع التطبيق (فاتح/داكن) —
      نفس نمط لوحات التحكم الحديثة؛ متغيرات مستقلة كي لا تتأثر بـ html.dark */
   --sb-bg-top: #0f1f2e;
@@ -54,11 +62,19 @@ html.dark {
   --text-main: #f1f5f9;
   --text-muted: #94a3b8;
   --success: #22c55e;
+  --success-bg: #14321f;
   --warning: #fbbf24;
+  --warning-bg: #3a2f10;
   --danger: #f87171;
+  --danger-bg: #3a1414;
+  --info: #60a5fa;
+  --info-bg: #172a4d;
+  --neutral: #94a3b8;
+  --neutral-bg: #1e293b;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow: 0 4px 14px -2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 20px 50px rgba(0,0,0,.55);
 }
 html.dark body { background: var(--bg); color: var(--text-main); }
 html.dark .topbar { background: #1e293b; }
@@ -235,7 +251,7 @@ html[dir="ltr"] .sidebar { border-left: none; border-right: 1px solid var(--sb-b
 .stat-icon.amber { background: #fef3c7; color: #d97706; }
 .stat-icon.red { background: #fee2e2; color: var(--danger); }
 .stat-label { grid-column: 2; grid-row: 1; font-size: 12.5px; color: var(--text-muted); font-weight: 700; margin-bottom: 0; }
-.stat-value { grid-column: 1 / -1; grid-row: 2; font-size: 24px; font-weight: 900; color: var(--text-main); letter-spacing: -0.4px; }
+.stat-value { grid-column: 1 / -1; grid-row: 2; font-size: 28px; font-weight: 900; color: var(--text-main); letter-spacing: -0.6px; }
 /* أي عنصر رابع (نسبة تغيّر، سطر إضافي...) يُمدَّد بعرض البطاقة بصفه الخاص */
 .stat-card > *:nth-child(4) { grid-column: 1 / -1; }
 
@@ -280,6 +296,41 @@ html[dir="ltr"] .sidebar { border-left: none; border-right: 1px solid var(--sb-b
 .badge-amber { background: #fef3c7; color: #b45309; }
 .badge-red { background: #fee2e2; color: #b91c1c; }
 .badge-gray { background: #f1f5f9; color: var(--text-muted); }
+
+/* Notifications dropdown */
+.notif-wrap { position: relative; }
+.notif-panel {
+  position: fixed; top: 72px; z-index: 998; width: 380px; max-width: calc(100vw - 24px);
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: var(--shadow-pop); overflow: hidden; display: flex; flex-direction: column;
+}
+.notif-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 16px 12px; }
+.notif-title { font-size: 15px; font-weight: 900; color: var(--text-main); }
+.notif-count { font-size: 11px; font-weight: 800; color: #fff; background: var(--danger); border-radius: 999px; padding: 2px 8px; margin-inline-start: 8px; }
+.notif-readall { font-size: 12px; font-weight: 800; color: var(--primary-dark); background: none; border: none; cursor: pointer; font-family: inherit; }
+.notif-tabs { display: flex; gap: 6px; padding: 0 16px 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.notif-tab { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 11.5px; font-weight: 800; color: var(--text-muted); background: var(--card-bg); cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; }
+.notif-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.notif-list { max-height: 400px; overflow-y: auto; }
+.notif-item { display: flex; gap: 11px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.notif-item:hover { background: var(--bg); }
+.notif-item.unread { background: var(--primary-soft); }
+.notif-ico { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.notif-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.notif-text { font-size: 13px; font-weight: 800; line-height: 1.45; color: var(--text-main); }
+.notif-desc { font-size: 12px; font-weight: 600; color: var(--text-muted); line-height: 1.5; }
+.notif-time { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.notif-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.notif-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); }
+.notif-amount { font-size: 13.5px; font-weight: 900; white-space: nowrap; color: var(--text-main); }
+.notif-empty { padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* Toggle switch (تفعيل/تعطيل) */
+.switch { width: 42px; height: 24px; border-radius: 999px; background: var(--border-strong); position: relative; flex-shrink: 0; cursor: pointer; transition: background .18s; border: none; padding: 0; }
+.switch::after { content: ''; position: absolute; top: 2px; inset-inline-start: 2px; width: 20px; height: 20px; border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s; }
+.switch.on { background: var(--primary); }
+.switch.on::after { transform: translateX(18px); }
+html[dir="rtl"] .switch.on::after { transform: translateX(-18px); }
 
 /* Login */
 .login-bg {
@@ -1503,10 +1554,12 @@ function renderShell() {
             <span style="width:6px;height:6px;border-radius:99px;background:var(--primary);"></span>${lang==='ar'?pl.ar:pl.en}
           </div>`;
         })()}
-        <button class="icon-btn" data-action="showNotifications" title="${lang==='ar'?'الإشعارات':'Notifications'}" style="position:relative;" id="notif-bell-btn">
-          ${icon('bell',18)}
-          <span id="notif-badge" style="position:absolute;top:3px;${lang==='ar'?'left':'right'}:3px;min-width:16px;height:16px;background:var(--danger);border-radius:9px;font-size:9px;font-weight:800;color:#fff;display:${getAlerts().length>0?'flex':'none'};align-items:center;justify-content:center;padding:0 3px;">${getAlerts().length||''}</span>
-        </button>
+        <div class="notif-wrap">
+          <button class="icon-btn" data-action="toggleNotifPanel" title="${lang==='ar'?'الإشعارات':'Notifications'}" style="position:relative;" id="notif-bell-btn">
+            ${icon('bell',18)}
+            <span id="notif-badge" style="position:absolute;top:3px;${lang==='ar'?'left':'right'}:3px;min-width:16px;height:16px;background:var(--danger);border-radius:9px;font-size:9px;font-weight:800;color:#fff;display:${getAlerts().length>0?'flex':'none'};align-items:center;justify-content:center;padding:0 3px;">${getAlerts().length||''}</span>
+          </button>
+        </div>
         ${currentUser?.role==='owner'?`<button class="icon-btn topbar-hide-mobile" data-action="showExportModal" title="${lang==='ar'?'تصدير البيانات':'Export'}">${icon('download',18)}</button>`:''}
         <button class="icon-btn" id="dark-btn" data-action="toggleDark" title="${lang==='ar'?'الوضع الليلي':'Dark Mode'}">${document.documentElement.classList.contains('dark')?icon('sun',18):icon('moon',18)}</button>
         <button class="icon-btn topbar-hide-mobile" data-action="toggleLang" title="Language">${icon('globe',18)}</button>
@@ -1541,6 +1594,7 @@ function renderShell() {
   <div id="toast" style="display:none;" class="toast"></div>
   <div id="modal-container"></div>
   <div id="cs-panel-root"></div>
+  <div id="notif-panel-root"></div>
   <div id="ai-chat-root"></div>
   <div class="user-corner" title="${sanitize(currentUser.full_name)} (@${currentUser.username})">
     <div class="user-corner-avatar">${(currentUser.full_name||'U')[0]}</div>
@@ -9222,42 +9276,97 @@ function deleteUser(id) {
 // مطابقةً لما يسويه الباكند (branches.controller.js create) بنفس الطلب.
 function renderBranches(c) {
   const db = getDB();
-  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  const branches = (db.branches||[]);
+  const activeBranches = branches.filter(b=>b.active!==false);
+  const isOwner = currentUser?.role==='owner';
+  const limit = getPlanBranchLimit();
+
+  const branchCardHtml = b => {
+    const wh = (db.warehouses||[]).find(w=>w.branch_id===b.id && w.active!==false);
+    const userCount = (db.users||[]).filter(u=>u.branch_id===b.id).length;
+    const isActive = b.active !== false;
+    return `
+    <article class="card" style="padding:20px;display:flex;flex-direction:column;gap:16px;${b.is_main?`border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);`:''}">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0;">${sanitize((b.name||'ف')[0])}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16.5px;font-weight:900;line-height:1.25;">${sanitize(b.name)}</div>
+          <div style="font-size:12.5px;font-weight:600;color:var(--text-muted);">${lang==='ar'?'رقم الفرع':'Branch #'}: ${sanitize(b.branch_number)}</div>
+        </div>
+        <span class="badge ${isActive?'badge-green':'badge-gray'}">${isActive?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'معطّل':'Disabled')}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding-top:14px;border-top:1px solid var(--border);">
+        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'المستودع':'Warehouse'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${wh?sanitize(wh.name):'—'}</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'المستخدمون':'Users'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${userCount}</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'تاريخ الإضافة':'Added'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${b.created_at?fmtDate(b.created_at):'—'}</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'الحالة':'Status'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${b.is_main?(lang==='ar'?'رئيسي':'Main'):(lang==='ar'?'فرعي':'Sub-branch')}</div></div>
+      </div>
+      ${isOwner?`
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="icon-btn" style="width:32px;height:32px;" data-action="showBranchModal" data-args="${JSON.stringify([b.id])}" title="${t('edit')}">${icon('edit',14)}</button>
+        <div style="display:flex;align-items:center;gap:9px;margin-inline-start:auto;" title="${b.is_main?(lang==='ar'?'لا يمكن تعطيل الفرع الرئيسي':'The main branch cannot be disabled'):''}">
+          <span style="font-size:12.5px;font-weight:700;color:var(--text-2,var(--text-muted));">${lang==='ar'?'تفعيل الفرع':'Branch enabled'}</span>
+          <button class="switch ${isActive?'on':''}" ${b.is_main?'disabled style="opacity:.4;cursor:not-allowed;"':''} data-action="toggleBranchActive" data-args="${JSON.stringify([b.id])}"></button>
+        </div>
+      </div>`:''}
+    </article>`;
+  };
+
   c.innerHTML = `
   <div>
     <div class="page-header">
-      <div class="page-title-lg">${lang==='ar'?'الفروع':'Branches'}</div>
+      <div>
+        <div class="page-title-lg">${lang==='ar'?'الإعدادات والفروع':'Settings & Branches'}</div>
+        <div class="page-sub">${activeBranches.length} ${lang==='ar'?'فرع نشط':'active branch(es)'}${limit?` · ${lang==='ar'?'الحد الأقصى':'max'} ${limit}`:''}</div>
+      </div>
       ${(()=>{
-        if(currentUser?.role!=='owner') return '';
-        const limit = getPlanBranchLimit();
-        const count = branches.length;
-        if(limit && count>=limit) return `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} فروع) في باقتك الحالية`:`Max branches reached (${limit}) on your current plan`}</div>`;
+        if(!isOwner) return '';
+        if(limit && activeBranches.length>=limit) return `<div style="background:var(--warning-bg);border:1px solid var(--warning);color:var(--warning);padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;">⚠️ ${lang==='ar'?`وصلت للحد الأقصى (${limit} فروع) في باقتك الحالية`:`Max branches reached (${limit}) on your current plan`}</div>`;
         return `<button class="btn btn-primary" data-action="showBranchModal">${icon('plus',16)} ${lang==='ar'?'فرع جديد':'New Branch'}</button>`;
       })()}
     </div>
-    <div class="card"><div class="tbl-wrap"><table class="tbl">
-      <thead><tr>
-        <th>${lang==='ar'?'الاسم':'Name'}</th>
-        <th>${lang==='ar'?'رقم الفرع':'Branch #'}</th>
-        <th>${lang==='ar'?'المستودع':'Warehouse'}</th>
-        <th>${lang==='ar'?'رئيسي؟':'Main?'}</th>
-        ${currentUser?.role==='owner'?'<th></th>':''}
-      </tr></thead>
-      <tbody>${branches.map(b=>{
-        const wh = (db.warehouses||[]).find(w=>w.branch_id===b.id && w.active!==false);
-        return `<tr>
-        <td><b>${sanitize(b.name)}</b></td>
-        <td><code>${sanitize(b.branch_number)}</code></td>
-        <td>${wh?sanitize(wh.name):'—'}</td>
-        <td>${b.is_main?`<span class="badge badge-blue">${lang==='ar'?'رئيسي':'Main'}</span>`:''}</td>
-        ${currentUser?.role==='owner'?`<td>
-          <button class="icon-btn" style="width:28px;height:28px;" data-action="showBranchModal" data-args="${JSON.stringify([b.id])}">${icon('edit',13)}</button>
-          ${!b.is_main?`<button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" data-action="deleteBranch" data-args="${JSON.stringify([b.id])}">${icon('trash-2',13)}</button>`:''}
-        </td>`:''}
-      </tr>`;}).join('')}</tbody>
-    </table>${branches.length===0?`<div class="empty">${lang==='ar'?'لا توجد فروع':'No branches'}</div>`:''}</div></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.75fr) minmax(280px,1fr);gap:16px;align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${branches.length?branches.map(branchCardHtml).join(''):`<div class="card"><div class="empty">${lang==='ar'?'لا توجد فروع':'No branches'}</div></div>`}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:15px;font-weight:900;">${lang==='ar'?'بيانات المنشأة':'Company Info'}</div>
+          <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);">${lang==='ar'?'الاسم':'Name'}</div><div style="font-size:13.5px;font-weight:800;margin-top:3px;">${sanitize(db.settings?.company_name||'—')}</div></div>
+          <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);">${lang==='ar'?'الرقم الضريبي':'VAT Number'}</div><div style="font-size:13.5px;font-weight:800;margin-top:3px;direction:ltr;text-align:right;">${sanitize(db.settings?.vat_number||'—')}</div></div>
+          ${isOwner?`<button class="btn btn-outline btn-sm" data-action="goTo" data-args='["settings"]' style="margin-top:4px;">${lang==='ar'?'تعديل من الإعدادات العامة':'Edit in General Settings'}</button>`:''}
+        </div>
+        <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:0;">
+          <div style="font-size:15px;font-weight:900;margin-bottom:12px;">${lang==='ar'?'مطبّق على كل الفروع':'Applies to all branches'}</div>
+          ${[
+            [lang==='ar'?'ضريبة القيمة المضافة':'VAT rate', '15%'],
+            [lang==='ar'?'الفروع النشطة':'Active branches', `${activeBranches.length}${limit?` / ${limit}`:''}`],
+            [lang==='ar'?'إجمالي المستخدمين':'Total users', `${(db.users||[]).length}`],
+          ].map(([k,v],i,arr)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:${i===0?'0 0 12px':'12px 0'};${i<arr.length-1?'border-bottom:1px solid var(--border);':''}"><span style="font-size:12.5px;font-weight:700;color:var(--text-muted);">${k}</span><span style="font-size:12.5px;font-weight:900;color:var(--primary-dark);background:var(--primary-soft);border-radius:9px;padding:5px 10px;">${v}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>
   </div>`;
   refreshIcons();
+}
+
+function toggleBranchActive(id) {
+  const db = getDB();
+  const b = (db.branches||[]).find(x=>x.id===id);
+  if (!b || b.is_main) return;
+  if (b.active === false) {
+    b.active = true;
+    saveDB(db);
+    renderPage();
+    if (window._apiReachable && window._cloudApiFetch) {
+      window._cloudApiFetch('PUT', `/api/branches/${id}`, { is_active: true }).catch(e=>{
+        console.warn('Branch reactivate API:', e.message);
+        showToast('⚠️ ' + (e.message||(lang==='ar'?'تعذر تفعيل الفرع':'Could not activate branch')), 'error');
+      });
+    }
+  } else {
+    deleteBranch(id);
+  }
 }
 
 function showBranchModal(id) {
@@ -12041,64 +12150,129 @@ function getAlerts() {
   return alerts;
 }
 
-async function showNotifications(){
-  const alerts = getAlerts();
-  const mc = el('modal-container');
+// قائمة منسدلة حقيقية بجانب الجرس (بدل مودال مركزي كان يفتح سابقًا) — تصنّف
+// الإشعارات لتبويبات حسب نوعها الحقيقي المخزّن بعمود notifications.type
+// (zatca_rejected/zatca_incomplete_seller → تبويب زاتكا، الباقي → تبويب النظام)
+let _notif = { open: false, tab: 'all', apiCache: null };
 
-  const renderNotifModal = (apiNotifs) => {
-    const unreadApi = (apiNotifs||[]).filter(n=>!n.is_read);
-    const totalBadge = alerts.length + unreadApi.length;
-    mc.innerHTML = `<div class="modal-bg" data-action="closeModal"><div class="modal" data-action="" style="max-width:480px;max-height:85vh;overflow-y:auto;">
-      <div class="modal-head" style="position:sticky;top:0;z-index:1;background:var(--card);">
-        <h3>🔔 ${lang==='ar'?'الإشعارات':'Notifications'} ${totalBadge>0?`<span class="badge badge-red" style="font-size:12px;">${totalBadge}</span>`:''}</h3>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <button class="icon-btn" data-action="closeModal">${icon('x',18)}</button>
-        </div>
-      </div>
-      <div style="padding:12px;">
-        ${alerts.length>0?`
-          <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'تنبيهات النظام':'System Alerts'}</div>
-          ${alerts.map(a=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${a.type==='danger'?'rgba(239,68,68,.1)':'rgba(245,158,11,.1)'};border-radius:10px;cursor:pointer;border:1px solid ${a.type==='danger'?'rgba(239,68,68,.2)':'rgba(245,158,11,.2)'};" data-action="closeModal" data-action2="goTo" data-args2='${JSON.stringify([a.page])}'>
-            <div style="width:36px;height:36px;border-radius:8px;background:${a.type==='danger'?'#dc2626':'#f59e0b'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icon(a.icon,16)}</div>
-            <div><div style="font-weight:800;font-size:13px;">${a.title}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${sanitize(a.msg)}</div></div>
-          </div>`).join('')}`:''}
-        ${apiNotifs===null?`<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">⏳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>`
-        :apiNotifs.length>0?`
-          ${alerts.length>0?`<div style="height:1px;background:var(--border);margin:12px 0;"></div>`:''}
-          <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">${lang==='ar'?'إشعارات التسعير':'Pricing Notifications'}</div>
-          ${apiNotifs.map(n=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px;margin-bottom:8px;background:${n.is_read?'transparent':'rgba(20,184,166,.08)'};border-radius:10px;border:1px solid ${n.is_read?'var(--border)':'rgba(20,184,166,.25)'};">
-            <div style="width:36px;height:36px;border-radius:8px;background:${n.is_read?'#334155':'#14b8a6'};color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;">💰</div>
-            <div style="flex:1;">
-              <div style="font-weight:800;font-size:13px;color:${n.is_read?'var(--text-main)':'#99f6e4'}">${n.title||'تحديث سعر'}</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${sanitize(n.message)}</div>
-              <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
-            </div>
-            ${!n.is_read?`<span style="width:8px;height:8px;background:#14b8a6;border-radius:50%;flex-shrink:0;margin-top:4px;"></span>`:''}
-          </div>`).join('')}`
-        :`${alerts.length===0?`<div class="empty"><div class="empty-icon">✅</div>${lang==='ar'?'لا توجد إشعارات':'No notifications'}</div>`:''}` }
-      </div>
-    </div></div>`;
-    refreshIcons();
+function _notifTypeStyle(type) {
+  if ((type||'').startsWith('zatca_rejected')) return { bg:'var(--danger-bg)', color:'var(--danger)', icon:'x-circle' };
+  if ((type||'').startsWith('zatca'))          return { bg:'var(--warning-bg)', color:'var(--warning)', icon:'alert-triangle' };
+  if (type==='price_update')                   return { bg:'var(--info-bg)', color:'var(--info)', icon:'trending-up' };
+  if (type==='support_reply')                  return { bg:'var(--info-bg)', color:'var(--info)', icon:'headphones' };
+  if (type==='plan_upgrade_opening_balances')  return { bg:'var(--info-bg)', color:'var(--info)', icon:'clipboard-list' };
+  if (type==='branch_sync_rejected')           return { bg:'var(--warning-bg)', color:'var(--warning)', icon:'git-branch' };
+  return { bg:'var(--neutral-bg)', color:'var(--neutral)', icon:'bell' };
+}
+
+function toggleNotifPanel() {
+  _notif.open = !_notif.open;
+  if (_notif.open && _notif.apiCache === null) _loadNotifApi();
+  renderNotifPanel();
+}
+function closeNotifPanel() { _notif.open = false; renderNotifPanel(); }
+function setNotifTab(tabId) { _notif.tab = tabId; renderNotifPanel(); }
+
+async function _loadNotifApi() {
+  if (!window._cloudApiFetch) { _notif.apiCache = []; renderNotifPanel(); return; }
+  try {
+    const res = await window._cloudApiFetch('GET', '/api/notifications');
+    _notif.apiCache = res?.data || [];
+    renderNotifPanel();
+    // مجرد ما يفتح المالك القائمة ويشوف نص الرسالة (معروض كامل مباشرة، بلا
+    // حاجة لفتح كل رسالة لحالها)، تُعتبر مقروءة تلقائيًا
+    if (_notif.apiCache.some(n => !n.is_read)) {
+      window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').then(() => { _notif.apiCache.forEach(n=>n.is_read=true); _updateNotifBadge(); }).catch(() => {});
+    }
+  } catch(e) { _notif.apiCache = []; renderNotifPanel(); }
+}
+
+function markAllNotifRead() {
+  if (!window._cloudApiFetch) return;
+  window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').then(() => {
+    (_notif.apiCache||[]).forEach(n=>n.is_read=true);
     _updateNotifBadge();
+    renderNotifPanel();
+  }).catch(() => {});
+}
+
+function renderNotifPanel() {
+  const root = document.getElementById('notif-panel-root');
+  if (!root) return;
+  if (!_notif.open) { root.innerHTML=''; return; }
+
+  const alerts = getAlerts();
+  const apiNotifs = _notif.apiCache;
+  const loading = apiNotifs === null;
+  const zatca  = (apiNotifs||[]).filter(n => (n.type||'').startsWith('zatca'));
+  const system = (apiNotifs||[]).filter(n => !(n.type||'').startsWith('zatca'));
+  const unreadApi = (apiNotifs||[]).filter(n=>!n.is_read);
+  const totalBadge = alerts.length + unreadApi.length;
+
+  const tabs = [
+    { id:'all',    label: lang==='ar'?'الكل':'All',            count: alerts.length + (apiNotifs||[]).length },
+    { id:'action', label: lang==='ar'?'تحتاج إجراء':'Needs Action', count: alerts.length },
+    { id:'zatca',  label: lang==='ar'?'زاتكا':'ZATCA',          count: zatca.length },
+    { id:'system', label: lang==='ar'?'النظام':'System',        count: system.length },
+  ];
+
+  const alertItemHtml = a => `
+    <div class="notif-item unread" data-action="closeNotifPanel" data-action2="goTo" data-args2='${JSON.stringify([a.page])}'>
+      <div class="notif-ico" style="background:${a.type==='danger'?'var(--danger-bg)':'var(--warning-bg)'};color:${a.type==='danger'?'var(--danger)':'var(--warning)'};">${icon(a.icon,16)}</div>
+      <div class="notif-body">
+        <div class="notif-text">${a.title}</div>
+        <div class="notif-desc">${sanitize(a.msg)}</div>
+      </div>
+      <div class="notif-right"><span class="notif-dot"></span></div>
+    </div>`;
+  const apiItemHtml = n => {
+    const st = _notifTypeStyle(n.type);
+    return `
+    <div class="notif-item ${n.is_read?'':'unread'}">
+      <div class="notif-ico" style="background:${st.bg};color:${st.color};">${icon(st.icon,16)}</div>
+      <div class="notif-body">
+        <div class="notif-text">${sanitize(n.title||'')}</div>
+        <div class="notif-desc">${sanitize(n.message||'')}</div>
+        <div class="notif-time">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
+      </div>
+      ${!n.is_read?`<div class="notif-right"><span class="notif-dot"></span></div>`:''}
+    </div>`;
   };
 
-  renderNotifModal(null);
-
-  if (window._cloudApiFetch) {
-    try {
-      const res = await window._cloudApiFetch('GET', '/api/notifications');
-      const apiNotifs = res?.data || [];
-      renderNotifModal(apiNotifs);
-      // مجرد ما يفتح المالك النافذة ويشوف نص الرسالة (معروض كامل بالقائمة
-      // مباشرة، بلا حاجة لفتح كل رسالة لحالها)، تُعتبر مقروءة تلقائيًا — لا
-      // تحتاج قرارًا/ضغطة إضافية منه (لا لكل رسالة ولا زر "قراءة الكل")
-      if (apiNotifs.some(n => !n.is_read)) {
-        window._cloudApiFetch('PUT', '/api/notifications/mark-all-read').then(() => _updateNotifBadge()).catch(() => {});
-      }
-    } catch(e) { renderNotifModal([]); }
+  let listHtml;
+  if (loading) {
+    listHtml = `<div class="notif-empty">⏳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div>`;
   } else {
-    renderNotifModal([]);
+    let items = [];
+    if (_notif.tab==='all')    items = [...alerts.map(a=>alertItemHtml(a)), ...apiNotifs.map(n=>apiItemHtml(n))];
+    if (_notif.tab==='action') items = alerts.map(a=>alertItemHtml(a));
+    if (_notif.tab==='zatca')  items = zatca.map(n=>apiItemHtml(n));
+    if (_notif.tab==='system') items = system.map(n=>apiItemHtml(n));
+    listHtml = items.length ? items.join('') : `<div class="notif-empty">✅ ${lang==='ar'?'لا توجد إشعارات':'No notifications'}</div>`;
   }
+
+  const btn = document.getElementById('notif-bell-btn');
+  const btnRect = btn ? btn.getBoundingClientRect() : null;
+  const sideStyle = lang==='ar'
+    ? `left:${btnRect?Math.max(12,btnRect.left-380+btnRect.width):16}px;`
+    : `left:${btnRect?btnRect.left:16}px;`;
+
+  root.innerHTML = `
+  <div class="notif-panel" style="${sideStyle}">
+    <div class="notif-head">
+      <div><span class="notif-title">${lang==='ar'?'الإشعارات':'Notifications'}</span>${totalBadge>0?`<span class="notif-count">${totalBadge} ${lang==='ar'?'جديدة':'new'}</span>`:''}</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${totalBadge>0?`<button class="notif-readall" data-action="markAllNotifRead">${lang==='ar'?'تحديد الكل كمقروء':'Mark all read'}</button>`:''}
+        <button class="icon-btn" style="width:28px;height:28px;" data-action="closeNotifPanel">${icon('x',14)}</button>
+      </div>
+    </div>
+    <div class="notif-tabs">
+      ${tabs.map(tb=>`<button class="notif-tab ${_notif.tab===tb.id?'active':''}" data-action="setNotifTab" data-args='["${tb.id}"]'>${tb.label}${tb.count?` (${tb.count})`:''}</button>`).join('')}
+    </div>
+    <div class="notif-list">${listHtml}</div>
+  </div>`;
+  refreshIcons();
+  _updateNotifBadge();
 }
 
 async function _updateNotifBadge() {
@@ -17039,6 +17213,17 @@ document.addEventListener('click', function(e) {
     }
   }
 });
+
+// إغلاق القائمة المنسدلة للإشعارات بالضغط خارجها (خارج اللوحة وخارج الجرس نفسه) —
+// لازم تُسجَّل بمرحلة الالتقاط (capture) قبل مرحلة الفقاعة اللي يشتغل فيها المُوزِّع
+// أعلاه: refreshIcons() يستبدل عنصر svg المضغوط عليه بعنصر جديد (lucide.createIcons
+// يعيد بناء الأيقونات كلها بالصفحة)، فلو فحصنا closest() بعد ما هذا الاستبدال صار،
+// e.target يكون عنصرًا مفصولًا عن الشجرة ولا يقدر يوصل لأي سلف — يُحسَب خطأً "بره" اللوحة
+document.addEventListener('click', function(e) {
+  if (!_notif.open) return;
+  if (e.target.closest('.notif-panel') || e.target.closest('.notif-wrap')) return;
+  closeNotifPanel();
+}, true);
 
 // بديل onchange="x=this.value;fn()"/onchange="fn(this.value)" — قيمة العنصر
 // (أو this.checked لصندوق الاختيار) تُمرَّر كأول معامل، مع دعم data-onchange-args
