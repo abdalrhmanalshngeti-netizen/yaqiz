@@ -1080,6 +1080,11 @@ function has(perm) {
     if (currentUser.role === 'owner') return false; // المالك يستخدم صفحة المبيعات العادية
     return currentUser.pos_access === true;
   }
+  // صلاحية اصطناعية لعنصر "الفروع" بالشريط الجانبي — نفس شرط تبويب الفروع
+  // القديم بداخل الإعدادات بالضبط: للمالك فقط، ومخفية لو الباقة تسمح بفرع واحد
+  if (perm === 'branches.manage') {
+    return currentUser.role === 'owner' && getPlanBranchLimit() !== 1;
+  }
   if (currentUser.role === 'owner') return true;
   return (currentUser.permissions||[]).includes(perm);
 }
@@ -1325,21 +1330,26 @@ function initDark() {
 
 // ============ SHELL ============
 const allNavItems = [
+  // العمليات
   { id:'pos',              icon:'scan-barcode',     perm:'pos.access',       group:'ops'   },
   { id:'dashboard',        icon:'layout-dashboard', perm:'dashboard.view',   group:'ops'   },
   { id:'sales',            icon:'shopping-cart',    perm:'sales.view',       group:'ops'   },
+  { id:'quotes',           icon:'file-plus',        perm:'quotes.view',     group:'ops'   },
   { id:'purchases',        icon:'package',          perm:'purchases.view',  group:'ops'   },
   { id:'inventory',        icon:'box',              perm:'inventory.view',  group:'ops'   },
   { id:'customers',        icon:'users',            perm:'customers.view',  group:'ops'   },
   { id:'suppliers',        icon:'truck',            perm:'suppliers.view',  group:'ops'   },
-  { id:'employees',        icon:'user-check',       perm:'employees.view',  group:'ops'   },
-  { id:'treasury',         icon:'wallet',           perm:'treasury.view',   group:'ops'   },
-  { id:'receipts',         icon:'receipt',          perm:'receipts.view',   group:'ops'   },
-  { id:'quotes',           icon:'file-plus',        perm:'quotes.view',     group:'ops'   },
+  // المحاسبة
+  { id:'treasury',         icon:'wallet',           perm:'treasury.view',   group:'acct'  },
+  { id:'receipts',         icon:'receipt',          perm:'receipts.view',   group:'acct'  },
   { id:'obligations',      icon:'repeat',           perm:'obligations.view',group:'acct'  },
-  { id:'accountingReports',icon:'calculator',       perm:'reports.view',    group:'acct'  },
   { id:'reports',          icon:'bar-chart-2',      perm:'reports.view',    group:'acct'  },
-  { id:'settings',         icon:'settings',         perm:'settings.view',   group:'admin' },
+  { id:'accountingReports',icon:'calculator',       perm:'reports.view',    group:'acct'  },
+  // الإدارة
+  { id:'settings',         icon:'settings',         perm:'settings.view',    group:'admin' },
+  { id:'users',            icon:'users',            perm:'settings.view',    group:'admin' },
+  { id:'branches',         icon:'map-pin',          perm:'branches.manage',  group:'admin' },
+  { id:'employees',        icon:'user-check',       perm:'employees.view',   group:'admin' },
 ];
 const navGroupLabels = {
   ops:   { ar:'العمليات',   en:'Operations'   },
@@ -1355,8 +1365,8 @@ const navGroupLabels = {
 // (رابط سريع، نتيجة بحث...)، ما ينحظر بصمت لعميل مستحِق فعليًا لها
 const PLAN_PAGES = {
   basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings','users','returns'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings','users','returns','activity','stock_moves'],
-  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings','users','returns','activity','stock_moves','accounts'],
+  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves'],
+  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves','accounts'],
   expired: ['settings'],
 };
 
@@ -1441,6 +1451,8 @@ const navLabels = {
   quotes:{ar:'عروض الأسعار',en:'Quotations'},
   reports:{ar:'التقارير',en:'Reports'},
   accountingReports:{ar:'التقارير المحاسبية',en:'Accounting Reports'},
+  users:{ar:'المستخدمون',en:'Users'},
+  branches:{ar:'الفروع',en:'Branches'},
   obligations:{ar:'الالتزامات الدورية',en:'Recurring Obligations'},
   settings:{ar:'الإعدادات',en:'Settings'},
 };
@@ -2575,6 +2587,7 @@ function renderPage() {
     case 'journal': renderReports(c); break;
     case 'accounts': renderReports(c); break;
     case 'users': renderUsers(c); break;
+    case 'branches': renderBranches(c); break;
     case 'employees': renderEmployees(c); break;
     case 'obligations': renderObligations(c); break;
     case 'receipts': renderReceipts(c); break;
@@ -14207,8 +14220,6 @@ function renderSettings(c) {
     <div class="page-header"><div class="page-title-lg">${t('settings')}</div></div>
     <div id="set-tabs" class="tabs" style="flex-wrap:wrap;">
       <button class="tab-btn ${settingsTab==='general'?'active':''}" data-action="setSettingsTab" data-args='["general"]'>⚙️ ${lang==='ar'?'عام':'General'}</button>
-      <button class="tab-btn ${settingsTab==='users'?'active':''}" data-action="setSettingsTab" data-args='["users"]'>👥 ${lang==='ar'?'المستخدمون':'Users'}</button>
-      ${(currentUser?.role==='owner' && getPlanBranchLimit()!==1)?`<button class="tab-btn ${settingsTab==='branches'?'active':''}" data-action="setSettingsTab" data-args='["branches"]'>🏬 ${lang==='ar'?'الفروع':'Branches'}</button>`:''}
       ${hasPlanFeature('employees')?`<button class="tab-btn ${settingsTab==='employees'?'active':''}" data-action="setSettingsTab" data-args='["employees"]'>👷 ${lang==='ar'?'الموظفون':'Employees'}</button>`:''}
       ${hasPlanFeature('activity_log')?`<button class="tab-btn ${settingsTab==='activity'?'active':''}" data-action="setSettingsTab" data-args='["activity"]'>📋 ${lang==='ar'?'النشاطات':'Activity'}</button>`:''}
       ${showSec?`<button class="tab-btn ${settingsTab==='security'?'active':''}" data-action="setSettingsTab" data-args='["security"]'>🔐 ${lang==='ar'?'الأمان':'Security'}</button>`:''}
@@ -14243,8 +14254,6 @@ function switchPlanPreview(plan) {
 }
 function renderSettingsContent() {
   const mc=el('settings-main-content'); if(!mc) return;
-  if(settingsTab==='users')    { renderUsers(mc); return; }
-  if(settingsTab==='branches' && getPlanBranchLimit()!==1) { renderBranches(mc); return; }
   if(settingsTab==='employees'){ renderEmployees(mc); return; }
   if(settingsTab==='activity') { renderActivity(mc); return; }
   if(settingsTab==='security') { renderAdminSessionsTab(mc); return; }
