@@ -20,6 +20,53 @@
   --red:#ef4444;--purple:#8b5cf6;--cyan:#06b6d4;
   --text:#f0f4ff;--muted:#6b7fa3;--muted2:#4a5878;
 }
+
+/* ── وضع الإضاءة (فاتح) ─────────────────────────────────────
+   الملف كله كان مبني على افتراض "داكن دائمًا" — عشرات الدوال تكتب ألوان
+   حرفية مباشرة بسمات style بدل متغيّرات CSS (خلاف بقية المنصة)، فما يكفي
+   قلب متغيّرات :root فقط. نغطي المتغيّرات أولاً، وبعدها أكثر الأنماط
+   الحرفية المتكررة عبر محدِّدات سمات (نفس أسلوب html.dark بـVVIP.html
+   بالاتجاه المعاكس) — تغطية عملية للغالبية، مو كل حالة نادرة بالملف */
+html.light{
+  --bg:#f4f7fc;--surface:#ffffff;--card:#ffffff;--border:#e6ecf5;--border2:#cdd8e8;
+  --text:#0f172a;--muted:#64748b;--muted2:#94a3b8;
+}
+html.light body{background:var(--bg);color:var(--text)}
+html.light [style*="background:#070d1a"],
+html.light [style*="background: #070d1a"]{background:#f1f5f9 !important}
+html.light [style*="background:#0d1629"],
+html.light [style*="background: #0d1629"]{background:#f8fafc !important}
+html.light [style*="background:#111d33"],
+html.light [style*="background: #111d33"]{background:#ffffff !important}
+html.light [style*="border:1px solid #1a2942"],
+html.light [style*="border-bottom:1px solid #1a2942"],
+html.light [style*="border-top:1px solid #1a2942"]{border-color:#e6ecf5 !important}
+html.light [style*="border:1.5px solid #243352"],
+html.light [style*="border:1px solid #243352"],
+html.light [style*="background:#070d1a;border:1.5px solid #243352"]{border-color:#cdd8e8 !important}
+html.light input[style*="background:#070d1a"]{background:#ffffff !important;color:#0f172a !important}
+html.light [style*="color:#f0f4ff"],
+html.light [style*="color: #f0f4ff"]{color:#0f172a !important}
+html.light [style*="color:#c4d0e8"]{color:#334155 !important}
+html.light [style*="color:#f87171"]{color:#dc2626 !important}
+html.light [style*="color:#34d399"]{color:#059669 !important}
+html.light [style*="color:#5eead4"]{color:#0f766e !important}
+html.light [style*="color:#fbbf24"]{color:#b45309 !important}
+html.light [style*="color:#c4b5fd"]{color:#7c3aed !important}
+html.light [style*="color:#a78bfa"]{color:#7c3aed !important}
+html.light [style*="color:#a5b4fc"]{color:#4f46e5 !important}
+html.light [style*="color:#fdba74"]{color:#c2410c !important}
+html.light [style*="color:#f9a8d4"]{color:#be185d !important}
+html.light [style*="background:rgba(255,255,255,.06)"],
+html.light [style*="background:rgba(255,255,255,.04)"],
+html.light [style*="background:rgba(255,255,255,.07)"]{background:rgba(15,23,42,.05) !important}
+html.light .fbtn{background:rgba(15,23,42,.04);color:#475569}
+html.light .fbtn:hover{background:rgba(15,23,42,.08);color:#0f172a}
+html.light th{background:#f8fafc}
+html.light td{color:#334155}
+html.light tbody tr:nth-child(even) td{background:rgba(15,23,42,.02)}
+html.light .empty-state,html.light .loader{color:#64748b}
+html.light .co-modal-tabs{border-color:#e6ecf5}
 body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;font-weight:500}
 
 /* LOGIN */
@@ -69,6 +116,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 /* KPI */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr)}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr)}
 .kpi-card{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden;transition:.2s}
 .kpi-card:hover{transform:translateY(-2px)}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
@@ -103,6 +151,10 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 table{width:100%;border-collapse:collapse}
 th{background:var(--surface);padding:10px 16px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.5px}
 td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;color:#c4d0e8}
+/* تلوين متبادل + تظليل عند المرور — جداول كثيرة الأعمدة (الشركات 11 عمود،
+   التذاكر 9) كانت مسطّحة تمامًا بلا أي تمييز بصري بين الصفوف */
+tbody tr:nth-child(even) td{background:rgba(255,255,255,.018)}
+tbody tr:hover td{background:rgba(13,148,136,.06)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(255,255,255,.02)}
 
@@ -159,7 +211,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .btn-action:hover{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.4);color:#fff}
 
 /* ACTION BTNS */
-.abtn{border:none;border-radius:7px;padding:5px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
+.abtn{border:none;border-radius:8px;padding:7px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
 .abtn:hover{filter:brightness(1.35)}
 .abtn.prog{background:rgba(245,158,11,.12);color:#fbbf24}
 .abtn.done{background:rgba(16,185,129,.12);color:#34d399}
@@ -176,6 +228,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .hover-row-soft:hover{background:rgba(255,255,255,.03) !important}
 .hover-ticket-row:hover{background:rgba(13,148,136,.07) !important}
 .hover-ticket-row-public:hover{background:rgba(13,148,136,.07) !important}
+
+/* تبويبات نافذة إدارة الشركة — كانت كل الأقسام (إحصاءات، ذكاء اصطناعي، حالة
+   الحساب، الباقة، تجاوز الفروع، المستخدمون) مكدّسة رأسيًا بنافذة واحدة طويلة
+   تحتاج تمرير كثير؛ صارت 2-3 تبويبات بدل ذلك */
+.co-modal-tabs{display:flex;gap:4px;padding:16px 28px 0;border-bottom:1px solid #1a2942;overflow-x:auto}
+.co-modal-tab{padding:10px 16px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;margin-bottom:-1px;transition:.15s}
+.co-modal-tab.active{color:var(--brand-light);border-bottom-color:var(--brand-light)}
+.co-modal-panel{display:none}
+.co-modal-panel.active{display:block}
 
 /* أزرار تمرير شريط التبويبات — كان يفيض بصمت بلا أي مؤشر (تبويب "الموظفون"
    يختفي كامل خارج الشاشة)؛ الآن سهمين ثابتين يظهرون فقط لو فيه فعليًا محتوى
@@ -198,6 +259,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   .main{padding:16px}
   .kpi-grid{grid-template-columns:1fr}
   .grid-4{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr}
   .topbar{padding:0 14px}
   .nav-tabs{padding:0 14px}
   .brand-sub{display:none} /* نص فرعي طويل كان يفيض تحت الشريط العلوي الثابت الارتفاع ويتراكب مع شريط التبويبات تحته */
@@ -252,6 +314,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
     <div class="topbar-right">
       <div class="status-dot">المنصة تعمل</div>
+      <button id="light-btn" data-action="toggleLight" title="تبديل الإضاءة" style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">☀️</button>
       <div style="position:relative;">
         <button data-action="toggleNotifDropdown" style="position:relative;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">
           🔔
@@ -725,7 +788,24 @@ function showApp(username){
   $('login-screen').style.display='none';
   $('app').style.display='block';
   setupNavScrollHints();
+  const lightBtn = $('light-btn');
+  if (lightBtn) lightBtn.textContent = document.documentElement.classList.contains('light') ? '🌙' : '☀️';
 }
+
+// ── تبديل الإضاءة (وضع فاتح/داكن) ────────────────────────
+// اللوحة كانت داكنة دائمًا بلا أي خيار — نفس فكرة toggleDark() بالمنصة
+// الرئيسية بالضبط لكن بالاتجاه المعاكس (الداكن هو الافتراضي هنا)
+function toggleLight(){
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('yaqiz_admin_light', isLight?'1':'0');
+  const btn = $('light-btn');
+  if(btn) btn.textContent = isLight ? '🌙' : '☀️';
+}
+(function(){
+  if (localStorage.getItem('yaqiz_admin_light')==='1') {
+    document.documentElement.classList.add('light');
+  }
+})();
 
 // ── أسهم تمرير شريط التبويبات ────────────────────────────
 // شريط التبويبات كان يفيض أفقيًا بصمت تام (تبويب "الموظفون" يختفي كامل خارج
@@ -830,7 +910,7 @@ async function loadPlans() {
   try {
     const data = await apiFetch('/api/admin/plans');
     renderPlansSection(data.data);
-  } catch(e) { box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل الباقات</p>'; }
+  } catch(e) { box.innerHTML = '<div class="empty-state">خطأ في تحميل الباقات</div>'; }
 }
 
 // ── استخدام الذكاء الاصطناعي ─────────────────────────────
@@ -840,7 +920,7 @@ async function loadAIUsage() {
   try {
     const res = await apiFetch('/api/admin/ai-usage/companies');
     renderAIUsageTable(res.data || []);
-  } catch (e) { box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل بيانات الاستخدام</p>'; }
+  } catch (e) { box.innerHTML = '<div class="empty-state">خطأ في تحميل بيانات الاستخدام</div>'; }
 }
 
 function renderAIUsageTable(rows) {
@@ -928,7 +1008,7 @@ async function showAIQuestionsModal(companyId, companyName, feature) {
       </div>`).join('') : `<div class="empty-state" style="padding:30px;">${isSupport?'لا توجد محادثات دعم فني مسجَّلة':isOB?'لا توجد أسئلة أرصدة افتتاحية مسجَّلة':'لا توجد أسئلة مسجَّلة'}</div>`;
   } catch (e) {
     const body = document.getElementById('ai-questions-body');
-    if (body) body.innerHTML = '<p style="color:var(--red);">خطأ في تحميل الأسئلة</p>';
+    if (body) body.innerHTML = '<div class="empty-state">خطأ في تحميل الأسئلة</div>';
   }
 }
 
@@ -944,7 +1024,7 @@ async function loadNewClients() {
     const badge = $('newclients-badge');
     if (badge) { badge.textContent = total; badge.style.display = total ? 'inline-flex' : 'none'; }
   } catch(e) {
-    if (box) box.innerHTML = '<p style="color:var(--red);padding:20px;">خطأ في تحميل البيانات</p>';
+    if (box) box.innerHTML = '<div class="empty-state">خطأ في تحميل البيانات</div>';
   }
 }
 
@@ -1379,10 +1459,18 @@ async function showCompanyModal(id){
 }
 
 let _currentCoModalCompany = null;
+let _coModalTab = 'overview';
+function switchCoModalTab(tab){
+  _coModalTab = tab;
+  document.querySelectorAll('.co-modal-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.co-modal-panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===tab));
+}
 function renderCoModal(c){
   const box=document.getElementById('co-modal-box');
   if(!box)return;
   _currentCoModalCompany = c;
+  _coModalTab = 'overview';
+  const canManage = hasPerm('companies_manage');
   const expiry=c.subscription_expires_at?new Date(c.subscription_expires_at).toISOString().split('T')[0]:'';
   const planOpts=['basic','growth','pro'].map(p=>`<option value="${p}"${c.plan===p?' selected':''}>${{basic:'أساسي 📗',growth:'نمو 📘',pro:'احترافي 📙'}[p]}</option>`).join('');
   const usersRows=(c.users||[]).map(u=>`
@@ -1400,8 +1488,17 @@ function renderCoModal(c){
   const statusColors={active:'#10b981',suspended:'#f59e0b',cancelled:'#ef4444'};
   const statusLabels={active:'✅ نشطة',suspended:'⏸ معلّقة',cancelled:'🚫 ملغاة'};
 
+  // تبويبات بدل التكديس الرأسي القديم لكل شي بنافذة وحدة (كانت أطول شاشة
+  // بالمنصة — رأس ثابت (اسم/تواصل/انتحال هوية) ثم 3 تبويبات: نظرة عامة،
+  // الباقة والحالة (لو عنده صلاحية إدارة)، والمستخدمون
+  const tabs = [
+    { id:'overview', label:'📊 نظرة عامة' },
+    ...(canManage ? [{ id:'plan', label:'⚙️ الباقة والحالة' }] : []),
+    { id:'users', label:`👥 المستخدمون (${(c.users||[]).length})` },
+  ];
+
   box.innerHTML=`
-  <div style="padding:24px 28px;border-bottom:1px solid #1a2942;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+  <div style="padding:24px 28px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
     <div>
       <div style="font-size:22px;font-weight:900;color:#f0f4ff;margin-bottom:4px;">${escHtml(c.name)}</div>
       <div style="font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;">
@@ -1414,17 +1511,22 @@ function renderCoModal(c){
     <button data-action="closeCoModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
   </div>
 
-  <!-- معلومات التواصل -->
-  ${(c.contact_phone||c.contact_email)?`
-  <div style="padding:16px 28px;border-bottom:1px solid #1a2942;background:rgba(13,148,136,.04);">
-    <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">📞 معلومات التواصل</div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;">
-      ${c.contact_phone?`<a href="tel:${escHtml(c.contact_phone)}" style="display:flex;align-items:center;gap:8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px 16px;color:#34d399;text-decoration:none;font-weight:800;font-size:14px;">📱 ${escHtml(c.contact_phone)}</a>`:''}
-      ${c.contact_email?`<a href="mailto:${escHtml(c.contact_email)}" style="display:flex;align-items:center;gap:8px;background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.25);border-radius:10px;padding:10px 16px;color:#5eead4;text-decoration:none;font-weight:800;font-size:14px;">📧 ${escHtml(c.contact_email)}</a>`:''}
+  <!-- معلومات التواصل + انتحال الهوية — ثابتة بكل التبويبات -->
+  ${(c.contact_phone||c.contact_email||hasPerm('impersonate'))?`
+  <div style="padding:16px 28px;margin-top:16px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      ${c.contact_phone?`<a href="tel:${escHtml(c.contact_phone)}" style="display:flex;align-items:center;gap:8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:8px 14px;color:#34d399;text-decoration:none;font-weight:800;font-size:13px;">📱 ${escHtml(c.contact_phone)}</a>`:''}
+      ${c.contact_email?`<a href="mailto:${escHtml(c.contact_email)}" style="display:flex;align-items:center;gap:8px;background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.25);border-radius:10px;padding:8px 14px;color:#5eead4;text-decoration:none;font-weight:800;font-size:13px;">📧 ${escHtml(c.contact_email)}</a>`:''}
+      ${hasPerm('impersonate')?`<button data-action="coModalImpersonate" data-args="${JSON.stringify([c.id])}" style="margin-inline-start:auto;padding:8px 16px;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.35);color:#c4b5fd;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">🔑 دخول حساب الشركة</button>`:''}
     </div>
   </div>`:''}
 
-  <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
+  <div class="co-modal-tabs">
+    ${tabs.map(t=>`<button class="co-modal-tab ${_coModalTab===t.id?'active':''}" data-tab="${t.id}" data-action="switchCoModalTab" data-args='["${t.id}"]'>${t.label}</button>`).join('')}
+  </div>
+
+  <!-- ═ نظرة عامة ═ -->
+  <div class="co-modal-panel ${_coModalTab==='overview'?'active':''}" data-panel="overview" style="padding:20px 28px;">
     <div class="grid-4" style="gap:12px;margin-bottom:20px;">
       <div style="background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.2);border-radius:12px;padding:14px;text-align:center;">
         <div style="font-size:28px;font-weight:900;color:#5eead4;">${fmt(c.user_count)}</div>
@@ -1445,7 +1547,7 @@ function renderCoModal(c){
     </div>
 
     <!-- استخدام الذكاء الاصطناعي -->
-    <div style="margin-bottom:20px;">
+    <div>
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🤖 استخدام الذكاء الاصطناعي (إجمالي)</div>
       <div class="grid-4" style="gap:12px;">
         <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:12px;text-align:center;">
@@ -1466,8 +1568,11 @@ function renderCoModal(c){
         </div>
       </div>
     </div>
+  </div>
 
-    ${hasPerm('companies_manage')?`
+  ${canManage?`
+  <!-- ═ الباقة والحالة ═ -->
+  <div class="co-modal-panel ${_coModalTab==='plan'?'active':''}" data-panel="plan" style="padding:20px 28px;">
     <!-- الحالة -->
     <div style="margin-bottom:18px;">
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">حالة الحساب</div>
@@ -1508,19 +1613,12 @@ function renderCoModal(c){
         ${c.branch_limit_override!=null?`<button data-action="coModalClearBranchLimit" data-args="${JSON.stringify([c.id])}" style="padding:10px 16px;background:transparent;border:1.5px solid #3a2942;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap;">إلغاء التجاوز</button>`:''}
       </div>
       ${c.branch_limit_override!=null?`<div style="margin-top:8px;font-size:12px;color:#a78bfa;">🏬 هذي الشركة على تجاوز مخصص: ${c.branch_limit_override} فروع (بدل حد باقتها العادي)</div>`:''}
-    </div>`:''}
-  </div>
-
-  ${hasPerm('impersonate')?`
-  <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
-    <button data-action="coModalImpersonate" data-args="${JSON.stringify([c.id])}" style="width:100%;padding:13px;background:rgba(139,92,246,.15);border:1.5px solid rgba(139,92,246,.35);color:#c4b5fd;border-radius:12px;font-family:inherit;font-weight:900;font-size:14px;cursor:pointer;transition:.2s;">
-      🔑 دخول حساب الشركة (انتحال الهوية)
-    </button>
+    </div>
   </div>`:''}
 
-  ${(c.users||[]).length?`
-  <div style="padding:20px 28px;">
-    <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">المستخدمون (${c.users.length})</div>
+  <!-- ═ المستخدمون ═ -->
+  <div class="co-modal-panel ${_coModalTab==='users'?'active':''}" data-panel="users" style="padding:20px 28px;">
+    ${(c.users||[]).length?`
     <div style="border:1px solid #1a2942;border-radius:12px;overflow:hidden;">
       <table style="width:100%;border-collapse:collapse;">
         <thead><tr style="background:#0d1629;">
@@ -1535,8 +1633,8 @@ function renderCoModal(c){
         </tr></thead>
         <tbody>${usersRows}</tbody>
       </table>
-    </div>
-  </div>`:''}`;
+    </div>`:`<div class="empty-state">لا يوجد مستخدمون</div>`}
+  </div>`;
 }
 
 async function coModalSetStatus(id,status){
@@ -1984,7 +2082,7 @@ function renderTeamActivity(res){
       </div>
       <button data-action="closeTeamActivityModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:30px;height:30px;border-radius:8px;color:var(--muted);cursor:pointer;">✕</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+    <div class="grid-3" style="gap:10px;margin-bottom:16px;">
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#5eead4;">${tickets.length}</div><div style="font-size:11px;color:var(--muted);">تذاكر استلمها</div></div>
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#34d399;">${replies.length}</div><div style="font-size:11px;color:var(--muted);">ردود على عملاء</div></div>
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#fbbf24;">${log.length}</div><div style="font-size:11px;color:var(--muted);">إجراءات على شركات</div></div>
