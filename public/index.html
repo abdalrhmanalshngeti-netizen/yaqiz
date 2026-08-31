@@ -23,6 +23,13 @@
       --surface: #0d1629;
       --card:    #111d33;
       --border:  #1a2942;
+      /* هوية الموقع العامة (تركوازي) — نفس ألوان المنصة الداخلية بالضبط بعد
+         إعادة التصميم؛ لا تُستخدم لأي شي مرتبط بلون باقة معيّنة */
+      --brand:       #0d9488;
+      --brand-d:     #0f766e;
+      --brand-light: #14b8a6;
+      /* --blue/--blue-d تبقى كما هي حرفيًا — مرتبطة بهوية باقة "النمو" تحديدًا
+         (planMeta.growth بالمنصة الداخلية)، ما تتغيّر مع هوية الموقع العامة */
       --blue:    #3b82f6;
       --blue-d:  #1d4ed8;
       --green:   #10b981;
@@ -62,24 +69,24 @@
     }
     .nav-links a:hover { color:#fff; background:rgba(255,255,255,0.08); }
     .btn-enter {
-      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      background:linear-gradient(135deg,var(--brand-d),var(--brand));
       color:#fff !important; font-weight:800 !important;
-      border-radius:10px !important; padding:8px 20px !important;
-      box-shadow:0 4px 16px rgba(59,130,246,.35);
+      border-radius:12px !important; padding:8px 20px !important;
+      box-shadow:0 4px 16px rgba(13,148,136,.35);
     }
-    .btn-enter:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(59,130,246,.5) !important; }
+    .btn-enter:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(13,148,136,.5) !important; }
 
     /* ── HERO ────────────────────── */
     .hero {
       min-height:100vh;
-      background:radial-gradient(ellipse at 40% 50%, #0d2a6e 0%, #070d1a 65%);
+      background:radial-gradient(ellipse at 40% 50%, #0a3330 0%, #070d1a 65%);
       display:flex; align-items:center; justify-content:center;
       text-align:center; padding:120px 2rem 6rem;
       position:relative; overflow:hidden;
     }
     .hero::before {
       content:''; position:absolute; inset:0;
-      background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233b82f6' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230d9488' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
       pointer-events:none;
     }
     .hero-content { position:relative; max-width:860px; }
@@ -93,22 +100,22 @@
       color:#fff;
       font-size:clamp(2.6rem, 6vw, 4.4rem);
       font-weight:900; line-height:1.15; margin-bottom:1.5rem;
-      text-shadow:0 2px 40px rgba(59,130,246,.2);
+      text-shadow:0 2px 40px rgba(13,148,136,.25);
     }
-    .hero h1 em { font-style:normal; color:#60a5fa; }
+    .hero h1 em { font-style:normal; color:#5eead4; }
     .hero-sub {
       color:rgba(255,255,255,.8); font-size:1.2rem; font-weight:600;
       line-height:1.85; margin-bottom:2.75rem; max-width:640px; margin-inline:auto;
     }
     .hero-btns { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-bottom:3.5rem; }
     .btn-cta {
-      background:linear-gradient(135deg,var(--blue-d),var(--blue));
-      color:#fff; padding:1rem 2.4rem; border-radius:14px;
+      background:linear-gradient(135deg,var(--brand-d),var(--brand));
+      color:#fff; padding:1rem 2.4rem; border-radius:16px;
       text-decoration:none; font-weight:800; font-size:1.05rem;
-      box-shadow:0 6px 28px rgba(29,78,216,.5);
+      box-shadow:0 6px 28px rgba(15,118,110,.5);
       transition:.3s; border:none; cursor:pointer; font-family:inherit;
     }
-    .btn-cta:hover { transform:translateY(-2px); box-shadow:0 10px 36px rgba(29,78,216,.65); }
+    .btn-cta:hover { transform:translateY(-2px); box-shadow:0 10px 36px rgba(15,118,110,.65); }
     .btn-ghost-cta {
       background:rgba(255,255,255,.06); color:#fff;
       padding:1rem 2.4rem; border-radius:14px;
@@ -136,9 +143,9 @@
     .container { max-width:1240px; margin:auto; }
     .sec-label {
       font-size:0.78rem; font-weight:800; letter-spacing:2px; text-transform:uppercase;
-      color:var(--blue); margin-bottom:.5rem;
+      color:var(--brand-d); margin-bottom:.5rem;
     }
-    .sec-label.light { color:#60a5fa; }
+    .sec-label.light { color:#5eead4; }
     .sec-title {
       font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900;
       color:var(--light-text); line-height:1.25; margin-bottom:.9rem;
@@ -199,11 +206,11 @@
     .step-card { text-align:center; padding:1.5rem; }
     .step-num {
       width:68px; height:68px; border-radius:50%;
-      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      background:linear-gradient(135deg,var(--brand-d),var(--brand));
       color:#fff; font-size:1.7rem; font-weight:900;
       display:flex; align-items:center; justify-content:center;
       margin:0 auto 1.5rem;
-      box-shadow:0 8px 28px rgba(29,78,216,.35);
+      box-shadow:0 8px 28px rgba(15,118,110,.35);
     }
     .step-card h3 { font-size:1.15rem; font-weight:900; color:var(--light-text); margin-bottom:.5rem; }
     .step-card p  { color:var(--light-muted); font-size:.96rem; font-weight:600; line-height:1.8; }
@@ -217,7 +224,7 @@
       background:#fff; border-radius:18px; padding:2rem 1.5rem;
       border:1.5px solid var(--light-border); text-align:center; transition:.3s;
     }
-    .comp-card:hover { border-color:var(--blue); box-shadow:0 6px 24px rgba(59,130,246,.1); }
+    .comp-card:hover { border-color:var(--brand); box-shadow:0 6px 24px rgba(13,148,136,.1); }
     .comp-card .ci { font-size:2.6rem; margin-bottom:.75rem; }
     .comp-card h4 { font-size:1.05rem; font-weight:900; color:var(--light-text); margin-bottom:.3rem; }
     .comp-card p  { color:var(--light-muted); font-size:.9rem; font-weight:600; line-height:1.65; }
@@ -293,7 +300,7 @@
       font-family:inherit; font-size:.92rem; font-weight:800; transition:all .2s;
     }
     .cycle-btn:hover  { border-color:rgba(255,255,255,.4); color:#fff; }
-    .cycle-btn.active { border-color:var(--blue); background:var(--blue); color:#fff; }
+    .cycle-btn.active { border-color:var(--brand); background:var(--brand); color:#fff; }
     .cycle-btn .tag   { font-size:.72rem; color:#34d399; margin-inline-start:4px; }
     .cycle-btn.active .tag { color:#d1fae5; }
     .feat-list { list-style:none; flex:1; margin-bottom:2rem; }
@@ -334,7 +341,7 @@
 
     /* ── CTA BANNER ────────────── */
     .cta-wrap {
-      background:linear-gradient(140deg,#070d1a,#0d2a6e);
+      background:linear-gradient(140deg,#070d1a,#0a3330);
       text-align:center; padding:6rem 2rem;
     }
     .cta-wrap h2 { color:#fff; font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900; margin-bottom:1rem; }
@@ -381,7 +388,7 @@
       border-radius:10px; font-family:inherit; font-size:.95rem;
       color:#0f172a; outline:none; transition:.2s;
     }
-    .fgroup input:focus { border-color:var(--blue); }
+    .fgroup input:focus { border-color:var(--brand); }
     .frow { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
     .malert {
       padding:.8rem 1rem; border-radius:10px;
@@ -393,12 +400,12 @@
     hr.div { border:none; border-top:1px solid #e2e8f0; margin:1.25rem 0; }
     .btn-submit {
       width:100%; padding:1rem; margin-top:.5rem;
-      background:linear-gradient(135deg,var(--blue-d),var(--blue));
+      background:linear-gradient(135deg,var(--brand-d),var(--brand));
       color:#fff; border:none; border-radius:12px;
       font-family:inherit; font-size:1rem; font-weight:800;
-      cursor:pointer; transition:.2s; box-shadow:0 4px 20px rgba(29,78,216,.4);
+      cursor:pointer; transition:.2s; box-shadow:0 4px 20px rgba(15,118,110,.4);
     }
-    .btn-submit:hover { transform:translateY(-1px); box-shadow:0 8px 28px rgba(29,78,216,.55); }
+    .btn-submit:hover { transform:translateY(-1px); box-shadow:0 8px 28px rgba(15,118,110,.55); }
     .btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; }
 
     /* ── RESPONSIVE ─────────────── */
@@ -688,6 +695,7 @@
           <li class="sect">الفريق والفروع</li>
           <li><span class="ck">✓</span> حتى 5 مستخدمين</li>
           <li><span class="ck">✓</span> حتى 3 فروع</li>
+          <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
         </ul>
         <button class="btn-plan" data-action="openModal" data-args='["growth"]'>ابدأ مجاناً 15 يوم</button>
       </div>
@@ -720,6 +728,7 @@
           <li class="sect">الفريق والفروع</li>
           <li><span class="ck">✓</span> مستخدمون غير محدودين</li>
           <li><span class="ck">✓</span> حتى 5 فروع</li>
+          <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
         </ul>
         <button class="btn-plan" data-action="openModal" data-args='["pro"]'>ابدأ مجاناً 15 يوم</button>
       </div>
@@ -823,8 +832,8 @@
       <button type="submit" class="btn-submit" id="regBtn">إنشاء الحساب</button>
       <p style="text-align:center;font-size:.78rem;color:#94a3b8;margin-top:.9rem">
         بالتسجيل توافق على
-        <a href="/terms" target="_blank" style="color:var(--blue)">شروط الاستخدام</a>
-        و<a href="/privacy" target="_blank" style="color:var(--blue)">سياسة الخصوصية</a>
+        <a href="/terms" target="_blank" style="color:var(--brand-d)">شروط الاستخدام</a>
+        و<a href="/privacy" target="_blank" style="color:var(--brand-d)">سياسة الخصوصية</a>
       </p>
     </form>
   </div>
