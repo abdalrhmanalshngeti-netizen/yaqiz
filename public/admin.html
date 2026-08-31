@@ -12,6 +12,10 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#070d1a;--surface:#0d1629;--card:#111d33;--border:#1a2942;--border2:#243352;
+  /* هوية عامة (تركوازي) — نفس ألوان المنصة والصفحة الرئيسية بعد إعادة
+     التصميم. --blue/--blue-d تبقى أزرق حرفيًا عمدًا: مستخدمة فقط لتمييز
+     باقة "نمو" (PLAN_META.growth) وشارات معلوماتية عامة، لا تمثّل هوية الموقع */
+  --brand:#0d9488;--brand-d:#0f766e;--brand-light:#5eead4;
   --blue:#3b82f6;--blue-d:#1d4ed8;--green:#10b981;--amber:#f59e0b;
   --red:#ef4444;--purple:#8b5cf6;--cyan:#06b6d4;
   --text:#f0f4ff;--muted:#6b7fa3;--muted2:#4a5878;
@@ -27,9 +31,9 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .field{margin-bottom:14px}
 .field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px}
 .field input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:13px 16px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;outline:none;transition:.2s}
-.field input:focus{border-color:var(--blue);background:#0a1428}
-.btn-login{width:100%;margin-top:8px;background:linear-gradient(135deg,var(--blue-d),var(--blue));color:#fff;border:none;border-radius:10px;padding:14px;font-family:'Tajawal',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;box-shadow:0 4px 24px rgba(59,130,246,.35)}
-.btn-login:hover{transform:translateY(-1px);box-shadow:0 8px 32px rgba(59,130,246,.5)}
+.field input:focus{border-color:var(--brand);background:#0a1428}
+.btn-login{width:100%;margin-top:8px;background:linear-gradient(135deg,var(--brand-d),var(--brand));color:#fff;border:none;border-radius:10px;padding:14px;font-family:'Tajawal',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;box-shadow:0 4px 24px rgba(13,148,136,.35)}
+.btn-login:hover{transform:translateY(-1px);box-shadow:0 8px 32px rgba(13,148,136,.5)}
 .btn-login:disabled{opacity:.6;cursor:not-allowed;transform:none}
 .err-msg{color:#f87171;font-size:13px;font-weight:700;margin-bottom:10px;display:none;text-align:center}
 
@@ -37,7 +41,7 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 #app{display:none}
 
 /* TOPBAR */
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;overflow:hidden}
 .brand-name{font-size:18px;font-weight:900}
 .brand-sub{font-size:11px;color:var(--muted)}
 .topbar-right{display:flex;align-items:center;gap:12px}
@@ -49,10 +53,12 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .btn-logout:hover{background:rgba(239,68,68,.2)}
 
 /* NAV TABS */
-.nav-tabs{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:4px;position:sticky;top:60px;z-index:99;overflow-x:auto}
+.nav-tabs-outer{position:sticky;top:60px;z-index:99}
+.nav-tabs{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.nav-tabs::-webkit-scrollbar{display:none}
 .nav-tab{display:flex;align-items:center;gap:7px;padding:14px 18px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;transition:.15s;margin-bottom:-1px}
 .nav-tab:hover{color:var(--text)}
-.nav-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.nav-tab.active{color:var(--brand-light);border-bottom-color:var(--brand-light)}
 .nav-tab .tab-badge{background:var(--red);color:#fff;border-radius:100px;min-width:18px;height:18px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
 
 /* MAIN */
@@ -62,10 +68,11 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 
 /* KPI */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr)}
 .kpi-card{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px 22px;position:relative;overflow:hidden;transition:.2s}
 .kpi-card:hover{transform:translateY(-2px)}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
-.kpi-card.blue::before{background:var(--blue)}
+.kpi-card.blue::before{background:var(--brand)}
 .kpi-card.green::before{background:var(--green)}
 .kpi-card.amber::before{background:var(--amber)}
 .kpi-card.red::before{background:var(--red)}
@@ -104,7 +111,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .sec-title{font-size:18px;font-weight:900}
 .sec-sub{font-size:12px;font-weight:600;color:var(--muted);margin-top:3px}
 .search-input{background:var(--card);border:1.5px solid var(--border2);border-radius:10px;padding:9px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;outline:none;transition:.2s;width:220px}
-.search-input:focus{border-color:var(--blue)}
+.search-input:focus{border-color:var(--brand)}
 
 /* COST */
 .cost-section{background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:22px;margin-bottom:24px}
@@ -112,7 +119,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .cost-input-wrap{flex:1;min-width:150px}
 .cost-input-wrap label{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .cost-input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;font-weight:700;outline:none;transition:.2s;text-align:center}
-.cost-input:focus{border-color:var(--blue)}
+.cost-input:focus{border-color:var(--brand)}
 .cost-body{display:grid;grid-template-columns:1fr 1.4fr;gap:20px}
 .cost-chart-wrap{position:relative;min-height:240px}
 .cost-table-wrap{overflow-x:auto}
@@ -120,14 +127,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .cost-table th{background:var(--surface);padding:10px 12px;text-align:right;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .cost-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600;color:#c4d0e8}
 .cost-table tr:last-child td{border-bottom:none}
-.cost-table .total-row td{background:rgba(59,130,246,.08);border-top:2px solid var(--border2);color:var(--text);font-weight:900;font-size:14px}
-.cost-bar-inline{height:6px;border-radius:3px;background:var(--blue);opacity:.8;margin-top:4px}
+.cost-table .total-row td{background:rgba(13,148,136,.08);border-top:2px solid var(--border2);color:var(--text);font-weight:900;font-size:14px}
+.cost-bar-inline{height:6px;border-radius:3px;background:var(--brand);opacity:.8;margin-top:4px}
 
 /* ACTIVITY */
 .activity-item{display:flex;align-items:flex-start;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:.15s}
 .activity-item:last-child{border-bottom:none}
 .activity-item:hover{background:rgba(255,255,255,.02)}
-.act-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:var(--blue);box-shadow:0 0 6px var(--blue)}
+.act-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:var(--brand);box-shadow:0 0 6px var(--brand)}
 .act-text{font-size:13px;font-weight:600;color:#c4d0e8;margin-bottom:2px}
 .act-meta{font-size:11px;font-weight:600;color:var(--muted)}
 
@@ -143,13 +150,13 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .filter-btns{display:flex;gap:6px;flex-wrap:wrap}
 .fbtn{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
 .fbtn:hover{background:rgba(255,255,255,.1);color:var(--text)}
-.fbtn.active{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:#93c5fd}
+.fbtn.active{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.4);color:#5eead4}
 
 /* أزرار ثانوية بروؤوس البطاقات ("عرض الكل ←"، "🔄 تحديث"...) — الصنف كان
    مستخدَمًا بـ4 أزرار حقيقية بدون أي تعريف CSS له إطلاقًا، فكانت تظهر بشكل
    المتصفح الافتراضي بلا أي تنسيق */
-.btn-action{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
-.btn-action:hover{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:#fff}
+.btn-action{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:#5eead4;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
+.btn-action:hover{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.4);color:#fff}
 
 /* ACTION BTNS */
 .abtn{border:none;border-radius:7px;padding:5px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
@@ -159,7 +166,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .abtn.open{background:rgba(239,68,68,.12);color:#f87171}
 
 /* HELPERS */
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes ticketPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4);background:#fbbf24}}
 .loader{padding:30px;text-align:center;color:var(--muted);font-weight:700}
@@ -167,8 +174,34 @@ tr:hover td{background:rgba(255,255,255,.02)}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;z-index:9999;display:none;box-shadow:0 16px 48px rgba(0,0,0,.5)}
 /* بديل onmouseover/onmouseout="this.style.x=y" (تشديد CSP، المرحلة 2) */
 .hover-row-soft:hover{background:rgba(255,255,255,.03) !important}
-.hover-ticket-row:hover{background:rgba(59,130,246,.07) !important}
-.hover-ticket-row-public:hover{background:rgba(59,130,246,.07) !important}
+.hover-ticket-row:hover{background:rgba(13,148,136,.07) !important}
+.hover-ticket-row-public:hover{background:rgba(13,148,136,.07) !important}
+
+/* أزرار تمرير شريط التبويبات — كان يفيض بصمت بلا أي مؤشر (تبويب "الموظفون"
+   يختفي كامل خارج الشاشة)؛ الآن سهمين ثابتين يظهرون فقط لو فيه فعليًا محتوى
+   مخفي بذاك الاتجاه (تتحكم فيهم updateNavScrollHints عبر JS) */
+.nav-scroll-btn{
+  position:absolute;top:0;bottom:0;width:34px;z-index:101;border:none;cursor:pointer;
+  display:none;align-items:center;justify-content:center;color:#fff;font-size:16px;
+  background:linear-gradient(90deg,var(--surface) 40%,transparent);
+}
+.nav-scroll-btn.show{display:flex}
+.nav-scroll-btn.end{right:0;background:linear-gradient(270deg,var(--surface) 40%,transparent)}
+.nav-scroll-btn.start{left:0}
+
+/* تجاوب — الملف ما كان فيه أي نقطة كسر إطلاقًا */
+@media (max-width:1100px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .main{padding:16px}
+  .kpi-grid{grid-template-columns:1fr}
+  .grid-4{grid-template-columns:1fr}
+  .topbar{padding:0 14px}
+  .nav-tabs{padding:0 14px}
+  .brand-sub{display:none} /* نص فرعي طويل كان يفيض تحت الشريط العلوي الثابت الارتفاع ويتراكب مع شريط التبويبات تحته */
+}
 </style>
 </head>
 <body>
@@ -232,18 +265,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 
   <!-- NAV TABS -->
-  <div class="nav-tabs">
-    <button class="nav-tab active" data-action="switchTab" data-args='["dashboard"]' id="tab-dashboard">📊 لوحة التحكم</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["companies"]'   id="tab-companies">🏢 الشركات</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["newclients"]'  id="tab-newclients">🆕 عملاء جدد <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
-    <button class="nav-tab" data-action="switchTab" data-args='["users"]'       id="tab-users">👥 المستخدمون</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["tickets"]'     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
-    <button class="nav-tab" data-action="switchTab" data-args='["costs"]'       id="tab-costs">💰 تحليل التكلفة</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["plans"]'       id="tab-plans">📦 الباقات والإيرادات</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]'     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["log"]'         id="tab-log">📋 سجل النشاط</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["employees"]'   id="tab-employees">🧑‍💼 الموظفون</button>
-    <button class="nav-tab" data-action="switchTab" data-args='["myteam"]'       id="tab-myteam" style="display:none;">👥 فريقي</button>
+  <div class="nav-tabs-outer">
+    <button class="nav-scroll-btn start" id="nav-scroll-start" data-action="scrollNavTabs" data-args='["start"]' aria-label="تمرير لليمين">›</button>
+    <div class="nav-tabs" id="nav-tabs">
+      <button class="nav-tab active" data-action="switchTab" data-args='["dashboard"]' id="tab-dashboard">📊 لوحة التحكم</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["companies"]'   id="tab-companies">🏢 الشركات</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["newclients"]'  id="tab-newclients">🆕 عملاء جدد <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["users"]'       id="tab-users">👥 المستخدمون</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["tickets"]'     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["costs"]'       id="tab-costs">💰 تحليل التكلفة</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["plans"]'       id="tab-plans">📦 الباقات والإيرادات</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]'     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["log"]'         id="tab-log">📋 سجل النشاط</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["employees"]'   id="tab-employees">🧑‍💼 الموظفون</button>
+      <button class="nav-tab" data-action="switchTab" data-args='["myteam"]'       id="tab-myteam" style="display:none;">👥 فريقي</button>
+    </div>
+    <button class="nav-scroll-btn end" id="nav-scroll-end" data-action="scrollNavTabs" data-args='["end"]' aria-label="تمرير لليسار">‹</button>
   </div>
 
   <div class="main">
@@ -258,7 +295,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div style="display:flex;align-items:center;gap:10px;">
             <span id="dash-tickets-count" style="font-size:28px;font-weight:900;color:#f59e0b;">—</span>
             <span style="font-size:11px;color:var(--muted);font-weight:700;">تذكرة</span>
-            <span style="font-size:11px;color:var(--blue);font-weight:700;text-decoration:underline;">عرض الكل ←</span>
+            <span style="font-size:11px;color:var(--brand-light);font-weight:700;text-decoration:underline;">عرض الكل ←</span>
           </div>
         </div>
         <div id="dash-tickets-latest"><div style="color:var(--muted);font-size:12px;text-align:center;padding:8px;">جاري التحميل...</div></div>
@@ -270,7 +307,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <div id="dash-mrr" style="font-size:36px;font-weight:900;color:#34d399;line-height:1">0</div>
             <div style="font-size:12px;font-weight:600;color:var(--muted);margin-top:5px">ريال سعودي / شهر</div>
           </div>
-          <div style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:0;" id="dash-plan-mini"></div>
+          <div class="grid-4" style="flex:1;gap:0;" id="dash-plan-mini"></div>
         </div>
       </div>
       <div class="charts-row">
@@ -441,9 +478,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <input class="cost-input" type="number" id="cost-user" value="1.00" min="0" step="0.10" data-oninput="recalcCost">
           </div>
           <div class="cost-input-wrap" style="display:flex;align-items:flex-end">
-            <div id="cost-total-badge" style="width:100%;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 14px;text-align:center">
+            <div id="cost-total-badge" style="width:100%;background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.25);border-radius:10px;padding:10px 14px;text-align:center">
               <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">إجمالي التكلفة / شهر</div>
-              <div id="cost-total-val" style="font-size:22px;font-weight:900;color:#93c5fd">— ر.س</div>
+              <div id="cost-total-val" style="font-size:22px;font-weight:900;color:#5eead4">— ر.س</div>
             </div>
           </div>
         </div>
@@ -484,7 +521,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="sec-title">🧑‍💼 موظفو لوحة الإدارة</div>
           <div class="sec-sub">إضافة موظفين ومنحهم صلاحيات محددة — خاص بالمالك فقط</div>
         </div>
-        <button class="btn-action" data-action="showAddEmployeeModal" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">➕ إضافة موظف</button>
+        <button class="btn-action" data-action="showAddEmployeeModal" style="background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">➕ إضافة موظف</button>
       </div>
       <div class="panel">
         <div style="overflow-x:auto">
@@ -568,9 +605,12 @@ function badge(s) {
   return m[s] || `<span class="badge">${s||'—'}</span>`;
 }
 function planBadge(p) {
+  // نفس ألوان PLAN_META بالضبط (كانت "نمو" هنا Amber بينما PLAN_META يعرّفها
+  // أزرق — تضارب داخلي بين نظامين مختلفين لنفس المعنى، وAmber كانت تتصادم
+  // بصريًا مع شارة حالة "معلّقة" اللي تستخدم نفس اللون بعمود ثاني بنفس الصف)
   const m = {
     basic:  '<span class="badge green">أساسي</span>',
-    growth: '<span class="badge amber">نمو</span>',
+    growth: '<span class="badge blue">نمو</span>',
     pro:    '<span class="badge purple">احترافي</span>',
   };
   return m[p] || `<span class="badge">${p||'—'}</span>`;
@@ -684,6 +724,32 @@ function showApp(username){
   $('admin-name').textContent=username||'المالك';
   $('login-screen').style.display='none';
   $('app').style.display='block';
+  setupNavScrollHints();
+}
+
+// ── أسهم تمرير شريط التبويبات ────────────────────────────
+// شريط التبويبات كان يفيض أفقيًا بصمت تام (تبويب "الموظفون" يختفي كامل خارج
+// الشاشة على شاشة عادية 1440px، بدون أي مؤشر إنه فيه محتوى مخفي) — الآن
+// سهمين يظهرون فقط لو فيه فعليًا محتوى مخفي بذاك الاتجاه
+function updateNavScrollHints(){
+  const nav = $('nav-tabs'); if(!nav) return;
+  const abs = Math.abs(nav.scrollLeft);
+  const atStart = abs < 4;
+  const atEnd = abs + nav.clientWidth >= nav.scrollWidth - 4;
+  const overflowing = nav.scrollWidth > nav.clientWidth + 4;
+  $('nav-scroll-start')?.classList.toggle('show', overflowing && !atStart);
+  $('nav-scroll-end')?.classList.toggle('show', overflowing && !atEnd);
+}
+function scrollNavTabs(dir){
+  const nav = $('nav-tabs'); if(!nav) return;
+  const amount = Math.round(nav.clientWidth*0.6) * (dir==='start' ? 1 : -1);
+  nav.scrollBy({ left: amount, behavior: 'smooth' });
+}
+function setupNavScrollHints(){
+  const nav = $('nav-tabs'); if(!nav) return;
+  nav.addEventListener('scroll', updateNavScrollHints);
+  window.addEventListener('resize', updateNavScrollHints);
+  setTimeout(updateNavScrollHints, 150); // بعد ما تُبنى صلاحيات التبويبات (قد تخفي بعضها)
 }
 
 // ── صلاحيات: إخفاء ما لا يملك الموظف صلاحية له، اختيار أول تبويب متاح ──
@@ -707,6 +773,7 @@ function applyPermissionGating(){
     else { const mainEl = document.querySelector('.main'); if (mainEl) mainEl.innerHTML = '<div class="empty-state" style="padding:60px;">لا تملك صلاحية الوصول لأي قسم — تواصل مع المالك</div>'; }
   }
   loadMyTeamTab();
+  setTimeout(updateNavScrollHints, 150);
 }
 async function apiFetch(path,opts={}){
   const token=localStorage.getItem(TOKEN_KEY);
@@ -1082,6 +1149,7 @@ async function loadNewClientsBadge() {
     const badge = $('newclients-badge');
     if (badge) { badge.textContent = total; badge.style.display = total ? 'inline-flex' : 'none'; }
   } catch(e) { /* silent */ }
+  updateNavScrollHints(); // الشارة تضيف عرض للتبويب بعد ما توصل بيانات السيرفر
 }
 
 // ── KPI ────────────────────────────────────────────────
@@ -1132,7 +1200,7 @@ function renderCharts(data) {
   if(_regChart) _regChart.destroy();
   _regChart=new Chart($('chart-reg'),{
     type:'bar',
-    data:{labels:last14.map(d=>d.day),datasets:[{label:'شركة',data:last14.map(d=>d.count),backgroundColor:'rgba(59,130,246,0.7)',borderColor:'#3b82f6',borderWidth:2,borderRadius:5}]},
+    data:{labels:last14.map(d=>d.day),datasets:[{label:'شركة',data:last14.map(d=>d.count),backgroundColor:'rgba(13,148,136,0.7)',borderColor:'#0d9488',borderWidth:2,borderRadius:5}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
       scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b7fa3',font:{family:'Tajawal',size:11}}},
               y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#6b7fa3',font:{family:'Tajawal',size:11},stepSize:1,precision:0}}}}
@@ -1203,7 +1271,7 @@ function renderIssues(data) {
     <tr>
       <td style="font-weight:800;color:#f0f4ff">${escHtml(c.name)}</td>
       <td>${badge(c.status)}</td>
-      <td style="font-weight:700;color:#93c5fd">${fmt(c.user_count)}</td>
+      <td style="font-weight:700;color:#5eead4">${fmt(c.user_count)}</td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
     </tr>`).join('');
 }
@@ -1227,13 +1295,13 @@ function renderCompaniesTable(companies) {
       <td>${badge(c.status)}</td>
       <td>${planBadge(c.plan)}</td>
       <td>${trialBadge(c)}</td>
-      <td style="font-weight:900;color:#93c5fd">${fmt(c.user_count)}</td>
+      <td style="font-weight:900;color:#5eead4">${fmt(c.user_count)}</td>
       <td style="font-weight:700;color:#fbbf24">${fmt(c.branch_count)}</td>
       <td style="color:#6ee7b7">${fmt(c.invoice_count)}</td>
       <td>${fmtSAR(c.total_revenue)}</td>
       <td style="font-size:12px;color:var(--muted)">${fmtD(c.created_at)}</td>
       <td>
-        <button data-action="showCompanyModal" data-args="${JSON.stringify([c.id])}" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">⚙️ إدارة</button>
+        <button data-action="showCompanyModal" data-args="${JSON.stringify([c.id])}" style="background:rgba(13,148,136,.15);border:1px solid rgba(13,148,136,.3);color:#5eead4;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">⚙️ إدارة</button>
       </td>
     </tr>`).join('');
 }
@@ -1321,7 +1389,7 @@ function renderCoModal(c){
     <tr>
       <td style="font-weight:700;color:#f0f4ff;padding:9px 12px;">${escHtml(u.full_name)||'—'}</td>
       <td style="color:var(--muted);font-size:12px;padding:9px 12px;">@${escHtml(u.username)}</td>
-      <td style="padding:9px 12px;"><span style="font-size:11px;background:rgba(59,130,246,.15);color:#93c5fd;padding:2px 8px;border-radius:99px;">${{owner:'مالك',accountant:'محاسب',cashier:'كاشير'}[u.role]||u.role}</span></td>
+      <td style="padding:9px 12px;"><span style="font-size:11px;background:rgba(13,148,136,.15);color:#5eead4;padding:2px 8px;border-radius:99px;">${{owner:'مالك',accountant:'محاسب',cashier:'كاشير'}[u.role]||u.role}</span></td>
       <td style="padding:9px 12px;">${u.active?'<span style="color:#34d399;font-size:12px;font-weight:700;">● نشط</span>':'<span style="color:#f87171;font-size:12px;font-weight:700;">● موقوف</span>'}</td>
       <td style="font-size:11px;color:var(--muted);padding:9px 12px;">${fmtD(u.last_login)}</td>
       <td style="font-size:12px;padding:9px 12px;text-align:center;color:${u.ai_extract_count?'#c4b5fd':'var(--muted)'};font-weight:${u.ai_extract_count?'800':'400'};">${u.ai_extract_count?fmt(u.ai_extract_count):'—'}</td>
@@ -1348,18 +1416,18 @@ function renderCoModal(c){
 
   <!-- معلومات التواصل -->
   ${(c.contact_phone||c.contact_email)?`
-  <div style="padding:16px 28px;border-bottom:1px solid #1a2942;background:rgba(59,130,246,.04);">
+  <div style="padding:16px 28px;border-bottom:1px solid #1a2942;background:rgba(13,148,136,.04);">
     <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">📞 معلومات التواصل</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;">
       ${c.contact_phone?`<a href="tel:${escHtml(c.contact_phone)}" style="display:flex;align-items:center;gap:8px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px 16px;color:#34d399;text-decoration:none;font-weight:800;font-size:14px;">📱 ${escHtml(c.contact_phone)}</a>`:''}
-      ${c.contact_email?`<a href="mailto:${escHtml(c.contact_email)}" style="display:flex;align-items:center;gap:8px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 16px;color:#93c5fd;text-decoration:none;font-weight:800;font-size:14px;">📧 ${escHtml(c.contact_email)}</a>`:''}
+      ${c.contact_email?`<a href="mailto:${escHtml(c.contact_email)}" style="display:flex;align-items:center;gap:8px;background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.25);border-radius:10px;padding:10px 16px;color:#5eead4;text-decoration:none;font-weight:800;font-size:14px;">📧 ${escHtml(c.contact_email)}</a>`:''}
     </div>
   </div>`:''}
 
   <div style="padding:20px 28px;border-bottom:1px solid #1a2942;">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
-      <div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:14px;text-align:center;">
-        <div style="font-size:28px;font-weight:900;color:#93c5fd;">${fmt(c.user_count)}</div>
+    <div class="grid-4" style="gap:12px;margin-bottom:20px;">
+      <div style="background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.2);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:28px;font-weight:900;color:#5eead4;">${fmt(c.user_count)}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">مستخدم</div>
       </div>
       <div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);border-radius:12px;padding:14px;text-align:center;">
@@ -1379,7 +1447,7 @@ function renderCoModal(c){
     <!-- استخدام الذكاء الاصطناعي -->
     <div style="margin-bottom:20px;">
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🤖 استخدام الذكاء الاصطناعي (إجمالي)</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div class="grid-4" style="gap:12px;">
         <div style="background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:12px;text-align:center;">
           <div style="font-size:22px;font-weight:900;color:#c4b5fd;">${fmt(c.ai_extract_count)}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:800;margin-top:2px;">تفريغ فواتير</div>
@@ -1423,7 +1491,7 @@ function renderCoModal(c){
           <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px;">تاريخ انتهاء الاشتراك</label>
           <input type="date" id="co-modal-expiry" value="${expiry}" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;">
         </div>
-        <button data-action="coModalSavePlan" data-args="${JSON.stringify([c.id])}" style="padding:10px 22px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
+        <button data-action="coModalSavePlan" data-args="${JSON.stringify([c.id])}" style="padding:10px 22px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap;">💾 حفظ الباقة</button>
       </div>
       ${expiry?`<div style="margin-top:8px;font-size:12px;color:${new Date(expiry)<new Date()?'#f87171':'#6b7fa3'};">⏳ تنتهي: ${fmtD(c.subscription_expires_at)}</div>`:''}
     </div>
@@ -1553,7 +1621,7 @@ function renderUsersTable(users){
       <td style="font-weight:700;color:#c4d0e8">${escHtml(u.company_name)||'—'}</td>
       <td>${badge(u.company_status)}</td>
       <td>
-        <span style="font-size:20px;font-weight:900;color:#93c5fd">${u.sub_count}</span>
+        <span style="font-size:20px;font-weight:900;color:#5eead4">${u.sub_count}</span>
         <span style="font-size:12px;color:var(--muted)"> حساب تابع</span>
       </td>
       <td style="font-size:12px;color:var(--muted)">${u.last_login?fmtD(u.last_login):'لم يدخل بعد'}</td>
@@ -1577,7 +1645,7 @@ function showMyAccountModal(){
     <div class="field"><label>كلمة مرور جديدة</label><input id="myacc-newpass" type="password" placeholder="اتركها فاضية لعدم التغيير" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div id="myacc-current-wrap" style="display:none;" class="field"><label>كلمة المرور الحالية (مطلوبة لتغيير الإيميل/كلمة المرور)</label><input id="myacc-current" type="password" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;"></div>
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button data-action="saveMyAccount" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="saveMyAccount" style="flex:1;padding:11px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
       <button data-action="closeMyAccountModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
     <div style="margin-top:18px;padding-top:16px;border-top:1px solid #1a2942;">
@@ -1609,7 +1677,7 @@ async function loadMy2FAStatus(){
         </div>`
       : `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#0d1629;border-radius:8px;">
           <span style="font-size:12px;color:var(--muted);">غير مفعّلة</span>
-          <button data-action="start2FASetup" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تفعيل</button>
+          <button data-action="start2FASetup" style="background:rgba(13,148,136,.15);border:1px solid rgba(13,148,136,.3);color:#5eead4;border-radius:7px;padding:5px 12px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;">تفعيل</button>
         </div>`;
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">خطأ في التحميل</div>';}
 }
@@ -1622,10 +1690,10 @@ async function start2FASetup(){
       <div style="text-align:center;background:#fff;border-radius:10px;padding:12px;margin-bottom:10px;">
         <img src="${res.qr_code}" style="width:160px;height:160px;">
       </div>
-      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">امسح الرمز بتطبيق المصادقة (Google Authenticator/Authy)، أو أدخل السر يدوياً: <code style="color:#93c5fd;">${res.secret}</code></div>
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">امسح الرمز بتطبيق المصادقة (Google Authenticator/Authy)، أو أدخل السر يدوياً: <code style="color:#5eead4;">${res.secret}</code></div>
       <input id="tfa-setup-pass" type="password" placeholder="كلمة المرور الحالية" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
       <input id="tfa-setup-code" placeholder="أدخل الرمز المكوّن من 6 أرقام" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
-      <button data-action="confirm2FASetupUI" style="width:100%;padding:9px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
+      <button data-action="confirm2FASetupUI" style="width:100%;padding:9px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">فشل التوليد</div>';}
 }
 async function confirm2FASetupUI(){
@@ -1772,7 +1840,7 @@ function showAddEmployeeModal(){
     <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;">الصلاحيات</div>
     ${permCheckboxes([])}
     <div style="display:flex;gap:10px;margin-top:14px;">
-      <button data-action="saveNewEmployee" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="saveNewEmployee" style="flex:1;padding:11px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
       <button data-action="closeEmployeeModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
   </div>`;
@@ -1809,7 +1877,7 @@ function showEditEmployeeModal(id){
       <input type="checkbox" id="emp-active-cb" ${emp.active?'checked':''}> الحساب مفعّل
     </label>
     <div style="display:flex;gap:10px;margin-top:10px;">
-      <button data-action="saveEmployeeEdit" data-args="${JSON.stringify([id])}" style="flex:1;padding:11px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
+      <button data-action="saveEmployeeEdit" data-args="${JSON.stringify([id])}" style="flex:1;padding:11px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">حفظ</button>
       <button data-action="closeEmployeeModal" style="flex:1;padding:11px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">إلغاء</button>
     </div>
     <button data-action="promptResetPassword" data-args="${JSON.stringify([id,emp.full_name]).replace(/"/g,'&quot;')}" style="width:100%;margin-top:10px;padding:9px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#fbbf24;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">🔒 إعادة تعيين كلمة المرور</button>
@@ -1869,6 +1937,7 @@ async function loadMyTeamTab(){
     _myTeam=res?.data||[];
     $('tab-myteam').style.display = _myTeam.length ? '' : 'none';
   }catch{ $('tab-myteam').style.display='none'; }
+  updateNavScrollHints();
 }
 async function loadMyTeam(){
   $('myteam-tbody').innerHTML='<tr><td colspan="5" class="loader"><span class="spinner"></span></td></tr>';
@@ -1916,7 +1985,7 @@ function renderTeamActivity(res){
       <button data-action="closeTeamActivityModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:30px;height:30px;border-radius:8px;color:var(--muted);cursor:pointer;">✕</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
-      <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#93c5fd;">${tickets.length}</div><div style="font-size:11px;color:var(--muted);">تذاكر استلمها</div></div>
+      <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#5eead4;">${tickets.length}</div><div style="font-size:11px;color:var(--muted);">تذاكر استلمها</div></div>
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#34d399;">${replies.length}</div><div style="font-size:11px;color:var(--muted);">ردود على عملاء</div></div>
       <div style="background:#0d1629;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:900;color:#fbbf24;">${log.length}</div><div style="font-size:11px;color:var(--muted);">إجراءات على شركات</div></div>
     </div>
@@ -2003,6 +2072,7 @@ async function loadTicketsBadge(){
       latest.innerHTML=items.slice(0,3).map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;" data-action="switchTab" data-args='["tickets"]' data-action2="openTicketDetail" data-args2="${JSON.stringify([t.id])}"><span style="font-weight:700;color:#f0f4ff;">${escHtml(t.company_name)||'طلب عام'}</span><span style="color:var(--muted);">${escHtml(t.department||t.sub_dept)||'—'}</span><span style="color:var(--muted);font-size:11px;">${fmtD(t.created_at)}</span></div>`).join('');
     } else if(latest) latest.innerHTML=`<div style="color:var(--muted);font-size:12px;text-align:center;padding:8px;">لا توجد تذاكر مفتوحة</div>`;
   }catch(e){ console.error('[Tickets badge error]', e); }
+  updateNavScrollHints(); // الشارة تضيف عرض للتبويب بعد ما توصل بيانات السيرفر
 }
 function _showAdminNotif(msg, type){
   const c=document.createElement('div');
@@ -2041,7 +2111,7 @@ function renderTickets(tickets){
         <div style="font-weight:700">${escHtml(t.user_name)||'—'}</div>
         <div style="font-size:11px;color:var(--muted)">${isPublic?'من شاشة الدخول':escHtml(t.user_role)||''}</div>
       </td>
-      <td style="color:#93c5fd;font-size:12px">${isPublic?(escHtml(t.note)||'—'):escHtml(t.department)||'—'}</td>
+      <td style="color:#5eead4;font-size:12px">${isPublic?(escHtml(t.note)||'—'):escHtml(t.department)||'—'}</td>
       <td style="font-size:12px;color:var(--muted)">${isPublic?'—':escHtml(t.sub_dept)||'—'}</td>
       <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${preview||'—'}</td>
       <td><span class="badge ${sClass[t.status]||'blue'}">● ${sLabel[t.status]||t.status}</span></td>
@@ -2118,7 +2188,7 @@ function renderTicketDetail(t, history, replies){
     actionsHtml=`<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1a2942;">
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📋 سجل الإجراءات</div>
       ${actions.map(a=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px;">
-        <span style="color:${statusColor[a.status]||'#93c5fd'};">${statusIcon[a.status]||'●'} ${a.label||a.status}</span>
+        <span style="color:${statusColor[a.status]||'#5eead4'};">${statusIcon[a.status]||'●'} ${a.label||a.status}</span>
         <span style="color:var(--muted);">— ${a.actor||'المدير'}</span>
         <span style="color:var(--muted2);margin-right:auto;">${fmtD(a.at)}</span>
       </div>`).join('')}
@@ -2134,7 +2204,7 @@ function renderTicketDetail(t, history, replies){
         : otherTickets.map(h=>`
           <div class="hover-ticket-row" data-action="openTicketDetail" data-args="${JSON.stringify([h.id])}" style="padding:10px 12px;border-radius:10px;border:1px solid #1a2942;margin-bottom:8px;cursor:pointer;transition:.15s;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
-              <span style="font-weight:800;color:#93c5fd;font-size:13px;">#${h.id}</span>
+              <span style="font-weight:800;color:#5eead4;font-size:13px;">#${h.id}</span>
               <span class="badge ${sClass[h.status]||'blue'}" style="font-size:10px;">● ${sLabel[h.status]||h.status}</span>
             </div>
             <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml((h.description||h.sub_dept||h.department||'—').slice(0,60))}</div>
@@ -2152,9 +2222,9 @@ function renderTicketDetail(t, history, replies){
       ${isPublic
         ? `<span style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#f59e0b;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:800;">📞 طلب عام</span>`
         : `<div style="font-size:18px;font-weight:900;color:#f0f4ff;">${escHtml(t.company_name)||'—'}</div>`}
-      <span style="background:${statusBg[t.status]||'rgba(59,130,246,.1)'};color:${statusColor[t.status]||'#93c5fd'};border-radius:8px;padding:3px 12px;font-size:12px;font-weight:800;">${statusIcon[t.status]||'●'} ${sLabel[t.status]||t.status}</span>
+      <span style="background:${statusBg[t.status]||'rgba(13,148,136,.1)'};color:${statusColor[t.status]||'#5eead4'};border-radius:8px;padding:3px 12px;font-size:12px;font-weight:800;">${statusIcon[t.status]||'●'} ${sLabel[t.status]||t.status}</span>
       ${t.assigned_name?`<span style="font-size:12px;color:var(--muted);">👷 مستلمة بواسطة <b style="color:#c4d0e8;">${escHtml(t.assigned_name)}</b></span>`
-        :`<button data-action="claimTicket" data-args="${JSON.stringify([t.id])}" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.35);color:#93c5fd;border-radius:8px;padding:5px 12px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">🙋 استلام</button>`}
+        :`<button data-action="claimTicket" data-args="${JSON.stringify([t.id])}" style="background:rgba(13,148,136,.15);border:1px solid rgba(13,148,136,.35);color:#5eead4;border-radius:8px;padding:5px 12px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">🙋 استلام</button>`}
     </div>
     <button data-action="closeTicketModal" style="background:rgba(255,255,255,.07);border:1px solid #243352;width:34px;height:34px;border-radius:9px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;line-height:34px;text-align:center;">✕</button>
   </div>
@@ -2179,7 +2249,7 @@ function renderTicketDetail(t, history, replies){
         </div>
         ${!isPublic&&t.department?`<div style="background:#0d1629;border-radius:10px;padding:12px;">
           <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">📂 القسم</div>
-          <div style="font-weight:700;color:#93c5fd;">${escHtml(t.department)}</div>
+          <div style="font-weight:700;color:#5eead4;">${escHtml(t.department)}</div>
           ${t.sub_dept?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(t.sub_dept)}</div>`:''}
         </div>`:''}
       </div>
@@ -2206,15 +2276,15 @@ function renderTicketDetail(t, history, replies){
         <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">💬 المحادثة مع العميل</div>
         ${replies.length ? `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
           ${replies.map(r=>`
-            <div style="background:${r.author_type==='admin'?'rgba(59,130,246,.08)':'#0d1629'};border:1px solid ${r.author_type==='admin'?'rgba(59,130,246,.2)':'#1a2942'};border-radius:10px;padding:10px 14px;${r.author_type==='admin'?'margin-right:20px;':'margin-left:20px;'}">
-              <div style="font-size:11px;font-weight:800;color:${r.author_type==='admin'?'#93c5fd':'#34d399'};margin-bottom:4px;">${r.author_type==='admin'?'👷 '+escHtml(r.author_name||'الدعم الفني'):'👤 '+escHtml(r.author_name||'العميل')}</div>
+            <div style="background:${r.author_type==='admin'?'rgba(13,148,136,.08)':'#0d1629'};border:1px solid ${r.author_type==='admin'?'rgba(13,148,136,.2)':'#1a2942'};border-radius:10px;padding:10px 14px;${r.author_type==='admin'?'margin-right:20px;':'margin-left:20px;'}">
+              <div style="font-size:11px;font-weight:800;color:${r.author_type==='admin'?'#5eead4':'#34d399'};margin-bottom:4px;">${r.author_type==='admin'?'👷 '+escHtml(r.author_name||'الدعم الفني'):'👤 '+escHtml(r.author_name||'العميل')}</div>
               <div style="font-size:13px;color:#f0f4ff;white-space:pre-wrap;line-height:1.7;">${escHtml(r.message)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:4px;">${fmtD(r.created_at)}</div>
             </div>`).join('')}
         </div>` : `<div style="color:var(--muted);font-size:12px;margin-bottom:12px;">لا توجد ردود بعد</div>`}
         ${isPublic ? '' : `
         <textarea id="ticket-reply-input" rows="3" placeholder="اكتب ردك للعميل..." style="width:100%;background:#0d1629;border:1.5px solid #243352;border-radius:10px;padding:10px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;resize:vertical;"></textarea>
-        <button data-action="sendTicketReply" data-args="${JSON.stringify([t.id])}" style="margin-top:8px;padding:9px 18px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">📤 إرسال الرد</button>`}
+        <button data-action="sendTicketReply" data-args="${JSON.stringify([t.id])}" style="margin-top:8px;padding:9px 18px;background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">📤 إرسال الرد</button>`}
       </div>
     </div>
 
@@ -2223,7 +2293,7 @@ function renderTicketDetail(t, history, replies){
       <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🏢 سجل الشركة</div>
       ${!isPublic?`<div style="display:flex;gap:10px;margin-bottom:12px;">
         <div style="flex:1;background:#111d33;border-radius:8px;padding:10px;text-align:center;">
-          <div style="font-size:20px;font-weight:900;color:#93c5fd;">${totalForCompany}</div>
+          <div style="font-size:20px;font-weight:900;color:#5eead4;">${totalForCompany}</div>
           <div style="font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;">إجمالي</div>
         </div>
         <div style="flex:1;background:#111d33;border-radius:8px;padding:10px;text-align:center;">
@@ -2288,7 +2358,7 @@ function renderCostSection(companies){
           ${rows.map((r,i)=>`<tr>
             <td style="font-weight:800;color:var(--muted)">${i+1}</td>
             <td style="font-weight:800;color:#f0f4ff;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.name)}</td>
-            <td style="color:#93c5fd">${fmt(r.user_count)}</td>
+            <td style="color:#5eead4">${fmt(r.user_count)}</td>
             <td style="color:#6ee7b7">${fmt(r.monthly_invoice_count)}</td>
             <td style="color:var(--muted)">${fmtSAR(r.varCost)}</td>
             <td style="font-weight:900;color:#fbbf24">${fmtSAR(r.cost)} ر.س</td>
@@ -2296,7 +2366,7 @@ function renderCostSection(companies){
           </tr>`).join('')}
           <tr class="total-row">
             <td colspan="2">المجموع</td>
-            <td style="color:#93c5fd">${fmt(totalUsers)}</td>
+            <td style="color:#5eead4">${fmt(totalUsers)}</td>
             <td style="color:#6ee7b7">${fmt(totalInv)}</td>
             <td style="color:var(--muted)">${fmtSAR(totalVar)}</td>
             <td style="font-size:16px;color:#fbbf24">${fmtSAR(totalCost)} ر.س</td>
