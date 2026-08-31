@@ -17304,7 +17304,10 @@ document.addEventListener('click', function(e) {
 // e.target يكون عنصرًا مفصولًا عن الشجرة ولا يقدر يوصل لأي سلف — يُحسَب خطأً "بره" اللوحة
 document.addEventListener('click', function(e) {
   if (!_notif.open) return;
-  if (e.target.closest('.notif-panel') || e.target.closest('.notif-wrap')) return;
+  // نطاق بمعرّفات فريدة (id) لا بأصناف CSS مشتركة (.notif-panel/.notif-wrap) —
+  // قائمة اختيار الفرع تعيد استخدام نفس الأصناف لمجرد الشكل، فكان الفحص القديم
+  // بالخطأ يعتبر الضغط عليها "داخل" الإشعارات ويمنع إغلاقها (باغ حقيقي مكتشَف بمراجعة)
+  if (e.target.closest('#notif-panel-root') || e.target.closest('#notif-bell-btn')) return;
   closeNotifPanel();
 }, true);
 
