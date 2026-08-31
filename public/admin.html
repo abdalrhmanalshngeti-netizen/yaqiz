@@ -145,11 +145,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .fbtn:hover{background:rgba(255,255,255,.1);color:var(--text)}
 .fbtn.active{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:#93c5fd}
 
+/* أزرار ثانوية بروؤوس البطاقات ("عرض الكل ←"، "🔄 تحديث"...) — الصنف كان
+   مستخدَمًا بـ4 أزرار حقيقية بدون أي تعريف CSS له إطلاقًا، فكانت تظهر بشكل
+   المتصفح الافتراضي بلا أي تنسيق */
+.btn-action{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:#93c5fd;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
+.btn-action:hover{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:#fff}
+
 /* ACTION BTNS */
 .abtn{border:none;border-radius:7px;padding:5px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:.15s}
-.abtn.suspend{background:rgba(245,158,11,.12);color:#fbbf24}
-.abtn.activate{background:rgba(16,185,129,.12);color:#34d399}
-.abtn.cancel{background:rgba(239,68,68,.12);color:#f87171}
+.abtn:hover{filter:brightness(1.35)}
 .abtn.prog{background:rgba(245,158,11,.12);color:#fbbf24}
 .abtn.done{background:rgba(16,185,129,.12);color:#34d399}
 .abtn.open{background:rgba(239,68,68,.12);color:#f87171}
@@ -543,7 +547,7 @@ const PERM_LABELS = {
 };
 let _regChart = null, _statusChart = null, _costChart = null;
 let _allCompanies = [], _allUsers = [], _allEmployees = [];
-let _coFilter = 'all', _ticketFilter = 'open';
+let _ticketFilter = 'open';
 let myRole = 'owner', myPerms = [];
 function isOwner(){ return myRole === 'owner'; }
 function hasPerm(p){ return isOwner() || myPerms.includes(p); }
@@ -574,8 +578,13 @@ function planBadge(p) {
 function trialBadge(c) {
   if (!c.subscription_expires_at) return '<span style="color:var(--muted);font-size:12px;">—</span>';
   const daysLeft = Math.ceil((new Date(c.subscription_expires_at) - new Date()) / (1000*60*60*24));
+  // فحص "دفع فعلاً" أول — قبل كذا كان فحص "انتهت الأيام" يسبقه، فشركة دافعة
+  // بس اشتراكها تأخّر تجديده كانت تظهر بالخطأ "انتهت الفترة المجانية"
+  if (c.has_paid) {
+    if (daysLeft <= 0) return '<span class="badge amber">⚠️ اشتراك منتهي — يحتاج تجديد</span>';
+    return `<span style="color:var(--muted);font-size:12px;">✅ مشترك — يتجدد ${fmtD(c.subscription_expires_at)}</span>`;
+  }
   if (daysLeft <= 0) return '<span class="badge red">⚠️ انتهت الفترة المجانية</span>';
-  if (c.has_paid) return `<span style="color:var(--muted);font-size:12px;">✅ مشترك — يتجدد ${fmtD(c.subscription_expires_at)}</span>`;
   const color = daysLeft <= 7 ? 'amber' : 'blue';
   return `<span class="badge ${color}">🎁 تجربة — ${daysLeft} يوم متبقٍ</span>`;
 }
@@ -892,7 +901,7 @@ function renderNewClients(data) {
         </td>
         <td>${escHtml(r.city||'—')}</td>
         <td><span style="background:${PLAN_META[r.plan]?.color||'var(--blue)'};color:#fff;padding:2px 8px;border-radius:8px;font-size:11px;">${planLabel[r.plan]||r.plan}</span></td>
-        <td style="color:var(--muted);font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-SA')} <br><span style="font-size:11px;">(منذ ${r.days_since} يوم)</span></td>
+        <td style="color:var(--muted);font-size:12px;">${fmtD(r.created_at)} <br><span style="font-size:11px;">(منذ ${r.days_since} يوم)</span></td>
       </tr>`).join('');
   }
 
@@ -964,7 +973,7 @@ function renderPlansSection(data) {
       <div class="kpi-icon">${meta.icon}</div>
       <div class="kpi-label">${meta.label}</div>
       <div class="kpi-value" style="color:${meta.color}">${list.length}</div>
-      <div class="kpi-sub">${meta.price > 0 ? rev.toLocaleString('ar-SA') + ' ر.س/شهر' : 'تجريبية مجانية'}</div>
+      <div class="kpi-sub">${meta.price > 0 ? fmt(rev) + ' ر.س/شهر' : 'تجريبية مجانية'}</div>
     </div>`;
   }).join('');
 
@@ -978,7 +987,7 @@ function renderPlansSection(data) {
         <td>${escHtml(c.contact_email) || '—'}</td>
         <td>${c.user_count || 0} مستخدم</td>
         <td>${c.invoice_count || 0} فاتورة</td>
-        <td>${c.subscription_expires_at ? new Date(c.subscription_expires_at).toLocaleDateString('ar-SA') : '—'}</td>
+        <td>${fmtD(c.subscription_expires_at)}</td>
         <td>
           <select ${hasPerm('companies_manage')?'':'disabled title="تحتاج صلاحية إدارة الشركات"'} data-onchange="changePlanV" data-onchange-args="${JSON.stringify([c.id])}" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'Tajawal',sans-serif;font-size:12px;">
             ${Object.entries(PLAN_META).map(([pk,pm]) => `<option value="${pk}" ${pk===key?'selected':''}>${pm.label}</option>`).join('')}
@@ -991,7 +1000,7 @@ function renderPlansSection(data) {
       <div class="panel-head">
         <div>
           <div class="panel-title">${meta.icon} باقة ${meta.label}</div>
-          <div class="panel-sub">${list.length} شركة${meta.price > 0 ? ' · ' + (list.length * meta.price).toLocaleString('ar-SA') + ' ر.س/شهر' : ''}</div>
+          <div class="panel-sub">${list.length} شركة${meta.price > 0 ? ' · ' + fmt(list.length * meta.price) + ' ر.س/شهر' : ''}</div>
         </div>
       </div>
       <table>
@@ -1031,11 +1040,11 @@ function renderPlanStats(data) {
     return `<div style="padding:18px 20px;border-left:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;">
       <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${meta.icon} ${meta.label}</div>
       <div style="font-size:28px;font-weight:900;color:${meta.color};line-height:1">${count}</div>
-      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">${meta.price > 0 ? rev.toLocaleString('ar-SA') + ' ر.س/شهر' : 'مجانية'}</div>
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">${meta.price > 0 ? fmt(rev) + ' ر.س/شهر' : 'مجانية'}</div>
     </div>`;
   }).join('');
   $('dash-plan-mini').innerHTML = mini;
-  $('dash-mrr').textContent = mrr.toLocaleString('ar-SA');
+  $('dash-mrr').textContent = fmt(mrr);
   box.style.display = 'block';
 }
 
@@ -1238,8 +1247,6 @@ function filterCompanies(status) {
   }
   renderCompaniesTable(_allCompanies);
 }
-function impersonateCompany(id, name) { promptImpersonationReason(id, name); }
-
 // ── ملاحظة المعاينة قبل الدخول بحساب أي شركة ──────────────
 // الاسم يُخزَّن بمتغيّر بدل تمريره كسلسلة نصية داخل onclick — تفادياً لأي
 // مشكلة هروب (escaping) لو احتوى اسم الشركة على علامات اقتباس أو HTML
@@ -1281,21 +1288,6 @@ async function confirmImpersonate(){
     window.open(url, '_blank');
     toast(`✅ تم فتح حساب ${coName} — الرابط صالح 5 دقائق`, '#c4b5fd');
   } catch { toast('خطأ في الاتصال', '#f87171'); }
-}
-
-async function setCoStatus(id,status){
-  if(status!=='active'){
-    const labels={suspended:'تعليق',cancelled:'إلغاء'};
-    if(!confirm(`متأكد إنك تبي ${labels[status]||status} حساب هذه الشركة؟ العميل بيُحظر فورًا من الدخول لكل شيء.`))return;
-  }
-  try{
-    await apiFetch(`/api/admin/companies/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
-    toast('تم تحديث حالة الشركة','#34d399');
-    const res=await apiFetch('/api/admin/cost-analysis');
-    _allCompanies=res.data||[];
-    renderCompaniesTable(_allCompanies);
-    renderCostSection(_allCompanies);
-  }catch{toast('خطأ في التحديث','#f87171');}
 }
 
 // ── Company Management Modal ────────────────────────────
@@ -1631,15 +1623,18 @@ async function start2FASetup(){
         <img src="${res.qr_code}" style="width:160px;height:160px;">
       </div>
       <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">امسح الرمز بتطبيق المصادقة (Google Authenticator/Authy)، أو أدخل السر يدوياً: <code style="color:#93c5fd;">${res.secret}</code></div>
+      <input id="tfa-setup-pass" type="password" placeholder="كلمة المرور الحالية" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
       <input id="tfa-setup-code" placeholder="أدخل الرمز المكوّن من 6 أرقام" style="width:100%;background:#070d1a;border:1.5px solid #243352;border-radius:8px;padding:9px 12px;color:#f0f4ff;font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
       <button data-action="confirm2FASetupUI" style="width:100%;padding:9px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;">تأكيد وتفعيل</button>`;
   }catch{box.innerHTML='<div style="color:var(--muted);font-size:12px;">فشل التوليد</div>';}
 }
 async function confirm2FASetupUI(){
   const code=$('tfa-setup-code')?.value?.trim();
+  const current_password=$('tfa-setup-pass')?.value;
+  if(!current_password){toast('أدخل كلمة المرور الحالية','#f87171');return;}
   if(!code){toast('أدخل رمز التحقق','#f87171');return;}
   try{
-    const res=await apiFetch('/api/admin/2fa/confirm',{method:'POST',body:JSON.stringify({code})});
+    const res=await apiFetch('/api/admin/2fa/confirm',{method:'POST',body:JSON.stringify({code,current_password})});
     const box=$('myacc-2fa');
     box.innerHTML=`
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:12px;">

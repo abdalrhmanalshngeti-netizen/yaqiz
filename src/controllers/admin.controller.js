@@ -15,6 +15,19 @@ const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
 
 const ADMIN_PERMISSIONS = ['tickets', 'customers', 'companies_manage', 'plans', 'cost_analysis', 'activity_log', 'dashboard', 'impersonate', 'ai_usage'];
 
+// هاش bcrypt ثابت (وهمي) — نفس مبدأ auth.controller.js بالضبط: يخلي bcrypt.compare
+// يشتغل دائمًا حتى لو الإيميل غير موجود، عشان زمن الاستجابة ما يكشف وجود
+// حساب موظف حقيقي (كانت لوحة الإدارة وحدها ناقصة هذا الإصلاح رغم وجوده بدخول المستأجرين)
+const DUMMY_ADMIN_PASSWORD_HASH = '$2b$12$C6UzMDM.H6dfI/f/IKcEeOgOEufIWNZTeIQZOMuVYUD/qA6M0EHKC';
+
+// قاعدة قوة كلمة مرور موحّدة لكل مسارات ضبط/تصفير كلمة مرور موظفي لوحة
+// الإدارة — كانت متفاوتة (بعضها بلا أي شرط إطلاقًا) رغم إنها حسابات
+// بصلاحية وصول لبيانات كل شركات المنصة، أحساس أهم من حسابات المستأجرين العادية
+function weakAdminPassword(pw) {
+  return !pw || pw.length < 8 || !/[a-z]/.test(pw) || !/[A-Z]/.test(pw);
+}
+const WEAK_PASSWORD_MSG = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير';
+
 // ينشئ جلسة كاملة (سطر admin_sessions + توكن نهائي) — يُستدعى من تسجيل الدخول
 // المباشر (بدون 2FA) ومن تأكيد رمز 2FA على حد سواء
 async function issueFullSession(admin, req) {
@@ -50,7 +63,8 @@ exports.login = async (req, res, next) => {
       [email.toLowerCase().trim()]
     );
     const admin = rows[0];
-    if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
+    const valid = await bcrypt.compare(password, admin?.password_hash || DUMMY_ADMIN_PASSWORD_HASH) && !!admin;
+    if (!valid) {
       return res.status(401).json({ success: false, message: 'بيانات غير صحيحة' });
     }
 
@@ -101,14 +115,19 @@ exports.verify2FALogin = async (req, res, next) => {
       return res.json(session);
     }
 
-    // جرّب كرمز احتياطي (backup code) — يُستهلك مرة وحدة
+    // جرّب كرمز احتياطي (backup code) — يُستهلك مرة وحدة. الحذف والفحص بنفس
+    // استعلام UPDATE...WHERE...RETURNING عشان يبقى ذرّيًا: لو صارت طلبين متزامنين
+    // بنفس الرمز، الشرط بالـWHERE ما يتحقق إلا لطلب وحد بعد ما يلتزم الأول
+    // (كان الحذف يصير بعد التحقق بذاكرة منفصلة، يسمح باستهلاك مزدوج نظريًا)
     const normalizedCode = code.trim().toUpperCase();
     for (const hashedBackup of admin.totp_backup_codes) {
       if (await bcrypt.compare(normalizedCode, hashedBackup)) {
-        await db.query(
-          `UPDATE platform_admins SET totp_backup_codes = array_remove(totp_backup_codes, $1) WHERE id = $2`,
+        const { rows: [consumed] } = await db.query(
+          `UPDATE platform_admins SET totp_backup_codes = array_remove(totp_backup_codes, $1)
+           WHERE id = $2 AND totp_backup_codes @> ARRAY[$1]::text[] RETURNING id`,
           [hashedBackup, admin.id]
         );
+        if (!consumed) break; // استهلكه طلب متزامن آخر أول منا
         const session = await issueFullSession(admin, req);
         return res.json(session);
       }
@@ -134,14 +153,19 @@ exports.setup2FA = async (req, res, next) => {
 // ── تفعيل 2FA: خطوة 2 — تأكيد أول رمز وتفعيله فعلياً ────
 exports.confirm2FASetup = async (req, res, next) => {
   try {
-    const { code } = req.body;
+    const { code, current_password } = req.body;
     if (!code) return res.status(400).json({ success: false, message: 'رمز التحقق مطلوب' });
 
     const { rows: [admin] } = await db.query(
-      `SELECT totp_pending_secret FROM platform_admins WHERE id = $1`, [req.admin.sub]
+      `SELECT totp_pending_secret, password_hash FROM platform_admins WHERE id = $1`, [req.admin.sub]
     );
     if (!admin?.totp_pending_secret) {
       return res.status(400).json({ success: false, message: 'ابدأ إعداد 2FA أولاً' });
+    }
+    // نفس شرط تعطيل 2FA بالضبط — تفعيله يستاهل نفس التأكيد، وإلا جلسة مسروقة
+    // مؤقتة تقدر تفعّل 2FA بسر خاص بالمهاجم وتقفل صاحب الحساب الحقيقي
+    if (!current_password || !(await bcrypt.compare(current_password, admin.password_hash))) {
+      return res.status(401).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
     }
     const valid = authenticator.verify({ token: code.trim(), secret: admin.totp_pending_secret });
     if (!valid) return res.status(400).json({ success: false, message: 'رمز التحقق غير صحيح' });
@@ -256,11 +280,8 @@ exports.resetPasswordViaToken = async (req, res, next) => {
     if (!token || !new_password) {
       return res.status(400).json({ success: false, message: 'الرمز وكلمة المرور الجديدة مطلوبان' });
     }
-    if (new_password.length < 8 || !/[a-z]/.test(new_password) || !/[A-Z]/.test(new_password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير'
-      });
+    if (weakAdminPassword(new_password)) {
+      return res.status(400).json({ success: false, message: WEAK_PASSWORD_MSG });
     }
 
     const { rows: [rec] } = await db.query(`
@@ -955,6 +976,9 @@ exports.createEmployee = async (req, res, next) => {
     if (!email || !password || !full_name) {
       return res.status(400).json({ success: false, message: 'البريد وكلمة المرور والاسم مطلوبة' });
     }
+    if (weakAdminPassword(password)) {
+      return res.status(400).json({ success: false, message: WEAK_PASSWORD_MSG });
+    }
     const validPerms = permissions.filter(p => ADMIN_PERMISSIONS.includes(p));
 
     const hash = await bcrypt.hash(password, 12);
@@ -1013,8 +1037,8 @@ exports.updateEmployee = async (req, res, next) => {
 exports.resetEmployeePassword = async (req, res, next) => {
   try {
     const { new_password } = req.body;
-    if (!new_password || new_password.length < 6) {
-      return res.status(400).json({ success: false, message: 'كلمة مرور جديدة مطلوبة (6 أحرف على الأقل)' });
+    if (weakAdminPassword(new_password)) {
+      return res.status(400).json({ success: false, message: WEAK_PASSWORD_MSG });
     }
     const { rows: [target] } = await db.query(`SELECT role FROM platform_admins WHERE id = $1`, [req.params.id]);
     if (!target) return res.status(404).json({ success: false, message: 'الموظف غير موجود' });
