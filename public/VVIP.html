@@ -983,6 +983,64 @@ function resolveWarehouseIdForBranch(db, branchId) {
   return wh ? wh.id : null;
 }
 
+// ============ حالة "الفرع المعروض" المشتركة (view scope) ============
+// نفس المتغير يقود: شارة الفرع بالهيدر، وتبويبات المخزون/الخزينة الحالية
+// (invBranchFilter/trBranchFilter صارت تُقرأ/تُكتب منه بدل متغيّر مستقل لكل
+// صفحة)، وفلترة لوحة التحكم والمبيعات والمشتريات. 'all' = إجمالي كل الفروع،
+// رقم = فرع محدد. يُحفظ بـlocalStorage (تفضيل جهاز، مو بيانات سيرفر) عشان
+// يفضل بعد إغلاق المتصفح — فقط للأونر أو موظف all_branches (isMultiBranchUser)
+let _viewBranchId = (() => {
+  const saved = localStorage.getItem('yaqiz_view_branch');
+  return (saved && saved !== 'all') ? Number(saved) : 'all';
+})();
+function getViewBranchId() { return _viewBranchId === 'all' ? null : _viewBranchId; }
+function setViewBranch(id) {
+  _viewBranchId = (id === 'all' || id == null) ? 'all' : Number(id);
+  try { localStorage.setItem('yaqiz_view_branch', String(_viewBranchId)); } catch(e) {}
+  // نفس الفرع المعروض يصير افتراضي فاتورة/عملية جديدة — لو رجع "الكل"، نمسح
+  // الاختيار اليدوي عشان يرجع resolveActiveBranchId() لمنطق الفرع الرئيسي الافتراضي
+  if (isMultiBranchUser()) _manualActiveBranchId = (_viewBranchId === 'all') ? null : _viewBranchId;
+  // مرآة لتبويبات المخزون/الخزينة المحلية (invBranchFilter/trBranchFilter) —
+  // نفس القيمة بصيغتها القديمة (نص 'total' أو رقم كنص) كي تبقى شغالة بلا تعديل
+  const mirrored = _viewBranchId==='all' ? 'total' : String(_viewBranchId);
+  invBranchFilter = mirrored;
+  trBranchFilter = mirrored;
+  renderShell();
+}
+// فلترة عامة لأي مصفوفة سجلات فيها branch_id — بدون فلترة لو "الكل" مختارة.
+// سجلات قديمة بلا branch_id (قبل ميزة الفروع) تظهر دائمًا بكل فرع بدل ما
+// تختفي بصمت — نفس مبدأ scopedMoves بصفحة الخزينة بالضبط
+function filterByViewBranch(list) {
+  const bid = getViewBranchId();
+  return bid ? (list||[]).filter(x => x.branch_id === bid || !x.branch_id) : (list||[]);
+}
+
+// قائمة اختيار الفرع المنسدلة بالهيدر
+let _branchSelectOpen = false;
+function toggleBranchSelectPanel() { _branchSelectOpen = !_branchSelectOpen; renderBranchSelectPanel(); }
+function closeBranchSelectPanel() { _branchSelectOpen = false; renderBranchSelectPanel(); }
+function chooseViewBranch(id) { _branchSelectOpen = false; setViewBranch(id); }
+function renderBranchSelectPanel() {
+  const root = document.getElementById('branch-select-root');
+  if (!root) return;
+  if (!_branchSelectOpen) { root.innerHTML=''; return; }
+  const db = getDB();
+  const branches = (db.branches||[]).filter(b=>b.active!==false);
+  const current = getViewBranchId();
+  const rowHtml = (id, label) => `
+    <button data-action="chooseViewBranch" data-args='[${id===null?'null':id}]' style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 12px;border:none;background:${current===id?'var(--primary-soft)':'transparent'};color:${current===id?'var(--primary-dark)':'var(--text-main)'};font-size:13px;font-weight:${current===id?'800':'600'};font-family:inherit;cursor:pointer;text-align:start;border-radius:10px;">
+      <span>${sanitize(label)}</span>${current===id?icon('check',14):''}
+    </button>`;
+  const btn = document.getElementById('branch-select-btn');
+  const rect = btn ? btn.getBoundingClientRect() : null;
+  root.innerHTML = `
+  <div class="notif-panel" style="width:220px;padding:6px;left:${rect?Math.max(12,Math.min(rect.left,window.innerWidth-236)):16}px;">
+    ${rowHtml(null, lang==='ar'?'كل الفروع':'All branches')}
+    ${branches.map(b=>rowHtml(b.id, b.name)).join('')}
+  </div>`;
+  refreshIcons();
+}
+
 // يحدّث كمية المستودع المحلية (db.productStock[productId][warehouseId]) و
 // products.qty الإجمالي المُشتق بنفس اللحظة دائمًا معًا — نقطة موحّدة بدل
 // تكرار "p.qty += delta" بكل موقع تعديل مخزون على حدة (كانت ٨ مواقع مختلفة)
@@ -1541,9 +1599,12 @@ function renderShell() {
           <div class="topbar-title">${(()=>{const s=getDB().settings;return s?.company_name||t('appName');})()}</div>
           ${(()=>{
             const branches = (getDB().branches||[]).filter(b=>b.active!==false);
-            if (branches.length <= 1) return '';
-            const label = lang==='ar' ? 'كل الفروع' : 'All branches';
-            return `<div class="topbar-hide-mobile" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:11.5px;font-weight:800;color:var(--text-muted);cursor:default;flex-shrink:0;" title="${lang==='ar'?'عرض تجميعي لكل الفروع حاليًا — اختيار فرع واحد ميزة قادمة':'Combined view of all branches for now — single-branch selection is a planned feature'}">${icon('map-pin',13)} ${label}</div>`;
+            if (branches.length <= 1 || currentUser?.role!=='owner') return '';
+            const current = getViewBranchId();
+            const label = current==null ? (lang==='ar'?'كل الفروع':'All branches') : sanitize((branches.find(b=>b.id===current)||{}).name || '');
+            return `<div class="notif-wrap topbar-hide-mobile">
+              <button id="branch-select-btn" data-action="toggleBranchSelectPanel" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:11.5px;font-weight:800;color:var(--text-main);cursor:pointer;flex-shrink:0;" title="${lang==='ar'?'اختر الفرع اللي تبي تشوف بياناته':'Choose which branch to view'}">${icon('map-pin',13)} ${label} ${icon('chevron-down',12)}</button>
+            </div>`;
           })()}
           <div class="topbar-hide-mobile" id="cs-topbar-chip" data-action="toggleCS" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:800;color:var(--text-main);cursor:pointer;flex-shrink:0;position:relative;" title="${lang==='ar'?'الدعم الفني':'Support'}">
             🎧 ${lang==='ar'?'الدعم الفني':'Support'}
@@ -1607,6 +1668,7 @@ function renderShell() {
   <div id="modal-container"></div>
   <div id="cs-panel-root"></div>
   <div id="notif-panel-root"></div>
+  <div id="branch-select-root"></div>
   <div id="ai-chat-root"></div>
   <div class="user-corner" title="${sanitize(currentUser.full_name)} (@${currentUser.username})">
     <div class="user-corner-avatar">${(currentUser.full_name||'U')[0]}</div>
@@ -2610,24 +2672,34 @@ function renderDashboard(c) {
   const lastMonth = month === 0 ? 11 : month - 1;
   const lastMonthYear = month === 0 ? year - 1 : year;
 
-  const todaySales  = db.invoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
-  const monthSales  = db.invoices.filter(i=>new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
-  const lastMSales  = db.invoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
-  const monthPurch  = db.purchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
-  const lastMPurch  = db.purchases.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
+  // فرع العرض المختار بالهيدر — لو محدَّد، كل أرقام اللوحة تُحسب من سجلات هذا
+  // الفرع فقط (الفواتير/المشتريات/الورديات فيها branch_id أصلاً)؛ "الكل" = بلا فلترة
+  const viewBid = getViewBranchId();
+  const dashInvoices  = filterByViewBranch(db.invoices);
+  const dashPurchases = filterByViewBranch(db.purchases);
+
+  const todaySales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
+  const monthSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
+  const lastMSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
+  const monthPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
+  const lastMPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
   const receivables = db.customers.reduce((s,c)=>s+Math.max(0,c.balance||0),0);
   const payables    = db.suppliers.reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
   const lowStock    = db.products.filter(p=>p.qty<=p.min_qty);
   // بضاعة بالطريق متأخرة — فواتير شراء عليها أصناف لم تُدرج بالمخزون بعد
   // لأكثر من أسبوع، حتى لا تتراكم بصمت وتُنسى (ملاحظة تشغيلية من مراجعة المحاسبين)
   const GOODS_IN_TRANSIT_ALERT_DAYS = 7;
-  const agingGoodsInTransit = db.purchases.filter(p=>
+  const agingGoodsInTransit = dashPurchases.filter(p=>
     p.items?.some(i=>!i.stocked) &&
     (Date.now() - new Date(p.created_at).getTime()) / 86400000 >= GOODS_IN_TRANSIT_ALERT_DAYS
   );
+  // رصيد الخزينة — من حركات نفس الفرع بس لو فيه فلترة، بنفس منطق صفحة الخزينة تمامًا
+  const dashTreasuryBalance = viewBid
+    ? (db.treasury.moves||[]).filter(m=>m.branch_id===viewBid||!m.branch_id).reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
+    : db.treasury.balance;
   // ورديات اليوم — للمالك فقط، وصول سريع لتفاصيل أي وردية بدل التنقّل يدويًا
   const todayShiftsClosed = currentUser?.role==='owner'
-    ? (db.shifts||[]).filter(s=>s.end_time && s.date===new Date().toISOString().slice(0,10)).sort((a,b)=>new Date(b.end_time)-new Date(a.end_time))
+    ? filterByViewBranch(db.shifts||[]).filter(s=>s.end_time && s.date===new Date().toISOString().slice(0,10)).sort((a,b)=>new Date(b.end_time)-new Date(a.end_time))
     : [];
 
   const pctChange = (cur,prev) => {
@@ -2641,8 +2713,8 @@ function renderDashboard(c) {
   for(let i=6;i>=0;i--) {
     const d = new Date(); d.setDate(d.getDate()-i);
     const ds = d.toDateString();
-    const s = db.invoices.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.grand_total,0);
-    const p = db.purchases.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.total,0);
+    const s = dashInvoices.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.grand_total,0);
+    const p = dashPurchases.filter(x=>new Date(x.created_at).toDateString()===ds).reduce((a,x)=>a+x.total,0);
     days.push({date:d.toLocaleDateString(lang==='ar'?'ar-SA-u-nu-latn':'en-US',{weekday:'short'}),s,p});
   }
   const maxVal = Math.max(...days.map(d=>Math.max(d.s,d.p)),1);
@@ -2660,14 +2732,14 @@ function renderDashboard(c) {
     <div class="page-header">
       <div>
         <div class="page-title-lg">${t('dashboard')}</div>
-        <div class="page-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="page-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}${viewBid?` · ${lang==='ar'?'بيانات فرع':'Branch data:'} ${sanitize((db.branches||[]).find(b=>b.id===viewBid)?.name||'')}`:''}</div>
       </div>
     </div>
     <div class="stats-grid">
       <div id="dash-today-sales-card" class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value">${fmtMoney(todaySales)}</div></div>
       <div class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon">${icon('shopping-cart',22)}</div><div class="stat-label">${t('monthSales')}</div><div class="stat-value">${fmtMoney(monthSales)}</div><div style="margin-top:6px;">${pctChange(monthSales,lastMSales)||''}</div></div>
       <div class="stat-card" data-action="goTo" data-args='["purchases"]'><div class="stat-icon amber">${icon('package',22)}</div><div class="stat-label">${t('monthPurchases')}</div><div class="stat-value">${fmtMoney(monthPurch)}</div><div style="margin-top:6px;">${pctChange(monthPurch,lastMPurch)||''}</div></div>
-      <div class="stat-card" data-action="goTo" data-args='["treasury"]'><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(db.treasury.balance)}</div></div>
+      <div class="stat-card" data-action="goTo" data-args='["treasury"]'><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(dashTreasuryBalance)}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
       <div id="dash-trend-card" class="card">
@@ -3641,7 +3713,8 @@ function setInvFilterType(v) { invFilter.type=v; renderInvoicesList(el('sales-co
 function resetInvFilter() { invFilter={search:'',status:'',type:''}; renderInvoicesList(el('sales-content')); }
 function renderInvoicesList(sc) {
   const db=getDB();
-  const allInvs=[...db.invoices].reverse();
+  const branchInvs=filterByViewBranch(db.invoices);
+  const allInvs=[...branchInvs].reverse();
   const filtered=allInvs.filter(i=>{
     const q=invFilter.search.toLowerCase();
     const matchQ=!q||(i.invoice_no.toLowerCase().includes(q)||i.customer_name.toLowerCase().includes(q));
@@ -3650,9 +3723,9 @@ function renderInvoicesList(sc) {
     return matchQ&&matchS&&matchT;
   });
 
-  const totalAll=db.invoices.filter(i=>i.status!=='ملغاة').reduce((s,i)=>s+i.grand_total,0);
-  const totalPaid=db.invoices.filter(i=>i.status==='مسددة').reduce((s,i)=>s+i.grand_total,0);
-  const totalPending=db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+(i.grand_total-(i.paid_amount||0)),0);
+  const totalAll=branchInvs.filter(i=>i.status!=='ملغاة').reduce((s,i)=>s+i.grand_total,0);
+  const totalPaid=branchInvs.filter(i=>i.status==='مسددة').reduce((s,i)=>s+i.grand_total,0);
+  const totalPending=branchInvs.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+(i.grand_total-(i.paid_amount||0)),0);
 
   sc.innerHTML=`
   <div>
@@ -4877,8 +4950,9 @@ function renderPurchMainContent() {
 }
 function renderPurchasesInner(c) {
   const db = getDB();
-  const goods = db.purchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة');
-  const opex  = db.purchases.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods'));
+  const branchPurchases = filterByViewBranch(db.purchases);
+  const goods = branchPurchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة');
+  const opex  = branchPurchases.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods'));
   const goodsTotal = goods.reduce((s,p)=>s+p.total,0);
   const opexTotal  = opex.reduce((s,p)=>s+p.total,0);
 
@@ -4906,7 +4980,7 @@ function renderPurchasesInner(c) {
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon">${icon('percent',20)}</div>
         <div class="stat-label">${lang==='ar'?'إجمالي ضريبة المدخلات':'Total Input VAT'}</div>
-        <div class="stat-value" style="font-size:18px;">${fmtMoney(db.purchases.reduce((s,p)=>s+p.vat,0))}</div>
+        <div class="stat-value" style="font-size:18px;">${fmtMoney(branchPurchases.reduce((s,p)=>s+p.vat,0))}</div>
       </div>
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon green">${icon('layers',20)}</div>
@@ -4940,9 +5014,10 @@ function renderPurchContent() {
   const isGoods = purchTab==='goods';
 
   const _byDate=(a,b)=>new Date(b.created_at)-new Date(a.created_at);
+  const _branchPurchases = filterByViewBranch(db.purchases);
   const rows = isGoods
-    ? [...db.purchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').sort(_byDate)
-    : [...db.purchases].filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).sort(_byDate);
+    ? [..._branchPurchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').sort(_byDate)
+    : [..._branchPurchases].filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).sort(_byDate);
 
   const goodsCats = ['بضاعة','مواد خام','بضاعة جاهزة','مواد تغليف'];
   const opexCats  = ['إيجار','رواتب وتعويضات','كهرباء ومياه','اتصالات وإنترنت','مواصلات','صيانة','تسويق وإعلان','قرطاسية ومكتبية','تأمين','رسوم وتراخيص','استشارات','نثريات'];
@@ -5689,7 +5764,7 @@ function savePurchase(purchase_type) {
 
 // ============ INVENTORY ============
 let invMainTab = 'inventory';
-let invBranchFilter = 'total'; // 'total' أو رقم فرع (نص) — للأونر فقط عند وجود أكثر من فرع
+let invBranchFilter = (_viewBranchId==='all'?'total':String(_viewBranchId)); // مرآة لـ_viewBranchId — راجع setViewBranch()
 function renderInventory(c) {
   const _idb = getDB();
   const _branches = (_idb.branches||[]).filter(b=>b.active!==false);
@@ -5745,8 +5820,7 @@ function renderInvMainContent() {
   else renderReturns(mc);
 }
 function setInvBranchFilter(val) {
-  invBranchFilter = val;
-  renderInvMainContent();
+  setViewBranch(val==='total' ? 'all' : Number(val));
 }
 function renderInventoryInner(c) {
   const db = getDB();
@@ -6432,8 +6506,8 @@ function computeCashBankSplit(branchId) {
   return { cash: Math.round(cash*100)/100, bank: Math.round(bank*100)/100 };
 }
 
-let trBranchFilter = 'total';
-function setTrBranchFilter(val) { trBranchFilter = val; renderPage(); }
+let trBranchFilter = (_viewBranchId==='all'?'total':String(_viewBranchId)); // مرآة لـ_viewBranchId — راجع setViewBranch()
+function setTrBranchFilter(val) { setViewBranch(val==='total' ? 'all' : Number(val)); }
 
 function renderTreasury(c) {
   const db = getDB();
@@ -13983,8 +14057,8 @@ function renderActivity(c) {
   const allUsers = db.users.filter(u=>u.active!==false);
   const today = actFilter.date || new Date().toISOString().slice(0,10);
 
-  // Filter shifts by date
-  const dayShifts = (db.shifts||[]).filter(s=>{
+  // Filter shifts by date (+ فرع العرض المختار بالهيدر لو محدَّد)
+  const dayShifts = filterByViewBranch(db.shifts||[]).filter(s=>{
     const matchDate = s.date===today;
     const matchUser = !actFilter.username || s.username===actFilter.username;
     return matchDate && matchUser;
@@ -17232,6 +17306,13 @@ document.addEventListener('click', function(e) {
   if (!_notif.open) return;
   if (e.target.closest('.notif-panel') || e.target.closest('.notif-wrap')) return;
   closeNotifPanel();
+}, true);
+
+// نفس مبدأ إغلاق قائمة الإشعارات بالضغط بره — قائمة اختيار الفرع بالهيدر
+document.addEventListener('click', function(e) {
+  if (!_branchSelectOpen) return;
+  if (e.target.closest('#branch-select-root') || e.target.closest('#branch-select-btn')) return;
+  closeBranchSelectPanel();
 }, true);
 
 // بديل onchange="x=this.value;fn()"/onchange="fn(this.value)" — قيمة العنصر
