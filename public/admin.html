@@ -1614,6 +1614,13 @@ function renderCoModal(c){
       </div>
       ${c.branch_limit_override!=null?`<div style="margin-top:8px;font-size:12px;color:#a78bfa;">🏬 هذي الشركة على تجاوز مخصص: ${c.branch_limit_override} فروع (بدل حد باقتها العادي)</div>`:''}
     </div>
+
+    <!-- منطقة الخطر: طلب حذف الحساب (PDPL) -->
+    <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.25);border-radius:12px;padding:16px;margin-top:14px;">
+      <div style="font-size:11px;font-weight:800;color:#f87171;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">منطقة الخطر — طلب حذف الحساب (PDPL)</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;">يمسح بيانات التواصل الشخصية لكل مستخدمي الشركة (الاسم/الإيميل/الجوال) ويعطّل دخولهم نهائيًا. الاسم التجاري والرقم الضريبي والفواتير تبقى محفوظة كما يشترط النظام (٦ سنوات). لا يمكن التراجع عن هذا الإجراء.</div>
+      <button data-action="coModalAnonymize" data-args="${JSON.stringify([c.id])}" style="padding:10px 22px;background:transparent;border:1.5px solid #f87171;color:#f87171;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">🗑 إخفاء الهوية وتعطيل الحساب نهائيًا</button>
+    </div>
   </div>`:''}
 
   <!-- ═ المستخدمون ═ -->
@@ -1653,6 +1660,22 @@ async function coModalSetStatus(id,status){
     _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);renderCostSection(_allCompanies);
     if(r2?.success)renderCoModal(r2.data);
   }catch{toast('خطأ في التحديث','#f87171');}
+}
+
+async function coModalAnonymize(id){
+  const step1 = prompt('إجراء لا يمكن التراجع عنه. اكتب "حذف" للمتابعة:');
+  if (step1 !== 'حذف') return;
+  if (!confirm('تأكيد أخير: سيتم تعطيل كل مستخدمي هذه الشركة ومسح بياناتهم الشخصية نهائيًا. متابعة؟')) return;
+  try{
+    await apiFetch(`/api/admin/companies/${id}/anonymize`,{method:'POST',body:JSON.stringify({confirm:'ERASE'})});
+    toast('🗑 تم إخفاء هوية الشركة وتعطيلها نهائيًا','#34d399');
+    const [r1,r2]=await Promise.all([
+      apiFetch('/api/admin/cost-analysis'),
+      apiFetch(`/api/admin/companies/${id}`)
+    ]);
+    _allCompanies=r1.data||[];renderCompaniesTable(_allCompanies);renderCostSection(_allCompanies);
+    if(r2?.success)renderCoModal(r2.data);
+  }catch{toast('خطأ في تنفيذ الإجراء','#f87171');}
 }
 
 async function coModalSavePlan(id){

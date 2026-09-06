@@ -9,4 +9,5 @@ node_modules/
 *.p12
 uploads/
 temp/
+backups/
 

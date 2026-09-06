@@ -61,6 +61,7 @@ router.get('/plans',                    canAdmin('plans'),         ctrl.getPlans
 router.put('/companies/:id/status',     canAdmin('companies_manage'), ctrl.setCompanyStatus);
 router.put('/companies/:id/plan',       canAdmin('companies_manage'), ctrl.setCompanyPlan);
 router.put('/companies/:id/branch-limit', canAdmin('companies_manage'), ctrl.setBranchLimitOverride);
+router.post('/companies/:id/anonymize', canAdmin('companies_manage'), ctrl.anonymizeCompany);
 
 // صلاحية "عرض بيانات العملاء والشركات"
 router.get('/companies',                canAdmin('customers'), ctrl.companies);

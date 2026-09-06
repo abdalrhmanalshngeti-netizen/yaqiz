@@ -503,6 +503,56 @@ exports.setCompanyStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── إخفاء هوية شركة (حق الحذف / PDPL) ──────────────────────
+// حذف حرفي للشركة يتعارض مع التزام الاحتفاظ بسجلات الفواتير 6 سنوات (زاتكا)،
+// فبدل حذف الصفوف نمسح بيانات التواصل الشخصية لمستخدمي الشركة (الاسم/الإيميل/
+// الجوال) ونعطّل دخولهم نهائيًا، ونمسح بيانات تواصل الشركة نفسها (هاتف/إيميل) —
+// نُبقي الاسم التجاري والرقم الضريبي والسجل التجاري والعنوان كما هي لأنها هوية
+// البائع القانونية اللازمة على الفواتير المُصدَرة سابقًا طوال فترة الاحتفاظ.
+// عملاء/موردو الشركة غير مشمولين بهذا الإجراء — نطاقه محصور بصاحب الحساب فقط.
+exports.anonymizeCompany = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    if (req.body?.confirm !== 'ERASE') {
+      return res.status(400).json({ success: false, message: 'يتطلب تأكيد صريح (confirm: "ERASE")' });
+    }
+    const companyId = req.params.id;
+    await client.query('BEGIN');
+
+    const { rowCount } = await client.query(
+      `UPDATE companies SET phone = NULL, email = NULL, status = 'cancelled' WHERE id = $1`,
+      [companyId]
+    );
+    if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الشركة غير موجودة' }); }
+
+    const randomHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+    const { rows: users } = await client.query(
+      `UPDATE users SET full_name = 'مستخدم محذوف', email = NULL, phone = NULL,
+              password_hash = $2, active = false
+       WHERE company_id = $1 RETURNING id`,
+      [companyId, randomHash]
+    );
+    const userIds = users.map(u => u.id);
+    if (userIds.length) {
+      await client.query(`DELETE FROM user_sessions WHERE user_id = ANY($1::int[])`, [userIds]);
+    }
+
+    await client.query(
+      `INSERT INTO platform_log (event_type, company_id, description, admin_id)
+       VALUES ('company_anonymized', $1, $2, $3)`,
+      [companyId, `إخفاء هوية وتعطيل نهائي بناءً على طلب حذف حساب — بواسطة ${req.admin.name || req.admin.email}`, req.admin.sub]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'تم إخفاء هوية الشركة وتعطيل حسابات مستخدميها نهائيًا' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
 // ── تحليل التكلفة لكل الشركات ────────────────────────────
 // invoice_count/total_revenue تبقى إجمالية (طول عمر الشركة) — نفس هذا الرد
 // يُستخدم أيضًا بجدول "الشركات" العام كمؤشر نشاط تاريخي، فتحويلها لشهرية
