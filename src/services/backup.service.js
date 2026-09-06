@@ -53,6 +53,21 @@ function runPgDump() {
   });
 }
 
+// تحقّق فعلي إن ملف النسخة سليم وقابل للاستعادة — بدون هذا، نسخة تالفة (كتابة
+// ناقصة بسبب انقطاع، قرص ممتلئ، ...) تمر بصمت وتُكتشف فقط يوم تحتاجها فعلاً.
+// pg_restore --list يقرأ فهرس المحتويات (TOC) بالكامل بدون لمس أي قاعدة بيانات
+// — يكشف أي تلف بالبنية الداخلية للملف بسرعة وبأمان تام
+function verifyBackup(outFile) {
+  return new Promise((resolve, reject) => {
+    execFile('pg_restore', ['--list', outFile], (err, stdout) => {
+      if (err) return reject(new Error(`الملف تالف أو غير قابل للقراءة: ${err.message}`));
+      const entryCount = stdout.split('\n').filter(l => l.trim()).length;
+      if (entryCount < 5) return reject(new Error(`محتوى النسخة فارغ أو ناقص (${entryCount} سطر فقط بالفهرس)`));
+      resolve(entryCount);
+    });
+  });
+}
+
 function pruneOldBackups() {
   ensureDir();
   const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -65,8 +80,9 @@ function pruneOldBackups() {
 
 async function runBackup() {
   const outFile = await runPgDump();
+  const entryCount = await verifyBackup(outFile);
   pruneOldBackups();
-  return outFile;
+  return { outFile, entryCount };
 }
 
 module.exports = { runBackup, BACKUP_DIR };

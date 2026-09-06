@@ -259,9 +259,9 @@ setInterval(() => {
 // أول نسخة بعد 5 دقائق من الإقلاع (تفادي التنافس مع تحميل السيرفر)، ثم كل 24 ساعة.
 const { runBackup } = require('./services/backup.service');
 setTimeout(() => {
-  runBackup().then(f => console.log('[Backup] ✅', f)).catch(err => console.error('[Backup]', err.message));
+  runBackup().then(r => console.log(`[Backup] ✅ verified (${r.entryCount} entries) — ${r.outFile}`)).catch(err => console.error('[Backup]', err.message));
   setInterval(() => {
-    runBackup().then(f => console.log('[Backup] ✅', f)).catch(err => console.error('[Backup]', err.message));
+    runBackup().then(r => console.log(`[Backup] ✅ verified (${r.entryCount} entries) — ${r.outFile}`)).catch(err => console.error('[Backup]', err.message));
   }, 24 * 60 * 60 * 1000);
 }, 5 * 60 * 1000);
 
