@@ -1,0 +1,6 @@
+# src/services/backup.service.js يشغّل pg_dump للنسخ الاحتياطي التلقائي —
+# صورة Node الافتراضية على Nixpacks/Railway ما فيها أدوات عميل PostgreSQL
+# إطلاقًا. aptPkgs تُضاف فوق مراحل البناء المكتشَفة تلقائيًا (Node/npm) بدون
+# التأثير عليها.
+[phases.setup]
+aptPkgs = ["postgresql-client"]

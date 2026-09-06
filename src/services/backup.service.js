@@ -2,13 +2,19 @@
 // سياسة الخصوصية (public/privacy.html) تنص فعليًا على "نسخ احتياطية منتظمة
 // لقاعدة البيانات" — هذي الخدمة تُنفّذ هذا الالتزام فعليًا بدل ما يكون بند
 // غير مطبَّق. تشغّل pg_dump يوميًا وتحتفظ بآخر BACKUP_RETENTION_DAYS نسخة
-// فقط (افتراضيًا 14) لتفادي امتلاء القرص. التخزين محلي على نفس السيرفر —
-// هذا لا يحمي من عطل كامل بالسيرفر نفسه، فلو توفّر تخزين خارجي (S3 أو ما
-// شابه) يُفضَّل رفع النسخة له أيضًا بخطوة إضافية لاحقًا.
+// فقط (افتراضيًا 14) لتفادي امتلاء القرص.
+// الإنتاج يشتغل على Railway ويوصّل عبر DATABASE_URL (نفس src/config/db.js
+// بالضبط) وليس متغيرات DB_HOST/DB_USER المنفصلة (تلك للتطوير المحلي فقط) —
+// لازم نتبع نفس منطق db.js هنا وإلا الأمر يفشل بصمت بالإنتاج بمتغيرات undefined.
+// ملاحظة مهمة: نظام ملفات حاويات Railway غير دائم بين عمليات النشر (redeploy)
+// ما لم يُربَط Volume فعلي بمسار BACKUP_DIR — بدونه، كل نسخة تُمحى تلقائيًا
+// عند أي نشر جديد (وهذا يحصل كثيرًا بهذا المشروع). هذا قرار بنية تحتية خارج
+// نطاق الكود، يحتاج تفعيله من لوحة Railway مباشرة.
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+const isProduction = process.env.NODE_ENV === 'production';
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(__dirname, '..', '..', 'backups');
 const RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS || '14', 10);
 
@@ -21,15 +27,26 @@ function runPgDump() {
     ensureDir();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const outFile = path.join(BACKUP_DIR, `yaqiz-${stamp}.dump`);
-    const args = [
-      '-h', process.env.DB_HOST || '127.0.0.1',
-      '-p', process.env.DB_PORT || '5432',
-      '-U', process.env.DB_USER,
-      '-F', 'c', // custom format — مضغوط ويدعم استرجاع جزئي بـpg_restore
-      '-f', outFile,
-      process.env.DB_NAME,
-    ];
-    execFile('pg_dump', args, { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD } }, (err) => {
+
+    const args = ['-F', 'c', '-f', outFile]; // custom format — مضغوط ويدعم استرجاع جزئي بـpg_restore
+    const env = { ...process.env };
+
+    if (process.env.DATABASE_URL) {
+      args.push(process.env.DATABASE_URL);
+      // "require" = تشفير TLS بدون التحقق من الشهادة — نفس مبدأ rejectUnauthorized:false
+      // المستخدَم بـdb.js تمامًا لنفس شهادة Railway الموقَّعة ذاتيًا
+      if (isProduction) env.PGSSLMODE = env.PGSSLMODE || 'require';
+    } else {
+      args.push(
+        '-h', process.env.DB_HOST || '127.0.0.1',
+        '-p', process.env.DB_PORT || '5432',
+        '-U', process.env.DB_USER,
+        process.env.DB_NAME,
+      );
+      env.PGPASSWORD = process.env.DB_PASSWORD;
+    }
+
+    execFile('pg_dump', args, { env }, (err) => {
       if (err) return reject(err);
       resolve(outFile);
     });
