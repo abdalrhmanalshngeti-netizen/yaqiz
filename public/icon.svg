@@ -1,14 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="87" fill="#0d0f14"/>
-  <circle cx="220" cy="215" r="113" fill="none" stroke="white" stroke-width="46"/>
-  <circle cx="220" cy="215" r="61" fill="white"/>
-  <path d="M 235,134 A 82,82 0 0 1 283,268" fill="none" stroke="white" stroke-width="9"/>
-  <path d="M 232,144 A 72,72 0 0 1 275,261" fill="none" stroke="white" stroke-width="7"/>
-  <g fill="white">
-    <g transform="rotate(10,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
-    <g transform="rotate(40,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
-    <g transform="rotate(70,220,215)"><rect x="201" y="46" width="38" height="38" rx="5"/></g>
-  </g>
-  <polygon points="251,297 307,348 425,466 363,451" fill="white"/>
-  <polygon points="277,317 292,333 410,466 394,456" fill="#0d0f14"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="17" fill="#0d0f14"/>
+  <defs>
+    <linearGradient id="yqzL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#1a8a8a"/></linearGradient>
+    <linearGradient id="yqzR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#6ee7c9"/></linearGradient>
+    <linearGradient id="yqzWL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#2a9d92"/></linearGradient>
+    <linearGradient id="yqzWR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#5eead4"/></linearGradient>
+    <linearGradient id="yqzS" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#a7f3d0"/></linearGradient>
+  </defs>
+  <polygon points="31,44 13,72 40,67" fill="url(#yqzWL)"/>
+  <polygon points="69,44 87,72 60,67" fill="url(#yqzWR)"/>
+  <polygon points="50,14 37,64 50,64" fill="url(#yqzL)"/>
+  <polygon points="50,14 50,64 63,64" fill="url(#yqzR)"/>
+  <polygon points="43,64 50,52 57,64" fill="#0d0f14"/>
+  <path transform="translate(50,84) scale(0.62)" d="M0 -13 C1 -4 4 -1 13 0 C4 1 1 4 0 13 C-1 4 -4 1 -13 0 C-4 -1 -1 -4 0 -13 Z" fill="url(#yqzS)"/>
 </svg>

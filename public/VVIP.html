@@ -589,17 +589,19 @@ html[dir="ltr"] .user-corner { left: auto; right: 20px; }
 // ============ LOGO SVG ============
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="display:block;width:100%;height:100%;">
   <rect width="100" height="100" rx="17" fill="#0d0f14"/>
-  <circle cx="43" cy="42" r="22" fill="none" stroke="white" stroke-width="9"/>
-  <circle cx="43" cy="42" r="12" fill="white"/>
-  <path d="M 45.8,26.2 A 16,16 0 0 1 55.3,52.3" fill="none" stroke="white" stroke-width="1.8"/>
-  <path d="M 45.4,28.2 A 14,14 0 0 1 53.7,51" fill="none" stroke="white" stroke-width="1.5"/>
-  <g fill="white">
-    <g transform="rotate(10,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
-    <g transform="rotate(40,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
-    <g transform="rotate(70,43,42)"><rect x="39.25" y="9" width="7.5" height="7.5"/></g>
-  </g>
-  <polygon points="49,58 60,68 83,91 71,88" fill="white"/>
-  <polygon points="54,62 57,65 80,91 77,89" fill="#0d0f14"/>
+  <defs>
+    <linearGradient id="yqzL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#1a8a8a"/></linearGradient>
+    <linearGradient id="yqzR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#6ee7c9"/></linearGradient>
+    <linearGradient id="yqzWL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#2a9d92"/></linearGradient>
+    <linearGradient id="yqzWR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#5eead4"/></linearGradient>
+    <linearGradient id="yqzS" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#a7f3d0"/></linearGradient>
+  </defs>
+  <polygon points="31,44 13,72 40,67" fill="url(#yqzWL)"/>
+  <polygon points="69,44 87,72 60,67" fill="url(#yqzWR)"/>
+  <polygon points="50,14 37,64 50,64" fill="url(#yqzL)"/>
+  <polygon points="50,14 50,64 63,64" fill="url(#yqzR)"/>
+  <polygon points="43,64 50,52 57,64" fill="#0d0f14"/>
+  <path transform="translate(50,84) scale(0.62)" d="M0 -13 C1 -4 4 -1 13 0 C4 1 1 4 0 13 C-1 4 -4 1 -13 0 C-4 -1 -1 -4 0 -13 Z" fill="url(#yqzS)"/>
 </svg>`;
 
 // تعيين الـ favicon
