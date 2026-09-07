@@ -1511,7 +1511,7 @@ const navLabels = {
   accountingReports:{ar:'التقارير المحاسبية',en:'Accounting Reports'},
   users:{ar:'المستخدمون',en:'Users'},
   branches:{ar:'الفروع',en:'Branches'},
-  obligations:{ar:'الالتزامات الدورية',en:'Recurring Obligations'},
+  obligations:{ar:'المصاريف الإدارية',en:'Administrative Expenses'},
   settings:{ar:'الإعدادات',en:'Settings'},
 };
 
@@ -4952,9 +4952,7 @@ function renderPurchasesInner(c) {
   const db = getDB();
   const branchPurchases = filterByViewBranch(db.purchases);
   const goods = branchPurchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة');
-  const opex  = branchPurchases.filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods'));
   const goodsTotal = goods.reduce((s,p)=>s+p.total,0);
-  const opexTotal  = opex.reduce((s,p)=>s+p.total,0);
 
   c.innerHTML = `
   <div>
@@ -4964,19 +4962,13 @@ function renderPurchasesInner(c) {
         ${has('purchases.create')?`<button id="purch-add-btn" class="btn btn-primary" data-action="showAddPurchaseMenu">${icon('plus',16)} ${lang==='ar'?'إضافة':'Add'}</button>`:''}
       </div>
     </div>
-    <div id="purch-stats-grid" class="stats-grid" style="grid-template-columns:repeat(${hasPlanFeature('admin_expenses')?4:3},1fr);margin-bottom:20px;">
-      <div class="stat-card" style="cursor:pointer;" data-action="setPurchTab" data-args='["goods"]'>
+    <div id="purch-stats-grid" class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+      <div class="stat-card">
         <div class="stat-icon amber">${icon('package',20)}</div>
         <div class="stat-label">${lang==='ar'?'مصاريف تشغيلية':'Operating Expenses'}</div>
         <div class="stat-value" style="font-size:18px;">${fmtMoney(goodsTotal)}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${goods.length} ${lang==='ar'?'فاتورة':'invoices'}</div>
       </div>
-      ${hasPlanFeature('admin_expenses')?`<div class="stat-card" style="cursor:pointer;" data-action="setPurchTab" data-args='["opex"]'>
-        <div class="stat-icon red">${icon('trending-down',20)}</div>
-        <div class="stat-label">${lang==='ar'?'مصاريف إدارية':'Administrative Expenses'}</div>
-        <div class="stat-value" style="font-size:18px;">${fmtMoney(opexTotal)}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${opex.length} ${lang==='ar'?'مصروف':'expenses'}</div>
-      </div>`:''}
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon">${icon('percent',20)}</div>
         <div class="stat-label">${lang==='ar'?'إجمالي ضريبة المدخلات':'Total Input VAT'}</div>
@@ -4985,12 +4977,8 @@ function renderPurchasesInner(c) {
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon green">${icon('layers',20)}</div>
         <div class="stat-label">${lang==='ar'?'إجمالي المشتريات':'Total Purchases'}</div>
-        <div class="stat-value" style="font-size:18px;">${fmtMoney(goodsTotal+opexTotal)}</div>
+        <div class="stat-value" style="font-size:18px;">${fmtMoney(goodsTotal)}</div>
       </div>
-    </div>
-    <div class="tabs">
-      <button class="tab-btn ${purchTab==='goods'?'active':''}" data-action="setPurchTab" data-args='["goods"]'>📦 ${lang==='ar'?'مصاريف تشغيلية':'Operating Expenses'}</button>
-      ${hasPlanFeature('admin_expenses')?`<button class="tab-btn ${purchTab==='opex'?'active':''}" data-action="setPurchTab" data-args='["opex"]'>💼 ${lang==='ar'?'مصاريف إدارية':'Administrative Expenses'}</button>`:''}
     </div>
     <div id="purch-content"></div>
   </div>`;
@@ -4998,34 +4986,19 @@ function renderPurchasesInner(c) {
   refreshIcons();
 }
 
-function setPurchTab(tab) {
-  purchTab = tab;
-  $qa('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const btns = $qa('.tab-btn');
-  if(tab==='goods'&&btns[0]) btns[0].classList.add('active');
-  if(tab==='opex'&&btns[1]) btns[1].classList.add('active');
-  renderPurchContent();
-}
-
 function renderPurchContent() {
   const db = getDB();
   const pc = el('purch-content'); if(!pc) return;
-  if(purchTab==='opex' && !hasPlanFeature('admin_expenses')) purchTab='goods';
-  const isGoods = purchTab==='goods';
+  const isGoods = true;
 
   const _byDate=(a,b)=>new Date(b.created_at)-new Date(a.created_at);
   const _branchPurchases = filterByViewBranch(db.purchases);
-  const rows = isGoods
-    ? [..._branchPurchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').sort(_byDate)
-    : [..._branchPurchases].filter(p=>p.purchase_type==='opex'||(p.category!=='بضاعة'&&p.purchase_type!=='goods')).sort(_byDate);
+  const rows = [..._branchPurchases].filter(p=>p.purchase_type==='goods'||p.category==='بضاعة').sort(_byDate);
 
   const goodsCats = ['بضاعة','مواد خام','بضاعة جاهزة','مواد تغليف'];
-  const opexCats  = ['إيجار','رواتب وتعويضات','كهرباء ومياه','اتصالات وإنترنت','مواصلات','صيانة','تسويق وإعلان','قرطاسية ومكتبية','تأمين','رسوم وتراخيص','استشارات','نثريات'];
 
-  const cats = isGoods ? goodsCats : opexCats;
-  const emptyMsg = isGoods
-    ? (lang==='ar'?'لا توجد فواتير بضاعة':'No goods purchases')
-    : (lang==='ar'?'لا توجد مصاريف إدارية':'No administrative expenses');
+  const cats = goodsCats;
+  const emptyMsg = lang==='ar'?'لا توجد فواتير بضاعة':'No goods purchases';
 
   pc.innerHTML = `
   <div id="purch-table" class="card">
@@ -9836,7 +9809,40 @@ function _paySalaryActual(id) {
 }
 
 // ============ OBLIGATIONS ============
+// صفحة "المصاريف الإدارية" — تبويبان: الالتزامات الدورية (الصفحة الأصلية،
+// بلا أي تغيير بمنطقها) والمصاريف العامة (كانت سابقًا تبويب "مصاريف إدارية"
+// داخل صفحة المشتريات، نُقلت هنا لأنها إداريّة بطبيعتها لا مشترياتية — تستخدم
+// نفس دالتي الإضافة/الحفظ الأصليتين (showAddOpexPurchase/savePurchase) بلا أي
+// تعديل بمنطق المحاسبة أو القيود
+let oblMainTab = 'recurring';
 function renderObligations(c) {
+  c.innerHTML = `<div>
+    <div class="tabs">
+      <button class="tab-btn ${oblMainTab==='recurring'?'active':''}" data-action="setOblMainTab" data-args='["recurring"]'>🔁 ${lang==='ar'?'الالتزامات الدورية':'Recurring Obligations'}</button>
+      ${hasPlanFeature('admin_expenses')?`<button class="tab-btn ${oblMainTab==='general'?'active':''}" data-action="setOblMainTab" data-args='["general"]'>💼 ${lang==='ar'?'مصاريف عامة':'General Expenses'}</button>`:''}
+    </div>
+    <div id="obl-main-content"></div>
+  </div>`;
+  renderOblMainContent();
+  refreshIcons();
+}
+function setOblMainTab(tab) {
+  oblMainTab = tab;
+  $qa('.tab-btn').forEach(b=>{
+    let tabName = null;
+    if (b.dataset.action==='setOblMainTab' && b.dataset.args) { try { tabName = JSON.parse(b.dataset.args)[0]; } catch(e) {} }
+    if (tabName!=null) b.classList.toggle('active', tabName===tab);
+  });
+  renderOblMainContent();
+}
+function renderOblMainContent() {
+  const mc = el('obl-main-content'); if(!mc) return;
+  if(oblMainTab==='general' && !hasPlanFeature('admin_expenses')) oblMainTab='recurring';
+  if(oblMainTab==='general') renderGeneralExpenses(mc);
+  else renderObligationsInner(mc);
+}
+
+function renderObligationsInner(c) {
   const db = getDB();
   const total = db.obligations.filter(o=>o.status==='active').reduce((s,o)=>s+o.amount,0);
   const monthlyTotal = db.obligations.filter(o=>o.status==='active').reduce((s,o)=>{
@@ -9928,6 +9934,82 @@ function renderObligations(c) {
             <td colspan="${has('obligations.manage')?4:3}"></td>
           </tr>
         </tfoot>
+      </table></div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+
+// ─── مصاريف عامة (منقولة من صفحة المشتريات) — نفس بيانات purchase_type==='opex'
+// بالضبط، نفس نموذج الإضافة والحفظ (showAddOpexPurchase/savePurchase) بلا أي
+// تغيير بالمحاسبة أو القيود، فقط مكان عرضها بالواجهة تغيّر ───
+function renderGeneralExpenses(c) {
+  const db = getDB();
+  const branchPurchases = filterByViewBranch(db.purchases);
+  const opex = branchPurchases.filter(p=>p.purchase_type==='opex');
+  const opexTotal = opex.reduce((s,p)=>s+p.total,0);
+  const rows = [...opex].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+
+  c.innerHTML = `
+  <div>
+    <div class="page-header">
+      <div class="page-title-lg">${lang==='ar'?'مصاريف عامة':'General Expenses'}</div>
+      <div style="display:flex;gap:8px;">
+        ${has('purchases.create')?`<button class="btn btn-primary" data-action="showAddOpexPurchase">${icon('plus',16)} ${lang==='ar'?'إضافة مصروف':'Add Expense'}</button>`:''}
+      </div>
+    </div>
+    <div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px;">
+      <div class="stat-card">
+        <div class="stat-icon red">${icon('trending-down',20)}</div>
+        <div class="stat-label">${lang==='ar'?'إجمالي المصاريف العامة':'Total General Expenses'}</div>
+        <div class="stat-value" style="font-size:18px;">${fmtMoney(opexTotal)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${opex.length} ${lang==='ar'?'مصروف':'expenses'}</div>
+      </div>
+      <div class="stat-card" style="cursor:default;">
+        <div class="stat-icon">${icon('percent',20)}</div>
+        <div class="stat-label">${lang==='ar'?'إجمالي ضريبة المدخلات':'Total Input VAT'}</div>
+        <div class="stat-value" style="font-size:18px;">${fmtMoney(opex.reduce((s,p)=>s+p.vat,0))}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3>💼 ${lang==='ar'?'مصاريف عامة — Administrative Expenses (OPEX)':'General Expenses (OPEX)'}</h3>
+        <div style="font-size:11px;color:var(--text-muted);text-align:end;">${lang==='ar'?'تُحتسب ضمن المصاريف الإدارية وتؤثر على صافي الربح':'Counted in OPEX, affects Net Profit'}</div>
+      </div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr>
+          <th>${t('date')}</th>
+          <th>${lang==='ar'?'الجهة':'Payee'}</th>
+          <th>${t('description')}</th>
+          <th>${t('category')}</th>
+          <th>${t('amount')}</th>
+          <th>${lang==='ar'?'ضريبة 15%':'VAT 15%'}</th>
+          <th>${t('total')}</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length===0
+            ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد مصاريف عامة':'No general expenses'}</td></tr>`
+            : rows.map(p=>`<tr>
+              <td>
+                <div>${fmtDate(p.created_at)}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
+              </td>
+              <td><b>${sanitize(p.vendor)}</b></td>
+              <td style="color:var(--text-muted);font-size:12px;">${sanitize(p.description)}</td>
+              <td><span class="badge badge-blue">${sanitize(p.category)}</span></td>
+              <td>${fmtMoney(p.amount)}</td>
+              <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
+              <td><b>${fmtMoney(p.total)}</b></td>
+            </tr>`).join('')}
+        </tbody>
+        ${rows.length>0?`<tfoot>
+          <tr style="background:var(--primary-soft);font-weight:900;">
+            <td colspan="4" style="padding:12px 14px;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
+            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.amount,0))}</td>
+            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.vat,0))}</td>
+            <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(rows.reduce((s,p)=>s+p.total,0))}</td>
+          </tr>
+        </tfoot>`:''}
       </table></div>
     </div>
   </div>`;
