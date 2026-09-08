@@ -46,21 +46,36 @@
 
 <nav>
   <a class="nav-logo" href="/">
-    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="17" fill="#0d0f14"/>
+    <svg viewBox="0 0 1254 1254" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="yqzL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#1a8a8a"/></linearGradient>
-        <linearGradient id="yqzR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#6ee7c9"/></linearGradient>
-        <linearGradient id="yqzWL" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c5d8c"/><stop offset="100%" stop-color="#2a9d92"/></linearGradient>
-        <linearGradient id="yqzWR" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2fb5a3"/><stop offset="100%" stop-color="#5eead4"/></linearGradient>
-        <linearGradient id="yqzS" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#a7f3d0"/></linearGradient>
+        <radialGradient id="bgGrad" cx="50%" cy="45%" r="65%"><stop offset="0%" stop-color="#072235"/><stop offset="45%" stop-color="#02131f"/><stop offset="85%" stop-color="#010a12"/><stop offset="100%" stop-color="#00060a"/></radialGradient>
+        <radialGradient id="ambientGlow" cx="50%" cy="50%" r="45%"><stop offset="0%" stop-color="#00e5ff" stop-opacity="0.18"/><stop offset="45%" stop-color="#0088b3" stop-opacity="0.08"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient>
+        <radialGradient id="starGlow" cx="50%" cy="63%" r="22%"><stop offset="0%" stop-color="#00ffff" stop-opacity="0.35"/><stop offset="50%" stop-color="#008cb3" stop-opacity="0.12"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient>
+        <linearGradient id="centerLeftFacet" x1="20%" y1="90%" x2="95%" y2="20%"><stop offset="0%" stop-color="#007e9e"/><stop offset="35%" stop-color="#009cb8"/><stop offset="70%" stop-color="#00c8db"/><stop offset="100%" stop-color="#3ef0f7"/></linearGradient>
+        <linearGradient id="centerRightFacet" x1="10%" y1="15%" x2="80%" y2="85%"><stop offset="0%" stop-color="#d6ffff"/><stop offset="25%" stop-color="#5ff4f9"/><stop offset="65%" stop-color="#00cde2"/><stop offset="100%" stop-color="#007d9f"/></linearGradient>
+        <linearGradient id="leftWingGrad" x1="0%" y1="60%" x2="100%" y2="30%"><stop offset="0%" stop-color="#0087b8"/><stop offset="45%" stop-color="#00b4d6"/><stop offset="85%" stop-color="#3af2f8"/><stop offset="100%" stop-color="#a4fcff"/></linearGradient>
+        <linearGradient id="rightWingGrad" x1="100%" y1="65%" x2="0%" y2="30%"><stop offset="0%" stop-color="#0079b3"/><stop offset="40%" stop-color="#00a8d4"/><stop offset="80%" stop-color="#4cf3f8"/><stop offset="100%" stop-color="#aefcff"/></linearGradient>
+        <linearGradient id="starTopLeft" x1="20%" y1="80%" x2="80%" y2="20%"><stop offset="0%" stop-color="#00a0b2"/><stop offset="60%" stop-color="#36ecf2"/><stop offset="100%" stop-color="#e2feff"/></linearGradient>
+        <linearGradient id="starTopRight" x1="80%" y1="80%" x2="20%" y2="20%"><stop offset="0%" stop-color="#008fa3"/><stop offset="50%" stop-color="#24dbe3"/><stop offset="100%" stop-color="#ffffff"/></linearGradient>
+        <linearGradient id="starBottomLeft" x1="20%" y1="20%" x2="80%" y2="80%"><stop offset="0%" stop-color="#008ea0"/><stop offset="65%" stop-color="#00bcd0"/><stop offset="100%" stop-color="#006575"/></linearGradient>
+        <linearGradient id="starBottomRight" x1="80%" y1="20%" x2="20%" y2="80%"><stop offset="0%" stop-color="#007b8c"/><stop offset="60%" stop-color="#00afc3"/><stop offset="100%" stop-color="#005866"/></linearGradient>
+        <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="60"/></filter>
       </defs>
-      <polygon points="31,44 13,72 40,67" fill="url(#yqzWL)"/>
-      <polygon points="69,44 87,72 60,67" fill="url(#yqzWR)"/>
-      <polygon points="50,14 37,64 50,64" fill="url(#yqzL)"/>
-      <polygon points="50,14 50,64 63,64" fill="url(#yqzR)"/>
-      <polygon points="43,64 50,52 57,64" fill="#0d0f14"/>
-      <path transform="translate(50,84) scale(0.62)" d="M0 -13 C1 -4 4 -1 13 0 C4 1 1 4 0 13 C-1 4 -4 1 -13 0 C-4 -1 -1 -4 0 -13 Z" fill="url(#yqzS)"/>
+      <rect width="1254" height="1254" fill="url(#bgGrad)"/>
+      <circle cx="627" cy="627" r="420" fill="url(#ambientGlow)" filter="url(#softGlow)"/>
+      <circle cx="627" cy="795" r="220" fill="url(#starGlow)" filter="url(#softGlow)"/>
+      <g id="logo-marks">
+        <path d="M 528 449 L 289 663 A 18 18 0 0 0 288 684 L 348 815 Z" fill="url(#leftWingGrad)"/>
+        <path d="M 726 449 L 906 815 L 966 684 A 18 18 0 0 0 965 663 Z" fill="url(#rightWingGrad)"/>
+        <path d="M 627 277 L 463 715 L 627 622 Z" fill="url(#centerLeftFacet)"/>
+        <path d="M 627 277 L 627 622 L 791 715 Z" fill="url(#centerRightFacet)"/>
+        <line x1="627" y1="277" x2="627" y2="622" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.75"/>
+        <path d="M 627 678 C 627 750 575 795 528 795 L 627 795 Z" fill="url(#starTopLeft)"/>
+        <path d="M 627 678 C 627 750 679 795 726 795 L 627 795 Z" fill="url(#starTopRight)"/>
+        <path d="M 528 795 C 575 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomLeft)"/>
+        <path d="M 726 795 C 679 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomRight)"/>
+        <circle cx="627" cy="795" r="7" fill="#ffffff" opacity="0.95"/>
+      </g>
     </svg>
     <div>
       <div class="nav-logo-text">يقظ</div>
