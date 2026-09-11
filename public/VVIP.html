@@ -10154,7 +10154,7 @@ function confirmObligationPayment(id, type, amount, method) {
   db.treasury.moves.unshift({
     id:nextId(db,'treasury'),type:'out',amount,
     description:`${lang==='ar'?'سداد التزام':'Obligation payment'} ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}: ${o.name}`,
-    reference:`OBL-${id}`,date:new Date().toISOString(),method
+    reference:`OBL-${id}`,date:new Date().toISOString(),method,branch_id:resolveActiveBranchId()
   });
 
   // ── تسجيل مصروف OPEX ─────────────────────────────────────
