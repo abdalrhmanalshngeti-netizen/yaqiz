@@ -2711,8 +2711,10 @@ function renderDashboard(c) {
     (Date.now() - new Date(p.created_at).getTime()) / 86400000 >= GOODS_IN_TRANSIT_ALERT_DAYS
   );
   // رصيد الخزينة — من حركات نفس الفرع بس لو فيه فلترة، بنفس منطق صفحة الخزينة تمامًا
+  // (حركة بلا فرع — راتب، مصروف مشترك — ما تلمس صندوق أي فرع فعليًا، تُستبعد هنا
+  // بنفس سبب استبعادها بصفحة الخزينة، وإلا اختلف رقم الداشبورد عن رقم صفحة الخزينة)
   const dashTreasuryBalance = viewBid
-    ? (db.treasury.moves||[]).filter(m=>m.branch_id===viewBid||!m.branch_id).reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
+    ? (db.treasury.moves||[]).filter(m=>m.branch_id===viewBid).reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
     : db.treasury.balance;
   // ورديات اليوم — للمالك فقط، وصول سريع لتفاصيل أي وردية بدل التنقّل يدويًا
   const todayShiftsClosed = currentUser?.role==='owner'
@@ -6487,7 +6489,7 @@ function isBankTreasuryMethod(method) {
 // (نفس السلوك السابق تمامًا — توافق رجعي لأي استدعاء آخر لهذي الدالة)
 function computeCashBankSplit(branchId) {
   const db = getDB();
-  const moves = (db.treasury?.moves || []).filter(m => !branchId || m.branch_id === branchId || !m.branch_id);
+  const moves = (db.treasury?.moves || []).filter(m => !branchId || m.branch_id === branchId);
   let cash = 0, bank = 0;
   for (const m of moves) {
     const amt = m.type === 'in' ? m.amount : -m.amount;
@@ -6517,8 +6519,11 @@ function renderTreasury(c) {
     }
   }
 
+  // حركة بلا فرع (راتب، مصروف مشترك...) ما تلمس فعليًا صندوق أي فرع محدد —
+  // عرضها بكل فرع لحاله يُضاعِف أثرها (تظهر مخصومة من كل فرع كامل مبلغها،
+  // بدل مرة وحدة بالتوتال). تبقى تظهر فقط بعرض "التوتال" غير المُصفَّى
   const scopedMoves = scopeBranchId
-    ? db.treasury.moves.filter(m => m.branch_id === scopeBranchId || !m.branch_id)
+    ? db.treasury.moves.filter(m => m.branch_id === scopeBranchId)
     : db.treasury.moves;
   const scopedBalance = scopeBranchId
     ? scopedMoves.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0)
