@@ -5723,6 +5723,7 @@ function savePurchase(purchase_type) {
     purchase_type: 'opex',
     amount, vat, total: amount+vat,
     payment_method:'نقدي', paid_amount:amount+vat, remaining_amount:0, status:'مسدد',
+    branch_id: resolveActiveBranchId(),
     created_at: new Date(dateVal).toISOString()
   };
   db.purchases.push(p);
@@ -16241,9 +16242,9 @@ TOUR_STEPS.sales = [
 ];
 
 TOUR_STEPS.purchases = [
-  { id:'purch-add-btn', title:'إضافة مشتريات', text:'سجّل فاتورة شراء بضاعة أو مصروف إداري جديد من هنا.' },
-  { id:'purch-stats-grid', title:'إجماليات المشتريات', text:'ملخص سريع لإجمالي مشتريات البضاعة والمصاريف الإدارية — اضغط على أي بطاقة للتصفية حسب نوعها.' },
-  { id:'purch-table', title:'سجل المشتريات', text:'كل فواتير الشراء تظهر هنا حسب النوع المختار (بضاعة أو مصاريف إدارية) — اضغط على أي فاتورة لعرض تفاصيلها.' },
+  { id:'purch-add-btn', title:'إضافة مشتريات', text:'سجّل فاتورة شراء بضاعة جديدة من هنا — يدويًا، استيراد Excel، أو تفريغ تلقائي بالذكاء الاصطناعي.' },
+  { id:'purch-stats-grid', title:'إجماليات المشتريات', text:'ملخص سريع لإجمالي مشتريات البضاعة وضريبة المدخلات.' },
+  { id:'purch-table', title:'سجل المشتريات', text:'كل فواتير شراء البضاعة تظهر هنا — اضغط على أي فاتورة لعرض تفاصيلها. المصاريف الإدارية صار لها صفحة خاصة بالشريط الجانبي.' },
 ];
 
 TOUR_STEPS.inventory = [
@@ -16288,7 +16289,7 @@ TOUR_STEPS.quotes = [
 TOUR_STEPS.obligations = [
   { id:'obl-add-btn', title:'إضافة التزام', text:'سجّل التزامًا دوريًا مثل الإيجار أو الاشتراكات مع تكراره (شهري، ربع سنوي...).' },
   { id:'obl-stats-grid', title:'ملخص الالتزامات', text:'المعادل الشهري لكل التزاماتك وعدد الالتزامات المستحقة خلال 30 يومًا.' },
-  { id:'obl-table', title:'سجل الالتزامات', text:'كل التزاماتك مع تاريخ الاستحقاق القادم — زر «سداد» يسجّل الدفعة فورًا.' },
+  { id:'obl-table', title:'سجل الالتزامات', text:'كل التزاماتك مع تاريخ الاستحقاق القادم — زر «سداد» يسجّل الدفعة فورًا. وفيه تبويب «مصاريف عامة» بالأعلى لتسجيل مصروف إداري غير دوري وقت حدوثه.' },
 ];
 
 TOUR_STEPS.reports = [
