@@ -22,6 +22,18 @@ function ensureDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
+// pg_dump يأخذ DATABASE_URL (بكلمة المرور الحقيقية صراحةً) كوسيط سطر أوامر —
+// عند أي فشل، خطأ execFile الافتراضي يُرجِع سطر الأمر الكامل بنص الخطأ،
+// فكلمة مرور قاعدة البيانات تنطبع كاملة بلوجات الإنتاج (Railway). حصل هذا
+// فعليًا قبل هذا الإصلاح — كلمة المرور الحقيقية ظهرت بلوج حقيقي. تنقيح أي
+// رابط اتصال محتمل (وليس فقط DATABASE_URL الحالي تحديدًا) قبل أي رفع/تسجيل
+function redactConnectionString(err) {
+  if (err?.message) {
+    err.message = err.message.replace(/(postgres(?:ql)?:\/\/[^:]+:)[^@]+(@)/gi, '$1[REDACTED]$2');
+  }
+  return err;
+}
+
 function runPgDump() {
   return new Promise((resolve, reject) => {
     ensureDir();
@@ -47,7 +59,7 @@ function runPgDump() {
     }
 
     execFile('pg_dump', args, { env }, (err) => {
-      if (err) return reject(err);
+      if (err) return reject(redactConnectionString(err));
       resolve(outFile);
     });
   });
