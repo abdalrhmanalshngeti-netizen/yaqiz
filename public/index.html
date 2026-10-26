@@ -3,803 +3,801 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="يقظ — نظام محاسبة سعودي ذكي متوافق مع ZATCA للشركات الصغيرة والمتوسطة. فواتير إلكترونية، إدارة مخزون، رواتب، وتقارير مالية متكاملة.">
+  <meta name="description" content="يقظ — نظام محاسبة سحابي سعودي متوافق مع الفوترة الإلكترونية (زاتكا) للمنشآت الصغيرة والمتوسطة. فواتير، مخزون، رواتب، تقارير مالية، ومساعد ذكي.">
   <meta name="robots" content="index, follow">
   <meta property="og:type"        content="website">
   <meta property="og:title"       content="يقظ — نظام المحاسبة السعودي">
-  <meta property="og:description" content="نظام محاسبة سعودي ذكي متوافق مع ZATCA — فواتير إلكترونية، مخزون، رواتب، وتقارير مالية للمنشآت الصغيرة والمتوسطة.">
+  <meta property="og:description" content="محاسبة سحابية متوافقة مع الفوترة الإلكترونية — فواتير، مخزون، رواتب، وتقارير مالية للمنشآت الصغيرة والمتوسطة.">
   <meta property="og:url"         content="https://yaqiz.me">
   <meta property="og:locale"      content="ar_SA">
   <meta name="twitter:card"        content="summary">
   <meta name="twitter:title"       content="يقظ — نظام المحاسبة السعودي">
-  <meta name="twitter:description" content="نظام محاسبة سعودي متوافق مع ZATCA للمنشآت الصغيرة والمتوسطة.">
+  <meta name="twitter:description" content="محاسبة سحابية متوافقة مع الفوترة الإلكترونية للمنشآت الصغيرة والمتوسطة.">
+  <meta name="theme-color" content="#061521">
   <title>يقظ — نظام المحاسبة السعودي</title>
   <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:      #070d1a;
-      --surface: #0d1629;
-      --card:    #111d33;
-      --border:  #1a2942;
-      /* هوية الموقع العامة (تركوازي) — نفس ألوان المنصة الداخلية بالضبط بعد
-         إعادة التصميم؛ لا تُستخدم لأي شي مرتبط بلون باقة معيّنة */
-      --brand:       #0d9488;
-      --brand-d:     #0f766e;
-      --brand-light: #14b8a6;
-      /* --blue/--blue-d تبقى كما هي حرفيًا — مرتبطة بهوية باقة "النمو" تحديدًا
-         (planMeta.growth بالمنصة الداخلية)، ما تتغيّر مع هوية الموقع العامة */
-      --blue:    #3b82f6;
-      --blue-d:  #1d4ed8;
-      --green:   #10b981;
-      --purple:  #8b5cf6;
-      --amber:   #f59e0b;
-      --text:    #f0f4ff;
-      --muted:   #6b7fa3;
-      --light-bg:#f0f4ff;
-      --light-text:#0f172a;
-      --light-muted:#64748b;
-      --light-border:#e2e8f0;
+      --ink:      #061521;
+      --ink-2:    #0b2232;
+      --ink-line: rgba(255,255,255,.09);
+      --brand:    #0d9488;
+      --brand-d:  #0f766e;
+      --brand-l:  #14b8a6;
+      --glow:     #22d3ee;
+      --mint:     #5eead4;
+      --bg:       #f5f8f9;
+      --surface:  #ffffff;
+      --line:     #e2e9ec;
+      --text:     #0b1b26;
+      --body:     #44575f;
+      --muted:    #7b8d95;
+      --tint:     #ecf7f6;
+      --radius:   16px;
+      --shadow:   0 1px 2px rgba(6,21,33,.04), 0 8px 24px -12px rgba(6,21,33,.12);
     }
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-    html { scroll-behavior: smooth; }
-    body { font-family:'Tajawal',sans-serif; background:#fff; color:var(--light-text); overflow-x:hidden; font-weight:600; }
+    html { scroll-behavior:smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } * { transition:none !important; animation:none !important; } }
+    body {
+      font-family:'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif;
+      background:var(--bg); color:var(--body);
+      font-size:16px; line-height:1.75; font-weight:400;
+      overflow-x:hidden; -webkit-font-smoothing:antialiased;
+    }
+    h1, h2, h3, h4 { color:var(--text); font-weight:700; line-height:1.3; text-wrap:balance; }
+    a { color:inherit; }
+    :focus-visible { outline:2px solid var(--brand-l); outline-offset:3px; border-radius:8px; }
+    .wrap { max-width:1160px; margin-inline:auto; padding-inline:24px; }
+    .ico { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+    .num { font-variant-numeric:tabular-nums; }
 
-    /* ── NAV ─────────────────────── */
-    nav {
-      position:fixed; top:0; width:100%; z-index:100;
-      background:rgba(7,13,26,0.97); backdrop-filter:blur(16px);
-      border-bottom:1px solid rgba(255,255,255,0.07);
+    /* ── Buttons ─────────────────────────────── */
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      font-family:inherit; font-size:1rem; font-weight:600; line-height:1;
+      padding:14px 26px; border-radius:12px; border:1px solid transparent;
+      cursor:pointer; text-decoration:none; transition:background .2s, border-color .2s, transform .2s, box-shadow .2s;
     }
-    .nav-inner {
-      max-width:1240px; margin:auto;
-      display:flex; align-items:center; justify-content:space-between;
-      height:70px; padding:0 2rem;
-    }
-    .logo { display:flex; align-items:center; gap:11px; text-decoration:none; }
-    .logo-icon { width:38px; height:38px; border-radius:9px; overflow:hidden; flex-shrink:0; }
-    .logo-name { color:#fff; font-size:1.5rem; font-weight:900; letter-spacing:-0.5px; }
-    .logo-sub  { color:rgba(255,255,255,0.4); font-size:0.72rem; font-weight:600; margin-top:-3px; }
-    .nav-links { display:flex; align-items:center; gap:6px; }
-    .nav-links a {
-      color:rgba(255,255,255,0.7); text-decoration:none;
-      font-size:0.9rem; font-weight:600; padding:7px 14px;
-      border-radius:8px; transition:.2s;
-    }
-    .nav-links a:hover { color:#fff; background:rgba(255,255,255,0.08); }
-    .btn-enter {
-      background:linear-gradient(135deg,var(--brand-d),var(--brand));
-      color:#fff !important; font-weight:800 !important;
-      border-radius:12px !important; padding:8px 20px !important;
-      box-shadow:0 4px 16px rgba(13,148,136,.35);
-    }
-    .btn-enter:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(13,148,136,.5) !important; }
+    .btn-primary { background:var(--brand); color:#fff; box-shadow:0 6px 20px -8px rgba(13,148,136,.7); }
+    .btn-primary:hover { background:var(--brand-d); transform:translateY(-1px); }
+    .btn-ghost-d { background:transparent; color:#fff; border-color:rgba(255,255,255,.22); }
+    .btn-ghost-d:hover { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.4); }
+    .btn-ghost { background:var(--surface); color:var(--text); border-color:var(--line); }
+    .btn-ghost:hover { border-color:var(--brand-l); color:var(--brand-d); }
+    .btn-sm { padding:10px 18px; font-size:.92rem; border-radius:10px; }
 
-    /* ── HERO ────────────────────── */
+    /* ── Nav ─────────────────────────────────── */
+    .nav {
+      position:sticky; top:0; z-index:50;
+      background:rgba(6,21,33,.82); backdrop-filter:saturate(140%) blur(14px);
+      border-bottom:1px solid var(--ink-line);
+    }
+    .nav .wrap { display:flex; align-items:center; justify-content:space-between; height:68px; gap:16px; }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .brand img { width:36px; height:36px; border-radius:9px; display:block; }
+    .brand b { color:#fff; font-size:1.3rem; font-weight:700; letter-spacing:-.3px; }
+    .nav-links { display:flex; align-items:center; gap:4px; }
+    .nav-links a:not(.btn) {
+      color:rgba(255,255,255,.72); text-decoration:none; font-size:.95rem; font-weight:500;
+      padding:8px 12px; border-radius:8px; transition:color .2s;
+    }
+    .nav-links a:not(.btn):hover { color:#fff; }
+    .nav-cta { display:flex; align-items:center; gap:8px; }
+    .nav-cta .login { color:rgba(255,255,255,.85); text-decoration:none; font-size:.95rem; font-weight:500; padding:8px 12px; }
+    .nav-cta .login:hover { color:#fff; }
+
+    /* ── Hero ────────────────────────────────── */
     .hero {
-      min-height:100vh;
-      background:radial-gradient(ellipse at 40% 50%, #0a3330 0%, #070d1a 65%);
-      display:flex; align-items:center; justify-content:center;
-      text-align:center; padding:120px 2rem 6rem;
-      position:relative; overflow:hidden;
+      position:relative; overflow:hidden; color:#c9d6dc;
+      background:
+        radial-gradient(60% 70% at 20% 30%, rgba(34,211,238,.14), transparent 70%),
+        radial-gradient(50% 60% at 85% 10%, rgba(13,148,136,.18), transparent 70%),
+        var(--ink);
+      padding:72px 0 112px;
     }
-    .hero::before {
-      content:''; position:absolute; inset:0;
-      background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230d9488' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-      pointer-events:none;
-    }
-    .hero-content { position:relative; max-width:860px; }
-    .hero-badge {
+    .hero-grid { display:grid; grid-template-columns:1fr 1.15fr; gap:56px; align-items:center; position:relative; z-index:1; }
+    .eyebrow {
       display:inline-flex; align-items:center; gap:8px;
-      background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.3);
-      color:#fbbf24; padding:7px 20px; border-radius:100px;
-      font-size:0.85rem; font-weight:700; margin-bottom:2rem; letter-spacing:.3px;
+      font-size:.85rem; font-weight:600; color:var(--mint);
+      background:rgba(94,234,212,.08); border:1px solid rgba(94,234,212,.22);
+      padding:6px 14px; border-radius:100px; margin-bottom:22px;
     }
-    .hero h1 {
-      color:#fff;
-      font-size:clamp(2.6rem, 6vw, 4.4rem);
-      font-weight:900; line-height:1.15; margin-bottom:1.5rem;
-      text-shadow:0 2px 40px rgba(13,148,136,.25);
-    }
-    .hero h1 em { font-style:normal; color:#5eead4; }
-    .hero-sub {
-      color:rgba(255,255,255,.8); font-size:1.2rem; font-weight:600;
-      line-height:1.85; margin-bottom:2.75rem; max-width:640px; margin-inline:auto;
-    }
-    .hero-btns { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-bottom:3.5rem; }
-    .btn-cta {
-      background:linear-gradient(135deg,var(--brand-d),var(--brand));
-      color:#fff; padding:1rem 2.4rem; border-radius:16px;
-      text-decoration:none; font-weight:800; font-size:1.05rem;
-      box-shadow:0 6px 28px rgba(15,118,110,.5);
-      transition:.3s; border:none; cursor:pointer; font-family:inherit;
-    }
-    .btn-cta:hover { transform:translateY(-2px); box-shadow:0 10px 36px rgba(15,118,110,.65); }
-    .btn-ghost-cta {
-      background:rgba(255,255,255,.06); color:#fff;
-      padding:1rem 2.4rem; border-radius:14px;
-      text-decoration:none; font-weight:700; font-size:1.05rem;
-      border:1.5px solid rgba(255,255,255,.2); transition:.3s;
-      cursor:pointer; font-family:inherit;
-    }
-    .btn-ghost-cta:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); }
-    .hero-stats {
-      display:flex; justify-content:center; gap:0; flex-wrap:wrap;
-      padding-top:2.5rem; border-top:1px solid rgba(255,255,255,.08);
-    }
-    .hero-stat {
-      padding:0 2.5rem;
-      border-left:1px solid rgba(255,255,255,.1);
-    }
-    .hero-stat:last-child { border-left:none; }
-    .stat-n { color:#fff; font-size:2.2rem; font-weight:900; line-height:1; }
-    .stat-l { color:rgba(255,255,255,.65); font-size:0.85rem; font-weight:700; margin-top:4px; }
+    .eyebrow .dot { width:7px; height:7px; border-radius:50%; background:var(--mint); box-shadow:0 0 0 4px rgba(94,234,212,.18); }
+    .hero h1 { color:#fff; font-size:clamp(2.3rem, 4.6vw, 3.6rem); line-height:1.2; letter-spacing:-.5px; margin-bottom:20px; }
+    .hero h1 span { color:var(--mint); }
+    .hero-lead { font-size:1.15rem; line-height:1.85; color:#b7c6cd; max-width:520px; margin-bottom:32px; }
+    .hero-actions { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:28px; }
+    .hero-notes { display:flex; gap:20px; flex-wrap:wrap; font-size:.9rem; color:#93a6af; }
+    .hero-notes span { display:inline-flex; align-items:center; gap:6px; }
+    .hero-notes .ico { width:16px; height:16px; color:var(--mint); }
 
-    /* ── CONTAINER / SECTION ──── */
-    .section { padding:6rem 2rem; }
-    .section.bg-light { background:#f8fafc; }
-    .section.bg-dark  { background:var(--bg); }
-    .container { max-width:1240px; margin:auto; }
-    .sec-label {
-      font-size:0.78rem; font-weight:800; letter-spacing:2px; text-transform:uppercase;
-      color:var(--brand-d); margin-bottom:.5rem;
+    /* app mockup */
+    .mock-wrap { position:relative; padding-bottom:40px; }
+    .mock {
+      background:#f4f7f8; border-radius:14px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 40px 80px -30px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.2), 0 0 120px -40px rgba(34,211,238,.35);
+      display:grid; grid-template-columns:132px 1fr; min-height:400px;
+      font-size:11px; color:#41545c;
     }
-    .sec-label.light { color:#5eead4; }
-    .sec-title {
-      font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900;
-      color:var(--light-text); line-height:1.25; margin-bottom:.9rem;
+    .mock-side { background:#0b1d29; padding:14px 10px; display:flex; flex-direction:column; gap:4px; order:1; }
+    .mock-side .mlogo { display:flex; align-items:center; gap:6px; color:#fff; font-weight:700; font-size:12px; margin-bottom:12px; }
+    .mock-side .mlogo img { width:20px; height:20px; border-radius:5px; }
+    .mock-side i { display:block; height:22px; border-radius:6px; background:rgba(255,255,255,.05); font-style:normal; color:#8fa5ae; padding:0 8px; line-height:22px; font-size:10.5px; }
+    .mock-side i.on { background:var(--brand); color:#fff; }
+    .mock-main { padding:16px; display:flex; flex-direction:column; gap:12px; order:2; }
+    .mock-top { display:flex; justify-content:space-between; align-items:center; }
+    .mock-top b { color:#0b1b26; font-size:14px; }
+    .mock-top .pill { background:#fff; border:1px solid #e3eaed; border-radius:100px; padding:3px 10px; font-size:10px; }
+    .mock-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+    .kpi { background:#fff; border:1px solid #e3eaed; border-radius:10px; padding:10px; }
+    .kpi small { display:block; color:#7b8d95; font-size:9.5px; margin-bottom:4px; }
+    .kpi strong { color:#0b1b26; font-size:13.5px; font-weight:700; }
+    .kpi em { display:block; font-style:normal; color:#0d9488; font-size:9.5px; margin-top:2px; }
+    .mock-row { display:grid; grid-template-columns:1.6fr 1fr; gap:8px; }
+    .panel { background:#fff; border:1px solid #e3eaed; border-radius:10px; padding:10px; }
+    .panel h5 { color:#0b1b26; font-size:11px; font-weight:600; margin-bottom:8px; }
+    .bars { display:flex; align-items:flex-end; gap:6px; height:92px; padding-top:4px; }
+    .bars span { flex:1; display:flex; gap:2px; align-items:flex-end; height:100%; }
+    .bars b { flex:1; border-radius:3px 3px 0 0; background:#0d9488; }
+    .bars b + b { background:#f2b84b; }
+    .inv { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #eef2f4; font-size:10px; }
+    .inv:last-child { border-bottom:0; }
+    .inv .st { color:#0d9488; font-weight:600; }
+    .ai-float {
+      position:absolute; bottom:0; left:-24px; width:320px;
+      background:#fff; border:1px solid #e3eaed; border-radius:14px; padding:14px 16px;
+      box-shadow:0 24px 48px -20px rgba(6,21,33,.45); font-size:.88rem; color:#41545c;
     }
-    .sec-title.light { color:#fff; }
-    .sec-sub {
-      color:var(--light-muted); font-size:1.08rem; font-weight:700;
-      max-width:560px; margin-inline:auto; line-height:1.8;
-    }
-    .sec-sub.light { color:rgba(255,255,255,.7); }
-    .text-center { text-align:center; }
+    .ai-float .who { display:flex; align-items:center; gap:8px; font-weight:600; color:#0b1b26; font-size:.85rem; margin-bottom:6px; }
+    .ai-float .who .ico { width:18px; height:18px; color:var(--brand); }
+    .ai-float strong { color:var(--brand-d); }
 
-    /* ── FEATURES GRID ─────────── */
-    .feat-grid {
-      display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-      gap:1.25rem; margin-top:3rem;
+    /* ── Strip ───────────────────────────────── */
+    .strip { margin-top:-48px; position:relative; z-index:2; }
+    .strip-grid {
+      display:grid; grid-template-columns:repeat(4,1fr);
+      background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
     }
-    .feat-card {
-      background:#fff; border-radius:20px; padding:2rem 2rem 2rem;
-      border:1.5px solid var(--light-border); transition:.3s; position:relative;
-      overflow:hidden;
-    }
-    .feat-card:hover { transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.08); }
-    .feat-card::before {
-      content:''; position:absolute; top:0; right:0; left:0; height:3px;
-      border-radius:20px 20px 0 0;
-    }
-    .feat-card.c-blue::before   { background:var(--blue); }
-    .feat-card.c-green::before  { background:var(--green); }
-    .feat-card.c-purple::before { background:var(--purple); }
-    .feat-card.c-amber::before  { background:var(--amber); }
-    .feat-card.c-cyan::before   { background:#06b6d4; }
-    .feat-card.c-rose::before   { background:#f43f5e; }
-    .feat-icon {
-      width:52px; height:52px; border-radius:14px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:1.6rem; margin-bottom:1.1rem; flex-shrink:0;
-    }
-    .feat-card.c-blue   .feat-icon { background:rgba(59,130,246,.1); }
-    .feat-card.c-green  .feat-icon { background:rgba(16,185,129,.1); }
-    .feat-card.c-purple .feat-icon { background:rgba(139,92,246,.1); }
-    .feat-card.c-amber  .feat-icon { background:rgba(245,158,11,.1); }
-    .feat-card.c-cyan   .feat-icon { background:rgba(6,182,212,.1); }
-    .feat-card.c-rose   .feat-icon { background:rgba(244,63,94,.1); }
-    .feat-card h3 { font-size:1.12rem; font-weight:900; color:var(--light-text); margin-bottom:.5rem; }
-    .feat-card p  { color:var(--light-muted); font-size:.96rem; font-weight:600; line-height:1.75; }
-    .feat-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:1rem; }
-    .feat-tag {
-      font-size:.75rem; font-weight:700; padding:3px 10px; border-radius:100px;
-      background:#f1f5f9; color:var(--light-muted);
-    }
+    .strip-item { display:flex; align-items:center; gap:12px; padding:20px 22px; }
+    .strip-item + .strip-item { border-inline-start:1px solid var(--line); }
+    .strip-item .ico { color:var(--brand); }
+    .strip-item b { display:block; color:var(--text); font-weight:600; font-size:.95rem; line-height:1.4; }
+    .strip-item small { color:var(--muted); font-size:.82rem; }
 
-    /* ── STEPS ──────────────────── */
-    .steps-grid {
-      display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-      gap:2rem; margin-top:3rem;
-    }
-    .step-card { text-align:center; padding:1.5rem; }
-    .step-num {
-      width:68px; height:68px; border-radius:50%;
-      background:linear-gradient(135deg,var(--brand-d),var(--brand));
-      color:#fff; font-size:1.7rem; font-weight:900;
-      display:flex; align-items:center; justify-content:center;
-      margin:0 auto 1.5rem;
-      box-shadow:0 8px 28px rgba(15,118,110,.35);
-    }
-    .step-card h3 { font-size:1.15rem; font-weight:900; color:var(--light-text); margin-bottom:.5rem; }
-    .step-card p  { color:var(--light-muted); font-size:.96rem; font-weight:600; line-height:1.8; }
+    /* ── Sections ────────────────────────────── */
+    section.blk { padding:104px 0; }
+    .head { max-width:640px; margin-bottom:48px; }
+    .head.center { margin-inline:auto; text-align:center; }
+    .kicker { color:var(--brand-d); font-size:.85rem; font-weight:600; letter-spacing:.2px; margin-bottom:10px; }
+    .head h2 { font-size:clamp(1.8rem, 3.2vw, 2.4rem); margin-bottom:14px; letter-spacing:-.3px; }
+    .head p { font-size:1.08rem; color:var(--body); }
 
-    /* ── COMPLIANCE ─────────────── */
-    .comp-grid {
-      display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
-      gap:1.25rem; margin-top:3rem;
+    /* features */
+    .feat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .feat {
+      background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+      padding:28px; transition:border-color .2s, box-shadow .2s;
     }
-    .comp-card {
-      background:#fff; border-radius:18px; padding:2rem 1.5rem;
-      border:1.5px solid var(--light-border); text-align:center; transition:.3s;
-    }
-    .comp-card:hover { border-color:var(--brand); box-shadow:0 6px 24px rgba(13,148,136,.1); }
-    .comp-card .ci { font-size:2.6rem; margin-bottom:.75rem; }
-    .comp-card h4 { font-size:1.05rem; font-weight:900; color:var(--light-text); margin-bottom:.3rem; }
-    .comp-card p  { color:var(--light-muted); font-size:.9rem; font-weight:600; line-height:1.65; }
+    .feat:hover { border-color:#c7e5e1; box-shadow:var(--shadow); }
+    .tile { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:var(--tint); color:var(--brand-d); margin-bottom:18px; }
+    .feat h3 { font-size:1.12rem; margin-bottom:8px; }
+    .feat p { font-size:.97rem; color:var(--body); }
 
-    /* ── PRICING ─────────────────── */
-    .pricing-row {
-      display:grid; grid-template-columns:repeat(3,1fr);
-      gap:1.5rem; margin-top:3rem; align-items:start;
-    }
-    .plan-card {
-      border-radius:24px; padding:2.5rem 2rem;
-      border:1px solid rgba(255,255,255,.1);
-      position:relative; transition:.3s;
-      display:flex; flex-direction:column;
-    }
-    .plan-card:hover { transform:translateY(-4px); }
+    /* AI band */
+    .ai-band { background:var(--ink); color:#b7c6cd; border-radius:24px; padding:56px; display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; position:relative; overflow:hidden; }
+    .ai-band::before { content:''; position:absolute; width:520px; height:520px; left:-160px; bottom:-260px; background:radial-gradient(circle, rgba(34,211,238,.18), transparent 65%); pointer-events:none; }
+    .ai-band .kicker { color:var(--mint); }
+    .ai-band h2 { color:#fff; font-size:clamp(1.7rem, 3vw, 2.2rem); margin-bottom:14px; }
+    .ai-band > div > p { font-size:1.05rem; margin-bottom:28px; }
+    .ai-list { list-style:none; display:grid; gap:18px; }
+    .ai-list li { display:grid; grid-template-columns:auto 1fr; gap:14px; }
+    .ai-list .tile { background:rgba(94,234,212,.1); color:var(--mint); margin:0; }
+    .ai-list b { display:block; color:#fff; font-weight:600; margin-bottom:2px; }
+    .ai-list span { font-size:.95rem; }
+    .chat { position:relative; background:#0d2433; border:1px solid var(--ink-line); border-radius:18px; padding:20px; display:flex; flex-direction:column; gap:12px; }
+    .chat-h { display:flex; align-items:center; gap:10px; color:#fff; font-weight:600; padding-bottom:12px; border-bottom:1px solid var(--ink-line); }
+    .chat-h img { width:28px; height:28px; border-radius:8px; }
+    .chat-h small { color:#7f97a1; font-weight:400; font-size:.8rem; display:block; line-height:1.2; }
+    .msg { max-width:86%; padding:11px 14px; border-radius:14px; font-size:.93rem; line-height:1.7; }
+    .msg.me { align-self:flex-start; background:var(--brand); color:#fff; border-bottom-right-radius:4px; }
+    .msg.bot { align-self:flex-end; background:#13303f; color:#d4e1e6; border-bottom-left-radius:4px; }
+    .msg.bot strong { color:var(--mint); font-weight:600; }
 
-    /* basic — green */
-    .plan-card.basic {
-      background:linear-gradient(160deg,#071a12,#0a2218);
-      border-color:rgba(16,185,129,.25);
-    }
-    .plan-card.basic:hover { box-shadow:0 20px 60px rgba(16,185,129,.2); }
+    /* steps */
+    .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:32px; position:relative; counter-reset:s; }
+    .steps::before { content:''; position:absolute; top:22px; right:16%; left:16%; height:1px; background:repeating-linear-gradient(to left, var(--line) 0 8px, transparent 8px 14px); }
+    .step { text-align:center; position:relative; }
+    .step .n { width:44px; height:44px; margin:0 auto 18px; border-radius:50%; background:var(--surface); border:1px solid var(--line); color:var(--brand-d); font-weight:700; display:grid; place-items:center; box-shadow:0 0 0 6px var(--bg); }
+    .step h3 { font-size:1.08rem; margin-bottom:6px; }
+    .step p { font-size:.96rem; max-width:290px; margin-inline:auto; }
 
-    /* growth — blue (popular) */
-    .plan-card.growth {
-      background:linear-gradient(160deg,#071228,#0d1e4a);
-      border-color:rgba(59,130,246,.5);
-      box-shadow:0 0 0 1px rgba(59,130,246,.3), 0 16px 50px rgba(59,130,246,.2);
-    }
-    .plan-card.growth:hover { box-shadow:0 0 0 1px rgba(59,130,246,.5), 0 24px 70px rgba(59,130,246,.3); }
+    /* trust */
+    .trust-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+    .trust { display:grid; grid-template-columns:auto 1fr; gap:16px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:24px; }
+    .trust .tile { margin:0; }
+    .trust h3 { font-size:1.05rem; margin-bottom:4px; }
+    .trust p { font-size:.95rem; }
 
-    /* pro — purple */
-    .plan-card.pro {
-      background:linear-gradient(160deg,#120718,#1a0a28);
-      border-color:rgba(139,92,246,.25);
-    }
-    .plan-card.pro:hover { box-shadow:0 20px 60px rgba(139,92,246,.2); }
-
-    .popular-badge {
-      position:absolute; top:-14px; right:50%; transform:translateX(50%);
-      background:linear-gradient(135deg,var(--blue-d),var(--blue));
-      color:#fff; padding:5px 22px; border-radius:100px;
-      font-size:.76rem; font-weight:800; white-space:nowrap;
-      box-shadow:0 4px 16px rgba(59,130,246,.5);
-    }
-    .plan-header { margin-bottom:1.75rem; }
-    .plan-icon-badge {
-      width:52px; height:52px; border-radius:14px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:1.6rem; margin-bottom:1rem;
-    }
-    .basic  .plan-icon-badge { background:rgba(16,185,129,.15); }
-    .growth .plan-icon-badge { background:rgba(59,130,246,.15); }
-    .pro    .plan-icon-badge { background:rgba(139,92,246,.15); }
-    .plan-name-text { font-size:1.3rem; font-weight:900; color:#fff; margin-bottom:.25rem; }
-    .plan-tagline   { font-size:.88rem; font-weight:700; color:rgba(255,255,255,.65); }
-    .plan-price-block {
-      padding:1.5rem 0; border-top:1px solid rgba(255,255,255,.07);
-      border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:1.75rem;
-    }
-    .price-num {
-      font-size:3rem; font-weight:900; line-height:1; color:#fff;
-    }
-    .price-num sup { font-size:1.1rem; font-weight:700; color:rgba(255,255,255,.6); vertical-align:super; }
-    .price-period { font-size:.88rem; font-weight:700; color:rgba(255,255,255,.6); margin-top:5px; }
-    .price-save { font-size:.8rem; font-weight:800; color:#34d399; background:rgba(52,211,153,.12); border-radius:100px; padding:2px 12px; display:inline-block; margin-top:8px; min-height:1.4em; }
-    .price-save:empty { display:none; }
-    .cycle-toggle { display:flex; justify-content:center; gap:.6rem; margin:1.75rem 0 .5rem; }
+    /* pricing */
+    .pricing { background:var(--surface); border-block:1px solid var(--line); }
+    .cycle { display:inline-flex; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:4px; gap:4px; margin:0 auto 40px; }
+    .cycle-wrap { text-align:center; }
     .cycle-btn {
-      border:1.5px solid rgba(255,255,255,.18); border-radius:100px; padding:.55rem 1.5rem;
-      background:rgba(255,255,255,.04); color:rgba(255,255,255,.75); cursor:pointer;
-      font-family:inherit; font-size:.92rem; font-weight:800; transition:all .2s;
+      font-family:inherit; font-size:.95rem; font-weight:600; color:var(--body);
+      background:transparent; border:0; border-radius:9px; padding:9px 20px; cursor:pointer; transition:background .2s, color .2s;
     }
-    .cycle-btn:hover  { border-color:rgba(255,255,255,.4); color:#fff; }
-    .cycle-btn.active { border-color:var(--brand); background:var(--brand); color:#fff; }
-    .cycle-btn .tag   { font-size:.72rem; color:#34d399; margin-inline-start:4px; }
-    .cycle-btn.active .tag { color:#d1fae5; }
-    .feat-list { list-style:none; flex:1; margin-bottom:2rem; }
-    .feat-list li {
-      display:flex; align-items:flex-start; gap:10px;
-      padding:.55rem 0; font-size:.94rem; font-weight:700;
-      color:rgba(255,255,255,.9);
-      border-bottom:1px solid rgba(255,255,255,.05);
+    .cycle-btn.active { background:var(--surface); color:var(--text); box-shadow:0 1px 3px rgba(6,21,33,.12); }
+    .cycle-btn .tag { color:var(--brand-d); font-size:.8rem; margin-inline-start:4px; }
+    .plans { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start; }
+    .plan {
+      position:relative; background:var(--surface); border:1px solid var(--line); border-radius:20px;
+      padding:30px 28px; display:flex; flex-direction:column;
     }
-    .feat-list li:last-child { border-bottom:none; }
-    .feat-list .ck { flex-shrink:0; margin-top:2px; font-size:1rem; }
-    .basic  .feat-list .ck { color:#34d399; }
-    .growth .feat-list .ck { color:#60a5fa; }
-    .pro    .feat-list .ck { color:#c4b5fd; }
-    .feat-list li.muted { color:rgba(255,255,255,.42); font-weight:600; }
-    .feat-list .nx { flex-shrink:0; margin-top:2px; font-size:1rem; color:rgba(255,255,255,.25); }
-    .feat-list .sect {
-      font-size:.72rem; font-weight:800; text-transform:uppercase;
-      letter-spacing:1px; padding:.9rem 0 .4rem; border-bottom:none;
-      color:rgba(255,255,255,.28);
-    }
-    .btn-plan {
-      width:100%; padding:1rem; border-radius:12px; font-family:inherit;
-      font-size:1rem; font-weight:800; cursor:pointer; transition:.3s;
-      border:1.5px solid; letter-spacing:.2px;
-    }
-    .basic  .btn-plan { border-color:rgba(16,185,129,.5);  color:#34d399; background:rgba(16,185,129,.08); }
-    .growth .btn-plan { border-color:var(--blue);           color:#fff;    background:var(--blue); box-shadow:0 4px 20px rgba(59,130,246,.4); }
-    .pro    .btn-plan { border-color:rgba(139,92,246,.5);  color:#c4b5fd; background:rgba(139,92,246,.08); }
-    .basic  .btn-plan:hover { background:rgba(16,185,129,.15); }
-    .growth .btn-plan:hover { transform:translateY(-1px); box-shadow:0 8px 32px rgba(59,130,246,.55); }
-    .pro    .btn-plan:hover { background:rgba(139,92,246,.15); }
-    .pricing-note {
-      text-align:center; margin-top:2rem;
-      color:rgba(255,255,255,.6); font-size:.9rem; font-weight:700;
-    }
-    .pricing-note strong { color:#fbbf24; }
+    .plan.featured { border-color:var(--brand); box-shadow:0 0 0 1px var(--brand), 0 24px 48px -24px rgba(13,148,136,.45); }
+    .plan .badge { position:absolute; top:-13px; right:28px; background:var(--brand); color:#fff; font-size:.78rem; font-weight:600; padding:4px 12px; border-radius:100px; }
+    .plan h3 { font-size:1.2rem; margin-bottom:4px; }
+    .plan .tagline { font-size:.93rem; color:var(--muted); margin-bottom:22px; }
+    .price { display:flex; align-items:baseline; gap:6px; color:var(--text); }
+    .price-num { font-size:2.6rem; font-weight:700; line-height:1; letter-spacing:-1px; }
+    .price .cur { font-size:.95rem; color:var(--muted); font-weight:500; }
+    .price-period { font-size:.88rem; color:var(--muted); margin-top:6px; }
+    .price-save { display:inline-block; margin-top:8px; font-size:.82rem; font-weight:600; color:var(--brand-d); background:var(--tint); border-radius:100px; padding:2px 10px; }
+    .price-save:empty { display:none; }
+    .plan .btn { margin:22px 0 22px; width:100%; }
+    .keys { list-style:none; display:grid; gap:10px; margin-bottom:18px; }
+    .keys li { display:flex; gap:10px; align-items:flex-start; font-size:.95rem; color:var(--text); line-height:1.55; }
+    .keys .ico { width:18px; height:18px; color:var(--brand); margin-top:3px; }
+    .keys li.lead { color:var(--muted); font-size:.88rem; }
+    details.all { border-top:1px solid var(--line); padding-top:14px; margin-top:auto; }
+    details.all summary { cursor:pointer; list-style:none; font-size:.92rem; font-weight:600; color:var(--brand-d); display:flex; align-items:center; gap:6px; }
+    details.all summary::-webkit-details-marker { display:none; }
+    details.all summary::after { content:'+'; margin-inline-start:auto; font-size:1.1rem; color:var(--muted); }
+    details.all[open] summary::after { content:'−'; }
+    .feat-list { list-style:none; margin-top:12px; }
+    .feat-list li { display:flex; gap:8px; font-size:.9rem; padding:6px 0; border-bottom:1px solid #f0f4f5; color:var(--body); line-height:1.55; }
+    .feat-list li:last-child { border-bottom:0; }
+    .feat-list .ck { color:var(--brand); flex-shrink:0; }
+    .feat-list .nx { color:#b4c1c6; flex-shrink:0; }
+    .feat-list li.muted { color:var(--muted); }
+    .feat-list li.sect { font-size:.76rem; font-weight:600; color:var(--muted); padding-top:14px; border-bottom:0; letter-spacing:.2px; }
+    .pricing-note { text-align:center; margin-top:28px; font-size:.95rem; color:var(--muted); }
+    .pricing-note a { color:var(--brand-d); font-weight:600; text-decoration:none; }
 
-    /* ── CTA BANNER ────────────── */
-    .cta-wrap {
-      background:linear-gradient(140deg,#070d1a,#0a3330);
-      text-align:center; padding:6rem 2rem;
-    }
-    .cta-wrap h2 { color:#fff; font-size:clamp(1.9rem,3.5vw,2.8rem); font-weight:900; margin-bottom:1rem; }
-    .cta-wrap p  { color:rgba(255,255,255,.75); font-size:1.1rem; font-weight:700; margin-bottom:2rem; }
+    /* FAQ */
+    .faq { max-width:780px; margin-inline:auto; display:grid; gap:10px; }
+    .faq details { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:4px 22px; }
+    .faq summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:12px; padding:16px 0; font-weight:600; color:var(--text); font-size:1.02rem; }
+    .faq summary::-webkit-details-marker { display:none; }
+    .faq summary::after { content:'+'; margin-inline-start:auto; font-size:1.3rem; color:var(--muted); font-weight:400; }
+    .faq details[open] summary::after { content:'−'; }
+    .faq details p { padding:0 0 18px; font-size:.98rem; }
 
-    /* ── FOOTER ──────────────────── */
-    footer {
-      background:#050b17; color:rgba(255,255,255,.4);
-      text-align:center; padding:2.5rem 2rem; font-size:.88rem;
+    /* CTA + footer */
+    .cta {
+      background:radial-gradient(60% 120% at 50% 0%, rgba(34,211,238,.16), transparent 70%), var(--ink);
+      border-radius:24px; padding:64px 32px; text-align:center; color:#b7c6cd;
     }
-    .footer-links { margin-bottom:.9rem; }
-    .footer-links a {
-      color:rgba(255,255,255,.5); text-decoration:none;
-      margin:0 .9rem; font-size:.88rem; font-weight:600; transition:.2s;
-    }
-    .footer-links a:hover { color:#fff; }
+    .cta h2 { color:#fff; font-size:clamp(1.7rem, 3vw, 2.3rem); margin-bottom:12px; }
+    .cta p { font-size:1.08rem; margin-bottom:28px; }
+    footer { padding:56px 0 40px; color:var(--muted); font-size:.92rem; }
+    .foot { display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:28px; }
+    .foot .brand b { color:var(--text); font-size:1.1rem; }
+    .foot .brand img { width:30px; height:30px; }
+    .foot nav { display:flex; gap:20px; flex-wrap:wrap; }
+    .foot nav a { text-decoration:none; color:var(--body); }
+    .foot nav a:hover { color:var(--brand-d); }
 
-    /* ── MODAL ───────────────────── */
-    .overlay {
-      display:none; position:fixed; inset:0; z-index:200;
-      background:rgba(0,0,0,.75); backdrop-filter:blur(5px);
-      align-items:center; justify-content:center; padding:1rem;
-    }
+    /* ── Modal (registration) ───────────────── */
+    .overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(6,21,33,.6); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:1rem; }
     .overlay.show { display:flex; }
-    .modal {
-      background:#fff; border-radius:24px; padding:2.5rem;
-      width:100%; max-width:500px; max-height:92vh;
-      overflow-y:auto; position:relative;
-      box-shadow:0 32px 80px rgba(0,0,0,.4);
-    }
-    .modal-close {
-      position:absolute; top:1.2rem; left:1.2rem;
-      background:#f1f5f9; border:none; width:32px; height:32px;
-      border-radius:50%; cursor:pointer; font-size:1rem; color:#64748b;
-      display:flex; align-items:center; justify-content:center; transition:.2s;
-    }
-    .modal-close:hover { background:#e2e8f0; color:#0f172a; }
-    .modal h2 { font-size:1.45rem; font-weight:900; color:#0f172a; margin-bottom:.25rem; }
-    .modal-sub { color:#64748b; margin-bottom:1.75rem; font-size:.92rem; }
-    .fgroup { margin-bottom:1rem; }
-    .fgroup label { display:block; font-weight:700; font-size:.85rem; color:#1e293b; margin-bottom:.4rem; }
-    .fgroup input {
-      width:100%; padding:.78rem 1rem; border:2px solid #e2e8f0;
-      border-radius:10px; font-family:inherit; font-size:.95rem;
-      color:#0f172a; outline:none; transition:.2s;
-    }
-    .fgroup input:focus { border-color:var(--brand); }
-    .frow { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-    .malert {
-      padding:.8rem 1rem; border-radius:10px;
-      margin-bottom:1rem; font-size:.88rem; display:none;
-    }
+    .modal { background:#fff; border-radius:20px; padding:32px; width:100%; max-width:520px; max-height:92vh; overflow-y:auto; position:relative; box-shadow:0 32px 80px rgba(0,0,0,.35); }
+    .modal-close { position:absolute; top:16px; left:16px; background:var(--bg); border:0; width:34px; height:34px; border-radius:50%; cursor:pointer; color:var(--muted); font-size:1rem; display:grid; place-items:center; }
+    .modal-close:hover { color:var(--text); background:var(--line); }
+    .modal h2 { font-size:1.4rem; margin-bottom:4px; }
+    .modal-sub { color:var(--muted); margin-bottom:22px; font-size:.95rem; }
+    .plan-picker { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
+    .plan-pick { padding:12px 8px; border-radius:12px; border:1.5px solid var(--line); background:var(--bg); cursor:pointer; text-align:center; transition:border-color .2s, background .2s, box-shadow .2s; }
+    .plan-pick b { display:block; color:var(--text); font-size:.95rem; font-weight:600; }
+    .plan-pick small { color:var(--muted); font-size:.8rem; }
+    .plan-pick.selected { border-color:var(--brand); background:var(--tint); box-shadow:0 0 0 3px rgba(13,148,136,.15); }
+    .fgroup { margin-bottom:14px; }
+    .fgroup label { display:block; font-weight:600; font-size:.88rem; color:var(--text); margin-bottom:6px; }
+    .fgroup input { width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; font-family:inherit; font-size:.97rem; color:var(--text); outline:none; transition:border-color .2s; background:#fff; }
+    .fgroup input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(13,148,136,.12); }
+    .frow { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .check-row { display:flex; align-items:flex-start; gap:10px; margin-top:4px; }
+    .check-row input { width:auto; margin-top:6px; accent-color:var(--brand); }
+    .check-row label { margin:0; font-weight:400; font-size:.86rem; color:var(--body); }
+    .malert { padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:.92rem; display:none; }
     .malert.show { display:block; }
-    .malert-err { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
-    .malert-ok  { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
-    hr.div { border:none; border-top:1px solid #e2e8f0; margin:1.25rem 0; }
-    .btn-submit {
-      width:100%; padding:1rem; margin-top:.5rem;
-      background:linear-gradient(135deg,var(--brand-d),var(--brand));
-      color:#fff; border:none; border-radius:12px;
-      font-family:inherit; font-size:1rem; font-weight:800;
-      cursor:pointer; transition:.2s; box-shadow:0 4px 20px rgba(15,118,110,.4);
-    }
-    .btn-submit:hover { transform:translateY(-1px); box-shadow:0 8px 28px rgba(15,118,110,.55); }
+    .malert-err { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    .malert-ok  { background:#effaf6; color:#0f766e; border:1px solid #bfe9df; }
+    hr.div { border:0; border-top:1px solid var(--line); margin:18px 0; }
+    .btn-submit { width:100%; margin-top:10px; }
     .btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+    .terms { text-align:center; font-size:.82rem; color:var(--muted); margin-top:12px; }
+    .terms a { color:var(--brand-d); }
 
-    /* ── RESPONSIVE ─────────────── */
-    @media (max-width:960px) {
-      .pricing-row { grid-template-columns:1fr; max-width:460px; margin-inline:auto; }
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width:1024px) {
+      .hero-grid { grid-template-columns:1fr; gap:40px; }
+      .hero-lead { max-width:none; }
+      .ai-float { left:12px; }
+      .feat-grid { grid-template-columns:repeat(2,1fr); }
+      .ai-band { grid-template-columns:1fr; padding:40px 28px; }
+      .plans { grid-template-columns:1fr; max-width:480px; margin-inline:auto; gap:28px; }
+      .strip-grid { grid-template-columns:repeat(2,1fr); }
+      .strip-item:nth-child(3) { border-inline-start:0; }
+      .strip-item:nth-child(n+3) { border-top:1px solid var(--line); }
     }
-    @media (max-width:768px) {
-      .nav-links a:not(.btn-enter) { display:none; }
-      .hero-stat { padding:0 1.5rem; }
+    @media (max-width:720px) {
+      .nav-links { display:none; }
+      .nav-cta .login { padding:8px 6px; font-size:.9rem; }
+      .hero { padding:48px 0 88px; }
+      .mock-row .panel:last-child { display:none; }
+      section.blk { padding:72px 0; }
+      .mock { grid-template-columns:1fr; min-height:0; }
+      .mock-side { display:none; }
+      .mock-kpis { grid-template-columns:repeat(2,1fr); }
+      .mock-row { grid-template-columns:1fr; }
+      .ai-float { position:relative; left:auto; width:auto; margin-top:12px; }
+      .mock-wrap { padding-bottom:40px; }
+      .feat-grid, .trust-grid, .steps { grid-template-columns:1fr; }
+      .steps::before { display:none; }
+      .strip-grid { grid-template-columns:1fr; }
+      .strip-item + .strip-item { border-inline-start:0; border-top:1px solid var(--line); }
       .frow { grid-template-columns:1fr; }
+      .cta { padding:48px 22px; }
+      .foot { flex-direction:column; align-items:flex-start; }
     }
   </style>
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3v18l2.5-1.5L10 21l2-1.5 2 1.5 2.5-1.5L19 21V3l-2.5 1.5L14 3l-2 1.5L10 3 7.5 4.5z"/><path d="M8.5 9h7M8.5 13h7"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 10h18M16 15h2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6 6 0 0 0-3.5-5.4"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h3l2.6 12.2h11.2L21 7H6.2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 21h18M6 21v-7M11 21V5M16 21v-10"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8M8 12h8M8 15h5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.6 7.5 9.5 4.3-.9 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2.2 2.2L15.5 10"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM20.5 14v.5M14 20.5h.5M17 20.5h3.5V17"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="m4 20 16-16" /></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.4-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.6 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/></symbol>
+</svg>
+
 <!-- ══ NAV ══ -->
-<nav>
-  <div class="nav-inner">
-    <a href="/" class="logo">
-      <div class="logo-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" style="display:block;width:100%;height:100%">
-          <defs>
-            <radialGradient id="bgGrad" cx="50%" cy="45%" r="65%"><stop offset="0%" stop-color="#072235"/><stop offset="45%" stop-color="#02131f"/><stop offset="85%" stop-color="#010a12"/><stop offset="100%" stop-color="#00060a"/></radialGradient>
-            <radialGradient id="ambientGlow" cx="50%" cy="50%" r="45%"><stop offset="0%" stop-color="#00e5ff" stop-opacity="0.18"/><stop offset="45%" stop-color="#0088b3" stop-opacity="0.08"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient>
-            <radialGradient id="starGlow" cx="50%" cy="63%" r="22%"><stop offset="0%" stop-color="#00ffff" stop-opacity="0.35"/><stop offset="50%" stop-color="#008cb3" stop-opacity="0.12"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient>
-            <linearGradient id="centerLeftFacet" x1="20%" y1="90%" x2="95%" y2="20%"><stop offset="0%" stop-color="#007e9e"/><stop offset="35%" stop-color="#009cb8"/><stop offset="70%" stop-color="#00c8db"/><stop offset="100%" stop-color="#3ef0f7"/></linearGradient>
-            <linearGradient id="centerRightFacet" x1="10%" y1="15%" x2="80%" y2="85%"><stop offset="0%" stop-color="#d6ffff"/><stop offset="25%" stop-color="#5ff4f9"/><stop offset="65%" stop-color="#00cde2"/><stop offset="100%" stop-color="#007d9f"/></linearGradient>
-            <linearGradient id="leftWingGrad" x1="0%" y1="60%" x2="100%" y2="30%"><stop offset="0%" stop-color="#0087b8"/><stop offset="45%" stop-color="#00b4d6"/><stop offset="85%" stop-color="#3af2f8"/><stop offset="100%" stop-color="#a4fcff"/></linearGradient>
-            <linearGradient id="rightWingGrad" x1="100%" y1="65%" x2="0%" y2="30%"><stop offset="0%" stop-color="#0079b3"/><stop offset="40%" stop-color="#00a8d4"/><stop offset="80%" stop-color="#4cf3f8"/><stop offset="100%" stop-color="#aefcff"/></linearGradient>
-            <linearGradient id="starTopLeft" x1="20%" y1="80%" x2="80%" y2="20%"><stop offset="0%" stop-color="#00a0b2"/><stop offset="60%" stop-color="#36ecf2"/><stop offset="100%" stop-color="#e2feff"/></linearGradient>
-            <linearGradient id="starTopRight" x1="80%" y1="80%" x2="20%" y2="20%"><stop offset="0%" stop-color="#008fa3"/><stop offset="50%" stop-color="#24dbe3"/><stop offset="100%" stop-color="#ffffff"/></linearGradient>
-            <linearGradient id="starBottomLeft" x1="20%" y1="20%" x2="80%" y2="80%"><stop offset="0%" stop-color="#008ea0"/><stop offset="65%" stop-color="#00bcd0"/><stop offset="100%" stop-color="#006575"/></linearGradient>
-            <linearGradient id="starBottomRight" x1="80%" y1="20%" x2="20%" y2="80%"><stop offset="0%" stop-color="#007b8c"/><stop offset="60%" stop-color="#00afc3"/><stop offset="100%" stop-color="#005866"/></linearGradient>
-            <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="60"/></filter>
-          </defs>
-          <rect width="1254" height="1254" fill="url(#bgGrad)"/>
-          <circle cx="627" cy="627" r="420" fill="url(#ambientGlow)" filter="url(#softGlow)"/>
-          <circle cx="627" cy="795" r="220" fill="url(#starGlow)" filter="url(#softGlow)"/>
-          <g id="logo-marks">
-            <path d="M 528 449 L 289 663 A 18 18 0 0 0 288 684 L 348 815 Z" fill="url(#leftWingGrad)"/>
-            <path d="M 726 449 L 906 815 L 966 684 A 18 18 0 0 0 965 663 Z" fill="url(#rightWingGrad)"/>
-            <path d="M 627 277 L 463 715 L 627 622 Z" fill="url(#centerLeftFacet)"/>
-            <path d="M 627 277 L 627 622 L 791 715 Z" fill="url(#centerRightFacet)"/>
-            <line x1="627" y1="277" x2="627" y2="622" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.75"/>
-            <path d="M 627 678 C 627 750 575 795 528 795 L 627 795 Z" fill="url(#starTopLeft)"/>
-            <path d="M 627 678 C 627 750 679 795 726 795 L 627 795 Z" fill="url(#starTopRight)"/>
-            <path d="M 528 795 C 575 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomLeft)"/>
-            <path d="M 726 795 C 679 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomRight)"/>
-            <circle cx="627" cy="795" r="7" fill="#ffffff" opacity="0.95"/>
-          </g>
-        </svg>
-      </div>
-      <div>
-        <div class="logo-name">يقظ</div>
-        <div class="logo-sub">Yaqiz Accounting</div>
-      </div>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="يقظ — الرئيسية">
+      <img src="/public/icon.svg" alt="" width="36" height="36">
+      <b>يقظ</b>
     </a>
-    <div class="nav-links">
+    <nav class="nav-links" aria-label="أقسام الصفحة">
       <a href="#features">المميزات</a>
+      <a href="#ai">الذكاء الاصطناعي</a>
       <a href="#pricing">الباقات</a>
-      <a href="#compliance">الامتثال</a>
-      <a href="/VVIP.html" class="btn-enter">دخول التطبيق</a>
+      <a href="#faq">الأسئلة الشائعة</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/VVIP.html" class="login">تسجيل الدخول</a>
+      <button class="btn btn-primary btn-sm" data-action="openModal">ابدأ مجانًا</button>
     </div>
   </div>
-</nav>
+</header>
 
 <!-- ══ HERO ══ -->
 <section class="hero" id="home">
-  <div class="hero-content">
-    <div class="hero-badge">🇸🇦 &nbsp; متوافق مع هيئة الزكاة والضريبة والجمارك — ZATCA</div>
-    <h1>حاسب بذكاء<br><em>أدر بثقة</em></h1>
-    <p class="hero-sub">
-      فواتير إلكترونية معتمدة، إدارة مخزون وموظفين، تقارير مالية متكاملة —
-      كل ما تحتاجه لإدارة منشأتك من مكان واحد، بسيرفر داخل المملكة العربية السعودية
-    </p>
-    <div class="hero-btns">
-      <button class="btn-cta" data-action="openModal">ابدأ تجربتك المجانية — 15 يوم</button>
-      <a href="#pricing" class="btn-ghost-cta">شاهد الباقات والأسعار</a>
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow"><span class="dot"></span>متوافق مع الفوترة الإلكترونية — زاتكا</div>
+      <h1>حاسب بذكاء،<br><span>وأدر منشأتك بثقة.</span></h1>
+      <p class="hero-lead">فواتير إلكترونية، مخزون، مشتريات، رواتب، وتقارير مالية مبنية على قيود محاسبية حقيقية — مع مساعد ذكي يجاوبك عن أرقام منشأتك مباشرة.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" data-action="openModal">ابدأ تجربتك المجانية</button>
+        <a href="#pricing" class="btn btn-ghost-d">الباقات والأسعار</a>
+      </div>
+      <div class="hero-notes">
+        <span><svg class="ico"><use href="#i-clock"/></svg>تجربة 15 يومًا</span>
+        <span><svg class="ico"><use href="#i-card"/></svg>بدون بطاقة بنكية</span>
+        <span><svg class="ico"><use href="#i-check"/></svg>لا تحويل تلقائي لباقة مدفوعة</span>
+      </div>
     </div>
-    <div class="hero-stats">
-      <div class="hero-stat">
-        <div class="stat-n">30</div>
-        <div class="stat-l">يوم تجريبي مجاني</div>
+
+    <div class="mock-wrap" aria-hidden="true">
+      <div class="mock">
+        <div class="mock-main">
+          <div class="mock-top"><b>لوحة التحكم</b><span class="pill">كل الفروع</span></div>
+          <div class="mock-kpis">
+            <div class="kpi"><small>مبيعات اليوم</small><strong class="num">12,480</strong><em>+8% عن أمس</em></div>
+            <div class="kpi"><small>مبيعات الشهر</small><strong class="num">186,240</strong><em>+12%</em></div>
+            <div class="kpi"><small>مشتريات الشهر</small><strong class="num">74,915</strong><em style="color:#c2850f">−3%</em></div>
+            <div class="kpi"><small>رصيد الخزينة</small><strong class="num">248,300</strong><em>نقدي + بنك</em></div>
+          </div>
+          <div class="mock-row">
+            <div class="panel">
+              <h5>المبيعات والمشتريات — آخر 7 أيام</h5>
+              <div class="bars">
+                <span><b style="height:52%"></b><b style="height:30%"></b></span>
+                <span><b style="height:64%"></b><b style="height:28%"></b></span>
+                <span><b style="height:47%"></b><b style="height:36%"></b></span>
+                <span><b style="height:78%"></b><b style="height:33%"></b></span>
+                <span><b style="height:70%"></b><b style="height:41%"></b></span>
+                <span><b style="height:88%"></b><b style="height:30%"></b></span>
+                <span><b style="height:95%"></b><b style="height:38%"></b></span>
+              </div>
+            </div>
+            <div class="panel">
+              <h5>آخر الفواتير</h5>
+              <div class="inv"><span>INV-000128</span><span class="st">مسددة</span></div>
+              <div class="inv"><span>INV-000127</span><span class="st">مسددة</span></div>
+              <div class="inv"><span>INV-000126</span><span style="color:#c2850f">آجل</span></div>
+              <div class="inv"><span>INV-000125</span><span class="st">مسددة</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="mock-side">
+          <div class="mlogo"><img src="/public/icon.svg" alt="">يقظ</div>
+          <i class="on">لوحة التحكم</i><i>المبيعات</i><i>المشتريات</i><i>المخزون</i><i>الخزينة</i><i>التقارير</i>
+        </div>
       </div>
-      <div class="hero-stat">
-        <div class="stat-n">15%</div>
-        <div class="stat-l">ضريبة القيمة المضافة تلقائية</div>
-      </div>
-      <div class="hero-stat">
-        <div class="stat-n">24/7</div>
-        <div class="stat-l">سيرفر داخل المملكة 🇸🇦</div>
+      <div class="ai-float">
+        <div class="who"><svg class="ico"><use href="#i-spark"/></svg>يقظ الذكي</div>
+        صافي ربحك هذا الشهر <strong class="num">38,420 ر.س</strong> — أعلى بـ 12% من الشهر الماضي.
       </div>
     </div>
   </div>
 </section>
+
+<!-- ══ STRIP ══ -->
+<div class="strip">
+  <div class="wrap">
+    <div class="strip-grid">
+      <div class="strip-item"><svg class="ico"><use href="#i-qr"/></svg><div><b>فواتير زاتكا</b><small>QR وXML وسلسلة تجزئة</small></div></div>
+      <div class="strip-item"><svg class="ico"><use href="#i-chart"/></svg><div><b>قيد مزدوج حقيقي</b><small>كل عملية تُرحَّل للدفاتر</small></div></div>
+      <div class="strip-item"><svg class="ico"><use href="#i-branch"/></svg><div><b>تعدد الفروع</b><small>حتى 5 فروع بخزائن منفصلة</small></div></div>
+      <div class="strip-item"><svg class="ico"><use href="#i-db"/></svg><div><b>نسخ احتياطي يومي</b><small>يُتحقَّق من سلامته تلقائيًا</small></div></div>
+    </div>
+  </div>
+</div>
 
 <!-- ══ FEATURES ══ -->
-<section class="section bg-light" id="features">
-  <div class="container">
-    <div class="text-center">
-      <div class="sec-label">المميزات</div>
-      <h2 class="sec-title">كل ما تحتاجه لإدارة أعمالك</h2>
-      <p class="sec-sub">نظام محاسبي متكامل مصمم خصيصاً للسوق السعودي — من الفاتورة إلى التقرير المالي</p>
+<section class="blk" id="features">
+  <div class="wrap">
+    <div class="head">
+      <div class="kicker">المميزات</div>
+      <h2>كل دورة منشأتك المالية، في مكان واحد</h2>
+      <p>من أول فاتورة بيع إلى الميزانية العمومية — بدون جداول متفرقة ولا إدخال مكرر.</p>
     </div>
     <div class="feat-grid">
-
-      <div class="feat-card c-blue">
-        <div class="feat-icon">🧾</div>
-        <h3>فواتير إلكترونية متوافقة مع ZATCA</h3>
-        <p>أصدر فواتير ضريبية معتمدة بمواصفات الهيئة مع احتساب ضريبة القيمة المضافة 15% تلقائياً، ودعم كامل لفواتير المبيعات والمرتجعات وعروض الأسعار.</p>
-        <div class="feat-tags"><span class="feat-tag">فاتورة ضريبية</span><span class="feat-tag">مرتجعات</span><span class="feat-tag">عروض أسعار</span></div>
-      </div>
-
-      <div class="feat-card c-green">
-        <div class="feat-icon">📦</div>
-        <h3>إدارة المخزون والمنتجات</h3>
-        <p>تتبع مخزونك لحظة بلحظة مع تنبيهات نقص البضاعة، وتقارير حركة المخزون، وإدارة الفئات والوحدات والباركود بكل سهولة.</p>
-        <div class="feat-tags"><span class="feat-tag">تنبيه نقص</span><span class="feat-tag">حركة المخزون</span><span class="feat-tag">باركود</span></div>
-      </div>
-
-      <div class="feat-card c-amber">
-        <div class="feat-icon">💰</div>
-        <h3>الخزينة وحركة النقد</h3>
-        <p>سندات قبض وصرف منظمة، تتبع كامل لكل دخل وخرج، وتقارير التدفق النقدي اليومي والشهري والسنوي — كل حركة موثقة ومحاسبة.</p>
-        <div class="feat-tags"><span class="feat-tag">سند قبض</span><span class="feat-tag">سند صرف</span><span class="feat-tag">تدفق نقدي</span></div>
-      </div>
-
-      <div class="feat-card c-purple">
-        <div class="feat-icon">👥</div>
-        <h3>الموظفون والرواتب</h3>
-        <p>إدارة بيانات الموظفين، وتوليد كشوف الرواتب الشهرية، ومتابعة الورديات والحضور والغياب، مع دعم كامل لنظام نقاط الولاء.</p>
-        <div class="feat-tags"><span class="feat-tag">رواتب</span><span class="feat-tag">ورديات</span><span class="feat-tag">ولاء</span></div>
-      </div>
-
-      <div class="feat-card c-cyan">
-        <div class="feat-icon">🛒</div>
-        <h3>المشتريات وإدارة الموردين</h3>
-        <p>سجّل مشترياتك وأدر علاقاتك مع الموردين، وتابع الديون والمستحقات، وأنشئ أوامر شراء احترافية بضغطة واحدة.</p>
-        <div class="feat-tags"><span class="feat-tag">موردون</span><span class="feat-tag">أوامر شراء</span><span class="feat-tag">مصاريف</span></div>
-      </div>
-
-      <div class="feat-card c-rose">
-        <div class="feat-icon">📊</div>
-        <h3>تقارير مالية شاملة</h3>
-        <p>قائمة الدخل، الميزانية العمومية، ميزان المراجعة، التسوية البنكية، تقرير الزكاة والضريبة — جميع التقارير جاهزة للطباعة بضغطة زر.</p>
-        <div class="feat-tags"><span class="feat-tag">قائمة دخل</span><span class="feat-tag">ميزانية</span><span class="feat-tag">زكاة</span></div>
-      </div>
-
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-receipt"/></svg></div>
+        <h3>المبيعات والفوترة الإلكترونية</h3>
+        <p>نقطة بيع سريعة وفواتير ضريبية ومبسطة متوافقة مع زاتكا، مع المرتجعات وإشعارات الدائن واحتساب الضريبة تلقائيًا.</p>
+      </article>
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-box"/></svg></div>
+        <h3>المخزون</h3>
+        <p>تكلفة فعلية بطريقة FIFO، تنبيهات نقص لكل فرع، حركة مخزون مفصلة، ونقل البضاعة بين المستودعات.</p>
+      </article>
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-cart"/></svg></div>
+        <h3>المشتريات والمصاريف</h3>
+        <p>فواتير شراء، أوامر شراء، وصفحة مستقلة للمصاريف الإدارية والالتزامات الدورية مع تنبيه قبل الاستحقاق.</p>
+      </article>
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-wallet"/></svg></div>
+        <h3>الخزينة والسندات</h3>
+        <p>حسابات نقدية وبنكية، سندات قبض وصرف تُطبَّق على الفواتير المستحقة، وتسوية بنكية بمطابقة تلقائية.</p>
+      </article>
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-users"/></svg></div>
+        <h3>الموظفون والصلاحيات</h3>
+        <p>بيانات الموظفين وصرف الرواتب بقيد محاسبي، نظام ورديات للكاشير، وصلاحيات دقيقة لكل مستخدم.</p>
+      </article>
+      <article class="feat">
+        <div class="tile"><svg class="ico"><use href="#i-chart"/></svg></div>
+        <h3>تقارير محاسبية حقيقية</h3>
+        <p>ميزان المراجعة، قائمة الدخل، الميزانية العمومية، دفتر اليومية، إقفال الفترات، وتقرير الضريبة والزكاة.</p>
+      </article>
     </div>
   </div>
 </section>
 
-<!-- ══ HOW IT WORKS ══ -->
-<section class="section" id="how">
-  <div class="container">
-    <div class="text-center">
-      <div class="sec-label">كيف يعمل</div>
-      <h2 class="sec-title">ابدأ في 3 خطوات فقط</h2>
-      <p class="sec-sub">لا تحتاج خبرة تقنية — يقظ مصمم للبساطة والسرعة</p>
-    </div>
-    <div class="steps-grid">
-      <div class="step-card">
-        <div class="step-num">1</div>
-        <h3>سجّل شركتك</h3>
-        <p>أدخل اسم شركتك وبيانات السجل التجاري في دقائق معدودة — التجربة مجانية 15 يوماً بلا قيود</p>
+<!-- ══ AI ══ -->
+<section class="blk" id="ai" style="padding-top:0">
+  <div class="wrap">
+    <div class="ai-band">
+      <div>
+        <div class="kicker">الذكاء الاصطناعي</div>
+        <h2>اسأل عن أرقامك، ولا تُدخل الفواتير يدويًا</h2>
+        <p>ذكاء اصطناعي مبني داخل يقظ نفسه، يقرأ بيانات منشأتك الفعلية ويحترم صلاحيات كل مستخدم.</p>
+        <ul class="ai-list">
+          <li><div class="tile"><svg class="ico"><use href="#i-scan"/></svg></div><div><b>تفريغ الفواتير تلقائيًا</b><span>ارفع صورة أو PDF لفاتورة شراء، ويقرأ المورد والأصناف والضريبة جاهزة للمراجعة.</span></div></li>
+          <li><div class="tile"><svg class="ico"><use href="#i-chat"/></svg></div><div><b>مساعد يجاوبك فورًا</b><span>"كم مبيعاتي هذا الشهر؟"، "مين أكثر عميل عليه مستحقات؟" — بدون بحث بين التقارير.</span></div></li>
+          <li><div class="tile"><svg class="ico"><use href="#i-spark"/></svg></div><div><b>تحليل مالي بتوصيات</b><span>قراءة نصية لأداء منشأتك في فترة تختارها: الإيرادات، المصاريف، الربحية، والتحصيل.</span></div></li>
+        </ul>
       </div>
-      <div class="step-card">
-        <div class="step-num">2</div>
-        <h3>أضف بياناتك</h3>
-        <p>استورد منتجاتك وعملاءك وموردينك بملف Excel أو أضفهم يدوياً — الخيار لك</p>
-      </div>
-      <div class="step-card">
-        <div class="step-num">3</div>
-        <h3>ابدأ الإدارة</h3>
-        <p>أصدر فواتيرك واستقبل مدفوعاتك وتابع أداء أعمالك من أي جهاز في أي مكان</p>
+      <div class="chat" aria-hidden="true">
+        <div class="chat-h"><img src="/public/icon.svg" alt=""><div>يقظ الذكي<small>مساعدك المحاسبي</small></div></div>
+        <div class="msg me">كم صافي ربحي هذا الشهر مقارنة بالشهر الماضي؟</div>
+        <div class="msg bot">صافي ربحك هذا الشهر <strong>38,420 ر.س</strong> مقابل 34,300 ر.س الشهر الماضي — زيادة 12%. أغلب الفرق من ارتفاع مبيعات فرع الرياض.</div>
+        <div class="msg me">ومين أكثر عميل عليه مستحقات؟</div>
+        <div class="msg bot">مؤسسة الأمل التجارية — <strong>14,750 ر.س</strong> على 3 فواتير آجلة، أقدمها من 41 يومًا.</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ══ COMPLIANCE ══ -->
-<section class="section bg-light" id="compliance">
-  <div class="container">
-    <div class="text-center">
-      <div class="sec-label">الامتثال والأمان</div>
-      <h2 class="sec-title">مبني على أسس قانونية صحيحة</h2>
-      <p class="sec-sub">يقظ مصمم ليلبي جميع المتطلبات التنظيمية للمملكة العربية السعودية</p>
+<!-- ══ HOW ══ -->
+<section class="blk" style="padding-top:0">
+  <div class="wrap">
+    <div class="head center">
+      <div class="kicker">البداية</div>
+      <h2>جاهز للعمل خلال دقائق</h2>
+      <p>لا تحتاج خبرة تقنية ولا محاسب لتشغيل النظام.</p>
     </div>
-    <div class="comp-grid">
-      <div class="comp-card">
-        <div class="ci">🏛️</div>
-        <h4>متوافق مع ZATCA</h4>
-        <p>فواتير إلكترونية بمواصفات هيئة الزكاة والضريبة والجمارك — المرحلة الثانية</p>
-      </div>
-      <div class="comp-card">
-        <div class="ci">🔒</div>
-        <h4>حماية البيانات PDPL</h4>
-        <p>بيانات منشأتك محمية وفق نظام حماية البيانات الشخصية السعودي</p>
-      </div>
-      <div class="comp-card">
-        <div class="ci">🇸🇦</div>
-        <h4>سيرفر داخل المملكة</h4>
-        <p>بياناتك مخزّنة داخل الأراضي السعودية ولا تغادرها أبداً</p>
-      </div>
-      <div class="comp-card">
-        <div class="ci">🔐</div>
-        <h4>تشفير HTTPS كامل</h4>
-        <p>جميع الاتصالات مشفرة بأحدث معايير الأمان العالمية TLS 1.3</p>
-      </div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>سجّل منشأتك</h3><p>اسم المنشأة وبيانات الدخول — وتبدأ تجربتك المجانية مباشرة.</p></div>
+      <div class="step"><div class="n">2</div><h3>أدخل أرصدتك الافتتاحية</h3><p>معالج يرشدك خطوة بخطوة، مع استيراد المنتجات والعملاء من Excel.</p></div>
+      <div class="step"><div class="n">3</div><h3>ابدأ البيع والمتابعة</h3><p>أصدر فواتيرك وتابع أداءك من المتصفح على أي جهاز.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TRUST ══ -->
+<section class="blk" id="compliance" style="padding-top:0">
+  <div class="wrap">
+    <div class="head">
+      <div class="kicker">الامتثال والأمان</div>
+      <h2>مبني على متطلبات الأنظمة السعودية</h2>
+      <p>تفاصيل التزاماتنا موضّحة في <a href="/privacy" style="color:var(--brand-d)">سياسة الخصوصية</a>.</p>
+    </div>
+    <div class="trust-grid">
+      <div class="trust"><div class="tile"><svg class="ico"><use href="#i-qr"/></svg></div><div><h3>الفوترة الإلكترونية — المرحلة الأولى</h3><p>فواتير XML بمعيار UBL 2.1، رمز QR، وسلسلة تجزئة متصلة (ICV/PIH) تمنع التلاعب، مُختبرة على أداة التحقق الرسمية من الهيئة.</p></div></div>
+      <div class="trust"><div class="tile"><svg class="ico"><use href="#i-shield"/></svg></div><div><h3>حماية البيانات الشخصية</h3><p>حقك في الاطلاع على بياناتك وتصديرها وطلب حذف حسابك، وفق نظام حماية البيانات الشخصية.</p></div></div>
+      <div class="trust"><div class="tile"><svg class="ico"><use href="#i-lock"/></svg></div><div><h3>تشفير وصلاحيات</h3><p>اتصال HTTPS مشفّر، مفاتيح التوقيع الضريبي مشفّرة بـ AES-256، وسجل نشاط يوثّق من سوّى كل عملية.</p></div></div>
+      <div class="trust"><div class="tile"><svg class="ico"><use href="#i-db"/></svg></div><div><h3>نسخ احتياطي مُتحقَّق منه</h3><p>نسخة يومية تلقائية من قاعدة البيانات، تُفحص سلامتها فور إنشائها — لا نسخ احتياطية شكلية.</p></div></div>
     </div>
   </div>
 </section>
 
 <!-- ══ PRICING ══ -->
-<section class="section bg-dark" id="pricing">
-  <div class="container">
-    <div class="text-center">
-      <div class="sec-label light">الباقات والأسعار</div>
-      <h2 class="sec-title light">اختر الباقة المناسبة لأعمالك</h2>
-      <p class="sec-sub light">جميع الباقات تبدأ بتجربة مجانية 15 يوماً بكامل المميزات — لا يلزم بطاقة بنكية</p>
+<section class="blk pricing" id="pricing">
+  <div class="wrap">
+    <div class="head center">
+      <div class="kicker">الباقات والأسعار</div>
+      <h2>ابدأ صغيرًا، وتوسّع مع منشأتك</h2>
+      <p>كل الباقات تبدأ بتجربة مجانية 15 يومًا بكامل مميزات الباقة — بدون بطاقة بنكية.</p>
     </div>
 
-    <div class="cycle-toggle">
-      <button class="cycle-btn active" data-cycle="monthly" data-action="setPricingCycle" data-args='["monthly"]'>شهري</button>
-      <button class="cycle-btn" data-cycle="annual" data-action="setPricingCycle" data-args='["annual"]'>سنوي <span class="tag">وفّر أكثر</span></button>
+    <div class="cycle-wrap">
+      <div class="cycle" role="group" aria-label="دورة الفوترة">
+        <button class="cycle-btn active" data-cycle="monthly" data-action="setPricingCycle" data-args='["monthly"]'>شهري</button>
+        <button class="cycle-btn" data-cycle="annual" data-action="setPricingCycle" data-args='["annual"]'>سنوي <span class="tag">وفّر أكثر</span></button>
+      </div>
     </div>
 
-    <div class="pricing-row">
+    <div class="plans">
 
       <!-- BASIC -->
-      <div class="plan-card basic">
-        <div class="plan-header">
-          <div class="plan-icon-badge">📗</div>
-          <div class="plan-name-text">الأساسية</div>
-          <div class="plan-tagline">مثالية للمنشآت الصغيرة</div>
-        </div>
-        <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> <span id="price-basic">199</span></div>
-          <div class="price-period" id="period-basic">شهرياً</div>
-          <div class="price-save" id="save-basic"></div>
-        </div>
-        <ul class="feat-list">
-          <li class="sect">الفوترة والمبيعات</li>
-          <li><span class="ck">✓</span> فواتير إلكترونية (ZATCA متوافق)</li>
-          <li><span class="ck">✓</span> مرتجعات المبيعات</li>
-          <li><span class="ck">✓</span> إدارة الموردين</li>
-          <li class="sect">المخزون والمشتريات</li>
-          <li><span class="ck">✓</span> إدارة المخزون (FIFO)</li>
-          <li><span class="ck">✓</span> المشتريات والمصاريف</li>
-          <li class="sect">المالية والإعدادات</li>
-          <li><span class="ck">✓</span> ضريبة القيمة المضافة 15% (تحكم كامل)</li>
-          <li><span class="ck">✓</span> سندات القبض والصرف</li>
-          <li><span class="ck">✓</span> المساعد الذكي (5 أسئلة يومياً)</li>
-          <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (30 فاتورة شهرياً)</li>
-          <li class="sect">التقارير</li>
-          <li><span class="ck">✓</span> تقرير ضريبة القيمة المضافة</li>
-          <li><span class="ck">✓</span> تقرير الزكاة</li>
-          <li><span class="ck">✓</span> كشوفات حسابات الموردين</li>
-          <li class="sect">الفريق والفروع</li>
-          <li><span class="ck">✓</span> حتى 3 مستخدمين</li>
-          <li><span class="ck">✓</span> فرع واحد</li>
-          <li class="sect">غير متوفر في الباقة الأساسية</li>
-          <li class="muted"><span class="nx">✕</span> إدارة العملاء (CRM)</li>
-          <li class="muted"><span class="nx">✕</span> الالتزامات الدورية</li>
-          <li class="muted"><span class="nx">✕</span> التسعير التلقائي للمنتجات</li>
-          <li class="muted"><span class="nx">✕</span> تقارير مفصّلة إضافية (منتجات، موردون، إلخ)</li>
+      <div class="plan">
+        <h3>الأساسية</h3>
+        <div class="tagline">للمنشآت الصغيرة والمحلات</div>
+        <div class="price"><span class="price-num num" id="price-basic">199</span><span class="cur">ر.س</span></div>
+        <div class="price-period" id="period-basic">شهرياً</div>
+        <div class="price-save" id="save-basic"></div>
+        <button class="btn btn-ghost" data-action="openModal" data-args='["basic"]'>ابدأ مجانًا 15 يوم</button>
+        <ul class="keys">
+          <li><svg class="ico"><use href="#i-check"/></svg>فواتير إلكترونية متوافقة مع زاتكا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>نقطة بيع ومخزون بتكلفة FIFO</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المشتريات والموردون والسندات</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>تقرير الضريبة والزكاة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>3 مستخدمين · فرع واحد</li>
         </ul>
-        <button class="btn-plan" data-action="openModal" data-args='["basic"]'>ابدأ مجاناً 15 يوم</button>
+        <details class="all">
+          <summary>كل مميزات الباقة</summary>
+          <ul class="feat-list">
+            <li class="sect">الفوترة والمبيعات</li>
+            <li><span class="ck">✓</span> فواتير إلكترونية (ZATCA متوافق)</li>
+            <li><span class="ck">✓</span> مرتجعات المبيعات</li>
+            <li><span class="ck">✓</span> إدارة الموردين</li>
+            <li class="sect">المخزون والمشتريات</li>
+            <li><span class="ck">✓</span> إدارة المخزون (FIFO)</li>
+            <li><span class="ck">✓</span> فواتير شراء البضاعة</li>
+            <li class="sect">المالية والذكاء الاصطناعي</li>
+            <li><span class="ck">✓</span> ضريبة القيمة المضافة 15% (تحكم كامل)</li>
+            <li><span class="ck">✓</span> سندات القبض والصرف</li>
+            <li><span class="ck">✓</span> المساعد الذكي (5 أسئلة يومياً)</li>
+            <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (30 فاتورة شهرياً)</li>
+            <li class="sect">التقارير</li>
+            <li><span class="ck">✓</span> تقرير ضريبة القيمة المضافة</li>
+            <li><span class="ck">✓</span> تقرير الزكاة</li>
+            <li><span class="ck">✓</span> كشوفات حسابات الموردين</li>
+            <li class="sect">الفريق والفروع</li>
+            <li><span class="ck">✓</span> حتى 3 مستخدمين</li>
+            <li><span class="ck">✓</span> فرع واحد</li>
+            <li class="sect">غير متوفر في الباقة الأساسية</li>
+            <li class="muted"><span class="nx">✕</span> إدارة العملاء (CRM)</li>
+            <li class="muted"><span class="nx">✕</span> المصاريف الإدارية والالتزامات الدورية</li>
+            <li class="muted"><span class="nx">✕</span> التسعير التلقائي للمنتجات</li>
+            <li class="muted"><span class="nx">✕</span> تقارير مفصّلة إضافية (منتجات، موردون، إلخ)</li>
+          </ul>
+        </details>
       </div>
 
       <!-- GROWTH -->
-      <div class="plan-card growth">
-        <div class="popular-badge">⭐ الأكثر اختياراً</div>
-        <div class="plan-header">
-          <div class="plan-icon-badge">📘</div>
-          <div class="plan-name-text">النمو</div>
-          <div class="plan-tagline">للمنشآت التي تحتاج تحكم أكبر</div>
-        </div>
-        <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> <span id="price-growth">349</span></div>
-          <div class="price-period" id="period-growth">شهرياً</div>
-          <div class="price-save" id="save-growth"></div>
-        </div>
-        <ul class="feat-list">
-          <li class="sect">كل ما في الأساسية، إضافةً إلى</li>
-          <li><span class="ck">✓</span> إدارة العملاء الكاملة (CRM)</li>
-          <li><span class="ck">✓</span> إدارة الموظفين والرواتب</li>
-          <li><span class="ck">✓</span> إدارة الورديات</li>
-          <li><span class="ck">✓</span> الالتزامات الدورية</li>
-          <li><span class="ck">✓</span> أوامر الشراء</li>
-          <li><span class="ck">✓</span> دفتر اليومية والقيود المحاسبية</li>
-          <li><span class="ck">✓</span> ميزان المراجعة</li>
-          <li><span class="ck">✓</span> إقفال الفترات المحاسبية</li>
-          <li><span class="ck">✓</span> سجل النشاط الكامل</li>
-          <li><span class="ck">✓</span> تقرير التدفقات النقدية</li>
-          <li><span class="ck">✓</span> تحليل ذكي للتقارير المالية</li>
-          <li><span class="ck">✓</span> حركة المخزون التفصيلية</li>
-          <li><span class="ck">✓</span> المصاريف الإدارية</li>
-          <li><span class="ck">✓</span> فترة مخصصة في التقارير</li>
-          <li><span class="ck">✓</span> تقارير تفصيلية إضافية (المنتجات، الموردون، أداء الفروع)</li>
-          <li><span class="ck">✓</span> استيراد البيانات</li>
-          <li><span class="ck">✓</span> المساعد الذكي — حتى 20 سؤال يومياً</li>
-          <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (100 فاتورة شهرياً)</li>
-          <li class="sect">الفريق والفروع</li>
-          <li><span class="ck">✓</span> حتى 5 مستخدمين</li>
-          <li><span class="ck">✓</span> حتى 3 فروع</li>
-          <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
+      <div class="plan featured">
+        <div class="badge">الأكثر اختيارًا</div>
+        <h3>النمو</h3>
+        <div class="tagline">للمنشآت بفريق وأكثر من فرع</div>
+        <div class="price"><span class="price-num num" id="price-growth">349</span><span class="cur">ر.س</span></div>
+        <div class="price-period" id="period-growth">شهرياً</div>
+        <div class="price-save" id="save-growth"></div>
+        <button class="btn btn-primary" data-action="openModal" data-args='["growth"]'>ابدأ مجانًا 15 يوم</button>
+        <ul class="keys">
+          <li class="lead">كل ما في الأساسية، إضافةً إلى:</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>العملاء والموظفون والرواتب</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>دفتر اليومية وميزان المراجعة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>إقفال الفترات المحاسبية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المصاريف الإدارية والالتزامات</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>5 مستخدمين · حتى 3 فروع</li>
         </ul>
-        <button class="btn-plan" data-action="openModal" data-args='["growth"]'>ابدأ مجاناً 15 يوم</button>
+        <details class="all">
+          <summary>كل مميزات الباقة</summary>
+          <ul class="feat-list">
+            <li class="sect">كل ما في الأساسية، إضافةً إلى</li>
+            <li><span class="ck">✓</span> إدارة العملاء الكاملة (CRM)</li>
+            <li><span class="ck">✓</span> إدارة الموظفين والرواتب</li>
+            <li><span class="ck">✓</span> إدارة الورديات</li>
+            <li><span class="ck">✓</span> المصاريف الإدارية والالتزامات الدورية</li>
+            <li><span class="ck">✓</span> أوامر الشراء</li>
+            <li><span class="ck">✓</span> دفتر اليومية والقيود المحاسبية</li>
+            <li><span class="ck">✓</span> ميزان المراجعة</li>
+            <li><span class="ck">✓</span> إقفال الفترات المحاسبية</li>
+            <li><span class="ck">✓</span> سجل النشاط الكامل</li>
+            <li><span class="ck">✓</span> تقرير التدفقات النقدية</li>
+            <li><span class="ck">✓</span> تحليل مالي ذكي (15 تحليلًا شهرياً)</li>
+            <li><span class="ck">✓</span> حركة المخزون التفصيلية</li>
+            <li><span class="ck">✓</span> فترة مخصصة في التقارير</li>
+            <li><span class="ck">✓</span> تقارير تفصيلية إضافية (المنتجات، الموردون، أداء الفروع)</li>
+            <li><span class="ck">✓</span> استيراد البيانات</li>
+            <li><span class="ck">✓</span> المساعد الذكي — حتى 20 سؤال يومياً</li>
+            <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (100 فاتورة شهرياً)</li>
+            <li class="sect">الفريق والفروع</li>
+            <li><span class="ck">✓</span> حتى 5 مستخدمين</li>
+            <li><span class="ck">✓</span> حتى 3 فروع</li>
+            <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
+          </ul>
+        </details>
       </div>
 
       <!-- PRO -->
-      <div class="plan-card pro">
-        <div class="plan-header">
-          <div class="plan-icon-badge">📙</div>
-          <div class="plan-name-text">الاحترافية</div>
-          <div class="plan-tagline">للمنشآت ذات المتطلبات المتقدمة</div>
-        </div>
-        <div class="plan-price-block">
-          <div class="price-num"><sup>ر.س</sup> <span id="price-pro">499</span></div>
-          <div class="price-period" id="period-pro">شهرياً</div>
-          <div class="price-save" id="save-pro"></div>
-        </div>
-        <ul class="feat-list">
-          <li class="sect">كل ما في باقة النمو، إضافةً إلى</li>
-          <li><span class="ck">✓</span> نظام نقاط الولاء</li>
-          <li><span class="ck">✓</span> عروض الأسعار للعملاء</li>
-          <li><span class="ck">✓</span> التسعير التلقائي للمنتجات</li>
-          <li><span class="ck">✓</span> التسوية البنكية (مطابقة تلقائية)</li>
-          <li><span class="ck">✓</span> قائمة الدخل (أرباح وخسائر)</li>
-          <li><span class="ck">✓</span> الميزانية العمومية</li>
-          <li><span class="ck">✓</span> تقرير الذمم المتأخرة</li>
-          <li><span class="ck">✓</span> مقارنة الفترات المالية</li>
-          <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (500 فاتورة شهرياً)</li>
-          <li><span class="ck">✓</span> استيراد كشف الحساب البنكي بالذكاء الاصطناعي (10 مرات شهرياً)</li>
-          <li><span class="ck">✓</span> مساعد ذكي بحد يومي سخي (150 سؤال) + ذاكرة المحادثات</li>
-          <li class="sect">الفريق والفروع</li>
-          <li><span class="ck">✓</span> مستخدمون غير محدودين</li>
-          <li><span class="ck">✓</span> حتى 5 فروع</li>
-          <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
+      <div class="plan">
+        <h3>الاحترافية</h3>
+        <div class="tagline">للمنشآت ذات المتطلبات المتقدمة</div>
+        <div class="price"><span class="price-num num" id="price-pro">499</span><span class="cur">ر.س</span></div>
+        <div class="price-period" id="period-pro">شهرياً</div>
+        <div class="price-save" id="save-pro"></div>
+        <button class="btn btn-ghost" data-action="openModal" data-args='["pro"]'>ابدأ مجانًا 15 يوم</button>
+        <ul class="keys">
+          <li class="lead">كل ما في النمو، إضافةً إلى:</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>قائمة الدخل والميزانية العمومية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التسوية البنكية التلقائية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>عروض الأسعار ونقاط الولاء</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>مقارنة الفترات المالية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>مستخدمون غير محدودين · حتى 5 فروع</li>
         </ul>
-        <button class="btn-plan" data-action="openModal" data-args='["pro"]'>ابدأ مجاناً 15 يوم</button>
+        <details class="all">
+          <summary>كل مميزات الباقة</summary>
+          <ul class="feat-list">
+            <li class="sect">كل ما في باقة النمو، إضافةً إلى</li>
+            <li><span class="ck">✓</span> نظام نقاط الولاء</li>
+            <li><span class="ck">✓</span> عروض الأسعار للعملاء</li>
+            <li><span class="ck">✓</span> التسعير التلقائي للمنتجات</li>
+            <li><span class="ck">✓</span> التسوية البنكية (مطابقة تلقائية)</li>
+            <li><span class="ck">✓</span> قائمة الدخل (أرباح وخسائر)</li>
+            <li><span class="ck">✓</span> الميزانية العمومية</li>
+            <li><span class="ck">✓</span> تقرير الذمم المتأخرة</li>
+            <li><span class="ck">✓</span> مقارنة الفترات المالية</li>
+            <li><span class="ck">✓</span> تحليل مالي ذكي (200 تحليل شهرياً)</li>
+            <li><span class="ck">✓</span> استخراج بيانات الفواتير بالذكاء الاصطناعي (500 فاتورة شهرياً)</li>
+            <li><span class="ck">✓</span> استيراد كشف الحساب البنكي بالذكاء الاصطناعي (10 مرات شهرياً)</li>
+            <li><span class="ck">✓</span> المساعد الذكي (150 سؤال يومياً) مع حفظ المحادثات</li>
+            <li class="sect">الفريق والفروع</li>
+            <li><span class="ck">✓</span> مستخدمون غير محدودين</li>
+            <li><span class="ck">✓</span> حتى 5 فروع</li>
+            <li><span class="ck">✓</span> تصفية لوحة التحكم والتقارير حسب الفرع</li>
+          </ul>
+        </details>
       </div>
 
     </div>
-    <p class="pricing-note">
-      بعد انتهاء التجربة اختر باقتك — أو تواصل معنا على
-      <strong>yaqiz.app@outlook.sa</strong>
-    </p>
+    <p class="pricing-note">عندك سؤال عن الباقات؟ تواصل معنا:<a href="mailto:yaqiz.app@outlook.sa">yaqiz.app@outlook.sa</a></p>
+  </div>
+</section>
+
+<!-- ══ FAQ ══ -->
+<section class="blk" id="faq">
+  <div class="wrap">
+    <div class="head center">
+      <div class="kicker">الأسئلة الشائعة</div>
+      <h2>أسئلة قبل ما تبدأ</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>وش يصير بعد انتهاء التجربة المجانية؟</summary>
+        <p>التجربة 15 يومًا بكامل مميزات الباقة المختارة. بعدها لا يحدث أي تحويل تلقائي أو خصم — حسابك وبياناتك تبقى محفوظة، وتختار الباقة وتدفع بنفسك من الإعدادات متى ما أردت.</p>
+      </details>
+      <details>
+        <summary>منشأتي غير مسجّلة في ضريبة القيمة المضافة، أقدر أستخدم يقظ؟</summary>
+        <p>نعم. عند التسجيل تحدد إن منشأتك غير مسجّلة، وتصدر الفواتير بدون احتساب ضريبة، وتقدر تفعّلها لاحقًا من الإعدادات.</p>
+      </details>
+      <details>
+        <summary>أقدر أنقل بياناتي من برنامج أو ملف Excel؟</summary>
+        <p>نعم، تستورد المنتجات والعملاء والموردين من Excel، ومعالج الأرصدة الافتتاحية يرشدك لإدخال النقدية والأرصدة والأصول. ويقدر الذكاء الاصطناعي يقرأ قائمة مخزونك من ملف أو صورة.</p>
+      </details>
+      <details>
+        <summary>أقدر أصدّر بياناتي أو أحذف حسابي؟</summary>
+        <p>تقدر تصدّر الفواتير والمشتريات بصيغة CSV ونسخة كاملة من بيانات منشأتك بصيغة JSON في أي وقت. ولطلب حذف الحساب تواصل معنا، ونمسح بياناتك الشخصية مع الإبقاء على السجلات المالية للمدة النظامية المطلوبة.</p>
+      </details>
+      <details>
+        <summary>هل يشتغل على الجوال؟</summary>
+        <p>يقظ يعمل من المتصفح على أي جهاز — كمبيوتر، جوال، أو تابلت — بدون تثبيت.</p>
+      </details>
+    </div>
   </div>
 </section>
 
 <!-- ══ CTA ══ -->
-<div class="cta-wrap">
-  <h2>جاهز تبدأ إدارة أعمالك باحترافية؟</h2>
-  <p>انضم للمنشآت السعودية التي تثق في يقظ لإدارة حساباتها</p>
-  <button class="btn-cta" data-action="openModal">سجّل الآن — مجاناً</button>
-</div>
+<section style="padding-bottom:24px">
+  <div class="wrap">
+    <div class="cta">
+      <h2>جاهز تبدأ؟</h2>
+      <p>أنشئ حسابك في دقيقة، وجرّب يقظ بكامل مميزاته 15 يومًا مجانًا.</p>
+      <button class="btn btn-primary" data-action="openModal">ابدأ تجربتك المجانية</button>
+    </div>
+  </div>
+</section>
 
 <!-- ══ FOOTER ══ -->
 <footer>
-  <div class="footer-links">
-    <a href="/VVIP.html">دخول التطبيق</a>
-    <a href="/privacy">سياسة الخصوصية</a>
-    <a href="/terms">شروط الاستخدام</a>
-    <a href="mailto:yaqiz.app@outlook.sa">تواصل معنا</a>
+  <div class="wrap foot">
+    <a class="brand" href="/"><img src="/public/icon.svg" alt="" width="30" height="30"><b>يقظ</b></a>
+    <nav aria-label="روابط التذييل">
+      <a href="/VVIP.html">تسجيل الدخول</a>
+      <a href="/privacy">سياسة الخصوصية</a>
+      <a href="/terms">شروط الاستخدام</a>
+      <a href="mailto:yaqiz.app@outlook.sa">تواصل معنا</a>
+    </nav>
+    <div>© 2026 يقظ لحلول المحاسبة</div>
   </div>
-  <p>© 2026 يقظ لحلول المحاسبة — جميع الحقوق محفوظة 🇸🇦</p>
 </footer>
 
 <!-- ══ MODAL ══ -->
 <div class="overlay" id="regOverlay">
-  <div class="modal">
-    <button class="modal-close" data-action="closeModal">✕</button>
-    <h2>سجّل شركتك في يقظ</h2>
-    <p class="modal-sub">أنشئ حسابك مجاناً — تجربة 15 يوم بكامل مميزات الباقة المختارة</p>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="regTitle">
+    <button class="modal-close" data-action="closeModal" aria-label="إغلاق">✕</button>
+    <h2 id="regTitle">سجّل منشأتك في يقظ</h2>
+    <p class="modal-sub">تجربة مجانية 15 يومًا بكامل مميزات الباقة المختارة.</p>
 
-    <!-- اختيار الباقة -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;" id="planPicker">
-      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]' style="padding:10px 8px;border-radius:12px;border:2px solid #10b981;background:#f0fdf4;cursor:pointer;text-align:center;transition:.2s;">
-        <div style="font-size:20px;">📗</div>
-        <div style="font-weight:900;font-size:13px;color:#10b981;margin-top:4px;">أساسية</div>
-        <div style="font-size:11px;color:#64748b;font-weight:700;">199 ر.س/شهر</div>
-      </div>
-      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]' style="padding:10px 8px;border-radius:12px;border:2px solid #3b82f6;background:#eff6ff;cursor:pointer;text-align:center;transition:.2s;box-shadow:0 0 0 3px rgba(59,130,246,.25);">
-        <div style="font-size:20px;">📘</div>
-        <div style="font-weight:900;font-size:13px;color:#3b82f6;margin-top:4px;">النمو ⭐</div>
-        <div style="font-size:11px;color:#64748b;font-weight:700;">349 ر.س/شهر</div>
-      </div>
-      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]' style="padding:10px 8px;border-radius:12px;border:2px solid rgba(139,92,246,.6);background:#f5f3ff;cursor:pointer;text-align:center;transition:.2s;">
-        <div style="font-size:20px;">📙</div>
-        <div style="font-weight:900;font-size:13px;color:#8b5cf6;margin-top:4px;">احترافية</div>
-        <div style="font-size:11px;color:#64748b;font-weight:700;">499 ر.س/شهر</div>
-      </div>
+    <div class="plan-picker" id="planPicker">
+      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]'><b>الأساسية</b><small>199 ر.س/شهر</small></div>
+      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]'><b>النمو</b><small>349 ر.س/شهر</small></div>
+      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]'><b>الاحترافية</b><small>499 ر.س/شهر</small></div>
     </div>
     <input type="hidden" id="chosen-plan" value="growth">
 
@@ -807,58 +805,56 @@
     <div class="malert malert-ok"  id="mOk"></div>
     <form id="regForm" novalidate>
       <div class="fgroup">
-        <label>اسم الشركة / المنشأة *</label>
+        <label for="f-co">اسم الشركة / المنشأة *</label>
         <input type="text" id="f-co" placeholder="مثال: مؤسسة النجاح للتجارة" required>
       </div>
       <hr class="div">
       <div class="frow">
         <div class="fgroup">
-          <label>اسم المستخدم *</label>
+          <label for="f-un">اسم المستخدم *</label>
           <input type="text" id="f-un" placeholder="ahmed1" required autocomplete="username">
         </div>
         <div class="fgroup">
-          <label>كلمة المرور *</label>
+          <label for="f-pw">كلمة المرور *</label>
           <input type="password" id="f-pw" placeholder="Ahmed@123" required minlength="8" autocomplete="new-password">
         </div>
       </div>
       <div class="frow">
         <div class="fgroup">
-          <label>الاسم الكامل *</label>
+          <label for="f-fn">الاسم الكامل *</label>
           <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required>
         </div>
         <div class="fgroup">
-          <label>رقم الجوال *</label>
+          <label for="f-ph">رقم الجوال *</label>
           <input type="tel" id="f-ph" placeholder="05xxxxxxxx" required>
         </div>
       </div>
       <hr class="div">
       <div class="frow">
         <div class="fgroup">
-          <label>رقم السجل التجاري</label>
+          <label for="f-cr">رقم السجل التجاري</label>
           <input type="text" id="f-cr" placeholder="1234567890" pattern="\d{10}" maxlength="10" title="10 أرقام">
         </div>
         <div class="fgroup">
-          <label>الرقم الضريبي VAT</label>
+          <label for="f-vt">الرقم الضريبي VAT</label>
           <input type="text" id="f-vt" placeholder="300…" pattern="3\d{13}3" maxlength="15" title="15 رقمًا، يبدأ وينتهي بالرقم 3">
         </div>
       </div>
-      <div class="fgroup" style="display:flex;align-items:center;gap:8px;margin-top:.4rem">
-        <input type="checkbox" id="f-vat-reg" checked style="width:auto;margin:0">
-        <label for="f-vat-reg" style="margin:0;font-weight:400;font-size:.85rem">شركتي مسجّلة بضريبة القيمة المضافة (VAT) — إن لم تكن مسجّلاً، الفواتير لن تحتسب الضريبة تلقائيًا (يمكن تفعيلها لاحقًا من الإعدادات)</label>
+      <div class="check-row">
+        <input type="checkbox" id="f-vat-reg" checked>
+        <label for="f-vat-reg">منشأتي مسجّلة بضريبة القيمة المضافة (VAT) — إن لم تكن مسجّلة، الفواتير لن تحتسب الضريبة تلقائيًا (يمكن تفعيلها لاحقًا من الإعدادات)</label>
       </div>
-      <button type="submit" class="btn-submit" id="regBtn">إنشاء الحساب</button>
-      <p style="text-align:center;font-size:.78rem;color:#94a3b8;margin-top:.9rem">
+      <button type="submit" class="btn btn-primary btn-submit" id="regBtn">إنشاء الحساب</button>
+      <p class="terms">
         بالتسجيل توافق على
-        <a href="/terms" target="_blank" style="color:var(--brand-d)">شروط الاستخدام</a>
-        و<a href="/privacy" target="_blank" style="color:var(--brand-d)">سياسة الخصوصية</a>
+        <a href="/terms" target="_blank">شروط الاستخدام</a>
+        و<a href="/privacy" target="_blank">سياسة الخصوصية</a>
       </p>
     </form>
   </div>
 </div>
 
 <script>
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" style="display:block;width:100%;height:100%"><defs><radialGradient id="bgGrad" cx="50%" cy="45%" r="65%"><stop offset="0%" stop-color="#072235"/><stop offset="45%" stop-color="#02131f"/><stop offset="85%" stop-color="#010a12"/><stop offset="100%" stop-color="#00060a"/></radialGradient><radialGradient id="ambientGlow" cx="50%" cy="50%" r="45%"><stop offset="0%" stop-color="#00e5ff" stop-opacity="0.18"/><stop offset="45%" stop-color="#0088b3" stop-opacity="0.08"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient><radialGradient id="starGlow" cx="50%" cy="63%" r="22%"><stop offset="0%" stop-color="#00ffff" stop-opacity="0.35"/><stop offset="50%" stop-color="#008cb3" stop-opacity="0.12"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient><linearGradient id="centerLeftFacet" x1="20%" y1="90%" x2="95%" y2="20%"><stop offset="0%" stop-color="#007e9e"/><stop offset="35%" stop-color="#009cb8"/><stop offset="70%" stop-color="#00c8db"/><stop offset="100%" stop-color="#3ef0f7"/></linearGradient><linearGradient id="centerRightFacet" x1="10%" y1="15%" x2="80%" y2="85%"><stop offset="0%" stop-color="#d6ffff"/><stop offset="25%" stop-color="#5ff4f9"/><stop offset="65%" stop-color="#00cde2"/><stop offset="100%" stop-color="#007d9f"/></linearGradient><linearGradient id="leftWingGrad" x1="0%" y1="60%" x2="100%" y2="30%"><stop offset="0%" stop-color="#0087b8"/><stop offset="45%" stop-color="#00b4d6"/><stop offset="85%" stop-color="#3af2f8"/><stop offset="100%" stop-color="#a4fcff"/></linearGradient><linearGradient id="rightWingGrad" x1="100%" y1="65%" x2="0%" y2="30%"><stop offset="0%" stop-color="#0079b3"/><stop offset="40%" stop-color="#00a8d4"/><stop offset="80%" stop-color="#4cf3f8"/><stop offset="100%" stop-color="#aefcff"/></linearGradient><linearGradient id="starTopLeft" x1="20%" y1="80%" x2="80%" y2="20%"><stop offset="0%" stop-color="#00a0b2"/><stop offset="60%" stop-color="#36ecf2"/><stop offset="100%" stop-color="#e2feff"/></linearGradient><linearGradient id="starTopRight" x1="80%" y1="80%" x2="20%" y2="20%"><stop offset="0%" stop-color="#008fa3"/><stop offset="50%" stop-color="#24dbe3"/><stop offset="100%" stop-color="#ffffff"/></linearGradient><linearGradient id="starBottomLeft" x1="20%" y1="20%" x2="80%" y2="80%"><stop offset="0%" stop-color="#008ea0"/><stop offset="65%" stop-color="#00bcd0"/><stop offset="100%" stop-color="#006575"/></linearGradient><linearGradient id="starBottomRight" x1="80%" y1="20%" x2="20%" y2="80%"><stop offset="0%" stop-color="#007b8c"/><stop offset="60%" stop-color="#00afc3"/><stop offset="100%" stop-color="#005866"/></linearGradient><filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="60"/></filter></defs><rect width="1254" height="1254" fill="url(#bgGrad)"/><circle cx="627" cy="627" r="420" fill="url(#ambientGlow)" filter="url(#softGlow)"/><circle cx="627" cy="795" r="220" fill="url(#starGlow)" filter="url(#softGlow)"/><g id="logo-marks"><path d="M 528 449 L 289 663 A 18 18 0 0 0 288 684 L 348 815 Z" fill="url(#leftWingGrad)"/><path d="M 726 449 L 906 815 L 966 684 A 18 18 0 0 0 965 663 Z" fill="url(#rightWingGrad)"/><path d="M 627 277 L 463 715 L 627 622 Z" fill="url(#centerLeftFacet)"/><path d="M 627 277 L 627 622 L 791 715 Z" fill="url(#centerRightFacet)"/><line x1="627" y1="277" x2="627" y2="622" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.75"/><path d="M 627 678 C 627 750 575 795 528 795 L 627 795 Z" fill="url(#starTopLeft)"/><path d="M 627 678 C 627 750 679 795 726 795 L 627 795 Z" fill="url(#starTopRight)"/><path d="M 528 795 C 575 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomLeft)"/><path d="M 726 795 C 679 795 627 840 627 912 L 627 795 Z" fill="url(#starBottomRight)"/><circle cx="627" cy="795" r="7" fill="#ffffff" opacity="0.95"/></g></svg>`;
-
 const PRICING = {
   basic:  { monthly:199, annual:2000 },
   growth: { monthly:349, annual:3700 },
@@ -866,8 +862,7 @@ const PRICING = {
 };
 
 function setPricingCycle(cycle) {
-  document.querySelectorAll('.cycle-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.cycle-btn[data-cycle="${cycle}"]`).classList.add('active');
+  document.querySelectorAll('.cycle-btn').forEach(b => b.classList.toggle('active', b.dataset.cycle === cycle));
   Object.keys(PRICING).forEach(plan => {
     const p = PRICING[plan];
     const priceEl  = document.getElementById('price-' + plan);
@@ -875,9 +870,9 @@ function setPricingCycle(cycle) {
     const saveEl   = document.getElementById('save-' + plan);
     if (cycle === 'annual') {
       const savings = (p.monthly * 12) - p.annual;
-      priceEl.textContent  = p.annual;
+      priceEl.textContent  = p.annual.toLocaleString('en-US');
       periodEl.textContent = 'سنوياً';
-      saveEl.textContent   = savings > 0 ? `💚 توفّر ${savings} ر.س سنويًا` : '';
+      saveEl.textContent   = savings > 0 ? `توفّر ${savings.toLocaleString('en-US')} ر.س سنويًا` : '';
     } else {
       priceEl.textContent  = p.monthly;
       periodEl.textContent = 'شهرياً';
@@ -889,20 +884,12 @@ function setPricingCycle(cycle) {
 function openModal(plan) {
   document.getElementById('regOverlay').classList.add('show');
   document.body.style.overflow = 'hidden';
-  if(plan) pickPlan(plan);
+  if (plan) pickPlan(plan);
+  setTimeout(() => document.getElementById('f-co')?.focus(), 50);
 }
 function pickPlan(plan) {
   document.getElementById('chosen-plan').value = plan;
-  const lightBg = {basic:'#f0fdf4',growth:'#eff6ff',pro:'#f5f3ff'};
-  const colors  = {basic:'#10b981',growth:'#3b82f6',pro:'#8b5cf6'};
-  document.querySelectorAll('.plan-pick').forEach(el => {
-    const p = el.dataset.plan;
-    const c = colors[p]||'#3b82f6';
-    const sel = p === plan;
-    el.style.border = `2px solid ${sel?c:'#e2e8f0'}`;
-    el.style.background = sel ? lightBg[p] : '#f8fafc';
-    el.style.boxShadow = sel ? `0 0 0 3px ${c}33` : 'none';
-  });
+  document.querySelectorAll('.plan-pick').forEach(el => el.classList.toggle('selected', el.dataset.plan === plan));
 }
 function closeModal() {
   document.getElementById('regOverlay').classList.remove('show');
@@ -927,8 +914,8 @@ document.addEventListener('click', function (e) {
   fn.apply(el, args);
 });
 document.getElementById('regForm').addEventListener('submit', doReg);
-document.getElementById('regOverlay').addEventListener('click', e => { if(e.target===document.getElementById('regOverlay')) closeModal(); });
-document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+document.getElementById('regOverlay').addEventListener('click', e => { if (e.target === document.getElementById('regOverlay')) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 async function doReg(e) {
   e.preventDefault();
@@ -943,36 +930,36 @@ async function doReg(e) {
   const ph = document.getElementById('f-ph').value.trim();
   const cr = document.getElementById('f-cr').value.trim();
   const vt = document.getElementById('f-vt').value.trim();
-  if (!co||!un||!pw||!fn||!ph) {
-    err.textContent='❌ يرجى ملء جميع الحقول الإلزامية'; err.classList.add('show'); return;
+  if (!co || !un || !pw || !fn || !ph) {
+    err.textContent = 'يرجى ملء جميع الحقول الإلزامية'; err.classList.add('show'); return;
   }
-  if (un.length<6||!/\d/.test(un)) {
-    err.textContent='❌ اسم المستخدم: 6 أحرف على الأقل ويحتوي على رقم (مثال: ahmed1)'; err.classList.add('show'); return;
+  if (un.length < 6 || !/\d/.test(un)) {
+    err.textContent = 'اسم المستخدم: 6 أحرف على الأقل ويحتوي على رقم (مثال: ahmed1)'; err.classList.add('show'); return;
   }
-  if (pw.length<8||!/[a-z]/.test(pw)||!/[A-Z]/.test(pw)) {
-    err.textContent='❌ كلمة المرور: 8 أحرف + حرف كبير + حرف صغير (مثال: Ahmed@123)'; err.classList.add('show'); return;
+  if (pw.length < 8 || !/[a-z]/.test(pw) || !/[A-Z]/.test(pw)) {
+    err.textContent = 'كلمة المرور: 8 أحرف على الأقل، وفيها حرف إنجليزي كبير وصغير (مثال: Ahmed@123)'; err.classList.add('show'); return;
   }
-  btn.textContent='جاري التسجيل...'; btn.disabled=true;
+  btn.textContent = 'جاري التسجيل...'; btn.disabled = true;
   try {
     const plan = document.getElementById('chosen-plan')?.value || 'basic';
-    const body={company_name:co,username:un,password:pw,full_name:fn,contact_phone:ph,plan};
-    if(cr) body.cr_number=cr;
-    if(vt) body.vat_number=vt;
+    const body = { company_name:co, username:un, password:pw, full_name:fn, contact_phone:ph, plan };
+    if (cr) body.cr_number = cr;
+    if (vt) body.vat_number = vt;
     body.vat_registered = document.getElementById('f-vat-reg').checked;
-    const res  = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const res  = await fetch('/api/register', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     const data = await res.json();
-    if(data.success){
-      localStorage.setItem('yaqiz_access_token',data.accessToken);
-      localStorage.setItem('yaqiz_refresh_token',data.refreshToken);
-      ok.textContent='✅ تم إنشاء حسابك! جاري التوجيه...'; ok.classList.add('show');
-      setTimeout(()=>{window.location.href='/VVIP.html';},1600);
+    if (data.success) {
+      localStorage.setItem('yaqiz_access_token', data.accessToken);
+      localStorage.setItem('yaqiz_refresh_token', data.refreshToken);
+      ok.textContent = 'تم إنشاء حسابك — جاري التوجيه...'; ok.classList.add('show');
+      setTimeout(() => { window.location.href = '/VVIP.html'; }, 1600);
     } else {
-      err.textContent='❌ '+(data.message||'حدث خطأ، حاول مجدداً'); err.classList.add('show');
-      btn.textContent='إنشاء الحساب'; btn.disabled=false;
+      err.textContent = data.message || 'حدث خطأ، حاول مجدداً'; err.classList.add('show');
+      btn.textContent = 'إنشاء الحساب'; btn.disabled = false;
     }
   } catch {
-    err.textContent='❌ تعذّر الاتصال بالخادم'; err.classList.add('show');
-    btn.textContent='إنشاء الحساب'; btn.disabled=false;
+    err.textContent = 'تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مجددًا'; err.classList.add('show');
+    btn.textContent = 'إنشاء الحساب'; btn.disabled = false;
   }
 }
 </script>
