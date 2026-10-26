@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>يقظ — لوحة الإدارة</title>
 <link rel="icon" type="image/svg+xml" id="adm-favicon">
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/public/chart.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -67,7 +67,7 @@ html.light td{color:#334155}
 html.light tbody tr:nth-child(even) td{background:rgba(15,23,42,.02)}
 html.light .empty-state,html.light .loader{color:#64748b}
 html.light .co-modal-tabs{border-color:#e6ecf5}
-body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;font-weight:500}
+body{font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;font-weight:500}
 
 /* LOGIN */
 #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at center,#0d1a3a 0%,#070d1a 70%)}
@@ -77,9 +77,9 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .login-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:32px}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px}
-.field input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:13px 16px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;outline:none;transition:.2s}
+.field input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:13px 16px;color:var(--text);font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:15px;outline:none;transition:.2s}
 .field input:focus{border-color:var(--brand);background:#0a1428}
-.btn-login{width:100%;margin-top:8px;background:linear-gradient(135deg,var(--brand-d),var(--brand));color:#fff;border:none;border-radius:10px;padding:14px;font-family:'Tajawal',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;box-shadow:0 4px 24px rgba(13,148,136,.35)}
+.btn-login{width:100%;margin-top:8px;background:linear-gradient(135deg,var(--brand-d),var(--brand));color:#fff;border:none;border-radius:10px;padding:14px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;box-shadow:0 4px 24px rgba(13,148,136,.35)}
 .btn-login:hover{transform:translateY(-1px);box-shadow:0 8px 32px rgba(13,148,136,.5)}
 .btn-login:disabled{opacity:.6;cursor:not-allowed;transform:none}
 .err-msg{color:#f87171;font-size:13px;font-weight:700;margin-bottom:10px;display:none;text-align:center}
@@ -96,14 +96,14 @@ body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--text);min
 .status-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .admin-badge{font-size:13px;font-weight:700;color:var(--muted)}
-.btn-logout{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#f87171;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:.2s}
+.btn-logout{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#f87171;border-radius:8px;padding:6px 14px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:.2s}
 .btn-logout:hover{background:rgba(239,68,68,.2)}
 
 /* NAV TABS */
 .nav-tabs-outer{position:sticky;top:60px;z-index:99}
 .nav-tabs{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
 .nav-tabs::-webkit-scrollbar{display:none}
-.nav-tab{display:flex;align-items:center;gap:7px;padding:14px 18px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;transition:.15s;margin-bottom:-1px}
+.nav-tab{display:flex;align-items:center;gap:7px;padding:14px 18px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;transition:.15s;margin-bottom:-1px}
 .nav-tab:hover{color:var(--text)}
 .nav-tab.active{color:var(--brand-light);border-bottom-color:var(--brand-light)}
 .nav-tab .tab-badge{background:var(--red);color:#fff;border-radius:100px;min-width:18px;height:18px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
@@ -162,7 +162,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 .sec-title{font-size:18px;font-weight:900}
 .sec-sub{font-size:12px;font-weight:600;color:var(--muted);margin-top:3px}
-.search-input{background:var(--card);border:1.5px solid var(--border2);border-radius:10px;padding:9px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:13px;outline:none;transition:.2s;width:220px}
+.search-input{background:var(--card);border:1.5px solid var(--border2);border-radius:10px;padding:9px 14px;color:var(--text);font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:13px;outline:none;transition:.2s;width:220px}
 .search-input:focus{border-color:var(--brand)}
 
 /* COST */
@@ -170,7 +170,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .cost-settings{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
 .cost-input-wrap{flex:1;min-width:150px}
 .cost-input-wrap label{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.cost-input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Tajawal',sans-serif;font-size:15px;font-weight:700;outline:none;transition:.2s;text-align:center}
+.cost-input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:15px;font-weight:700;outline:none;transition:.2s;text-align:center}
 .cost-input:focus{border-color:var(--brand)}
 .cost-body{display:grid;grid-template-columns:1fr 1.4fr;gap:20px}
 .cost-chart-wrap{position:relative;min-height:240px}
@@ -200,18 +200,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 /* FILTER BTNS */
 .filter-btns{display:flex;gap:6px;flex-wrap:wrap}
-.fbtn{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
+.fbtn{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:6px 14px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
 .fbtn:hover{background:rgba(255,255,255,.1);color:var(--text)}
 .fbtn.active{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.4);color:#5eead4}
 
 /* أزرار ثانوية بروؤوس البطاقات ("عرض الكل ←"، "🔄 تحديث"...) — الصنف كان
    مستخدَمًا بـ4 أزرار حقيقية بدون أي تعريف CSS له إطلاقًا، فكانت تظهر بشكل
    المتصفح الافتراضي بلا أي تنسيق */
-.btn-action{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:#5eead4;border-radius:8px;padding:6px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
+.btn-action{background:rgba(255,255,255,.06);border:1px solid var(--border2);color:#5eead4;border-radius:8px;padding:6px 14px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
 .btn-action:hover{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.4);color:#fff}
 
 /* ACTION BTNS */
-.abtn{border:none;border-radius:8px;padding:7px 14px;font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
+.abtn{border:none;border-radius:8px;padding:7px 14px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:.15s}
 .abtn:hover{filter:brightness(1.35)}
 .abtn.prog{background:rgba(245,158,11,.12);color:#fbbf24}
 .abtn.done{background:rgba(16,185,129,.12);color:#34d399}
@@ -233,7 +233,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
    الحساب، الباقة، تجاوز الفروع، المستخدمون) مكدّسة رأسيًا بنافذة واحدة طويلة
    تحتاج تمرير كثير؛ صارت 2-3 تبويبات بدل ذلك */
 .co-modal-tabs{display:flex;gap:4px;padding:16px 28px 0;border-bottom:1px solid #1a2942;overflow-x:auto}
-.co-modal-tab{padding:10px 16px;font-family:'Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;margin-bottom:-1px;transition:.15s}
+.co-modal-tab{padding:10px 16px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;margin-bottom:-1px;transition:.15s}
 .co-modal-tab.active{color:var(--brand-light);border-bottom-color:var(--brand-light)}
 .co-modal-panel{display:none}
 .co-modal-panel.active{display:block}
@@ -264,9 +264,86 @@ tr:hover td{background:rgba(255,255,255,.02)}
   .nav-tabs{padding:0 14px}
   .brand-sub{display:none} /* نص فرعي طويل كان يفيض تحت الشريط العلوي الثابت الارتفاع ويتراكب مع شريط التبويبات تحته */
 }
+
+/* ═══ إعادة تصميم 2026-10: شريط جانبي بدل صف التبويبات، أيقونات خطية بدل
+   الإيموجي، خط أخف — نفس لغة المنصة الرئيسية والصفحة التسويقية ═══ */
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+body{font-weight:400;-webkit-font-smoothing:antialiased}
+#app{grid-template-columns:240px minmax(0,1fr);grid-template-rows:auto 1fr;grid-template-areas:"side top" "side main";min-height:100vh}
+.nav-tabs-outer{grid-area:side;position:sticky;top:0;height:100vh;z-index:120;background:#06111b;border-inline-end:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column}
+.side-brand{display:flex;align-items:center;gap:10px;padding:16px 18px;height:64px;border-bottom:1px solid rgba(255,255,255,.06)}
+.side-brand .lg{width:34px;height:34px;border-radius:9px;overflow:hidden;flex-shrink:0}
+.side-brand b{display:block;color:#fff;font-size:16px;font-weight:700;line-height:1.2}
+.side-brand small{display:block;color:#7f97a1;font-size:11.5px}
+.nav-tabs{flex:1;flex-direction:column;background:transparent;border-bottom:0;padding:12px 10px;gap:2px;overflow-y:auto;overflow-x:hidden}
+.nav-tab{width:100%;justify-content:flex-start;gap:11px;padding:10px 12px;border-radius:10px;border-bottom:0;margin:0;font-size:14px;font-weight:500;color:#8fa5ae}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,.04)}
+.nav-tab.active{color:#5eead4;background:rgba(13,148,136,.16);border-bottom-color:transparent}
+.nav-tab:focus-visible{outline:2px solid #5eead4;outline-offset:-2px}
+.nav-tab .tab-badge{margin-inline-start:auto}
+.nav-scroll-btn{display:none!important}
+.topbar{grid-area:top;height:64px;overflow:visible}
+.top-title{font-size:17px;font-weight:700}
+.top-sub{font-size:12px;color:var(--muted)}
+.icon-btn{background:transparent;border:1px solid var(--border2);border-radius:10px;width:38px;height:38px;cursor:pointer;color:var(--text);display:inline-grid;place-items:center;position:relative;transition:.15s}
+.icon-btn:hover{background:rgba(255,255,255,.05)}
+.me-chip{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--text);cursor:pointer;padding:6px 10px;border-radius:10px}
+.me-chip:hover{background:rgba(255,255,255,.05)}
+.me-chip .av{width:28px;height:28px;border-radius:50%;background:rgba(13,148,136,.2);color:#5eead4;display:grid;place-items:center}
+.me-chip .av .ico{width:15px;height:15px}
+.btn-logout{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.main{grid-area:main;width:100%;padding:28px 32px}
+.kpi-card::before{display:none}
+.kpi-card{border-radius:14px;padding:20px}
+.kpi-card:hover{transform:none}
+.kpi-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:rgba(13,148,136,.14);color:#5eead4;margin-bottom:14px;font-size:0}
+.kpi-icon .ico{width:19px;height:19px}
+.kpi-card.amber .kpi-icon{background:rgba(245,158,11,.12);color:#fbbf24}
+.kpi-card.red .kpi-icon{background:rgba(239,68,68,.12);color:#f87171}
+.kpi-label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500}
+.kpi-value{font-weight:700}
+.sec-title{font-weight:700}
+.chart-title,.panel-title{font-weight:700}
+th{text-transform:none;letter-spacing:0;font-weight:600}
+html.light .nav-tabs-outer{background:#0b1d29}
+html.light .icon-btn:hover,html.light .me-chip:hover{background:rgba(15,23,42,.05)}
+html.light .kpi-icon{color:#0f766e}
+html.light .kpi-card.amber .kpi-icon{color:#b45309}
+html.light .kpi-card.red .kpi-icon{color:#dc2626}
+html.light .me-chip .av{color:#0f766e}
+@media (max-width:960px){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "side" "main"}
+  .nav-tabs-outer{position:sticky;top:64px;height:auto;z-index:99;border-inline-end:0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .side-brand{display:none}
+  .nav-tabs{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:8px 10px}
+  .nav-tab{width:auto;white-space:nowrap}
+  .main{padding:20px 16px}
+  .charts-row{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:640px){ .me-chip #admin-name{display:none} .top-sub{display:none} .status-dot{display:none} }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 7h4M8 11h4M8 15h4"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6 6 0 0 0-3.5-5.4"/></symbol>
+<symbol id="i-headset" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></symbol>
+<symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5V18M8.5 18h3.5"/></symbol>
+<symbol id="i-package" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+<symbol id="i-idcard" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="10" r="2.8"/><path d="M7.5 17.5a4.5 4.5 0 0 1 9 0"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+<symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3v18l2.5-1.5L10 21l2-1.5 2 1.5 2.5-1.5L19 21V3l-2.5 1.5L14 3l-2 1.5L10 3 7.5 4.5z"/><path d="M8.5 9h7M8.5 13h7"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/></symbol>
+<symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+</svg>
 
 <!-- ═══ LOGIN ═══ -->
 <div id="login-screen">
@@ -304,44 +381,40 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <!-- TOPBAR -->
   <div class="topbar">
     <div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;border-radius:9px;overflow:hidden;flex-shrink:0;" id="adm-topbar-logo"></div>
-        <div>
-          <div class="brand-name">يقظ — لوحة الإدارة</div>
-          <div class="brand-sub">Admin Dashboard · منصة المحاسبة السعودية</div>
-        </div>
-      </div>
+      <div class="top-title" id="top-title">لوحة التحكم</div>
+      <div class="top-sub">لوحة إدارة منصة يقظ</div>
     </div>
     <div class="topbar-right">
       <div class="status-dot">المنصة تعمل</div>
-      <button id="light-btn" data-action="toggleLight" title="تبديل الإضاءة" style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">☀️</button>
+      <button id="light-btn" class="icon-btn" data-action="toggleLight" title="تبديل الإضاءة" aria-label="تبديل الإضاءة"><svg class="ico"><use href="#i-sun"/></svg></button>
       <div style="position:relative;">
-        <button data-action="toggleNotifDropdown" style="position:relative;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:9px;width:38px;height:38px;cursor:pointer;color:var(--text);font-size:16px;">
-          🔔
+        <button class="icon-btn" data-action="toggleNotifDropdown" title="الإشعارات" aria-label="الإشعارات">
+          <svg class="ico"><use href="#i-bell"/></svg>
           <span id="admin-notif-badge" class="tab-badge" style="display:none;position:absolute;top:-5px;left:-5px;">0</span>
         </button>
         <div id="admin-notif-dropdown" style="display:none;position:absolute;left:0;top:46px;width:340px;max-height:420px;overflow-y:auto;background:var(--card);border:1px solid var(--border2);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);z-index:500;"></div>
       </div>
-      <div class="admin-badge" style="cursor:pointer;" data-action="showMyAccountModal" title="حسابي">👤 <span id="admin-name">المالك</span></div>
-      <button class="btn-logout" data-action="doLogout">خروج</button>
+      <div class="me-chip" data-action="showMyAccountModal" title="حسابي"><span class="av"><svg class="ico"><use href="#i-user"/></svg></span><span id="admin-name">المالك</span></div>
+      <button class="btn-logout" data-action="doLogout"><svg class="ico" style="width:15px;height:15px"><use href="#i-logout"/></svg>خروج</button>
     </div>
   </div>
 
   <!-- NAV TABS -->
   <div class="nav-tabs-outer">
     <button class="nav-scroll-btn start" id="nav-scroll-start" data-action="scrollNavTabs" data-args='["start"]' aria-label="تمرير لليمين">›</button>
+    <div class="side-brand"><div class="lg" id="adm-topbar-logo"></div><div><b>يقظ</b><small>لوحة الإدارة</small></div></div>
     <div class="nav-tabs" id="nav-tabs">
-      <button class="nav-tab active" data-action="switchTab" data-args='["dashboard"]' id="tab-dashboard">📊 لوحة التحكم</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["companies"]'   id="tab-companies">🏢 الشركات</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["newclients"]'  id="tab-newclients">🆕 عملاء جدد <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
-      <button class="nav-tab" data-action="switchTab" data-args='["users"]'       id="tab-users">👥 المستخدمون</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["tickets"]'     id="tab-tickets">🎧 تذاكر الدعم <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
-      <button class="nav-tab" data-action="switchTab" data-args='["costs"]'       id="tab-costs">💰 تحليل التكلفة</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["plans"]'       id="tab-plans">📦 الباقات والإيرادات</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]'     id="tab-aiusage">🤖 استخدام الذكاء الاصطناعي</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["log"]'         id="tab-log">📋 سجل النشاط</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["employees"]'   id="tab-employees">🧑‍💼 الموظفون</button>
-      <button class="nav-tab" data-action="switchTab" data-args='["myteam"]'       id="tab-myteam" style="display:none;">👥 فريقي</button>
+      <button class="nav-tab active" data-action="switchTab" data-args='["dashboard"]' id="tab-dashboard"><svg class="ico"><use href="#i-grid"/></svg><span class="nt-l">لوحة التحكم</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["companies"]' id="tab-companies"><svg class="ico"><use href="#i-building"/></svg><span class="nt-l">الشركات</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["newclients"]' id="tab-newclients"><svg class="ico"><use href="#i-user-plus"/></svg><span class="nt-l">عملاء جدد</span> <span class="tab-badge" id="newclients-badge" style="display:none;background:var(--green)">0</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["users"]' id="tab-users"><svg class="ico"><use href="#i-users"/></svg><span class="nt-l">المستخدمون</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["tickets"]' id="tab-tickets"><svg class="ico"><use href="#i-headset"/></svg><span class="nt-l">تذاكر الدعم</span> <span class="tab-badge" id="tickets-badge" style="display:none">0</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["costs"]' id="tab-costs"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">تحليل التكلفة</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["plans"]' id="tab-plans"><svg class="ico"><use href="#i-package"/></svg><span class="nt-l">الباقات والإيرادات</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]' id="tab-aiusage"><svg class="ico"><use href="#i-spark"/></svg><span class="nt-l">استخدام الذكاء الاصطناعي</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["log"]' id="tab-log"><svg class="ico"><use href="#i-list"/></svg><span class="nt-l">سجل النشاط</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["employees"]' id="tab-employees"><svg class="ico"><use href="#i-idcard"/></svg><span class="nt-l">الموظفون</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["myteam"]' id="tab-myteam" style="display:none;"><svg class="ico"><use href="#i-users"/></svg><span class="nt-l">فريقي</span></button>
     </div>
     <button class="nav-scroll-btn end" id="nav-scroll-end" data-action="scrollNavTabs" data-args='["end"]' aria-label="تمرير لليسار">‹</button>
   </div>
@@ -354,7 +427,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <!-- بطاقة التذاكر المفتوحة -->
       <div class="chart-card" id="tickets-dash-card" style="margin-bottom:24px;cursor:pointer;" data-action="switchTab" data-args='["tickets"]' title="اضغط لعرض التذاكر">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div class="chart-title" style="margin:0;">🎧 تذاكر الدعم المفتوحة</div>
+          <div class="chart-title" style="margin:0;">تذاكر الدعم المفتوحة</div>
           <div style="display:flex;align-items:center;gap:10px;">
             <span id="dash-tickets-count" style="font-size:28px;font-weight:900;color:#f59e0b;">—</span>
             <span style="font-size:11px;color:var(--muted);font-weight:700;">تذكرة</span>
@@ -375,12 +448,12 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="charts-row">
         <div class="chart-card">
-          <div class="chart-title">📈 التسجيلات اليومية</div>
+          <div class="chart-title">التسجيلات اليومية</div>
           <div class="chart-sub">آخر 30 يوم</div>
           <div class="chart-wrap"><canvas id="chart-reg"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">🏢 توزيع الشركات</div>
+          <div class="chart-title">توزيع الشركات</div>
           <div class="chart-sub">حسب الحالة</div>
           <div class="chart-wrap" style="height:160px"><canvas id="chart-status"></canvas></div>
           <div class="status-legend" id="status-legend"></div>
@@ -389,7 +462,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <!-- بطاقة أحدث العملاء -->
       <div class="panel" style="margin-bottom:24px;">
         <div class="panel-head">
-          <div><div class="panel-title">🆕 أحدث العملاء المسجّلين</div><div class="panel-sub">آخر 10 منشآت</div></div>
+          <div><div class="panel-title">أحدث العملاء المسجّلين</div><div class="panel-sub">آخر 10 منشآت</div></div>
           <button class="btn-action" data-action="switchTab" data-args='["companies"]'>عرض الكل ←</button>
         </div>
         <div style="overflow-x:auto">
@@ -402,11 +475,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
         <div class="panel">
-          <div class="panel-head"><div><div class="panel-title">🕐 آخر الأنشطة</div><div class="panel-sub">أحدث 10 أحداث</div></div></div>
+          <div class="panel-head"><div><div class="panel-title">آخر الأنشطة</div><div class="panel-sub">أحدث 10 أحداث</div></div></div>
           <div id="dash-activity"><div class="loader"><span class="spinner"></span></div></div>
         </div>
         <div class="panel" id="issues-panel" style="display:none">
-          <div class="panel-head"><div><div class="panel-title">⚠️ تحتاج مراجعة</div><div class="panel-sub">معلّقة أو ملغاة</div></div></div>
+          <div class="panel-head"><div><div class="panel-title">تحتاج مراجعة</div><div class="panel-sub">معلّقة أو ملغاة</div></div></div>
           <div style="overflow-x:auto"><table><thead><tr><th>الشركة</th><th>الحالة</th><th>المستخدمون</th><th>التاريخ</th></tr></thead><tbody id="issues-tbody"></tbody></table></div>
         </div>
       </div>
@@ -416,7 +489,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-companies">
       <div class="sec-head">
         <div>
-          <div class="sec-title">🏢 الشركات</div>
+          <div class="sec-title">الشركات</div>
           <div class="sec-sub" id="companies-label">جاري التحميل...</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -447,7 +520,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-newclients">
       <div class="sec-head">
         <div>
-          <div class="sec-title">🆕 عملاء جدد</div>
+          <div class="sec-title">عملاء جدد</div>
           <div class="sec-sub">المنشآت المسجّلة خلال آخر 15 يوماً</div>
         </div>
         <button class="btn-action" data-action="loadNewClients">🔄 تحديث</button>
@@ -461,7 +534,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-users">
       <div class="sec-head">
         <div>
-          <div class="sec-title">👥 المستخدمون</div>
+          <div class="sec-title">المستخدمون</div>
           <div class="sec-sub" id="users-label">جاري التحميل...</div>
         </div>
         <input class="search-input" type="text" id="user-search" placeholder="🔍 بحث..." data-oninput="filterUsers">
@@ -483,7 +556,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-tickets">
       <div class="sec-head">
         <div>
-          <div class="sec-title">🎧 تذاكر الدعم</div>
+          <div class="sec-title">تذاكر الدعم</div>
           <div class="sec-sub" id="tickets-label">جاري التحميل...</div>
         </div>
         <div class="filter-btns">
@@ -511,7 +584,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-plans">
       <div class="sec-head" style="margin-bottom:20px;">
         <div>
-          <div class="sec-title">📦 إدارة الباقات</div>
+          <div class="sec-title">إدارة الباقات</div>
           <div class="sec-sub">عدد المشتركين في كل باقة وبيانات كل شركة</div>
         </div>
         <button class="btn-action" data-action="loadPlans">🔄 تحديث</button>
@@ -522,7 +595,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-costs">
       <div class="sec-head">
         <div>
-          <div class="sec-title">💰 تحليل التكلفة</div>
+          <div class="sec-title">تحليل التكلفة</div>
           <div class="sec-sub">احسب كم تكلّفك كل شركة من تكلفة التشغيل الشهرية</div>
         </div>
       </div>
@@ -555,7 +628,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-aiusage">
       <div class="sec-head">
         <div>
-          <div class="sec-title">🤖 استخدام الذكاء الاصطناعي</div>
+          <div class="sec-title">استخدام الذكاء الاصطناعي</div>
           <div class="sec-sub">لكل شركة: عدد المستخدمين، وكم منهم استخدم الذكاء الاصطناعي فعليًا. اضغط على شركة لعرض نصوص أسئلتها بالشات (بدون الإجابات).</div>
         </div>
         <button class="btn-action" data-action="loadAIUsage">🔄 تحديث</button>
@@ -567,7 +640,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-log">
       <div class="sec-head">
         <div>
-          <div class="sec-title">📋 سجل النشاط</div>
+          <div class="sec-title">سجل النشاط</div>
           <div class="sec-sub">آخر 100 حدث على المنصة</div>
         </div>
         <button class="fbtn active" data-action="loadLog">🔄 تحديث</button>
@@ -581,7 +654,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-employees">
       <div class="sec-head">
         <div>
-          <div class="sec-title">🧑‍💼 موظفو لوحة الإدارة</div>
+          <div class="sec-title">موظفو لوحة الإدارة</div>
           <div class="sec-sub">إضافة موظفين ومنحهم صلاحيات محددة — خاص بالمالك فقط</div>
         </div>
         <button class="btn-action" data-action="showAddEmployeeModal" style="background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">➕ إضافة موظف</button>
@@ -602,7 +675,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="section" id="sec-myteam">
       <div class="sec-head">
         <div>
-          <div class="sec-title">👥 فريقي</div>
+          <div class="sec-title">فريقي</div>
           <div class="sec-sub">الموظفون اللي أنت مديرهم المباشر — تقدر تشوف نشاطهم وإنجازهم</div>
         </div>
       </div>
@@ -629,7 +702,10 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254
   const ll=document.getElementById('adm-login-logo');
   if(ll)ll.innerHTML=LOGO_SVG;
   const tl=document.getElementById('adm-topbar-logo');
-  if(tl)tl.innerHTML=LOGO_SVG;
+  // كصورة وليس SVG مضمَّن: نسختان مضمَّنتان تتشاركان نفس معرّفات التدرّجات
+  // (bgGrad...)، والأولى داخل شاشة الدخول المخفية بعد الدخول — Chrome لا يرسم
+  // تدرّجًا معرَّفًا داخل عنصر display:none، فيختفي الشعار من الشريط الجانبي
+  if(tl)tl.innerHTML=`<img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(LOGO_SVG)}" alt="" style="display:block;width:100%;height:100%">`;
 })();
 
 const TOKEN_KEY = 'yaqiz_admin_token';
@@ -786,10 +862,10 @@ async function sendAdminForgotPassword(){
 function showApp(username){
   $('admin-name').textContent=username||'المالك';
   $('login-screen').style.display='none';
-  $('app').style.display='block';
+  $('app').style.display='grid';
   setupNavScrollHints();
   const lightBtn = $('light-btn');
-  if (lightBtn) lightBtn.textContent = document.documentElement.classList.contains('light') ? '🌙' : '☀️';
+  if (lightBtn) lightBtn.innerHTML = `<svg class="ico"><use href="#${document.documentElement.classList.contains('light') ? 'i-moon' : 'i-sun'}"/></svg>`;
 }
 
 // ── تبديل الإضاءة (وضع فاتح/داكن) ────────────────────────
@@ -799,7 +875,7 @@ function toggleLight(){
   const isLight = document.documentElement.classList.toggle('light');
   localStorage.setItem('yaqiz_admin_light', isLight?'1':'0');
   const btn = $('light-btn');
-  if(btn) btn.textContent = isLight ? '🌙' : '☀️';
+  if(btn) btn.innerHTML = `<svg class="ico"><use href="#${isLight ? 'i-moon' : 'i-sun'}"/></svg>`;
 }
 (function(){
   if (localStorage.getItem('yaqiz_admin_light')==='1') {
@@ -868,6 +944,8 @@ async function apiFetch(path,opts={}){
 // ── Tab Navigation ─────────────────────────────────────
 const TABS = ['dashboard','companies','newclients','users','tickets','plans','costs','aiusage','log','employees','myteam'];
 function switchTab(name) {
+  const _tt = $('top-title'), _lbl = $('tab-'+name)?.querySelector('.nt-l');
+  if (_tt && _lbl) _tt.textContent = _lbl.textContent;
   TABS.forEach(t => {
     $('tab-'+t)?.classList.toggle('active', t===name);
     $('sec-'+t)?.classList.toggle('active', t===name);
@@ -1116,8 +1194,8 @@ function renderPlansSection(data) {
     const list = plans[key] || [];
     const rev = list.length * meta.price;
     return `
-    <div class="kpi-card" style="border-top:3px solid ${meta.color}">
-      <div class="kpi-icon">${meta.icon}</div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="color:${meta.color};background:color-mix(in srgb, ${meta.color} 14%, transparent)"><svg class="ico"><use href="#i-package"/></svg></div>
       <div class="kpi-label">${meta.label}</div>
       <div class="kpi-value" style="color:${meta.color}">${list.length}</div>
       <div class="kpi-sub">${meta.price > 0 ? fmt(rev) + ' ر.س/شهر' : 'تجريبية مجانية'}</div>
@@ -1136,7 +1214,7 @@ function renderPlansSection(data) {
         <td>${c.invoice_count || 0} فاتورة</td>
         <td>${fmtD(c.subscription_expires_at)}</td>
         <td>
-          <select ${hasPerm('companies_manage')?'':'disabled title="تحتاج صلاحية إدارة الشركات"'} data-onchange="changePlanV" data-onchange-args="${JSON.stringify([c.id])}" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'Tajawal',sans-serif;font-size:12px;">
+          <select ${hasPerm('companies_manage')?'':'disabled title="تحتاج صلاحية إدارة الشركات"'} data-onchange="changePlanV" data-onchange-args="${JSON.stringify([c.id])}" style="background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-family:'IBM Plex Sans Arabic','Tajawal',sans-serif;font-size:12px;">
             ${Object.entries(PLAN_META).map(([pk,pm]) => `<option value="${pk}" ${pk===key?'selected':''}>${pm.label}</option>`).join('')}
           </select>
         </td>
@@ -1146,7 +1224,7 @@ function renderPlansSection(data) {
     <div class="panel" style="margin-bottom:16px;">
       <div class="panel-head">
         <div>
-          <div class="panel-title">${meta.icon} باقة ${meta.label}</div>
+          <div class="panel-title"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${meta.color};margin-inline-end:8px"></span>باقة ${meta.label}</div>
           <div class="panel-sub">${list.length} شركة${meta.price > 0 ? ' · ' + fmt(list.length * meta.price) + ' ر.س/شهر' : ''}</div>
         </div>
       </div>
@@ -1185,7 +1263,7 @@ function renderPlanStats(data) {
     const rev = count * meta.price;
     mrr += rev;
     return `<div style="padding:18px 20px;border-left:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;">
-      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${meta.icon} ${meta.label}</div>
+      <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${meta.label}</div>
       <div style="font-size:28px;font-weight:900;color:${meta.color};line-height:1">${count}</div>
       <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:4px">${meta.price > 0 ? fmt(rev) + ' ر.س/شهر' : 'مجانية'}</div>
     </div>`;
@@ -1240,27 +1318,27 @@ function renderKPI(data) {
   const pct = data.companies.total>0 ? Math.round((data.companies.active/data.companies.total)*100) : 100;
   $('kpi-grid').innerHTML = `
     <div class="kpi-card blue">
-      <div class="kpi-icon">🏢</div>
+      <div class="kpi-icon"><svg class="ico"><use href="#i-building"/></svg></div>
       <div class="kpi-label">إجمالي الشركات</div>
       <div class="kpi-value">${fmt(data.companies.total)}</div>
       <div class="kpi-sub">${fmt(data.companies.active)} نشطة</div>
       <div class="kpi-badge up">+${data.new_today} اليوم</div>
     </div>
     <div class="kpi-card green">
-      <div class="kpi-icon">👥</div>
+      <div class="kpi-icon"><svg class="ico"><use href="#i-users"/></svg></div>
       <div class="kpi-label">إجمالي المستخدمين</div>
       <div class="kpi-value">${fmt(data.users.total)}</div>
       <div class="kpi-sub">عبر جميع الشركات</div>
       <div class="kpi-badge up">صحة المنصة ${pct}%</div>
     </div>
     <div class="kpi-card amber">
-      <div class="kpi-icon">🧾</div>
+      <div class="kpi-icon"><svg class="ico"><use href="#i-receipt"/></svg></div>
       <div class="kpi-label">إجمالي الفواتير</div>
       <div class="kpi-value">${fmt(data.invoices.total)}</div>
       <div class="kpi-sub">${fmtSAR(data.invoices.revenue)} ر.س إيرادات</div>
     </div>
     <div class="kpi-card ${issues>0?'red':'green'}">
-      <div class="kpi-icon">${issues>0?'⚠️':'✅'}</div>
+      <div class="kpi-icon"><svg class="ico"><use href="#${issues>0?'i-alert':'i-check-circle'}"/></svg></div>
       <div class="kpi-label">تحتاج مراجعة</div>
       <div class="kpi-value">${fmt(issues)}</div>
       <div class="kpi-sub">${fmt(suspended)} معلّقة · ${fmt(cancelled)} ملغاة</div>
@@ -1492,9 +1570,9 @@ function renderCoModal(c){
   // بالمنصة — رأس ثابت (اسم/تواصل/انتحال هوية) ثم 3 تبويبات: نظرة عامة،
   // الباقة والحالة (لو عنده صلاحية إدارة)، والمستخدمون
   const tabs = [
-    { id:'overview', label:'📊 نظرة عامة' },
-    ...(canManage ? [{ id:'plan', label:'⚙️ الباقة والحالة' }] : []),
-    { id:'users', label:`👥 المستخدمون (${(c.users||[]).length})` },
+    { id:'overview', label:'نظرة عامة' },
+    ...(canManage ? [{ id:'plan', label:'الباقة والحالة' }] : []),
+    { id:'users', label:`المستخدمون (${(c.users||[]).length})` },
   ];
 
   box.innerHTML=`
