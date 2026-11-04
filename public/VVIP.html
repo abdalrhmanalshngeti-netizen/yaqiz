@@ -580,6 +580,162 @@ html[dir="ltr"] .user-corner { left: auto; right: 20px; }
 .hover-danger-soft:hover { border-color: #dc2626 !important; background: #fef2f2 !important; }
 .hover-amber-row:hover { background: #fef3c7 !important; }
 .hover-blue-row:hover { background: #ccfbf1 !important; }
+
+/* ═══ خلنا نجهّز محلك — شاشة أول دخول + بطاقة خطوات البداية بلوحة التحكم ═══
+   كل الألوان من متغيرات التصميم الحالية فتشتغل تلقائيًا بالوضع الداكن */
+.qs-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(7,16,25,.62); backdrop-filter: blur(6px); display: flex; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; }
+.qs-shell { margin: auto; width: 100%; max-width: 1040px; min-height: min(640px, calc(100vh - 40px)); display: grid; grid-template-columns: 270px minmax(0,1fr); background: var(--card-bg); border-radius: 22px; box-shadow: var(--shadow-pop); overflow: hidden; animation: qsIn .32s cubic-bezier(.2,.8,.2,1); }
+@keyframes qsIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .qs-shell { animation: none; } }
+.qs-rail { background: linear-gradient(180deg, var(--sb-bg-top), var(--sb-bg-bot)); color: var(--sb-text); padding: 26px 18px 20px; display: flex; flex-direction: column; gap: 26px; }
+.qs-hello { display: flex; gap: 11px; align-items: center; padding: 0 6px; }
+.qs-hello-ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: rgba(45,212,191,.16); color: #5eead4; flex-shrink: 0; }
+.qs-hello b { display: block; color: var(--sb-text-strong); font-size: 16px; font-weight: 800; }
+.qs-hello small { display: block; color: var(--sb-muted); font-size: 12px; font-weight: 500; margin-top: 2px; }
+.qs-rail-list { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.qs-rail-item { display: flex; gap: 12px; align-items: center; width: 100%; text-align: start; padding: 11px 10px; border-radius: 12px; border: 0; background: transparent; color: inherit; font: inherit; cursor: default; position: relative; }
+.qs-rail-item.done { cursor: pointer; }
+.qs-rail-item.done:hover { background: var(--sb-hover-bg); }
+.qs-rail-item.now { background: rgba(45,212,191,.12); }
+.qs-rail-dot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; border: 1.5px solid rgba(255,255,255,.18); color: var(--sb-muted); }
+.qs-rail-item.now .qs-rail-dot { border-color: #5eead4; color: #5eead4; box-shadow: 0 0 0 4px rgba(45,212,191,.14); }
+.qs-rail-item.done .qs-rail-dot { background: #14b8a6; border-color: #14b8a6; color: #fff; }
+.qs-rail-txt b { display: block; font-size: 14px; font-weight: 700; color: var(--sb-text); }
+.qs-rail-item.now .qs-rail-txt b, .qs-rail-item.done .qs-rail-txt b { color: var(--sb-text-strong); }
+.qs-rail-txt small { display: block; font-size: 11.5px; font-weight: 500; color: var(--sb-muted); margin-top: 2px; }
+.qs-rail-foot { border-top: 1px solid var(--sb-border); padding: 16px 6px 0; }
+.qs-rail-foot small { display: block; color: var(--sb-muted); font-size: 11.5px; font-weight: 500; margin-top: 4px; line-height: 1.6; }
+.qs-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 700; color: #5eead4; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.qs-full-m { display: none; }
+.qs-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.qs-main { display: flex; flex-direction: column; min-width: 0; }
+.qs-head { padding: 26px 32px 6px; }
+.qs-progress { display: none; gap: 5px; margin-bottom: 12px; }
+.qs-progress i { flex: 1; height: 4px; border-radius: 99px; background: var(--border); }
+.qs-progress i.on { background: var(--primary); }
+.qs-count { font-size: 12px; font-weight: 600; color: var(--primary); letter-spacing: .2px; }
+.qs-head h2 { font-size: 24px; font-weight: 800; color: var(--text-main); margin: 4px 0 0; text-wrap: balance; }
+.qs-body { padding: 14px 32px 24px; flex: 1; overflow-y: auto; }
+.qs-lead { color: var(--text-muted); font-size: 14px; font-weight: 500; line-height: 1.8; margin: 0 0 18px; max-width: 60ch; }
+.qs-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 32px; border-top: 1px solid var(--border); background: var(--card-bg); }
+.qs-foot .btn { display: inline-flex; align-items: center; gap: 8px; }
+.qs-next { padding-inline: 26px; }
+.qs-later { background: none; border: 0; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-muted); cursor: pointer; padding: 8px 4px; }
+.qs-later:hover { color: var(--text-main); }
+.qs-store { display: grid; grid-template-columns: minmax(0,1fr) 270px; gap: 28px; align-items: start; }
+.qs-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px 14px; }
+.qs-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.qs-field.span { grid-column: 1 / -1; }
+.qs-field > span { font-size: 12.5px; font-weight: 700; color: var(--text-main); }
+.qs-field > span em, .qs-sub-head em { font-style: normal; color: var(--danger); }
+.qs-sub-head { display: flex; align-items: center; gap: 6px; margin: 22px 0 12px; padding-top: 18px; border-top: 1px dashed var(--border); font-size: 13.5px; font-weight: 800; color: var(--text-main); }
+.qs-sub-head em { color: var(--text-muted); font-weight: 600; font-size: 12px; }
+.qs-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 4px; }
+.qs-seg button { border: 0; border-radius: 9px; padding: 9px 10px; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-muted); background: transparent; cursor: pointer; transition: background .15s, color .15s; }
+.qs-seg button.on { background: var(--card-bg); color: var(--primary); box-shadow: var(--shadow-sm); }
+.qs-hint { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.qs-preview-wrap { position: sticky; top: 0; }
+.qs-preview-cap { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-align: center; }
+.qs-receipt { background: #fff; color: #0f172a; border-radius: 6px; padding: 18px 16px 14px; font-size: 12px; font-weight: 500; box-shadow: 0 10px 28px rgba(15,23,42,.12), 0 0 0 1px rgba(15,23,42,.06); position: relative; font-variant-numeric: tabular-nums; }
+.qs-receipt::after { content: ''; position: absolute; inset-inline: 0; bottom: -7px; height: 8px; background: radial-gradient(circle at 5px 0, transparent 5px, #fff 5.5px) repeat-x; background-size: 10px 8px; }
+.qs-r-name { text-align: center; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+.qs-r-meta { text-align: center; color: #475569; font-size: 11px; line-height: 1.7; }
+.qs-r-title { text-align: center; font-weight: 800; font-size: 12px; margin: 10px 0 6px; padding: 4px; border-block: 1px dashed #cbd5e1; }
+.qs-r-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.qs-r-row.muted { color: #64748b; font-size: 11px; }
+.qs-r-row.total { font-weight: 800; font-size: 13px; padding-top: 6px; }
+.qs-r-sep { border-top: 1px dashed #cbd5e1; margin: 6px 0; }
+.qs-r-qr { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 10px; color: #0f172a; }
+.qs-r-qr small { font-size: 10px; color: #94a3b8; }
+.qs-miss { color: #dc2626; background: #fef2f2; border-radius: 5px; padding: 0 5px; font-weight: 700; }
+.qs-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.qs-tile { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 16px; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-main); cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+.qs-tile:hover { border-color: var(--primary); box-shadow: var(--shadow); transform: translateY(-1px); }
+.qs-tile:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.qs-tile svg { color: var(--primary); }
+.qs-tile b { font-size: 15px; font-weight: 800; }
+.qs-tile small { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.qs-tile.primary { background: var(--primary-soft); border-color: transparent; }
+.qs-review { margin: 4px 0 14px; padding: 14px; border-radius: 14px; background: var(--bg); border: 1px solid var(--border); }
+.qs-review-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--text-main); margin-bottom: 10px; }
+.qs-tbl input.input { padding: 6px 8px; font-size: 12.5px; min-width: 0; }
+.qs-tbl input.num { width: 84px; }
+.qs-review-actions { display: flex; gap: 8px; margin-top: 10px; }
+.qs-review-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.qs-manual { margin-top: 6px; padding-top: 16px; border-top: 1px dashed var(--border); }
+.qs-manual-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 10px; }
+.qs-manual-row { display: grid; grid-template-columns: minmax(0,2fr) repeat(3, minmax(0,1fr)) 44px; gap: 10px; align-items: end; }
+.qs-add { height: 42px; padding: 0; display: grid; place-items: center; }
+.qs-list { list-style: none; margin: 16px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.qs-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.qs-list li:last-child { border-bottom: 0; }
+.qs-list b { display: block; font-size: 13.5px; font-weight: 700; color: var(--text-main); }
+.qs-list small { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.qs-total { display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.qs-total b { color: var(--primary); font-weight: 800; }
+.qs-empty { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 16px; border-radius: 14px; background: var(--bg); color: var(--text-muted); font-size: 13px; font-weight: 500; }
+.qs-x { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 9px; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+.qs-x:hover { background: var(--danger-bg); color: var(--danger); }
+.qs-cash { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; row-gap: 10px; align-items: center; padding: 20px; border-radius: 18px; border: 1.5px solid var(--border); margin-bottom: 14px; max-width: 520px; }
+.qs-cash > svg { grid-row: 1 / 3; width: 46px !important; height: 46px !important; padding: 11px; border-radius: 14px; background: var(--primary-soft); color: var(--primary); }
+.qs-cash > span { font-size: 15px; font-weight: 800; color: var(--text-main); }
+.qs-cash .opt { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-inline-start: 6px; }
+.qs-cash-in { display: flex; align-items: center; gap: 10px; }
+.qs-cash-in input { font-size: 26px; font-weight: 800; padding: 10px 14px; font-variant-numeric: tabular-nums; }
+.qs-cash-in em { font-style: normal; font-weight: 700; color: var(--text-muted); }
+.qs-cash.small { border-style: dashed; }
+.qs-cash.small > svg { width: 40px !important; height: 40px !important; padding: 10px; background: var(--bg); color: var(--text-muted); }
+.qs-cash.small .qs-cash-in input { font-size: 18px; }
+.qs-ready { max-width: 560px; }
+.qs-ready-hero { display: flex; align-items: center; gap: 16px; padding: 20px; border-radius: 18px; background: linear-gradient(135deg, var(--primary-soft), transparent); margin-bottom: 18px; }
+.qs-ready-hero > svg { color: var(--primary); flex-shrink: 0; }
+.qs-ready-hero b { display: block; font-size: 18px; font-weight: 800; color: var(--text-main); }
+.qs-ready-hero small { display: block; font-size: 13.5px; font-weight: 500; color: var(--text-muted); margin-top: 3px; }
+.qs-ready-list { list-style: none; padding: 0; margin: 0 0 22px; display: flex; flex-direction: column; gap: 8px; }
+.qs-ready-list li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); }
+.qs-ready-ico { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: var(--bg); color: var(--text-muted); }
+.qs-ready-list li.ok .qs-ready-ico { background: var(--success-bg); color: var(--success); }
+.qs-ready-list b { display: block; font-size: 14px; font-weight: 700; color: var(--text-main); }
+.qs-ready-list small { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
+.qs-ready-cta { display: flex; gap: 10px; flex-wrap: wrap; }
+.qs-ready-cta .btn { display: inline-flex; align-items: center; gap: 8px; }
+.qs-go-pos { padding: 13px 28px; font-size: 15px; }
+.qs-ready-note { display: flex; align-items: center; gap: 6px; margin-top: 18px; font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
+.qs-check { margin-bottom: 20px; padding: 18px 20px; }
+.qs-check-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.qs-check-head b { display: block; font-size: 16px; font-weight: 800; color: var(--text-main); }
+.qs-check-head small { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
+.qs-check-bar { height: 6px; border-radius: 99px; background: var(--bg); margin: 14px 0; overflow: hidden; }
+.qs-check-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--primary-light)); }
+.qs-check-items { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.qs-check-item { display: flex; align-items: center; gap: 11px; text-align: start; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card-bg); font: inherit; color: var(--text-main); cursor: pointer; transition: border-color .15s, background .15s; }
+.qs-check-item:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-soft); }
+.qs-check-item > span:nth-child(2) { flex: 1; min-width: 0; }
+.qs-check-item b { display: block; font-size: 13.5px; font-weight: 700; }
+.qs-check-item small { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
+.qs-check-item > svg { color: var(--text-muted); flex-shrink: 0; }
+.qs-check-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; background: var(--primary-soft); color: var(--primary); }
+.qs-check-item.ok { cursor: default; background: var(--bg); border-color: transparent; }
+.qs-check-item.ok b { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+.qs-check-item.ok .qs-check-ico { background: var(--success-bg); color: var(--success); }
+@media (max-width: 900px) {
+  .qs-overlay { padding: 0; align-items: stretch; }
+  .qs-shell { grid-template-columns: minmax(0,1fr); border-radius: 0; min-height: 100vh; }
+  .qs-rail { display: none; }
+  .qs-progress { display: flex; }
+  .qs-head { padding: calc(20px + env(safe-area-inset-top, 0px)) 18px 4px; }
+  .qs-body { padding: 12px 18px 20px; }
+  .qs-foot { padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); position: sticky; bottom: 0; }
+  .qs-store { grid-template-columns: minmax(0,1fr); }
+  .qs-preview-wrap { position: static; max-width: 300px; margin: 0 auto; width: 100%; }
+  .qs-full-m { display: inline-flex; margin-top: 8px; color: var(--primary); }
+  .qs-check-items { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 560px) {
+  .qs-grid, .qs-tiles { grid-template-columns: minmax(0,1fr); }
+  .qs-manual-row { grid-template-columns: repeat(3, minmax(0,1fr)) 44px; }
+  .qs-manual-row > .qs-field:first-child { grid-column: 1 / -1; }
+}
 </style>
 </head>
 <body>
@@ -2754,6 +2910,7 @@ function renderDashboard(c) {
         <div class="page-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}${viewBid?` · ${lang==='ar'?'بيانات فرع':'Branch data:'} ${sanitize((db.branches||[]).find(b=>b.id===viewBid)?.name||'')}`:''}</div>
       </div>
     </div>
+    ${qsChecklistCard(db)}
     <div class="stats-grid">
       <div id="dash-today-sales-card" class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value">${fmtMoney(todaySales)}</div></div>
       <div class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon">${icon('shopping-cart',22)}</div><div class="stat-label">${t('monthSales')}</div><div class="stat-value">${fmtMoney(monthSales)}</div><div style="margin-top:6px;">${pctChange(monthSales,lastMSales)||''}</div></div>
@@ -14970,68 +15127,62 @@ async function paySubscription() {
   }
 }
 
-function saveSettings() {
-  if (blockedByExpiredSubscription()) return;
-  const db = getDB();
-  const company_name    = el('s-name')?.value||'';
-  const vat_number      = el('s-vat')?.value||'';
-  const cr_number       = el('s-cr')?.value||'';
-  const phone           = el('s-phone')?.value||'';
-  const address         = el('s-addr')?.value||'';
-  const street_name     = el('s-street')?.value||'';
-  const building_number = el('s-building')?.value||'';
-  const district        = el('s-district')?.value||'';
-  const city            = el('s-city')?.value||'';
-  const postal_code     = el('s-postal')?.value||'';
-  const additional_number = el('s-additional')?.value||'';
-
+// قواعد بيانات المنشأة مشتركة بين صفحة الإعدادات وشاشة "خلنا نجهّز محلك"
+// (qsSaveStore) — مكان واحد للتحقق والحفظ حتى لا تختلف القواعد بين الشاشتين
+function _validateCompanyInfo(info) {
+  const ar = lang==='ar';
   // العنوان الوطني المُهيكل مطلوب فعليًا فقط للشركات المسجَّلة بضريبة القيمة
   // المضافة (المرحلة الثانية تخصّها تحديدًا) — لا نُلزم به شركة بلا رقم ضريبي
-  if (vat_number.trim()) {
-    if (!street_name.trim() || !district.trim() || !city.trim()) {
-      showToast(lang==='ar'?'⚠️ العنوان الوطني (الشارع/الحي/المدينة) مطلوب لشركة مسجَّلة بالضريبة':'⚠️ National address (street/district/city) is required for a VAT-registered company','error');
-      return;
-    }
-    if (!/^\d{4}$/.test(building_number.trim())) {
-      showToast(lang==='ar'?'⚠️ رقم المبنى يجب أن يكون 4 أرقام بالضبط':'⚠️ Building number must be exactly 4 digits','error');
-      return;
-    }
-    if (!/^\d{5}$/.test(postal_code.trim())) {
-      showToast(lang==='ar'?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits','error');
-      return;
-    }
-    if (!/^\d{4}$/.test(additional_number.trim())) {
-      showToast(lang==='ar'?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits','error');
-      return;
-    }
+  if (info.vat_number.trim()) {
+    if (!info.street_name.trim() || !info.district.trim() || !info.city.trim())
+      return ar?'⚠️ العنوان الوطني (الشارع/الحي/المدينة) مطلوب لشركة مسجَّلة بالضريبة':'⚠️ National address (street/district/city) is required for a VAT-registered company';
+    if (!/^\d{4}$/.test(info.building_number.trim())) return ar?'⚠️ رقم المبنى يجب أن يكون 4 أرقام بالضبط':'⚠️ Building number must be exactly 4 digits';
+    if (!/^\d{5}$/.test(info.postal_code.trim()))     return ar?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits';
+    if (!/^\d{4}$/.test(info.additional_number.trim())) return ar?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits';
   } else {
     // حتى بدون تسجيل ضريبي، لو كتب المستخدم رقم مبنى/رمز بريدي جزئيًا نتأكد
     // من صحة الصيغة بدل حفظ قيمة غير صالحة تفشل لاحقًا وقت تفعيل الضريبة
-    if (building_number.trim() && !/^\d{4}$/.test(building_number.trim())) {
-      showToast(lang==='ar'?'⚠️ رقم المبنى يجب أن يكون 4 أرقام بالضبط':'⚠️ Building number must be exactly 4 digits','error');
-      return;
-    }
-    if (postal_code.trim() && !/^\d{5}$/.test(postal_code.trim())) {
-      showToast(lang==='ar'?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits','error');
-      return;
-    }
-    if (additional_number.trim() && !/^\d{4}$/.test(additional_number.trim())) {
-      showToast(lang==='ar'?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits','error');
-      return;
-    }
+    if (info.building_number.trim() && !/^\d{4}$/.test(info.building_number.trim())) return ar?'⚠️ رقم المبنى يجب أن يكون 4 أرقام بالضبط':'⚠️ Building number must be exactly 4 digits';
+    if (info.postal_code.trim() && !/^\d{5}$/.test(info.postal_code.trim()))         return ar?'⚠️ الرمز البريدي يجب أن يكون 5 أرقام بالضبط':'⚠️ Postal code must be exactly 5 digits';
+    if (info.additional_number.trim() && !/^\d{4}$/.test(info.additional_number.trim())) return ar?'⚠️ الرقم الإضافي يجب أن يكون 4 أرقام بالضبط':'⚠️ Additional number must be exactly 4 digits';
   }
+  return '';
+}
 
-  db.settings = { ...db.settings, company_name, vat_number, cr_number, phone, address,
-    street_name, building_number, district, city, postal_code, additional_number };
+function _persistCompanyInfo(info) {
+  const db = getDB();
+  db.settings = { ...db.settings, ...info };
   saveDB(db);
-  showToast(`✅ ${t('save')}`);
   // مزامنة مع API (للمالك فقط)
   if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
     window._cloudApiFetch('PUT', '/api/auth/company', {
-      company_name, vat_number, cr_number, address, contact_phone: phone,
-      street_name, building_number, district, city, postal_code, additional_number
+      company_name: info.company_name, vat_number: info.vat_number, cr_number: info.cr_number,
+      address: info.address, contact_phone: info.phone,
+      street_name: info.street_name, building_number: info.building_number, district: info.district,
+      city: info.city, postal_code: info.postal_code, additional_number: info.additional_number
     }).catch(e => console.warn('Company sync:', e.message));
   }
+}
+
+function saveSettings() {
+  if (blockedByExpiredSubscription()) return;
+  const info = {
+    company_name:      el('s-name')?.value||'',
+    vat_number:        el('s-vat')?.value||'',
+    cr_number:         el('s-cr')?.value||'',
+    phone:             el('s-phone')?.value||'',
+    address:           el('s-addr')?.value||'',
+    street_name:       el('s-street')?.value||'',
+    building_number:   el('s-building')?.value||'',
+    district:          el('s-district')?.value||'',
+    city:              el('s-city')?.value||'',
+    postal_code:       el('s-postal')?.value||'',
+    additional_number: el('s-additional')?.value||'',
+  };
+  const err = _validateCompanyInfo(info);
+  if (err) { showToast(err,'error'); return; }
+  _persistCompanyInfo(info);
+  showToast(`✅ ${t('save')}`);
   renderShell();
 }
 
@@ -16565,11 +16716,339 @@ function _obStepCount() { return _obActiveSteps().length; }
 let _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
 let _obImportStaging = []; // {name, qty, buy_price, sell_price} — صفوف مؤقتة قبل التأكيد بخطوة المخزون
 
+// ============ خلنا نجهّز محلك (أول دخول للمالك) ============
+// 4 خطوات قصيرة بدل معالج الأرصدة الافتتاحية الكامل: بيانات المحل (اللي تطلع
+// على الفاتورة المبسطة)، البضاعة، الدرج، أول بيعة. لا منطق محاسبي جديد هنا:
+// البضاعة والنقدية تُجمَع في نفس _obData وتُحفَظ عبر obSaveAll نفسها (رأس المال
+// يُحسب تلقائيًا هناك)، وبيانات المحل عبر _validateCompanyInfo/_persistCompanyInfo
+// نفس صفحة الإعدادات بالضبط
+let _qs = { active:false, step:1, vatOn:true, draft:{} };
+const QS_STEPS = [
+  { key:'store', icon:'store',   title:'بيانات محلك', sub:'اللي تطلع على فاتورة زبونك' },
+  { key:'goods', icon:'package', title:'بضاعتك',      sub:'صوّر فاتورة المورد أو ارفع ملف' },
+  { key:'cash',  icon:'wallet',  title:'الصندوق',     sub:'كم في الدرج الحين؟' },
+  { key:'ready', icon:'rocket',  title:'جاهز للبيع',  sub:'جرّب أول بيعة' },
+];
+const QS_FIELDS = ['company_name','vat_number','cr_number','phone','address','street_name','building_number','district','city','postal_code','additional_number'];
+const QS_VAT_RE = /^3\d{13}3$/;
+
+function showQuickStart() {
+  const s = getDB().settings || {};
+  _obEditMode = false;
+  _obData = { cash_box:0, cash_bank:0, products:[], customers:[], suppliers:[], fixed_assets:[], obligations:[], employees:[], capital:0 };
+  _obImportStaging = [];
+  const draft = {};
+  QS_FIELDS.forEach(f => { draft[f] = String(s[f] || ''); });
+  _qs = { active:true, step:1, vatOn: s.vat_enabled!==false && s.vat_enabled!==0, draft };
+  renderQuickStart();
+}
+
+function renderQuickStart() {
+  const mc = el('modal-container'); if (!mc) return;
+  const cur = QS_STEPS[_qs.step-1];
+  const rail = QS_STEPS.map((st,i) => {
+    const n = i+1, state = n<_qs.step ? 'done' : n===_qs.step ? 'now' : 'next';
+    return `<button type="button" class="qs-rail-item ${state}" ${n<_qs.step?`data-action="qsGo" data-args="[${n}]"`:'disabled'} ${n===_qs.step?'aria-current="step"':''}>
+      <span class="qs-rail-dot">${state==='done'?icon('check',15):icon(st.icon,15)}</span>
+      <span class="qs-rail-txt"><b>${st.title}</b><small>${st.sub}</small></span>
+    </button>`;
+  }).join('');
+  const bodies = { store:qsStoreStep, goods:qsGoodsStep, cash:qsCashStep, ready:qsReadyStep };
+  const isLast = _qs.step === QS_STEPS.length;
+  const goodsEmpty = cur.key==='goods' && !_obData.products.length;
+  mc.innerHTML = `<div class="qs-overlay">
+    <div class="qs-shell" role="dialog" aria-modal="true" aria-labelledby="qs-title">
+      <aside class="qs-rail">
+        <div class="qs-hello"><span class="qs-hello-ico">${icon('sparkles',18)}</span><div><b>خلنا نجهّز محلك</b><small>4 خطوات، دقايق معدودة</small></div></div>
+        <div class="qs-rail-list">${rail}</div>
+        <div class="qs-rail-foot">
+          <button type="button" class="qs-link" data-action="qsOpenFullWizard">${icon('calculator',14)} الإعداد المحاسبي الكامل</button>
+          <small>للمحاسب: العملاء والموردين والأصول ورأس المال</small>
+        </div>
+      </aside>
+      <section class="qs-main">
+        <header class="qs-head">
+          <div class="qs-progress" aria-hidden="true">${QS_STEPS.map((_,i)=>`<i class="${i<_qs.step?'on':''}"></i>`).join('')}</div>
+          <div class="qs-count">الخطوة ${_qs.step} من ${QS_STEPS.length}</div>
+          <h2 id="qs-title">${cur.title}</h2>
+          <button type="button" class="qs-link qs-full-m" data-action="qsOpenFullWizard">${icon('calculator',14)} الإعداد المحاسبي الكامل (للمحاسب)</button>
+        </header>
+        <div class="qs-body">${bodies[cur.key]()}</div>
+        ${isLast ? '' : `<footer class="qs-foot">
+          ${_qs.step>1 ? `<button type="button" class="btn btn-outline" data-action="qsGo" data-args="[${_qs.step-1}]">${icon('arrow-right',16)} السابق</button>`
+                       : `<button type="button" class="qs-later" data-action="qsSkip">أكمل لاحقًا</button>`}
+          <button type="button" class="btn btn-primary qs-next" data-action="qsNext">${goodsEmpty?'تخطّ الحين':'التالي'} ${icon('arrow-left',16)}</button>
+        </footer>`}
+      </section>
+    </div>
+  </div>`;
+  refreshIcons();
+  const first = mc.querySelector('.qs-body input:not([type=file])');
+  if (first && _qs.step!==2) first.focus({ preventScroll:true });
+}
+
+function qsGo(n) { if (n>=1 && n<_qs.step) { _qsReadCash(); _qs.step = n; renderQuickStart(); } }
+
+// ── الخطوة 1: بيانات المحل + معاينة حيّة للفاتورة المبسطة ──
+function qsField(id, label, opts={}) {
+  const v = sanitize(_qs.draft[id]||'');
+  return `<label class="qs-field ${opts.span?'span':''}"><span>${label}${opts.req?' <em>*</em>':''}</span>
+    <input class="input" id="qs-${id}" value="${v}" ${opts.ph?`placeholder="${opts.ph}"`:''} ${opts.max?`maxlength="${opts.max}" inputmode="numeric"`:''} ${opts.dir?`dir="${opts.dir}"`:''}
+      data-oninput="qsDraft" data-oninput-args='["${id}"]' /></label>`;
+}
+function qsStoreStep() {
+  const v = _qs.vatOn;
+  return `<div class="qs-store">
+    <div class="qs-form">
+      <p class="qs-lead">هذي البيانات تطلع على كل فاتورة تعطيها لزبونك. شوف المعاينة وأنت تكتب.</p>
+      <div class="qs-grid">
+        ${qsField('company_name','اسم المحل',{req:true,span:true,ph:'مثال: بقالة الحي'})}
+        <div class="qs-field span"><span>هل محلك مسجّل في ضريبة القيمة المضافة؟</span>
+          <div class="qs-seg" role="radiogroup">
+            <button type="button" role="radio" aria-checked="${v}" class="${v?'on':''}" data-action="qsSetVat" data-args="[true]">نعم، مسجّل</button>
+            <button type="button" role="radio" aria-checked="${!v}" class="${!v?'on':''}" data-action="qsSetVat" data-args="[false]">لا، غير مسجّل</button>
+          </div>
+        </div>
+        ${v ? qsField('vat_number','الرقم الضريبي',{req:true,max:15,ph:'3XXXXXXXXXXXXX3',dir:'ltr'}) : ''}
+        ${qsField('cr_number','السجل التجاري',{max:10,ph:'اختياري',dir:'ltr'})}
+        ${qsField('phone','جوال المحل',{ph:'05XXXXXXXX',dir:'ltr'})}
+      </div>
+      <div class="qs-sub-head">${icon('map-pin',15)} العنوان الوطني ${v?'<em>مطلوب للمسجّل في الضريبة</em>':'<em>اختياري</em>'}</div>
+      <div class="qs-grid">
+        ${qsField('city','المدينة',{req:v})}
+        ${qsField('district','الحي',{req:v})}
+        ${qsField('street_name','الشارع',{req:v,span:true})}
+        ${qsField('building_number','رقم المبنى',{req:v,max:4,ph:'4 أرقام',dir:'ltr'})}
+        ${qsField('postal_code','الرمز البريدي',{req:v,max:5,ph:'5 أرقام',dir:'ltr'})}
+        ${qsField('additional_number','الرقم الإضافي',{req:v,max:4,ph:'4 أرقام',dir:'ltr'})}
+      </div>
+      <div class="qs-hint">${icon('info',14)} تلقى العنوان الوطني في تطبيق «سبل» أو موقع البريد السعودي.</div>
+    </div>
+    <div class="qs-preview-wrap"><div class="qs-preview-cap">معاينة فاتورة زبونك</div><div id="qs-preview">${qsReceiptPreview()}</div></div>
+  </div>`;
+}
+function qsDraft(value, field) {
+  _qs.draft[field] = value;
+  const p = el('qs-preview'); if (p) { p.innerHTML = qsReceiptPreview(); refreshIcons(); }
+}
+function qsSetVat(on) { _qsReadStore(); _qs.vatOn = !!on; renderQuickStart(); }
+function _qsReadStore() { QS_FIELDS.forEach(f => { const i = el('qs-'+f); if (i) _qs.draft[f] = i.value; }); }
+function _qsComposedAddress(d) { return [d.street_name, d.district, d.city].map(x=>String(x||'').trim()).filter(Boolean).join('، '); }
+
+function qsReceiptPreview() {
+  const d = _qs.draft, v = _qs.vatOn;
+  const miss = txt => `<span class="qs-miss">${txt}</span>`;
+  const addr = String(d.address||'').trim() || _qsComposedAddress(d);
+  const sub = 20, vat = v ? 3 : 0;
+  return `<div class="qs-receipt">
+    <div class="qs-r-name">${sanitize(d.company_name||'').trim() ? sanitize(d.company_name) : miss('اسم المحل')}</div>
+    ${addr ? `<div class="qs-r-meta">${sanitize(addr)}</div>` : ''}
+    ${v ? `<div class="qs-r-meta">الرقم الضريبي: ${QS_VAT_RE.test(String(d.vat_number||'').trim()) ? `<b dir="ltr">${sanitize(d.vat_number)}</b>` : miss('مطلوب — 15 رقم')}</div>` : ''}
+    ${String(d.cr_number||'').trim() ? `<div class="qs-r-meta">س.ت: <span dir="ltr">${sanitize(d.cr_number)}</span></div>` : ''}
+    <div class="qs-r-title">${v ? 'فاتورة ضريبية مبسطة' : 'فاتورة'}</div>
+    <div class="qs-r-row muted"><span>${new Date().toLocaleDateString('en-GB')}</span><span>${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span></div>
+    <div class="qs-r-sep"></div>
+    <div class="qs-r-row"><span>منتج تجريبي × 2</span><span>${(sub).toFixed(2)}</span></div>
+    <div class="qs-r-sep"></div>
+    ${v ? `<div class="qs-r-row muted"><span>ضريبة القيمة المضافة 15%</span><span>${vat.toFixed(2)}</span></div>` : ''}
+    <div class="qs-r-row total"><span>الإجمالي</span><span>${(sub+vat).toFixed(2)} ر.س</span></div>
+    ${v ? `<div class="qs-r-qr">${icon('qr-code',46)}<small>رمز QR يُنشأ تلقائيًا</small></div>` : ''}
+  </div>`;
+}
+
+function _qsSaveStore() {
+  _qsReadStore();
+  const d = { ..._qs.draft };
+  QS_FIELDS.forEach(f => { d[f] = String(d[f]||'').trim(); });
+  if (!d.company_name) return 'اكتب اسم المحل — يطلع أعلى كل فاتورة';
+  if (_qs.vatOn && !QS_VAT_RE.test(d.vat_number)) return 'الرقم الضريبي لازم يكون 15 رقم، يبدأ وينتهي بـ 3';
+  // غير المسجّل بالضريبة لا يُطبع له رقم ضريبي على الفاتورة أصلًا
+  if (!_qs.vatOn) d.vat_number = '';
+  const err = _validateCompanyInfo(d);
+  if (err) return err.replace(/^⚠️\s*/,'');
+  if (!d.address) d.address = _qsComposedAddress(d);
+  _persistCompanyInfo(d);
+  _qs.draft = d;
+  const db = getDB();
+  const wasOn = db.settings?.vat_enabled!==false && db.settings?.vat_enabled!==0;
+  if (wasOn !== _qs.vatOn) {
+    db.settings = { ...db.settings, vat_enabled: _qs.vatOn };
+    saveDB(db);
+    if (window._apiReachable && window._cloudApiFetch) {
+      window._cloudApiFetch('PUT', '/api/settings', { settings: { vat_enabled: _qs.vatOn } }).catch(e => console.warn('VAT setting sync:', e.message));
+    }
+  }
+  return '';
+}
+
+// ── الخطوة 2: البضاعة — نفس معرّفات وأفعال خطوة المخزون بالمعالج الكامل ──
+function qsGoodsStep() { return `<div id="ob-step-content">${qsGoodsBody()}</div>`; }
+function qsGoodsBody() {
+  const total = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
+  const staging = _obImportStaging.map((it,i)=>`<tr>
+      <td><input class="input" value="${sanitize(it.name)}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"name"]' /></td>
+      <td><input class="input num" type="number" value="${it.qty}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"qty"]' /></td>
+      <td><input class="input num" type="number" value="${it.buy_price}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"buy_price"]' /></td>
+      <td><input class="input num" type="number" value="${it.sell_price}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"sell_price"]' /></td>
+      <td><button type="button" class="qs-x" aria-label="حذف" data-action="obImportRemoveStagingRow" data-args="[${i}]">${icon('x',14)}</button></td></tr>`).join('');
+  const list = _obData.products.map((p,i)=>`<li>
+      <div><b>${sanitize(p.name)}</b><small>${p.qty} قطعة · شراء ${fmtMoney(p.buy_price)} · بيع ${fmtMoney(p.sell_price)}</small></div>
+      <button type="button" class="qs-x" aria-label="حذف" data-action="obRemoveProduct" data-args="[${i}]">${icon('x',14)}</button></li>`).join('');
+  return `<p class="qs-lead">أضف البضاعة اللي في محلك الحين. أسرع طريقة: صوّر فاتورة من موردك والذكاء الاصطناعي يقرأ الأصناف والأسعار.</p>
+    ${branchFieldHtml('ob-branch', 'الفرع اللي فيه هالبضاعة', _obData.branch_id)}
+    <div class="qs-tiles">
+      <label class="qs-tile primary">${icon('camera',22)}<b>صوّر فاتورة المورد</b><small>صورة أو PDF، ونقرأها لك</small>
+        <input type="file" accept="image/*,.pdf" hidden data-onchange-el="obImportAIChange" /></label>
+      <label class="qs-tile">${icon('file-spreadsheet',22)}<b>ارفع ملف Excel</b><small>الاسم، الكمية، سعر الشراء، سعر البيع</small>
+        <input type="file" accept=".xlsx,.xls" hidden data-onchange-el="obImportExcelChange" /></label>
+    </div>
+    <div id="ob-import-status"></div>
+    ${_obImportStaging.length ? `<div class="qs-review">
+      <div class="qs-review-head">${icon('sparkles',15)} راجع الأصناف قبل الإضافة (${_obImportStaging.length})</div>
+      <div class="tbl-wrap"><table class="tbl qs-tbl"><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الشراء</th><th>سعر البيع</th><th></th></tr></thead><tbody>${staging}</tbody></table></div>
+      <div class="qs-review-actions"><button type="button" class="btn btn-primary" data-action="obImportCommitStaging">${icon('check',15)} إضافة الكل</button>
+        <button type="button" class="btn btn-outline" data-action="obImportClearStaging">إلغاء</button></div></div>` : ''}
+    <div class="qs-manual">
+      <div class="qs-manual-head">${icon('plus',14)} أو أضف صنف بيدك</div>
+      <div class="qs-manual-row">
+        <label class="qs-field"><span>اسم الصنف</span><input class="input" id="ob-p-name" placeholder="مثال: ماء 330 مل" data-enter-action="obAddProduct" /></label>
+        <label class="qs-field"><span>الكمية</span><input class="input" type="number" id="ob-p-qty" value="1" min="0" /></label>
+        <label class="qs-field"><span>سعر الشراء</span><input class="input" type="number" id="ob-p-buy" placeholder="0.00" /></label>
+        <label class="qs-field"><span>سعر البيع</span><input class="input" type="number" id="ob-p-sell" placeholder="0.00" data-enter-action="obAddProduct" /></label>
+        <button type="button" class="btn btn-primary qs-add" aria-label="إضافة" data-action="obAddProduct">${icon('plus',18)}</button>
+      </div>
+    </div>
+    ${_obData.products.length ? `<ul class="qs-list">${list}</ul>
+      <div class="qs-total"><span>${_obData.products.length} صنف</span><span>قيمة البضاعة: <b>${fmtMoney(total)}</b></span></div>`
+      : `<div class="qs-empty">${icon('package',20)}<span>ما أضفت أصناف للحين. تقدر تتخطّى وتضيفها بعدين من صفحة المخزون.</span></div>`}`;
+}
+
+// ── الخطوة 3: الدرج ──
+function qsCashStep() {
+  return `<p class="qs-lead">كم المبلغ الموجود في درج الكاشير الحين؟ يصير هو رصيد الصندوق في المنصة، وكل بيعة نقدية تنضاف عليه.</p>
+    <label class="qs-cash">${icon('banknote',24)}<span>النقد في الدرج</span>
+      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-box" min="0" placeholder="0" value="${_obData.cash_box||''}" /><em>ر.س</em></div></label>
+    <label class="qs-cash small">${icon('landmark',20)}<span>رصيد حساب البنك <em class="opt">اختياري</em></span>
+      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-bank" min="0" placeholder="0" value="${_obData.cash_bank||''}" /><em>ر.س</em></div></label>`;
+}
+function _qsReadCash() {
+  const b = el('qs-cash-box'), k = el('qs-cash-bank');
+  if (b) _obData.cash_box  = Math.max(0, parseFloat(b.value)||0);
+  if (k) _obData.cash_bank = Math.max(0, parseFloat(k.value)||0);
+}
+
+// ── الخطوة 4: جاهز ──
+function qsReadyStep() {
+  const d = _qs.draft;
+  const val = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
+  const row = (ok, ico, title, detail) => `<li class="${ok?'ok':''}"><span class="qs-ready-ico">${icon(ok?'check':ico,16)}</span><div><b>${title}</b><small>${detail}</small></div></li>`;
+  return `<div class="qs-ready">
+    <div class="qs-ready-hero">${icon('party-popper',30)}<div><b>محلك جاهز يا ${sanitize((currentUser?.full_name||'').split(' ')[0]||'هلا')}!</b><small>آخر خطوة: جرّب أول بيعة وشوف فاتورتك.</small></div></div>
+    <ul class="qs-ready-list">
+      ${row(true,'store', sanitize(d.company_name), _qs.vatOn ? 'مسجّل في الضريبة · الرقم الضريبي على الفاتورة' : 'غير مسجّل في الضريبة')}
+      ${row(_obData.products.length>0,'package', _obData.products.length ? `${_obData.products.length} صنف` : 'ما فيه أصناف للحين', _obData.products.length ? `قيمتها ${fmtMoney(val)}` : 'تقدر تضيفها من صفحة المخزون')}
+      ${row(_obData.cash_box+_obData.cash_bank>0,'wallet', `الصندوق: ${fmtMoney(_obData.cash_box||0)}`, _obData.cash_bank ? `والبنك: ${fmtMoney(_obData.cash_bank)}` : 'رصيد الدرج الافتتاحي')}
+    </ul>
+    <div class="qs-ready-cta">
+      <button type="button" class="btn btn-primary qs-go-pos" data-action="qsFinish" data-args='["pos"]'>${icon('scan-line',18)} افتح نقطة البيع</button>
+      <button type="button" class="btn btn-outline" data-action="qsFinish" data-args='["dashboard"]'>روح للوحة التحكم</button>
+    </div>
+    <p class="qs-ready-note">${icon('info',14)} العملاء والموردين والأصول تقدر تضيفها لاحقًا من الإعدادات ← الأرصدة الافتتاحية.</p>
+  </div>`;
+}
+
+function qsNext() {
+  const key = QS_STEPS[_qs.step-1].key;
+  if (key==='store') {
+    const err = _qsSaveStore();
+    if (err) { showToast('⚠️ '+err, 'error'); return; }
+  } else if (key==='goods') {
+    if (_obImportStaging.length) { showToast('⚠️ راجع الأصناف المستوردة واضغط «إضافة الكل» أو «إلغاء» أولًا','error'); return; }
+    _obData.branch_id = readBranchField('ob-branch') || _obData.branch_id;
+  } else if (key==='cash') {
+    _qsReadCash();
+  }
+  if (_qs.step < QS_STEPS.length) { _qs.step++; renderQuickStart(); }
+}
+
+function qsFinish(page) {
+  _qs.active = false;
+  // obSaveAll يقرأ الخطوة الحالية بالمعالج الكامل (obReadStep) — نضعه على خطوة
+  // المراجعة الأخيرة حتى لا يحاول قراءة حقول غير موجودة بهذه الشاشة
+  _obStep = _obActiveSteps().length;
+  // حركة الرصيد الافتتاحي بالخزينة لازم تحمل فرعًا وإلا تظهر بإجمالي "الكل" فقط
+  // ولا تُحتسب بصندوق أي فرع (نفس مبدأ إصلاح حركات الخزينة بلا فرع سابقًا)
+  if (!_obData.branch_id) _obData.branch_id = resolveActiveBranchId();
+  obSaveAll();
+  if (page && page!==currentPage) goTo(page);
+}
+
+function qsSkip() {
+  _qs.active = false;
+  const db = getDB();
+  db.settings = { ...(db.settings||{}), opening_balances_done: true };
+  saveDB(db);
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/settings', { settings: { opening_balances_done: true } }).catch(e => console.warn('QS skip sync:', e.message));
+  }
+  closeModal();
+  showToast('تمام — تلقى خطوات البداية في لوحة التحكم متى ما بغيت');
+  renderPage();
+}
+
+function qsOpenFullWizard() {
+  if (_qs.step===3) _qsReadCash();
+  const keep = { products:[..._obData.products], cash_box:_obData.cash_box, cash_bank:_obData.cash_bank, branch_id:_obData.branch_id };
+  const staging = [..._obImportStaging];
+  _qs.active = false;
+  showOpeningBalancesWizard(false);
+  Object.assign(_obData, keep);
+  _obImportStaging = staging;
+  renderOBWizard();
+}
+
+// ── بطاقة "خطوات البداية" في لوحة التحكم ──
+function qsChecklistCard(db) {
+  if (currentUser?.role!=='owner') return '';
+  const s = db.settings || {};
+  if (s.getting_started_dismissed) return '';
+  const vatOn = s.vat_enabled!==false && s.vat_enabled!==0;
+  const items = [
+    { ok: !!String(s.company_name||'').trim() && (!vatOn || QS_VAT_RE.test(String(s.vat_number||'').trim())),
+      ico:'store', title:'بيانات المحل على الفاتورة', sub: vatOn ? 'الاسم والرقم الضريبي والعنوان' : 'الاسم والعنوان', act:'goTo', args:'["settings"]' },
+    { ok: (db.products||[]).length>0, ico:'package', title:'أضف بضاعتك', sub:'صوّر فاتورة المورد أو ارفع Excel', act:'goTo', args:'["inventory"]' },
+    { ok: (db.invoices||[]).some(i=>i.status!=='ملغاة'), ico:'scan-line', title:'أول بيعة', sub:'من نقطة البيع', act:'goTo', args:'["pos"]' },
+  ];
+  const done = items.filter(i=>i.ok).length;
+  if (done === items.length) return '';
+  return `<div class="card qs-check">
+    <div class="qs-check-head">
+      <div><b>خطوات البداية</b><small>${done} من ${items.length} · كمّلها وصار محلك جاهز للبيع</small></div>
+      <button type="button" class="qs-x" aria-label="إخفاء" title="إخفاء" data-action="qsDismissChecklist">${icon('x',15)}</button>
+    </div>
+    <div class="qs-check-bar"><i style="width:${Math.round(done/items.length*100)}%"></i></div>
+    <div class="qs-check-items">${items.map(i=>`<button type="button" class="qs-check-item ${i.ok?'ok':''}" ${i.ok?'disabled':`data-action="${i.act}" data-args='${i.args}'`}>
+      <span class="qs-check-ico">${icon(i.ok?'check':i.ico,16)}</span><span><b>${i.title}</b><small>${i.ok?'تم':i.sub}</small></span>${i.ok?'':icon('chevron-left',16)}</button>`).join('')}</div>
+  </div>`;
+}
+function qsDismissChecklist() {
+  const db = getDB();
+  db.settings = { ...(db.settings||{}), getting_started_dismissed: true };
+  saveDB(db);
+  if (window._apiReachable && window._cloudApiFetch) {
+    window._cloudApiFetch('PUT', '/api/settings', { settings: { getting_started_dismissed: true } }).catch(e => console.warn('Checklist dismiss sync:', e.message));
+  }
+  renderPage();
+}
+
 function checkOpeningBalances() {
   if (!currentUser || currentUser.role !== 'owner') return;
   const db = getDB();
   if (!db.settings?.opening_balances_done) {
-    setTimeout(() => showOpeningBalancesWizard(false), 700);
+    // أول دخول: شاشة قصيرة لصاحب المحل (بيانات المحل، البضاعة، الدرج، أول بيعة)
+    // بدل معالج الأرصدة الافتتاحية الكامل بخطواته التسع — المعالج الكامل يبقى
+    // متاحًا منها (qsOpenFullWizard) ومن الإعدادات للمحاسب
+    setTimeout(() => showQuickStart(), 700);
   }
 }
 
@@ -16861,6 +17340,9 @@ function renderOBWizard() {
 }
 
 function renderOBStepContent() {
+  // شاشة "خلنا نجهّز محلك" تعيد استخدام كل دوال الإضافة/الاستيراد أعلاه كما هي
+  // (كلها ترسم من جديد عبر هذه الدالة داخل #ob-step-content) — نرسم تصميمها هي
+  if (_qs.active) return qsGoodsBody();
   const stepFns = { cash:obStep1, products:obStep2, customers:obStep3, suppliers:obStep4, fixed_assets:obStep5, obligations:obStep6, employees:obStep7, capital:obStep8, review:obStep9 };
   const key = _obActiveSteps()[_obStep-1];
   return (stepFns[key]||(() => ''))();
