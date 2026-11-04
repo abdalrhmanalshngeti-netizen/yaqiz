@@ -597,7 +597,7 @@
       <div class="plan">
         <h3>الأساسية</h3>
         <div class="tagline">للمنشآت الصغيرة والمحلات</div>
-        <div class="price"><span class="price-num num" id="price-basic">199</span><span class="cur">ر.س</span></div>
+        <div class="price"><span class="price-num num" id="price-basic">99</span><span class="cur">ر.س</span></div>
         <div class="price-period" id="period-basic">شهرياً</div>
         <div class="price-save" id="save-basic"></div>
         <button class="btn btn-ghost" data-action="openModal" data-args='["basic"]'>ابدأ مجانًا 15 يوم</button>
@@ -644,7 +644,7 @@
         <div class="badge">الأكثر اختيارًا</div>
         <h3>النمو</h3>
         <div class="tagline">للمنشآت بفريق وأكثر من فرع</div>
-        <div class="price"><span class="price-num num" id="price-growth">349</span><span class="cur">ر.س</span></div>
+        <div class="price"><span class="price-num num" id="price-growth">179</span><span class="cur">ر.س</span></div>
         <div class="price-period" id="period-growth">شهرياً</div>
         <div class="price-save" id="save-growth"></div>
         <button class="btn btn-primary" data-action="openModal" data-args='["growth"]'>ابدأ مجانًا 15 يوم</button>
@@ -689,7 +689,7 @@
       <div class="plan">
         <h3>الاحترافية</h3>
         <div class="tagline">للمنشآت ذات المتطلبات المتقدمة</div>
-        <div class="price"><span class="price-num num" id="price-pro">499</span><span class="cur">ر.س</span></div>
+        <div class="price"><span class="price-num num" id="price-pro">299</span><span class="cur">ر.س</span></div>
         <div class="price-period" id="period-pro">شهرياً</div>
         <div class="price-save" id="save-pro"></div>
         <button class="btn btn-ghost" data-action="openModal" data-args='["pro"]'>ابدأ مجانًا 15 يوم</button>
@@ -795,9 +795,9 @@
     <p class="modal-sub">تجربة مجانية 15 يومًا بكامل مميزات الباقة المختارة.</p>
 
     <div class="plan-picker" id="planPicker">
-      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]'><b>الأساسية</b><small>199 ر.س/شهر</small></div>
-      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]'><b>النمو</b><small>349 ر.س/شهر</small></div>
-      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]'><b>الاحترافية</b><small>499 ر.س/شهر</small></div>
+      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]'><b>الأساسية</b><small>99 ر.س/شهر</small></div>
+      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]'><b>النمو</b><small>179 ر.س/شهر</small></div>
+      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]'><b>الاحترافية</b><small>299 ر.س/شهر</small></div>
     </div>
     <input type="hidden" id="chosen-plan" value="growth">
 
@@ -856,9 +856,9 @@
 
 <script>
 const PRICING = {
-  basic:  { monthly:199, annual:2000 },
-  growth: { monthly:349, annual:3700 },
-  pro:    { monthly:499, annual:5500 },
+  basic:  { monthly:99, annual:990 },
+  growth: { monthly:179, annual:1790 },
+  pro:    { monthly:299, annual:2990 },
 };
 
 function setPricingCycle(cycle) {

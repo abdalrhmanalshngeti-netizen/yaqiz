@@ -3,9 +3,9 @@ const db     = require('../config/db');
 const { notifyPlanUpgradeOpeningBalances } = require('../services/planUpgrade.service');
 
 const PLAN_PRICES = {
-  basic:  { monthly: 199, annual: 2000 },
-  growth: { monthly: 349, annual: 3700 },
-  pro:    { monthly: 499, annual: 5500 },
+  basic:  { monthly:99, annual:990 },
+  growth: { monthly:179, annual:1790 },
+  pro:    { monthly:299, annual:2990 },
 };
 const PLAN_LABELS = { basic: 'الأساسية', growth: 'النمو', pro: 'الاحترافية' };
 
