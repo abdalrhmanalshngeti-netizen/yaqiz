@@ -323,7 +323,8 @@ exports.addPayment = async (req, res, next) => {
 
     const paying    = Math.min(parseFloat(amount), parseFloat(pur.remaining));
     const newPaid   = parseFloat(pur.paid_amount) + paying;
-    const newRem    = parseFloat(pur.total) - newPaid;
+    // من المتبقي الحالي (لا الإجمالي − المدفوع) — يحفظ أي تسوية بمرتجع آجل
+    const newRem    = Math.round((parseFloat(pur.remaining) - paying) * 100) / 100;
     const newStatus = newRem <= 0 ? 'paid' : 'partial';
 
     await client.query(`
@@ -374,4 +375,25 @@ exports.addPayment = async (req, res, next) => {
   } finally {
     client.release();
   }
+};
+
+// عكس دفعة على فاتورة شراء (حذف سند صرف مطبَّق عليها) — نفس فجوة الفواتير
+exports.reversePayment = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const amount = parseFloat(req.body.amount);
+    if (!amount || amount <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'المبلغ غير صحيح' }); }
+    const { rows: [pur] } = await client.query(
+      `SELECT * FROM purchases WHERE id = $1 AND company_id = $2 FOR UPDATE`, [req.params.id, req.user.company_id]);
+    if (!pur) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات غير موجودة' }); }
+    const rev = Math.min(amount, parseFloat(pur.paid_amount));
+    const newPaid = Math.round((parseFloat(pur.paid_amount) - rev) * 100) / 100;
+    const newRem = Math.round((parseFloat(pur.remaining) + rev) * 100) / 100;
+    const newStatus = newRem <= 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+    await client.query(`UPDATE purchases SET paid_amount = $1, remaining = $2, status = $3 WHERE id = $4`, [newPaid, newRem, newStatus, pur.id]);
+    if (pur.supplier_id && rev > 0) await client.query(`UPDATE suppliers SET balance = balance + $1 WHERE id = $2`, [rev, pur.supplier_id]);
+    await client.query('COMMIT');
+    res.json({ success: true, data: { paid_amount: newPaid, remaining: newRem, status: newStatus } });
+  } catch (err) { await client.query('ROLLBACK'); next(err); } finally { client.release(); }
 };

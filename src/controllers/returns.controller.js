@@ -15,6 +15,84 @@ const logAudit = require('../middleware/logger');
 // (هذا لا يشمل الكمية الفعلية بالمخزون — أدناه نُعيدها فعليًا لمرتجعات المبيعات
 // المرتبطة بصنف حقيقي، وإلا يبقى المخزون منقوصًا للأبد بعد أي مرتجع).
 
+// يحسب ويطبّق تسوية المرتجع الآجلة: لا تتجاوز المتبقي الفعلي على المستند،
+// والطلب من المتصفح يُقبل فقط ضمن هذا الحد (لا يُثق به لتجاوزه)
+async function settleReturnCredit(client, { ret, linkedInvoice, linkedPurchase, amount, credit_portion }) {
+  const amt = Math.round(parseFloat(amount) * 100) / 100;
+  let outstanding = 0;
+  if (linkedInvoice) {
+    outstanding = parseFloat(linkedInvoice.grand_total) - parseFloat(linkedInvoice.paid_amount || 0) - parseFloat(linkedInvoice.credited_amount || 0);
+  } else if (linkedPurchase) {
+    outstanding = parseFloat(linkedPurchase.remaining || 0);
+  }
+  outstanding = Math.max(0, Math.round(outstanding * 100) / 100);
+  const cap = Math.min(amt, outstanding);
+  const asked = credit_portion != null && credit_portion !== '' ? parseFloat(credit_portion) : cap;
+  const credit = Math.round(Math.max(0, Math.min(cap, isNaN(asked) ? cap : asked)) * 100) / 100;
+  const cash = Math.round((amt - credit) * 100) / 100;
+  await client.query(`UPDATE returns SET cash_portion = $1, credit_portion = $2 WHERE id = $3`, [cash, credit, ret.id]);
+  if (credit > 0 && linkedInvoice) {
+    await client.query(`
+      UPDATE invoices SET credited_amount = credited_amount + $1,
+        status = CASE WHEN paid_amount + credited_amount + $1 >= grand_total - 0.005 THEN 'paid' ELSE status END,
+        updated_at = NOW()
+      WHERE id = $2`, [credit, linkedInvoice.id]);
+    if (linkedInvoice.customer_id) await client.query(`UPDATE customers SET balance = balance - $1 WHERE id = $2`, [credit, linkedInvoice.customer_id]);
+  } else if (credit > 0 && linkedPurchase) {
+    await client.query(`
+      UPDATE purchases SET remaining = GREATEST(0, remaining - $1),
+        status = CASE WHEN remaining - $1 <= 0.005 THEN 'paid' ELSE status END
+      WHERE id = $2`, [credit, linkedPurchase.id]);
+    if (linkedPurchase.supplier_id) await client.query(`UPDATE suppliers SET balance = balance - $1 WHERE id = $2`, [credit, linkedPurchase.supplier_id]);
+  }
+  return { cash, credit };
+}
+
+// حذف المرتجع كان يمسح السجل فقط: البضاعة المرتجعة تبقى بمخزون السيرفر (أو
+// تبقى خارجه لمرتجع مشتريات)، والتسوية الآجلة تبقى مطبَّقة — فيرجع أول سحب
+// بيانات بكميات وأرصدة غلط للواجهة. نعكسها هنا بنفس المعاملة
+async function reverseReturnEffects(client, ret, user) {
+  const qty = parseFloat(ret.qty) || 0;
+  if (ret.product_id && qty > 0) {
+    const { rows: [mv] } = await client.query(
+      `SELECT warehouse_id FROM stock_moves WHERE company_id = $1 AND source_type = 'return' AND source_id = $2 ORDER BY id DESC LIMIT 1`,
+      [ret.company_id, ret.id]
+    );
+    if (mv?.warehouse_id) {
+      if (ret.type === 'sales') {
+        await stock.deduct(client, {
+          company_id: ret.company_id, product_id: ret.product_id, warehouse_id: mv.warehouse_id, qty,
+          reason: 'حذف مرتجع مبيعات', source_type: 'return_delete', source_id: ret.id,
+          reference: ret.return_no, user_id: user.sub,
+          preferLot: { source_type: 'return', source_id: ret.id }
+        });
+      } else {
+        const unitCost = qty ? (parseFloat(ret.cogs_reversal) || 0) / qty : undefined;
+        await stock.add(client, {
+          company_id: ret.company_id, product_id: ret.product_id, warehouse_id: mv.warehouse_id, qty,
+          unit_cost: unitCost, reason: 'حذف مرتجع مشتريات', source_type: 'return_delete', source_id: ret.id,
+          reference: ret.return_no, user_id: user.sub
+        });
+      }
+    }
+  }
+  const credit = parseFloat(ret.credit_portion) || 0;
+  if (credit > 0 && ret.linked_invoice_id) {
+    const { rows: [inv] } = await client.query(
+      `UPDATE invoices SET credited_amount = GREATEST(0, credited_amount - $1),
+         status = CASE WHEN status = 'paid' AND paid_amount + GREATEST(0, credited_amount - $1) < grand_total - 0.005
+                       THEN (CASE WHEN paid_amount > 0 THEN 'partial' ELSE 'issued' END) ELSE status END
+       WHERE id = $2 AND company_id = $3 RETURNING customer_id`, [credit, ret.linked_invoice_id, ret.company_id]);
+    if (inv?.customer_id) await client.query(`UPDATE customers SET balance = balance + $1 WHERE id = $2`, [credit, inv.customer_id]);
+  } else if (credit > 0 && ret.linked_purchase_id) {
+    const { rows: [pur] } = await client.query(
+      `UPDATE purchases SET remaining = remaining + $1,
+         status = CASE WHEN remaining + $1 >= total - 0.005 THEN 'unpaid' ELSE 'partial' END
+       WHERE id = $2 AND company_id = $3 RETURNING supplier_id`, [credit, ret.linked_purchase_id, ret.company_id]);
+    if (pur?.supplier_id) await client.query(`UPDATE suppliers SET balance = balance + $1 WHERE id = $2`, [credit, pur.supplier_id]);
+  }
+}
+
 exports.list = async (req, res, next) => {
   try {
     const { rows } = await db.query(
@@ -33,7 +111,7 @@ exports.create = async (req, res, next) => {
       type, party_name, product_id, product_name, qty,
       base_amount, vat_amount, amount, reason,
       linked_invoice_id, linked_purchase_id, date,
-      payment_method, cogs_reversal, client_local_id
+      payment_method, cogs_reversal, client_local_id, credit_portion
     } = req.body;
 
     if (!['sales', 'purchases'].includes(type) || !amount) {
@@ -97,7 +175,7 @@ exports.create = async (req, res, next) => {
     }
     let linkedPurchase = null;
     if (linked_purchase_id) {
-      const { rows } = await client.query(`SELECT id, branch_id, total FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
+      const { rows } = await client.query(`SELECT id, branch_id, total, remaining, supplier_id FROM purchases WHERE id = $1 AND company_id = $2`, [linked_purchase_id, company_id]);
       if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'المشتريات المرتبطة غير موجودة' }); }
       linkedPurchase = rows[0];
 
@@ -140,6 +218,11 @@ exports.create = async (req, res, next) => {
         reason || '', linked_invoice_id || null, linked_purchase_id || null,
         date || todayLocalDateStr(), req.user.sub,
         payment_method || null, cogs_reversal || 0, client_local_id || null]);
+
+    // الجزء الآجل من المرتجع يسوّي المتبقي على الفاتورة/فاتورة الشراء المرتبطة
+    // (إشعار دائن)، والنقدي فقط هو ما يُرد فعليًا
+    const settle = await settleReturnCredit(client, { ret, linkedInvoice, linkedPurchase, amount, credit_portion });
+    ret.cash_portion = settle.cash; ret.credit_portion = settle.credit;
 
     // إرجاع الكمية فعليًا للمخزون — لنفس مستودع فرع الفاتورة الأصلية إن وُجدت
     // (نفس المستودع اللي خُصم منه وقت البيع)، وإلا مستودع فرع المستخدم الحالي
@@ -196,7 +279,8 @@ exports.create = async (req, res, next) => {
       const { totalCost } = await stock.deduct(client, {
         company_id, product_id, warehouse_id, qty: qty || 0,
         reason: 'مرتجع مشتريات', source_type: 'return', source_id: ret.id,
-        reference: return_no, user_id: req.user.sub
+        reference: return_no, user_id: req.user.sub,
+        preferLot: linkedPurchase ? { source_type: 'purchase', source_id: linkedPurchase.id } : null
       });
       const realCogsReversal = Math.round(totalCost * 100) / 100;
       await client.query(`UPDATE returns SET cogs_reversal = $1 WHERE id = $2`, [realCogsReversal, ret.id]);
@@ -267,10 +351,18 @@ exports.remove = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
+    // إشعار دائن ضريبي صادر لهذا المرتجع — مستند رسمي لا يُحذف (كان يرجع 500
+    // بقيد المفتاح الأجنبي، والواجهة تعيد المحاولة بلا نهاية)
+    const { rows: [cn] } = await client.query(`SELECT id FROM credit_notes WHERE reference_return_id = $1 LIMIT 1`, [req.params.id]);
+    if (cn) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'HAS_CREDIT_NOTE', message: 'هذا المرتجع صدر له إشعار دائن ضريبي ولا يمكن حذفه' });
+    }
     const { rows: [ret] } = await client.query(
       `DELETE FROM returns WHERE id = $1 AND company_id = $2 RETURNING *`,
       [req.params.id, req.user.company_id]
     );
+    await reverseReturnEffects(client, ret, req.user);
     await client.query('COMMIT');
     res.json({ success: true });
 

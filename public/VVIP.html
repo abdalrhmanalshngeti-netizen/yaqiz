@@ -2697,6 +2697,9 @@ function aiMaybeSetupNudge() {
     _aiNudgeBubble = true;
     yq('Track', 'ai_setup_nudge_shown', { missing: missing.length });
     renderAIChatButton();
+    // الفقاعة ما تبقى فوق محتوى الصفحة (كانت تغطي أزرار الجداول تحتها): تنطوي
+    // بعد 25 ثانية أو عند الانتقال لصفحة ثانية، والرسالة تبقى بالشات مع نقطة تنبيه
+    setTimeout(() => { if (_aiNudgeBubble) { _aiNudgeBubble = false; renderAIChatButton(); } }, 25000);
   } catch (e) { console.warn('AI setup nudge:', e); }
 }
 
@@ -2974,6 +2977,7 @@ function goTo(page) {
   });
   if (window.innerWidth <= 768) closeMobileSidebar();
   renderPage();
+  if (_aiNudgeBubble) { _aiNudgeBubble = false; renderAIChatButton(); }
   if (page === 'pos' || page === 'inventory') window._pullIfStale?.();
   yq('Page', page);
   maybeStartPageTour(page);
@@ -3170,7 +3174,7 @@ function renderDashboard(c) {
               ${db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').length===0
                 ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم مدينة':'No receivables'}</td></tr>`
                 : db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').map(i=>{
-                  const remaining = i.grand_total - (i.paid_amount||0);
+                  const remaining = invOutstanding(i);
                   const days = Math.floor((new Date()-new Date(i.created_at))/(1000*60*60*24));
                   return `
                 <tr>
@@ -3641,10 +3645,21 @@ function updatePOSTotals() {
 //                فواتير محددة) — افتراضيًا نفس journalAmount
 // customerId (اختياري): نفس مبدأ postSupplierPayable — لو تحدَّد، الأولوية له
 // دائمًا على مطابقة الاسم (نص حر يتغيّر بأي تعديل بيانات عميل لاحق)
+// المتبقي الفعلي على فاتورة: الإجمالي − المدفوع − المسوّى بمرتجعات آجلة (إشعار دائن)
+function invOutstanding(inv) {
+  if (!inv) return 0;
+  return Math.max(0, Math.round(((inv.grand_total||0) - (inv.paid_amount||0) - (inv.credited_amount||0)) * 100) / 100);
+}
+function purOutstanding(p) {
+  if (!p) return 0;
+  return Math.max(0, Math.round((p.remaining_amount != null ? p.remaining_amount : (p.total||0) - (p.paid_amount||0)) * 100) / 100);
+}
 function postCustomerReceivable(db, jEntries, customerName, journalAmount, direction, balanceAmount, customerId) {
   if (balanceAmount === undefined) balanceAmount = journalAmount;
   if (balanceAmount) {
-    const cust = customerId ? db.customers.find(c => c.id === customerId) : db.customers.find(c => c.name === customerName);
+    // المعرّف أولًا، والاسم احتياطيًا: سجل قديم ممكن يحمل معرّفًا محليًا قديمًا
+    // تغيّر بعد مزامنة العميل، فكان الرصيد ما يتحدّث إطلاقًا بلا أي خطأ
+    const cust = (customerId && db.customers.find(c => c.id === customerId)) || db.customers.find(c => c.name === customerName);
     if (cust) {
       const next = (cust.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
       cust.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
@@ -3661,7 +3676,7 @@ function postCustomerReceivable(db, jEntries, customerName, journalAmount, direc
 function postSupplierPayable(db, jEntries, supplierName, journalAmount, direction, balanceAmount, supplierId) {
   if (balanceAmount === undefined) balanceAmount = journalAmount;
   if (balanceAmount) {
-    const sup = supplierId ? db.suppliers.find(s => s.id === supplierId) : db.suppliers.find(s => s.name === supplierName);
+    const sup = (supplierId && db.suppliers.find(s => s.id === supplierId)) || db.suppliers.find(s => s.name === supplierName);
     if (sup) {
       const next = (sup.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
       sup.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
@@ -4100,7 +4115,7 @@ function renderInvoicesList(sc) {
 
   const totalAll=branchInvs.filter(i=>i.status!=='ملغاة').reduce((s,i)=>s+i.grand_total,0);
   const totalPaid=branchInvs.filter(i=>i.status==='مسددة').reduce((s,i)=>s+i.grand_total,0);
-  const totalPending=branchInvs.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+(i.grand_total-(i.paid_amount||0)),0);
+  const totalPending=branchInvs.filter(i=>i.status==='آجل'||i.status==='جزئي').reduce((s,i)=>s+(invOutstanding(i)),0);
 
   sc.innerHTML=`
   <div>
@@ -4982,7 +4997,7 @@ function printSalesInvoice(id) {
       <div class="tot-row"><span>ضريبة القيمة المضافة 15%:</span><span>${fmtMoney(inv.vat_total)}</span></div>
       <div class="tot-row tot-final"><span>الإجمالي النهائي:</span><span>${fmtMoney(inv.grand_total)}</span></div>
       ${inv.paid_amount<inv.grand_total?`<div class="tot-row" style="color:#16a34a;"><span>المسدد:</span><span>${fmtMoney(inv.paid_amount||0)}</span></div>
-      <div class="tot-row" style="color:#dc2626;font-weight:700;"><span>المتبقي:</span><span>${fmtMoney(inv.grand_total-(inv.paid_amount||0))}</span></div>`:''}
+      <div class="tot-row" style="color:#dc2626;font-weight:700;"><span>المتبقي:</span><span>${fmtMoney(invOutstanding(inv))}</span></div>`:''}
     </div>
   </div>
   ${inv.notes?`<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-right:3px solid #0f766e;border-radius:6px;font-size:12px;color:#334155;"><b>ملاحظات:</b> ${sanitize(inv.notes)}</div>`:''}
@@ -6958,6 +6973,14 @@ function showTreasuryMove(type) {
       <div class="modal-head"><h3>${type==='in'?t('deposit'):t('withdraw')}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
       <div style="margin-bottom:12px;"><label class="form-label">${t('amount')} *</label><input class="input" type="number" id="tr-amount" /></div>
       <div style="margin-bottom:12px;"><label class="form-label">${t('description')} *</label><input class="input" id="tr-desc" /></div>
+      <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'سبب الحركة':'Reason'} *</label>
+        <select class="select" id="tr-kind">
+          <option value="">${lang==='ar'?'اختر…':'Choose…'}</option>
+          ${type==='in'
+            ? `<option value="owner">${lang==='ar'?'إيداع من المالك (رأس مال)':'Owner deposit (capital)'}</option><option value="other">${lang==='ar'?'إيراد آخر (غير المبيعات)':'Other income'}</option>`
+            : `<option value="owner">${lang==='ar'?'مسحوبات المالك الشخصية':'Owner drawings'}</option><option value="other">${lang==='ar'?'مصروف آخر':'Other expense'}</option>`}
+        </select>
+      </div>
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'طريقة الدفع':'Payment Method'}</label>
         <select class="select" id="tr-method">
           <option value="نقدي">${lang==='ar'?'نقدي':'Cash'}</option>
@@ -6981,6 +7004,8 @@ function saveTreasuryMove(type) {
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
+  const _trKind = el('tr-kind')?.value || '';
+  if(!_trKind){showToast(lang==='ar'?'اختر سبب الحركة':'Choose the reason','error');return;}
   const m = {id:nextId(db,'treasury'),type,amount,description:el('tr-desc').value,reference:el('tr-ref').value,date:new Date().toISOString(),method:el('tr-method')?.value||'نقدي',_manual:true,branch_id:resolveActiveBranchId()};
   db.treasury.moves.unshift(m);
   db.treasury.balance += type==='in'?amount:-amount;
@@ -6991,11 +7016,17 @@ function saveTreasuryMove(type) {
   db.journal.push({
     id:db.nextId.journal++, date:new Date().toISOString(),
     description:`${type==='in'?(lang==='ar'?'إيداع خزينة':'Treasury Deposit'):(lang==='ar'?'صرف خزينة':'Treasury Withdrawal')}: ${el('tr-desc').value}`,
+    // إيداع/سحب المالك يمس حقوق الملكية لا الأرباح — كان كل إيداع يُقيَّد إيرادًا
+    // وكل سحب مصروفًا، فيتضخّم الربح أو المصروف بتمويل المالك ومسحوباته
     entries: type==='in' ? [
       {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount},
-      {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount},
+      _trKind==='owner'
+        ? {account:lang==='ar'?'رأس المال':'Owner Capital', account_code:'3000', side:'credit', amount}
+        : {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount},
     ] : [
-      {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount},
+      _trKind==='owner'
+        ? {account:lang==='ar'?'مسحوبات المالك':'Owner Drawings', account_code:'3000', side:'debit', amount}
+        : {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount},
       {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount},
     ],
     ref: el('tr-ref').value||''
@@ -10475,6 +10506,10 @@ function showObligationModal(id) {
           <option value="stopped" ${o?.status==='stopped'?'selected':''}>${lang==='ar'?'موقوف':'Stopped'}</option>
         </select>
       </div>
+      ${(db.settings?.vat_enabled!==false && db.settings?.vat_enabled!==0) ? `<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;font-size:13px;line-height:1.6;">
+        <input type="checkbox" id="ob-vat" ${o?.vat_included?'checked':''} style="margin-top:4px;" />
+        <span>${lang==='ar'?'المبلغ يشمل ضريبة القيمة المضافة 15% (المورد يصدر لك فاتورة ضريبية) — تُخصم كضريبة مدخلات. اتركها فاضية للرسوم الحكومية والأقساط والإيجار السكني.':'Amount includes 15% VAT (supplier issues a tax invoice) — claimed as input VAT.'}</span>
+      </label>` : ''}
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary btn-full" data-action="saveObligation" data-args="${JSON.stringify([id||null])}">${lang==='ar'?'حفظ':'Save'}</button>
         <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
@@ -10487,7 +10522,7 @@ function showObligationModal(id) {
 function saveObligation(id) {
   if (blockedByExpiredSubscription()) return;
   const db = getDB();
-  const data = { name:el('ob-name').value, vendor:el('ob-vendor').value, amount:Number(el('ob-amount').value||0), frequency:el('ob-freq').value, category:el('ob-cat').value, next_due:new Date(el('ob-due').value).toISOString(), status:el('ob-status').value };
+  const data = { name:el('ob-name').value, vendor:el('ob-vendor').value, amount:Number(el('ob-amount').value||0), frequency:el('ob-freq').value, category:el('ob-cat').value, next_due:new Date(el('ob-due').value).toISOString(), status:el('ob-status').value, vat_included: !!el('ob-vat')?.checked };
   if(!data.name){showToast(lang==='ar'?'اسم الالتزام مطلوب':'Name required','error');return;}
   if(id){const o=db.obligations.find(x=>x.id===id);if(o)Object.assign(o,data);}
   else db.obligations.push({id:nextId(db,'obligation'),...data,_pending:true});
@@ -10569,7 +10604,10 @@ function confirmObligationPayment(id, type, amount, method) {
   // بصرف النظر عن كون الشركة مسجّلة بالضريبة أصلًا أم لا — نفس فحص vat_enabled
   // (إعداد الشركة العام) المستخدَم أصلًا بـsavePurchase لمصروف opex الإداري.
   // شركة غير مسجّلة ضريبيًا: كامل المبلغ مصروف، لا ضريبة مدخلات على الإطلاق
-  const _vatOnObligation = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
+  // الضريبة تُفصل فقط لو المستخدم حدّد إن مبلغ هذا الالتزام شامل ضريبة (فاتورة
+  // ضريبية من المورد) — كانت تُفترض لكل التزام، فتُخصم ضريبة مدخلات على رسوم
+  // حكومية وأقساط وإيجار سكني بلا فاتورة تدعمها
+  const _vatOnObligation = (db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0) && !!o?.vat_included;
   const _oblBase = _vatOnObligation ? Math.round(amount/1.15*100)/100 : amount;
   const _oblVat  = _vatOnObligation ? Math.round((amount-_oblBase)*100)/100 : 0;
   db.purchases.push({
@@ -10808,7 +10846,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بفاتورة آجلة (اختياري):':'Link to pending invoice (optional):'}</div>
         <select class="select" id="v-invoice-link" data-onchange="onInvoiceLinkChange">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${i.grand_total-(i.paid_amount||0)}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
+          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${invOutstanding(i)}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
         </select>
         <div id="v-invoice-info" style="margin-top:8px;display:none;background:white;border-radius:8px;padding:10px;font-size:12px;"></div>
       </div>` : ''}
@@ -10928,7 +10966,7 @@ function saveVoucher(type, printAfter=true) {
     if(preview.length) {
       let left=amount;
       const lines=[];
-      for(const inv of preview){ if(left<=0) break; const rem=Math.max(0,inv.grand_total-(inv.paid_amount||0)); const applying=Math.min(left,rem); if(applying>0) lines.push(`• ${inv.invoice_no}: ${fmtMoney(applying)}`); left=Math.round((left-applying)*100)/100; }
+      for(const inv of preview){ if(left<=0) break; const rem=invOutstanding(inv); const applying=Math.min(left,rem); if(applying>0) lines.push(`• ${inv.invoice_no}: ${fmtMoney(applying)}`); left=Math.round((left-applying)*100)/100; }
       const msg=(lang==='ar'
         ?`لم تحدد فاتورة معينة — سيُطبَّق المبلغ تلقائيًا على أقدم فاتورة/فواتير غير مسددة لهذا العميل بالترتيب التالي:\n\n${lines.join('\n')}${left>0?`\n\n(متبقٍ بلا تخصيص: ${fmtMoney(left)})`:''}\n\nإذا كنت تقصد فاتورة محددة، ألغِ واخترها من قائمة «ربط بفاتورة» أولاً.`
         :`No specific invoice selected — this amount will auto-apply to the oldest unpaid invoice(s) for this customer, in this order:\n\n${lines.join('\n')}${left>0?`\n\n(Left unapplied: ${fmtMoney(left)})`:''}\n\nIf you meant a specific invoice, cancel and pick it from "Link to invoice" first.`);
@@ -11009,7 +11047,7 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     for(const inv of targetInvs) {
       if(left<=0) break;
       const prevStatus = inv.status;
-      const invRemaining = Math.max(0, inv.grand_total-(inv.paid_amount||0));
+      const invRemaining = invOutstanding(inv);
       const applying = Math.min(left, invRemaining);
       inv.paid_amount = Math.round(((inv.paid_amount||0)+applying)*100)/100;
       if(inv.paid_amount >= inv.grand_total) {
@@ -11199,12 +11237,17 @@ function deleteReceipt(id) {
   const amount = parseFloat(v.amount||0);
   const isReceipt = v.type==='receipt';
 
-  // 1. عكس الخزينة
+  // 1. عكس الخزينة بحركة عكسية (لا بحذف الحركة الأصلية): حذف الحركة كان يبقى
+  //    محليًا فقط (لا مزامنة للحذف)، فيرجع رصيد السيرفر القديم بأول تحديث.
+  //    الحركة العكسية تتزامن عادي وتبقي أثر التدقيق كاملًا
+  const _vRefs = [v.voucher_no, v.local_no].filter(Boolean);
   db.treasury.balance = Math.round((db.treasury.balance + (isReceipt?-amount:amount))*100)/100;
-  db.treasury.moves = db.treasury.moves.filter(m=>m.reference!==v.voucher_no);
+  db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:isReceipt?'out':'in', amount,
+    description:`عكس ${isReceipt?'سند قبض':'سند صرف'} محذوف ${v.voucher_no}: ${v.party||''}`, reference:`DEL-${v.voucher_no}`,
+    date:new Date().toISOString(), method:v.method||'نقدي', branch_id:resolveActiveBranchId() });
 
-  // 2. حذف القيد اليومي
-  if(db.journal) db.journal = db.journal.filter(j=>j.ref!==v.voucher_no);
+  // 2. حذف القيد اليومي (بالرقم الحالي أو المحلي الأصلي قبل المزامنة)
+  if(db.journal) db.journal = db.journal.filter(j=>!_vRefs.includes(j.ref));
 
   // 3. عكس الفاتورة/الفواتير (إذا سند قبض)
   if(isReceipt) {
@@ -11555,13 +11598,14 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
   //    بحسب حالة سداد الفاتورة/فاتورة الشراء المرتبطة — يغطي نقدي/آجل/جزئي بنفس المعادلة:
   //    الفاتورة المدفوعة بالكامل → كل المرتجع نقدي. غير المسددة إطلاقًا → كل المرتجع يخصم من الرصيد.
   //    المسددة جزئيًا → يُقسَّم المرتجع بنفس نسبة ما تم سداده من الفاتورة الأصلية.
+  // كان يقسّم بنسبة المسدّد من الفاتورة — فاتورة باقي عليها 171.50 ومرتجع
+  // 80.50 كان يرجّع للعميل 51 كاش وهو لسه مديون. الصحيح: المرتجع يسوّي
+  // المتبقي على المستند أولًا (إشعار دائن)، ولا يُرد نقدًا إلا ما زاد عنه
   let cashPortion = amount, creditPortion = 0;
   if (linkedRec) {
-    const grandTotal = isSales ? (linkedRec.grand_total||0) : (linkedRec.total||0);
-    const paidAmount = linkedRec.paid_amount||0;
-    const paidFraction = grandTotal>0 ? Math.min(1, Math.max(0, paidAmount/grandTotal)) : (paidAmount>0?1:0);
-    cashPortion = Math.round(amount*paidFraction*100)/100;
-    creditPortion = Math.round((amount-cashPortion)*100)/100;
+    const outstanding = isSales ? invOutstanding(linkedRec) : purOutstanding(linkedRec);
+    creditPortion = Math.round(Math.min(amount, outstanding)*100)/100;
+    cashPortion = Math.round((amount-creditPortion)*100)/100;
   }
   ret.cash_portion = cashPortion;
   ret.credit_portion = creditPortion;
@@ -11602,7 +11646,11 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
         prod.lots.push({qty, cost:unitCost, date:new Date().toISOString(), ref:ret.return_no});
         mutateWarehouseStock(db, prod.id, returnWarehouseId, qty);
       } else {
-        returnCogsReversal = fifoDeduct(prod, qty);
+        // تخرج من دفعة فاتورة الشراء نفسها وبسعرها (نفس ما يخصمه السيرفر من
+        // طبقتها — stock.deduct preferLot)، وإلا FIFO العادي لمرتجع غير مرتبط
+        const fifoVal = fifoDeduct(prod, qty);
+        const _purItem = (linkedRec?.items||[]).find(it => (it.product_id === prodId || (it.name||'').trim() === (prod.name||'').trim()) && Number(it.price) > 0);
+        returnCogsReversal = _purItem ? Math.round(qty*Number(_purItem.price)*100)/100 : fifoVal;
         mutateWarehouseStock(db, prod.id, returnWarehouseId, -qty);
       }
       db.stock_moves.push({
@@ -11647,6 +11695,10 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
       if(inv) {
         inv.has_return=true;
         inv.returned_amount=(inv.returned_amount||0)+amount;
+        if (creditPortion>0) {
+          inv.credited_amount = Math.round(((inv.credited_amount||0)+creditPortion)*100)/100;
+          if (invOutstanding(inv) <= 0.005) inv.status = 'مسددة';
+        }
         logActivity('مرتجعات',`ربط مرتجع ${ret.return_no} بالفاتورة ${inv.invoice_no}`);
       }
     }
@@ -11655,7 +11707,14 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
     const purRetEntries = [];
     if(cashPortion>0) purRetEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashPortion});
     postSupplierPayable(db, purRetEntries, ret.party, creditPortion, 'decrease', undefined, ret.party_id);
-    purRetEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'credit', amount:base});
+    // جرد مستمر: البضاعة المرتجعة تخرج من حساب المخزون بتكلفتها — كانت تُقيَّد
+    // على "مرتجعات المشتريات" (5300، جرد دوري)، فيبقى المخزون بالدفاتر منفوخًا
+    // بقيمتها والمصاريف ناقصة بنفس المبلغ. أي فرق بين مبلغ المرتجع وتكلفة
+    // البضاعة (خصم/فرق سعر من المورد) فقط يروح لـ5300
+    const _invCredit = returnCogsReversal > 0 ? returnCogsReversal : base;
+    purRetEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:_invCredit});
+    const _priceDiff = Math.round((base - _invCredit)*100)/100;
+    if (Math.abs(_priceDiff) >= 0.01) purRetEntries.push({account:lang==='ar'?'فروقات مرتجعات المشتريات':'Purchase Return Variance', account_code:'5300', side:_priceDiff>0?'credit':'debit', amount:Math.abs(_priceDiff)});
     purRetEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'credit', amount:vat});
     const _retJournalEntry = {
       id:db.nextId.journal++, date:new Date().toISOString(),
@@ -11671,6 +11730,10 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
       if(pur) {
         pur.has_return=true;
         pur.returned_amount=(pur.returned_amount||0)+amount;
+        if (creditPortion>0) {
+          pur.remaining_amount = Math.max(0, Math.round((purOutstanding(pur)-creditPortion)*100)/100);
+          if (pur.remaining_amount <= 0.005) pur.status = 'مسدد';
+        }
       }
     }
   }
@@ -11688,9 +11751,16 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
 
 
 function deleteReturn(id){
-  if(!confirm(lang==='ar'?'حذف المرتجع سيعكس كل تأثيراته. تأكيد؟':'Delete will reverse all effects. Confirm?'))return;
   const db=getDB();
   const r=(db.returns||[]).find(x=>x.id===id); if(!r)return;
+  // مرتجع مبيعات مرتبط بفاتورة يصدر له إشعار دائن ضريبي — مستند رسمي ما ينحذف.
+  // كان يُحذف محليًا ويرفضه السيرفر بلا نهاية (إعادة محاولة كل مزامنة)، فتختلف
+  // الكميات والدفاتر بين الجهاز والسيرفر
+  if (r.type==='sales' && r.linked_id) {
+    showToast(lang==='ar'?'⚠️ هذا المرتجع صدر له إشعار دائن ضريبي ولا يمكن حذفه. لو كان المرتجع خطأ، أصدر فاتورة جديدة بنفس الصنف.':'⚠️ This return has a tax credit note and cannot be deleted. If it was a mistake, issue a new invoice for the item.','error');
+    return;
+  }
+  if(!confirm(lang==='ar'?'حذف المرتجع سيعكس كل تأثيراته. تأكيد؟':'Delete will reverse all effects. Confirm?'))return;
   const isSales=r.type==='sales';
   // مرتجعات قديمة محفوظة قبل هذا الإصلاح ما فيها هذا التقسيم — نفترض حينها
   // كامل المبلغ كان نقديًا (نفس السلوك السابق) بدل كسر التوافق الرجعي
@@ -11751,11 +11821,13 @@ function deleteReturn(id){
   // 3. Reverse invoice flag
   if(r.linked_id && isSales){
     const inv=db.invoices.find(i=>i.id===r.linked_id);
-    if(inv){ inv.returned_amount=Math.max(0,(inv.returned_amount||0)-r.amount); if(inv.returned_amount<=0)inv.has_return=false; }
+    if(inv){ inv.returned_amount=Math.max(0,(inv.returned_amount||0)-r.amount); if(inv.returned_amount<=0)inv.has_return=false;
+      if(creditPortion>0){ inv.credited_amount=Math.max(0,Math.round(((inv.credited_amount||0)-creditPortion)*100)/100); if(invOutstanding(inv)>0.005 && inv.status==='مسددة') inv.status=(inv.paid_amount||0)>0?'جزئي':'آجل'; } }
   }
   if(r.linked_id && !isSales){
     const pur=db.purchases.find(p=>p.id===r.linked_id);
-    if(pur){ pur.returned_amount=Math.max(0,(pur.returned_amount||0)-r.amount); if(pur.returned_amount<=0)pur.has_return=false; }
+    if(pur){ pur.returned_amount=Math.max(0,(pur.returned_amount||0)-r.amount); if(pur.returned_amount<=0)pur.has_return=false;
+      if(creditPortion>0){ pur.remaining_amount=Math.round((purOutstanding(pur)+creditPortion)*100)/100; if(pur.status==='مسدد') pur.status=(pur.paid_amount||0)>0?'جزئي':'آجل'; } }
   }
 
   // 4. Journal: قيد عكسي (لا نحذف من السجل التاريخي، نعكسه بقيد جديد)
@@ -11779,7 +11851,11 @@ function deleteReturn(id){
     if(cashPortion>0) revEntries.push({account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:cashPortion});
     // الجزء الآجل اللي خُصم من رصيد المورد وقت المرتجع يُعاد له الآن
     postSupplierPayable(db, revEntries, r.party, creditPortion, 'increase', undefined, r.party_id);
-    revEntries.push({account:lang==='ar'?'مرتجعات المشتريات':'Purchase Returns', account_code:'5300', side:'debit', amount:r.base_amount||0});
+    // عكس قيد المرتجع بنفس تكوينه: المخزون بتكلفته، والفرق (إن وُجد) على 5300
+    const _revInv = r.cogs_reversal > 0 ? r.cogs_reversal : (r.base_amount||0);
+    revEntries.push({account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:_revInv});
+    const _revDiff = Math.round(((r.base_amount||0) - _revInv)*100)/100;
+    if (Math.abs(_revDiff) >= 0.01) revEntries.push({account:lang==='ar'?'فروقات مرتجعات المشتريات':'Purchase Return Variance', account_code:'5300', side:_revDiff>0?'debit':'credit', amount:Math.abs(_revDiff)});
     revEntries.push({account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:r.vat_amount||0});
     db.journal.push({id:db.nextId.journal++, date:new Date().toISOString(), description:`عكس مرتجع مشتريات ${r.return_no} — ${r.party}`, entries:revEntries, ref:r.return_no});
   }
@@ -12013,7 +12089,10 @@ function autoFillPrice() {
 function addQuoteItem() {
   const name=el('qi-name')?.value; const qty=Number(el('qi-qty')?.value||1); const price=Number(el('qi-price')?.value||0);
   if(!name||!price){showToast(lang==='ar'?'أدخل الاسم والسعر':'Enter name and price','error');return;}
-  c_quoteItems.push({name,qty,price,line_total:qty*price});
+  // يُربط الصنف بالمنتج نفسه — بدونه تتحوّل الفاتورة من عرض السعر بلا خصم مخزون
+  // ولا تكلفة بضاعة مباعة (السيرفر ما يعرف أي منتج يقصد)
+  const _qp = getDB().products.find(x => x.name === name || (x.code && x.code === name) || (x.barcode && x.barcode === name));
+  c_quoteItems.push({name,qty,price,line_total:qty*price, ...(_qp ? {product_id:_qp.id} : {})});
   el('qi-name').value=''; el('qi-qty').value=1; el('qi-price').value='';
   renderQuoteItems();
 }
@@ -13706,6 +13785,16 @@ function _saveJournalEntryActual(overrideToken) {
     created_by:currentUser?.username,created_at:new Date().toISOString()};
   db.journal.push(entry);
   if (overrideToken) window._periodOverrideTokens[`journal:${entry.id}`] = overrideToken;
+  // قيد يدوي يمس النقدية (1100) يحرّك الخزينة فعليًا بنفس الصافي — بدونه يختلف
+  // رصيد الخزينة عن حساب النقدية بالميزانية بقيمة القيد (مثلًا إيداع رأس مال)
+  const _cashNet = Math.round(entry.entries.filter(e=>String(e.account_code)==='1100')
+    .reduce((s,e)=>s+(e.side==='debit'?1:-1)*(Number(e.amount)||0),0)*100)/100;
+  if (Math.abs(_cashNet) >= 0.01) {
+    db.treasury.balance = Math.round((db.treasury.balance + _cashNet)*100)/100;
+    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:_cashNet>0?'in':'out', amount:Math.abs(_cashNet),
+      description:`قيد يدوي #${entry.id}: ${entry.description}`, reference:`JE-${entry.id}`, date:entry.date,
+      method:'نقدي', _manual:true, branch_id:resolveActiveBranchId() });
+  }
   saveDB(db);
   logActivity('قيود يومية',`قيد يدوي #${entry.id} — ${entry.description}`);
   showToast(`✅ ${lang==='ar'?'تم حفظ القيد':'Entry saved'}`);
@@ -15540,7 +15629,7 @@ function quickReceipt(invoiceId) {
   const db = getDB();
   const inv = db.invoices.find(i=>i.id===invoiceId);
   if(!inv) return;
-  const remaining = inv.grand_total - (inv.paid_amount||0);
+  const remaining = invOutstanding(inv);
   const mc = el('modal-container');
   mc.innerHTML = `
   <div class="modal-bg" data-action="closeModal">
@@ -15583,7 +15672,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
   if(!inv) return;
   const amount = Number(el('qr-amount').value||0);
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
-  const remaining = Math.max(0, Math.round((inv.grand_total-(inv.paid_amount||0))*100)/100);
+  const remaining = invOutstanding(inv);
   if(amount>remaining){showToast(lang==='ar'?'المبلغ أكبر من المتبقي':'Amount exceeds remaining','error');return;}
 
   const num = nextReceiptId(db);
@@ -19017,8 +19106,9 @@ async function runAISearchQuery(q) {
       vat_total:      parseFloat(inv.vat_amount)||0,
       grand_total:    parseFloat(inv.grand_total)||0,
       paid_amount:    parseFloat(inv.paid_amount)||0,
+      credited_amount: parseFloat(inv.credited_amount)||0,
       cogs_total:     parseFloat(inv.cogs_total)||0,
-      remaining_amount: parseFloat(inv.grand_total||0) - parseFloat(inv.paid_amount||0),
+      remaining_amount: parseFloat(inv.grand_total||0) - parseFloat(inv.paid_amount||0) - parseFloat(inv.credited_amount||0),
       payment_method: inv.payment_method||'',
       status:         STATUS_TO_FE[inv.status]||inv.status,
       invoice_type:   inv.invoice_type||'simplified',
@@ -19161,6 +19251,8 @@ async function runAISearchQuery(q) {
       notes: q.notes || '',
       vat_rate: (q.vat_total>0 ? 15 : 0),
       items: (q.items || []).map(i => ({
+        // عروض قديمة بلا product_id تُربط بالاسم وقت الإرسال
+        product_id: i.product_id || ((getDB().products || []).find(p => p.name === i.name)?.id) || null,
         product_name: i.name || '', qty: parseFloat(i.qty) || 1,
         unit_price: parseFloat(i.price) || 0, discount: 0
       }))
@@ -19325,6 +19417,7 @@ async function runAISearchQuery(q) {
             linked_id: row.linked_invoice_id || row.linked_purchase_id || null,
             date: row.date, created_at: row.created_at,
             payment_method: row.payment_method || null, cogs_reversal: parseFloat(row.cogs_reversal) || 0,
+            ...(row.credit_portion != null ? { credit_portion: parseFloat(row.credit_portion), cash_portion: parseFloat(row.cash_portion) || 0 } : {}),
             _serverId: row.id,
           }));
         if (_rFromServer.length) {
@@ -19486,6 +19579,7 @@ async function runAISearchQuery(q) {
           frequency: o.frequency || 'شهري',
           next_due:  o.next_due  ? new Date(o.next_due).toISOString() : new Date().toISOString(),
           status:    o.status    || 'active',
+          vat_included: o.vat_included === true,
         }));
         // احتفظ بالالتزامات المحلية التي لم تُزامَن بعد (pending) دون طغيان السيرفر عليها
         const _localPending = (db.obligations||[]).filter(lo =>
@@ -19647,6 +19741,14 @@ async function runAISearchQuery(q) {
           if (ps && ps[localId]) { if (!ps[apiId]) ps[apiId] = ps[localId]; delete ps[localId]; }
           for (const m of db.stock_moves || []) { if (m.product_id === localId) m.product_id = apiId; }
           if (db === dbs[0]) for (const ci of (typeof cart !== 'undefined' ? cart : [])) { if (ci.id === localId) ci.id = apiId; }
+        }
+        // كل مستند يحمل معرّف العميل/المورد وقت إنشائه — يتحدّث مع تغيّر معرّفه
+        if (entity === 'customers' || entity === 'suppliers') {
+          const isC = entity === 'customers';
+          for (const d of (isC ? db.invoices : db.purchases) || []) { const k = isC ? 'customer_id' : 'supplier_id'; if (d[k] === localId) d[k] = apiId; }
+          for (const r of db.receipts || []) { if (r.party_type === (isC ? 'customer' : 'supplier') && r.party_id === localId) r.party_id = apiId; }
+          for (const r of db.returns || []) { if (r.type === (isC ? 'sales' : 'purchases') && r.party_id === localId) r.party_id = apiId; }
+          for (const q of (isC ? db.quotes : []) || []) { if (q.customer_id === localId) q.customer_id = apiId; }
         }
         if (entity === 'invoices' || entity === 'purchases') {
           const linkField = entity === 'invoices' ? 'linked_invoice_id' : 'linked_purchase_id';
@@ -19885,7 +19987,12 @@ async function runAISearchQuery(q) {
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
           const _oldPaid = parseFloat(old.paid_amount||0);
           const _newPaid = parseFloat(p.paid_amount||0);
-          if (_newPaid > _oldPaid + 0.01) {
+          if (_newPaid < _oldPaid - 0.01) {
+            const _revAmt = Math.round((_oldPaid - _newPaid)*100)/100;
+            const ok = await apiFetch('POST', `/api/purchases/${p.id}/payment-reversal`, { amount: _revAmt })
+              .then(()=>true).catch(e => { console.warn('purchase payment reversal:', e.message); return false; });
+            if (!ok) _revertSnapEntity('purchases', p.id, old);
+          } else if (_newPaid > _oldPaid + 0.01) {
             if (SYNC_LOG) console.log('→ API: purchase payment', p.vendor, _newPaid - _oldPaid);
             const _payAmt = Math.round((_newPaid - _oldPaid)*100)/100;
             // كانت هذي الرابط '/addPayment' (خطأ إملائي) — الراوت الفعلي المسجَّل
@@ -19994,6 +20101,12 @@ async function runAISearchQuery(q) {
               payment_method: inv.last_payment_method || 'نقدي'
             }).then(()=>true).catch(e => { console.warn('invoice payment sync:', e.message); return false; });
             if (!ok) _revertSnapEntity('invoices', inv.id, old);
+          } else if (_newPaid < _oldPaid - 0.01) {
+            // نقص المدفوع (حذف سند قبض مطبَّق) — كان يُتجاهَل فتبقى الفاتورة مدفوعة بالسيرفر
+            const _revAmt = Math.round((_oldPaid - _newPaid) * 100) / 100;
+            const ok = await apiFetch('POST', `/api/invoices/${inv.id}/payment-reversal`, { amount: _revAmt })
+              .then(()=>true).catch(e => { console.warn('invoice payment reversal sync:', e.message); return false; });
+            if (!ok) _revertSnapEntity('invoices', inv.id, old);
           }
         }
       }
@@ -20074,7 +20187,9 @@ async function runAISearchQuery(q) {
               try {
                 const _db = getDB();
                 const _rv = _db.receipts.find(x => x.id === res.data.id);
-                if (_rv) { _rv.voucher_no = res.data.voucher_no; _origSaveDB(_db); }
+                // الرقم المحلي يبقى محفوظًا: حركة الخزينة والقيد مرجعهما هو، وحذف السند
+                // لاحقًا يبحث بهما (كان يبحث بالرقم الجديد فقط فيترك القيد بلا عكس)
+                if (_rv) { if (!_rv.local_no && _rv.voucher_no !== res.data.voucher_no) _rv.local_no = _rv.voucher_no; _rv.voucher_no = res.data.voucher_no; _origSaveDB(_db); }
               } catch {}
             }
           }
@@ -20094,7 +20209,7 @@ async function runAISearchQuery(q) {
         const old = (prev.obligations || []).find(x => x.id === o.id);
         const body = { name: o.name, category: o.category, amount: o.amount,
                        frequency: o.frequency, next_due: (o.next_due||'').slice(0,10),
-                       vendor: o.vendor, status: o.status };
+                       vendor: o.vendor, status: o.status, vat_included: !!o.vat_included };
         if (!old) {
           if (SYNC_LOG) console.log('→ API: create obligation', o.name);
           const res = await apiFetch('POST', '/api/obligations', body)
@@ -20219,7 +20334,8 @@ async function runAISearchQuery(q) {
           linked_invoice_id: r.type === 'sales' ? (r.linked_id || null) : null,
           linked_purchase_id: r.type === 'purchases' ? (r.linked_id || null) : null,
           date: r.date || new Date().toISOString().slice(0, 10),
-          payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0
+          payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0,
+          credit_portion: r.credit_portion != null ? r.credit_portion : null
         }, _rTok ? { 'X-Period-Override-Token': _rTok } : undefined).catch(e => { console.warn('return sync:', e.message); return null; });
 
         if (res?.data?.id) {

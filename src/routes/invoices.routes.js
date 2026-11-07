@@ -12,6 +12,7 @@ router.get ('/:id',        can('sales.view'),    ctrl.getOne);
 router.put ('/:id',        can('sales.edit'),    ctrl.update);
 router.delete('/:id',      can('sales.delete'),  ctrl.remove);
 router.post('/:id/payment',can('sales.edit'),    ctrl.addPayment);
+router.post('/:id/payment-reversal', can('sales.edit'), ctrl.reversePayment);
 router.post('/:id/cancel', can('sales.delete'),  ctrl.cancel);
 
 module.exports = router;

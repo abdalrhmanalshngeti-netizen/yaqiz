@@ -10,7 +10,10 @@
 // ترتيب القفل ثابت دائمًا: products → product_stock → stock_lots، لمنع
 // deadlock بين عمليتين متزامنتين على نفس الصنف/المستودع.
 
-exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, source_type, source_id, user_id, reason = 'بيع', reference, client_local_id }) => {
+// preferLot: { source_type, source_id } — طبقة معيّنة تُستهلك أولًا قبل FIFO العادي.
+// مرتجع المشتريات يرجّع بضاعة دفعة شراء محددة، فتخرج من طبقتها وبتكلفتها
+// (لا من أقدم طبقة بتكلفة مختلفة، وإلا قيمة المخزون الفعلية تختلف عن الدفاتر)
+exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, source_type, source_id, user_id, reason = 'بيع', reference, client_local_id, preferLot }) => {
   if (!warehouse_id) throw Object.assign(new Error('المستودع مطلوب لتنفيذ عملية المخزون'), { status: 400 });
 
   const { rows: [p] } = await client.query(
@@ -45,8 +48,8 @@ exports.deduct = async (client, { company_id, product_id, warehouse_id, qty, sou
   const { rows: lots } = await client.query(
     `SELECT id, qty_remaining, unit_cost FROM stock_lots
      WHERE product_id = $1 AND warehouse_id = $2 AND qty_remaining > 0
-     ORDER BY received_at ASC, id ASC FOR UPDATE`,
-    [product_id, warehouse_id]
+     ORDER BY COALESCE(source_type = $3::text AND source_id = $4::int, false) DESC, received_at ASC, id ASC FOR UPDATE`,
+    [product_id, warehouse_id, preferLot?.source_type || null, preferLot?.source_id || null]
   );
   let remaining = deductQty;
   let totalCost = 0;

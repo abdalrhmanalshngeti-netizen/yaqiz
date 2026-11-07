@@ -461,11 +461,13 @@ exports.addPayment = async (req, res, next) => {
     );
     if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
 
-    const remaining = parseFloat(inv.grand_total) - parseFloat(inv.paid_amount);
+    // المسوّى بمرتجعات آجلة (إشعار دائن) لا يُحصَّل مرة ثانية
+    const credited  = parseFloat(inv.credited_amount || 0);
+    const remaining = parseFloat(inv.grand_total) - parseFloat(inv.paid_amount) - credited;
     const paying    = Math.min(parseFloat(amount), remaining);
 
     const newPaid   = parseFloat(inv.paid_amount) + paying;
-    const newStatus = newPaid >= parseFloat(inv.grand_total) ? 'paid' : 'partial';
+    const newStatus = newPaid + credited >= parseFloat(inv.grand_total) - 0.005 ? 'paid' : 'partial';
 
     await client.query(`
       UPDATE invoices SET paid_amount = $1, status = $2, updated_at = NOW()
@@ -605,4 +607,28 @@ exports.cancel = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   res.status(405).json({ success: false, message: 'لا يمكن حذف الفواتير — استخدم الإلغاء بدلاً من ذلك' });
+};
+
+// عكس دفعة (حذف سند قبض مطبَّق على الفاتورة) — المزامنة كانت ترسل زيادة المدفوع
+// فقط، فحذف السند بالواجهة يترك الفاتورة مدفوعة ورصيد العميل منقوصًا بالسيرفر
+exports.reversePayment = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const amount = parseFloat(req.body.amount);
+    if (!amount || amount <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'المبلغ غير صحيح' }); }
+    const { rows: [inv] } = await client.query(
+      `SELECT * FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE`, [req.params.id, req.user.company_id]);
+    if (!inv) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
+    const periodCheck = await periodClose.assertPeriodNotClosed(client, req.user.company_id, todayLocalDateStr(), req.headers['x-period-override-token']);
+    if (periodCheck.blocked) { await client.query('ROLLBACK'); return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message }); }
+    const rev = Math.min(amount, parseFloat(inv.paid_amount));
+    const newPaid = Math.round((parseFloat(inv.paid_amount) - rev) * 100) / 100;
+    const credited = parseFloat(inv.credited_amount || 0);
+    const newStatus = newPaid + credited >= parseFloat(inv.grand_total) - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'issued');
+    await client.query(`UPDATE invoices SET paid_amount = $1, status = $2, updated_at = NOW() WHERE id = $3`, [newPaid, newStatus, inv.id]);
+    if (inv.customer_id && rev > 0) await client.query(`UPDATE customers SET balance = balance + $1 WHERE id = $2`, [rev, inv.customer_id]);
+    await client.query('COMMIT');
+    res.json({ success: true, data: { paid_amount: newPaid, status: newStatus } });
+  } catch (err) { await client.query('ROLLBACK'); next(err); } finally { client.release(); }
 };

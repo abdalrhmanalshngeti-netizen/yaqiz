@@ -11,5 +11,6 @@ router.post('/',             can('purchases.create'), requireBranch, ctrl.create
 router.get ('/:id',          can('purchases.view'),   ctrl.getOne);
 router.put ('/:id',          can('purchases.edit'),   ctrl.update);
 router.post('/:id/payment',  can('purchases.edit'),   ctrl.addPayment);
+router.post('/:id/payment-reversal', can('purchases.edit'), ctrl.reversePayment);
 
 module.exports = router;

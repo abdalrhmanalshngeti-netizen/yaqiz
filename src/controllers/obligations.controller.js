@@ -16,18 +16,18 @@ exports.list = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { name, category, amount, frequency, next_due, vendor, status } = req.body;
+    const { name, category, amount, frequency, next_due, vendor, status, vat_included } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'اسم الالتزام مطلوب' });
     if (frequency && !ALLOWED_FREQUENCIES.includes(frequency)) {
       return res.status(400).json({ success: false, message: 'تكرار غير صالح' });
     }
 
     const { rows } = await db.query(`
-      INSERT INTO obligations (company_id, name, category, amount, frequency, next_due, vendor, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      INSERT INTO obligations (company_id, name, category, amount, frequency, next_due, vendor, status, vat_included)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING *
     `, [req.user.company_id, name, category || '', parseFloat(amount) || 0,
-        frequency || 'شهري', next_due || null, vendor || '', status || 'active']);
+        frequency || 'شهري', next_due || null, vendor || '', status || 'active', vat_included === true]);
 
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
@@ -35,13 +35,14 @@ exports.create = async (req, res, next) => {
 
 exports.update = async (req, res, next) => {
   try {
-    const { name, category, amount, frequency, next_due, vendor, status } = req.body;
+    const { name, category, amount, frequency, next_due, vendor, status, vat_included } = req.body;
     if (frequency && !ALLOWED_FREQUENCIES.includes(frequency)) {
       return res.status(400).json({ success: false, message: 'تكرار غير صالح' });
     }
 
     const { rows } = await db.query(`
       UPDATE obligations SET
+        vat_included = COALESCE($10, vat_included),
         name      = COALESCE($1, name),
         category  = COALESCE($2, category),
         amount    = COALESCE($3, amount),
@@ -53,7 +54,7 @@ exports.update = async (req, res, next) => {
       RETURNING *
     `, [name, category, amount != null ? parseFloat(amount) : null,
         frequency, next_due || null, vendor, status,
-        req.params.id, req.user.company_id]);
+        req.params.id, req.user.company_id, typeof vat_included === 'boolean' ? vat_included : null]);
 
     if (!rows[0]) return res.status(404).json({ success: false, message: 'الالتزام غير موجود' });
     res.json({ success: true, data: rows[0] });
