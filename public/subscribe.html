@@ -150,21 +150,21 @@
   <div class="duration-section">
     <label>دورة الاشتراك</label>
     <div class="duration-btns">
-      <button class="dur-btn active" data-cycle="monthly" onclick="selectCycle('monthly')">شهري</button>
-      <button class="dur-btn" data-cycle="annual" onclick="selectCycle('annual')">سنوي <span class="save">وفّر أكثر</span></button>
+      <button class="dur-btn active" data-cycle="monthly" data-action="selectCycle" data-args='["monthly"]'>شهري</button>
+      <button class="dur-btn" data-cycle="annual" data-action="selectCycle" data-args='["annual"]'>سنوي <span class="save">وفّر أكثر</span></button>
     </div>
   </div>
 
   <!-- Plans -->
   <div class="plans">
-    <div class="plan-card" data-plan="basic" onclick="selectPlan('basic')">
+    <div class="plan-card" data-plan="basic" data-action="selectPlan" data-args='["basic"]'>
       <div class="plan-icon">📗</div>
       <div class="plan-name">الأساسية</div>
       <div class="plan-price"><span id="price-basic">99</span> <span class="unit" id="unit-basic">ر.س / شهر</span></div>
       <div class="save-badge" id="save-basic"></div>
       <div class="plan-desc">فواتير، مخزون، تقارير ضريبية، الالتزامات</div>
     </div>
-    <div class="plan-card" data-plan="growth" onclick="selectPlan('growth')">
+    <div class="plan-card" data-plan="growth" data-action="selectPlan" data-args='["growth"]'>
       <div class="popular-badge">⭐ الأكثر اختياراً</div>
       <div class="plan-icon">📘</div>
       <div class="plan-name">النمو</div>
@@ -172,7 +172,7 @@
       <div class="save-badge" id="save-growth"></div>
       <div class="plan-desc">+ موظفين، رواتب، نقاط ولاء، تدفقات نقدية</div>
     </div>
-    <div class="plan-card" data-plan="pro" onclick="selectPlan('pro')">
+    <div class="plan-card" data-plan="pro" data-action="selectPlan" data-args='["pro"]'>
       <div class="plan-icon">📙</div>
       <div class="plan-name">الاحترافية</div>
       <div class="plan-price"><span id="price-pro">299</span> <span class="unit" id="unit-pro">ر.س / شهر</span></div>
@@ -189,7 +189,7 @@
     <div class="summary-row total"><span>الإجمالي</span><span id="sum-total">0 ر.س</span></div>
   </div>
 
-  <button id="btn-pay" class="btn-pay" onclick="pay()" disabled>
+  <button id="btn-pay" class="btn-pay" data-action="pay" disabled>
     <div class="spinner"></div>
     <span class="btn-text">💳 ادفع الآن</span>
   </button>
@@ -331,6 +331,18 @@ if (err) {
   };
   showAlert(msgs[err] || 'حدث خطأ في عملية الدفع');
 }
+
+// معالجات onclick المضمّنة كانت ممنوعة بسياسة أمان المحتوى (CSP) — أزرار
+// الباقة والدورة والدفع ما كانت تستجيب. مستمع نقر مفوَّض بنفس نمط بقية الصفحات
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const fn = window[el.dataset.action];
+  if (typeof fn !== 'function') return;
+  let args = [];
+  if (el.dataset.args) { try { args = JSON.parse(el.dataset.args); } catch (err) { args = []; } }
+  fn.apply(el, args);
+});
 </script>
 </body>
 </html>

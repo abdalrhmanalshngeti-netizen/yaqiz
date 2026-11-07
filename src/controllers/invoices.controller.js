@@ -273,6 +273,8 @@ exports.create = async (req, res, next) => {
       `, [invoice.id, item.product_id, item.product_name, item.product_code,
           item.qty, item.unit_price, item.discount || 0,
           item.line_total, item.vat_amount, i, itemUnitCost]);
+      // ترجع مع الرد — الواجهة تحتاجها لعكس التكلفة الصحيحة بأي مرتجع قبل السحب التالي
+      item.unit_cost = itemUnitCost;
     }
     cogsTotal = Math.round(cogsTotal * 100) / 100;
     await client.query(`UPDATE invoices SET cogs_total = $1 WHERE id = $2`, [cogsTotal, invoice.id]);

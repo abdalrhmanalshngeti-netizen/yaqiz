@@ -210,7 +210,16 @@ app.get('/admin', (req, res) => {
 // غير مُعيَّن مثلاً) بدون وصول مباشر لسجلّات السيرفر. الإخفاء بالإنتاج يبقى
 // مفيدًا فقط لاستثناء غير متوقَّع فعليًا (بلا err.status، قد يحمل تفاصيل
 // داخلية حسّاسة) — لا لرسالة صيغت عمدًا لتكون آمنة وواضحة للمستخدم النهائي
+// تكرار قيمة فريدة بقاعدة البيانات (23505) — رسالة عربية واضحة بدل نص Postgres
+// الخام (بالتطوير) أو "خطأ داخلي" المبهم (بالإنتاج)
+const UNIQUE_MESSAGES = {
+  companies_vat_number_key:      'هذا الرقم الضريبي مسجّل لمنشأة أخرى في يقظ — تأكد من الرقم، أو تواصل معنا لو هو رقمك',
+  users_username_company_id_key: 'اسم المستخدم مستخدم مسبقًا',
+};
 app.use((err, req, res, next) => {
+  if (err.code === '23505' && UNIQUE_MESSAGES[err.constraint]) {
+    return res.status(409).json({ success: false, message: UNIQUE_MESSAGES[err.constraint] });
+  }
   console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}:`, err.message);
   const isDeliberateError = !!err.status && err.status < 500;
   res.status(err.status || 500).json({

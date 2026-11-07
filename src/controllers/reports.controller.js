@@ -62,6 +62,19 @@ exports.dashboard = async (req, res, next) => {
 // exports.balanceSheet بالضبط)، فتشمل أي مرتجع/إشعار دائن تلقائيًا (يمر بنفس
 // الحسابين أصلًا) وتطابق الميزانية العمومية دائمًا. الحقول الوصفية
 // (taxable_sales, invoice_count...) تبقى من الجداول الخام كسياق فقط.
+// الحساب الواحد يجي بأكثر من اسم بالقيود ("النقدية"، "النقدية والبنك"، "الصندوق"
+// كلها 1100) — الاستعلام يرجّع سطر لكل (رقم، اسم)، فلازم نجمعها بالرقم. كان كل
+// سطر يكتب فوق اللي قبله، فالنقدية بالميزانية طلعت قيمة آخر اسم فقط
+function sumByAccountCode(rows) {
+  const bal = {};
+  for (const r of rows) {
+    const b = bal[r.account_code] || (bal[r.account_code] = { name: r.account_name, debit: 0, credit: 0 });
+    b.debit  += parseFloat(r.debit)  || 0;
+    b.credit += parseFloat(r.credit) || 0;
+  }
+  return bal;
+}
+
 exports.vatReport = async (req, res, next) => {
   try {
     const { from, to } = req.query;
@@ -145,8 +158,7 @@ exports.incomeStatement = async (req, res, next) => {
       GROUP BY ji.account_code, ji.account_name
     `, [cid, from || null, to || null]);
 
-    const bal = {};
-    rows.forEach(r => { bal[r.account_code] = { name: r.account_name, debit: parseFloat(r.debit), credit: parseFloat(r.credit) }; });
+    const bal = sumByAccountCode(rows);
     const get = code => bal[code] || { debit: 0, credit: 0 };
     const debitNormal  = code => get(code).debit  - get(code).credit;
     const creditNormal = code => get(code).credit - get(code).debit;
@@ -155,8 +167,14 @@ exports.incomeStatement = async (req, res, next) => {
     const rev   = codesStarting('4').reduce((s, c) => s + creditNormal(c), 0);
     const cogs  = debitNormal('5100');
     const gross = rev - cogs;
-    const expenseRows = codesStarting('5').filter(c => c !== '5100')
-      .map(c => ({ category: bal[c].name, amount: debitNormal(c) }))
+    // تفصيل المصاريف بالاسم (فئة المصروف) — الإجمالي نفسه من مجاميع الحسابات
+    const byName = {};
+    rows.filter(r => String(r.account_code).startsWith('5') && r.account_code !== '5100').forEach(r => {
+      const k = r.account_name || r.account_code;
+      byName[k] = (byName[k] || 0) + parseFloat(r.debit) - parseFloat(r.credit);
+    });
+    const expenseRows = Object.entries(byName)
+      .map(([category, amount]) => ({ category, amount }))
       .filter(r => Math.abs(r.amount) > 0.004)
       .sort((a, b) => b.amount - a.amount);
     const opex = expenseRows.reduce((s, r) => s + r.amount, 0);
@@ -232,8 +250,7 @@ exports.balanceSheet = async (req, res, next) => {
       GROUP BY ji.account_code, ji.account_name
     `, [cid]);
 
-    const bal = {};
-    rows.forEach(r => { bal[r.account_code] = { name: r.account_name, debit: parseFloat(r.debit), credit: parseFloat(r.credit) }; });
+    const bal = sumByAccountCode(rows);
     const get = code => bal[code] || { debit: 0, credit: 0 };
     const debitNormal  = code => get(code).debit  - get(code).credit;
     const creditNormal = code => get(code).credit - get(code).debit;

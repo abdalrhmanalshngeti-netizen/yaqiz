@@ -736,6 +736,62 @@ html[dir="ltr"] .user-corner { left: auto; right: 20px; }
   .qs-manual-row { grid-template-columns: repeat(3, minmax(0,1fr)) 44px; }
   .qs-manual-row > .qs-field:first-child { grid-column: 1 / -1; }
 }
+
+/* ── يقظ الذكي (الشات العائم) ───────────────────────────── */
+.ai-fab { position: fixed; bottom: 24px; inset-inline-end: 90px; width: 54px; height: 54px; border-radius: 999px; border: 0; cursor: pointer; z-index: 1000;
+  background: linear-gradient(145deg, var(--sb-bg-top), var(--sb-bg-bot)); color: #5eead4;
+  box-shadow: 0 10px 28px -8px rgba(13,148,136,.55), 0 0 0 1px rgba(94,234,212,.25); display: grid; place-items: center; transition: transform .15s; }
+.ai-fab:hover { transform: translateY(-2px); }
+.ai-fab .ai-dot { position: absolute; top: 4px; inset-inline-start: 4px; width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; border: 2px solid #fff; }
+.ai-panel { position: fixed; bottom: 90px; inset-inline-end: 16px; width: 380px; max-width: calc(100vw - 32px); height: min(620px, 72vh);
+  display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: var(--shadow-pop); z-index: 999; overflow: hidden; }
+.ai-panel.max { inset: 24px; width: auto; height: auto; max-width: none; }
+.ai-panel.min { height: auto; }
+.ai-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: linear-gradient(145deg, var(--sb-bg-top), var(--sb-bg-bot)); color: #f1f5f9; flex-shrink: 0; cursor: pointer; user-select: none; }
+.ai-head .ai-ava { width: 34px; height: 34px; border-radius: 11px; background: rgba(94,234,212,.12); color: #5eead4; display: grid; place-items: center; flex-shrink: 0; }
+.ai-head b { display: block; font-size: 14px; font-weight: 800; }
+.ai-head small { display: block; font-size: 11px; color: rgba(255,255,255,.6); }
+.ai-head .ai-quota { font-size: 10px; font-weight: 700; color: #5eead4; background: rgba(94,234,212,.12); border-radius: 99px; padding: 1px 8px; margin-inline-start: 6px; }
+.ai-head .ai-hbtns { margin-inline-start: auto; display: flex; gap: 4px; }
+.ai-head .ai-hbtns button { width: 28px; height: 28px; border-radius: 8px; border: 0; background: rgba(255,255,255,.08); color: rgba(255,255,255,.8); cursor: pointer; display: grid; place-items: center; }
+.ai-head .ai-hbtns button:hover { background: rgba(255,255,255,.16); color: #fff; }
+.ai-msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; background: var(--bg); }
+.ai-q { align-self: flex-end; max-width: 85%; background: var(--primary); color: #fff; padding: 9px 13px; border-radius: 16px 16px 4px 16px; font-size: 13.5px; line-height: 1.65; word-break: break-word; white-space: pre-wrap; }
+.ai-a { align-self: flex-start; max-width: 92%; background: var(--card-bg); border: 1px solid var(--border); padding: 10px 14px; border-radius: 16px 16px 16px 4px; font-size: 13.5px; line-height: 1.85; color: var(--text-main); word-break: break-word; }
+.ai-a b { font-weight: 800; }
+.ai-a ul, .ai-a ol { margin: 4px 0; padding-inline-start: 20px; }
+.ai-a li { margin: 2px 0; }
+.ai-a .ai-h { font-weight: 800; margin: 6px 0 2px; }
+.ai-a.nudge { border-color: rgba(13,148,136,.35); box-shadow: 0 0 0 3px rgba(13,148,136,.08); }
+.ai-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ai-acts button { font-family: inherit; font-size: 12.5px; font-weight: 700; border-radius: 10px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--border-strong); background: var(--card-bg); color: var(--text-main); }
+.ai-acts button.pri { background: var(--primary); border-color: var(--primary); color: #fff; }
+.ai-acts button:hover { border-color: var(--primary); }
+.ai-typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; }
+.ai-typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); opacity: .35; animation: aiDot 1.2s infinite; }
+.ai-typing i:nth-child(2) { animation-delay: .2s; } .ai-typing i:nth-child(3) { animation-delay: .4s; }
+@keyframes aiDot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.ai-empty { text-align: center; padding: 18px 8px 6px; color: var(--text-muted); font-size: 13px; line-height: 1.8; }
+.ai-empty .ai-ava { width: 48px; height: 48px; margin: 0 auto 10px; border-radius: 16px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; }
+.ai-empty b { display: block; color: var(--text-main); font-size: 15px; margin-bottom: 2px; }
+.ai-chips { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.ai-chips button { font-family: inherit; text-align: start; font-size: 13px; color: var(--text-main); background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.ai-chips button:hover { border-color: var(--primary); color: var(--primary-dark); }
+.ai-chips button svg { color: var(--primary); flex-shrink: 0; }
+.ai-input { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border-top: 1px solid var(--border); background: var(--card-bg); flex-shrink: 0; }
+.ai-input textarea { flex: 1; resize: none; max-height: 120px; min-height: 40px; padding: 9px 12px; font: inherit; font-size: 13.5px; line-height: 1.5; border: 1.5px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text-main); outline: none; }
+.ai-input textarea:focus { border-color: var(--primary); background: var(--card-bg); }
+.ai-input .ai-send { width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--primary); color: #fff; cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
+.ai-input .ai-send:disabled { opacity: .45; cursor: default; }
+.ai-foot { font-size: 10.5px; color: var(--text-muted); text-align: center; padding: 0 10px 8px; background: var(--card-bg); }
+.ai-bubble { position: fixed; bottom: 88px; inset-inline-end: 24px; width: 320px; max-width: calc(100vw - 48px); background: var(--card-bg); border: 1px solid rgba(13,148,136,.35); border-radius: 16px; box-shadow: var(--shadow-pop); padding: 14px; z-index: 1001; font-size: 13px; line-height: 1.75; color: var(--text-main); }
+.ai-bubble .ai-bx { position: absolute; top: 8px; inset-inline-start: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; display: grid; place-items: center; }
+@media (max-width: 560px) {
+  .ai-panel:not(.max) { inset-inline: 8px; width: auto; bottom: 84px; height: 70vh; }
+  .ai-fab { inset-inline-end: 16px; bottom: 16px; }
+  .ai-bubble { inset-inline-end: 12px; bottom: 80px; }
+}
 </style>
 <script defer src="/public/posthog-1.438.12.js"></script>
 <script defer src="/public/analytics.js"></script>
@@ -1102,6 +1158,33 @@ function initDB() {
 }
 
 function nextId(db, key) { const id = db.nextId[key]||1; db.nextId[key] = id+1; return id; }
+
+// مفتاح منع التكرار المرسَل للسيرفر (client_local_id) — الرقم المحلي وحده يتكرر
+// بين جهازين لنفس الشركة (كلاهما يبدأ عدّاده من نفس النقطة)، فكان السيرفر يعتبر
+// سجل الجهاز الثاني "إعادة إرسال" للأول ويرميه بصمت. نضيف معرّفًا عشوائيًا ثابتًا
+// لكل متصفح: نفس السجل من نفس الجهاز يعطي نفس المفتاح دائمًا (إعادة المحاولة
+// تبقى آمنة)، وجهازان مختلفان ما يتصادمان. (معرّف 29 بت × 2^23 + الرقم < 2^53)
+const _DEVICE_KEY = (() => {
+  const gen = () => String(1 + Math.floor(Math.random() * 0x1ffffffe));
+  try {
+    let d = localStorage.getItem('yaqiz_device_key');
+    if (!d || !/^d+$/.test(d) || Number(d) >= 0x20000000) { d = gen(); localStorage.setItem('yaqiz_device_key', d); }
+    return Number(d);
+  } catch (e) { return Number(gen()); }
+})();
+// رقم السند المحلي: أكبر من العدّاد ومن أي سند موجود (السندات المُزامَنة تاخذ
+// رقم السيرفر، فالعدّاد وحده ممكن يصادف رقمًا مستخدمًا)
+function nextReceiptId(db) {
+  const maxId = (db.receipts||[]).reduce((m, r) => typeof r.id === 'number' && r.id > m ? r.id : m, 0);
+  const num = Math.max(db.nextId.receipt || 1, maxId + 1);
+  db.nextId.receipt = num + 1;
+  return num;
+}
+function clientKey(localId) {
+  const n = Number(localId);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return _DEVICE_KEY * 8388608 + (Math.floor(n) % 8388608);
+}
 
 // ============ فروع/مستودعات: نقطة موحّدة لحل المستودع النشط ============
 // المستخدم الحالي (فرعه) وإلا الفرع الرئيسي — نفس منطق الحل بالباكند
@@ -2442,6 +2525,65 @@ function _aiClearHistory() {
   renderAIChatButton();
 }
 
+// ردود الذكاء الاصطناعي نص عادي فيه **عريض** وقوائم — نعقّمه أولًا (ممكن يحوي
+// أسماء عملاء/أصناف كتبها المستخدم) ثم نحوّل التنسيق البسيط فقط إلى HTML
+function aiFormat(text) {
+  const lines = sanitize(String(text || '')).split('\n');
+  let html = '', list = null;
+  const close = () => { if (list) { html += `</${list}>`; list = null; } };
+  for (const raw of lines) {
+    const ln = raw.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    let m;
+    if ((m = ln.match(/^\s*(?:[-•*])\s+(.*)$/))) { if (list !== 'ul') { close(); html += '<ul>'; list = 'ul'; } html += `<li>${m[1]}</li>`; continue; }
+    if ((m = ln.match(/^\s*\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { close(); html += '<ol>'; list = 'ol'; } html += `<li>${m[1]}</li>`; continue; }
+    close();
+    if ((m = ln.match(/^\s*#{1,4}\s+(.*)$/))) { html += `<div class="ai-h">${m[1]}</div>`; continue; }
+    html += ln.trim() ? `<div>${ln}</div>` : '<div style="height:6px"></div>';
+  }
+  close();
+  return html;
+}
+
+// أسئلة مقترحة حسب الدور — تساعد المستخدم يبدأ بدل الصندوق الفاضي
+function aiSuggestions() {
+  const owner = currentUser?.role === 'owner';
+  const list = [
+    { ico: 'trending-up', q: 'كم مبيعاتي اليوم مقارنة بأمس؟' },
+    { ico: 'package', q: 'وش الأصناف اللي قربت تخلص؟' },
+  ];
+  if (owner) list.push({ ico: 'wallet', q: 'كم رصيد الصندوق، ومين العملاء اللي عليهم مبالغ؟' });
+  list.push({ ico: 'help-circle', q: 'كيف أطبع باركود لمنتج؟' });
+  return list;
+}
+function aiAskSuggestion(q) {
+  const inp = document.getElementById('ai-chat-inp');
+  if (!inp) return;
+  inp.value = q;
+  sendAIMsg();
+}
+
+// أزرار داخل رسائل يقظ الذكي — قائمة مغلقة من الإجراءات (لا تنفيذ نصوص من الرد)
+const AI_ACTIONS = {
+  company:    () => { closeAIChat(); goTo('settings'); setSettingsTab('general'); },
+  accounting: () => { closeAIChat(); goTo('settings'); setSettingsTab('opening'); },
+  later:      () => {},
+};
+function aiRunAction(histIdx, key) {
+  const h = _aiChatHistory[histIdx];
+  if (h) { h.done = true; _aiSaveHistory(); }
+  _aiNudgeBubble = false;
+  yq('Track', 'ai_setup_nudge_action', { action: key });
+  (AI_ACTIONS[key] || (() => {}))();
+  renderAIChatButton();
+}
+let _aiNudgeBubble = false;
+function aiDismissBubble() { _aiNudgeBubble = false; renderAIChatButton(); }
+
+function _aiActionsHtml(h, idx) {
+  if (!h.actions || h.done) return '';
+  return `<div class="ai-acts">${h.actions.map((a, i) => `<button type="button" class="${i === 0 ? 'pri' : ''}" data-action="aiRunAction" data-args='${JSON.stringify([idx, a.key])}'>${sanitize(a.label)}</button>`).join('')}</div>`;
+}
+
 function renderAIChatButton() {
   const root = document.getElementById('ai-chat-root');
   if (!root) return;
@@ -2449,96 +2591,113 @@ function renderAIChatButton() {
   if (!token) { root.innerHTML = ''; return; }
   const plan = getCurrentPlan();
   if (!hasPlanFeature('ai_assistant')) { root.innerHTML = ''; return; }
+  const ar = lang === 'ar';
+  const limit = AI_ASSISTANT_DAILY_LIMIT[plan] || 0;
+  const hasPendingNudge = _aiChatHistory.some(h => h.kind === 'nudge' && !h.done);
 
-  const side = lang === 'ar' ? 'left' : 'right';
   const msgHtml = _aiChatHistory.length === 0
-    ? `<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:24px 12px;">
-        <div style="font-size:36px;margin-bottom:10px;">🤖</div>
-        <div style="font-weight:900;font-size:14px;color:var(--text-main);margin-bottom:6px;">مرحباً! أنا يقظ الذكي</div>
-        <div style="line-height:1.7;">اسألني عن فواتيرك، إيراداتك،<br>مصاريفك، أو أي شيء في حساباتك</div>
+    ? `<div class="ai-empty">
+        <div class="ai-ava">${icon('sparkles', 24)}</div>
+        <b>${ar ? `هلا ${sanitize((currentUser?.full_name || '').split(' ')[0])}، أنا يقظ الذكي` : 'Hi, I am Yaqiz AI'}</b>
+        ${ar ? 'أعرف أرقام محلك وكل شاشة بالمنصة — اسألني عن مبيعاتك، مخزونك، أو كيف تسوي أي شي.' : 'Ask me about your sales, stock, or how to do anything in Yaqiz.'}
+        <div class="ai-chips">${aiSuggestions().map(s => `<button type="button" data-action="aiAskSuggestion" data-args='${JSON.stringify([s.q])}'>${icon(s.ico, 15)}<span>${sanitize(s.q)}</span></button>`).join('')}</div>
       </div>`
-    : _aiChatHistory.map(h => `
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
-        <div style="align-self:flex-end;max-width:85%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:9px 13px;border-radius:16px 16px 4px 16px;font-size:13px;line-height:1.6;word-break:break-word;">${h.q}</div>
-        ${h.a != null
-          ? `<div style="align-self:flex-start;max-width:92%;background:var(--bg);border:1px solid var(--border);padding:9px 13px;border-radius:16px 16px 16px 4px;font-size:13px;line-height:1.8;color:var(--text-main);word-break:break-word;">${h.a.replace(/\n/g,'<br>')}</div>`
-          : `<div style="align-self:flex-start;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:16px;color:var(--text-muted);font-size:20px;letter-spacing:4px;">●●●</div>`}
-      </div>`).join('');
+    : _aiChatHistory.map((h, idx) => `
+      ${h.q ? `<div class="ai-q">${sanitize(h.q)}</div>` : ''}
+      ${h.a != null
+        ? `<div class="ai-a ${h.kind === 'nudge' ? 'nudge' : ''}">${aiFormat(h.a)}${_aiActionsHtml(h, idx)}</div>`
+        : `<div class="ai-typing" aria-label="${ar ? 'يكتب' : 'Typing'}"><i></i><i></i><i></i></div>`}`).join('');
+
+  const nudge = _aiChatHistory.slice().reverse().find(h => h.kind === 'nudge' && !h.done);
+  const bubble = (!_aiChat.open && _aiNudgeBubble && nudge) ? `
+    <div class="ai-bubble" role="dialog" aria-label="${ar ? 'اقتراح من يقظ الذكي' : 'Suggestion'}">
+      <button type="button" class="ai-bx" data-action="aiDismissBubble" aria-label="${ar ? 'إغلاق' : 'Close'}">${icon('x', 14)}</button>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;font-weight:800;color:var(--primary-dark);">${icon('sparkles', 16)} ${ar ? 'يقظ الذكي' : 'Yaqiz AI'}</div>
+      <div class="ai-a" style="border:0;padding:0;max-width:none;background:none;">${aiFormat(nudge.a)}</div>
+      ${_aiActionsHtml(nudge, _aiChatHistory.indexOf(nudge))}
+    </div>` : '';
 
   root.innerHTML = `
-  <button data-action="toggleAIChat" style="
-    position:fixed;bottom:24px;${side}:90px;
-    width:54px;height:54px;border-radius:999px;
-    background:linear-gradient(135deg,#6366f1,#8b5cf6);
-    color:white;border:none;cursor:pointer;
-    box-shadow:0 4px 24px rgba(99,102,241,.45);
-    display:flex;align-items:center;justify-content:center;
-    font-size:24px;z-index:1000;transition:.2s;" title="${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}">🤖</button>
-
-  <div id="ai-chat-panel" style="
-    display:${_aiChat.open ? 'flex' : 'none'};flex-direction:column;
-    ${_aiChat.maximized ? `
-      position:fixed;top:24px;bottom:24px;left:24px;right:24px;
-      width:auto;height:auto;max-height:none;min-height:0;resize:none;
-    ` : `
-      position:fixed;bottom:90px;${side}:16px;
-      width:360px;
-      max-height:${_aiChat.minimized ? '54px' : '70vh'};
-      min-height:${_aiChat.minimized ? '54px' : '300px'};
-      ${_aiChat.minimized ? '' : 'resize:both;overflow:auto;max-width:92vw;min-width:300px;'}
-    `}
-    background:var(--card-bg);border:1px solid var(--border);
-    border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.25);
-    z-index:999;overflow:${_aiChat.minimized||_aiChat.maximized?'hidden':'auto'};transition:${_aiChat.maximized?'none':'max-height .25s ease,min-height .25s ease'};">
-
-    <div data-action="toggleAIChatMin" style="
-      padding:12px 14px;
-      background:${plan==='pro'?'linear-gradient(135deg,#7c3aed,#6d28d9,#4f46e5)':'linear-gradient(135deg,#14b8a6,#6366f1)'};
-      color:white;flex-shrink:0;cursor:pointer;user-select:none;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:20px;">${plan==='pro'?'🧠':'🤖'}</span>
-          <div>
-            <div style="font-weight:900;font-size:14px;display:flex;align-items:center;gap:6px;">
-              ${lang==='ar'?'يقظ الذكي':'Yaqiz AI'}
-              ${plan==='pro'?`<span style="background:rgba(255,255,255,.25);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">PRO</span>`:`<span style="background:rgba(255,255,255,.2);font-size:9px;padding:1px 7px;border-radius:99px;font-weight:800;">${lang==='ar'?`${(AI_ASSISTANT_DAILY_LIMIT[plan]||0)-_aiDailyUsed}/${AI_ASSISTANT_DAILY_LIMIT[plan]||0} اليوم`:`${(AI_ASSISTANT_DAILY_LIMIT[plan]||0)-_aiDailyUsed}/${AI_ASSISTANT_DAILY_LIMIT[plan]||0} today`}</span>`}
-            </div>
-            <div style="font-size:10px;opacity:.85;">${_aiChat.loading?(lang==='ar'?'⏳ يفكر...':'⏳ Thinking...'):(plan==='pro'?(lang==='ar'?'🧠 يتذكر محادثاتك':'🧠 Remembers your conversations'):(lang==='ar'?'مساعدك المحاسبي':'Your accounting assistant'))}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:5px;">
-          ${plan==='pro'?`<button data-action="aiClearHistoryWithConfirm" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="${lang==='ar'?'مسح المحادثات':'Clear history'}">🗑</button>`:''}
-          <button data-action="toggleAIChatMax" title="${_aiChat.maximized?(lang==='ar'?'استعادة الحجم':'Restore size'):(lang==='ar'?'تكبير':'Maximize')}" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">${_aiChat.maximized?'⤡':'⤢'}</button>
-          ${!_aiChat.maximized?`<button data-action="toggleAIChatMin" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">${_aiChat.minimized?'▲':'▼'}</button>`:''}
-          <button data-action="closeAIChat" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
-        </div>
+  <button type="button" class="ai-fab" data-action="toggleAIChat" title="${ar ? 'يقظ الذكي' : 'Yaqiz AI'}" aria-label="${ar ? 'يقظ الذكي' : 'Yaqiz AI'}">
+    ${icon('sparkles', 24)}${hasPendingNudge && !_aiChat.open ? '<span class="ai-dot"></span>' : ''}
+  </button>
+  ${bubble}
+  <section id="ai-chat-panel" class="ai-panel ${_aiChat.maximized ? 'max' : ''} ${_aiChat.minimized ? 'min' : ''}" style="display:${_aiChat.open ? 'flex' : 'none'};" aria-label="${ar ? 'يقظ الذكي' : 'Yaqiz AI'}">
+    <header class="ai-head" data-action="toggleAIChatMin">
+      <span class="ai-ava">${icon('sparkles', 18)}</span>
+      <div>
+        <b>${ar ? 'يقظ الذكي' : 'Yaqiz AI'}<span class="ai-quota">${plan === 'pro' ? 'PRO' : (ar ? `${Math.max(0, limit - _aiDailyUsed)}/${limit} اليوم` : `${Math.max(0, limit - _aiDailyUsed)}/${limit} today`)}</span></b>
+        <small>${_aiChat.loading ? (ar ? 'يكتب الرد…' : 'Typing…') : (plan === 'pro' ? (ar ? 'يتذكر محادثاتك' : 'Remembers your chats') : (ar ? 'مساعدك المحاسبي' : 'Your accounting assistant'))}</small>
       </div>
-    </div>
-
+      <div class="ai-hbtns" data-action="">
+        ${plan === 'pro' && _aiChatHistory.length ? `<button type="button" data-action="aiClearHistoryWithConfirm" title="${ar ? 'مسح المحادثة' : 'Clear'}">${icon('trash-2', 14)}</button>` : ''}
+        <button type="button" data-action="toggleAIChatMax" title="${_aiChat.maximized ? (ar ? 'تصغير' : 'Restore') : (ar ? 'تكبير' : 'Maximize')}">${icon(_aiChat.maximized ? 'minimize-2' : 'maximize-2', 14)}</button>
+        ${!_aiChat.maximized ? `<button type="button" data-action="toggleAIChatMin" title="${ar ? 'طي' : 'Collapse'}">${icon(_aiChat.minimized ? 'chevron-up' : 'chevron-down', 15)}</button>` : ''}
+        <button type="button" data-action="closeAIChat" title="${ar ? 'إغلاق' : 'Close'}">${icon('x', 15)}</button>
+      </div>
+    </header>
     ${!_aiChat.minimized ? `
-    <div id="ai-chat-msgs" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:4px;scroll-behavior:smooth;">
-      ${msgHtml}
+    <div id="ai-chat-msgs" class="ai-msgs" aria-live="polite">${msgHtml}</div>
+    <div class="ai-input">
+      <textarea id="ai-chat-inp" rows="1" placeholder="${ar ? 'اكتب سؤالك…' : 'Ask anything…'}" data-onkeydown="aiInputKeydown" data-oninput="aiAutosize" ${_aiChat.loading ? 'disabled' : ''}></textarea>
+      <button type="button" class="ai-send" data-action="sendAIMsg" ${_aiChat.loading ? 'disabled' : ''} aria-label="${ar ? 'إرسال' : 'Send'}">${icon('send', 17)}</button>
     </div>
-
-    <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;background:var(--card-bg);">
-      <input id="ai-chat-inp" class="input" placeholder="${lang==='ar'?'اسأل عن حساباتك...':'Ask about your accounts...'}"
-        style="flex:1;padding:8px 12px;font-size:13px;border-radius:10px;"
-        data-onkeydown="aiInputKeydown" />
-      <button data-action="sendAIMsg" style="
-        background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;
-        border:none;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:18px;
-        flex-shrink:0;">↑</button>
-    </div>` : ''}
-  </div>`;
+    <div class="ai-foot">${ar ? 'يقظ الذكي ممكن يخطئ — راجع الأرقام المهمة من التقارير' : 'AI can make mistakes — verify key numbers in reports'}</div>` : ''}
+  </section>`;
+  refreshIcons();
 
   if (_aiChat.open && !_aiChat.minimized) {
     setTimeout(() => {
       const m = document.getElementById('ai-chat-msgs');
       if (m) m.scrollTop = m.scrollHeight;
       const i = document.getElementById('ai-chat-inp');
-      if (i && !_aiChat.loading) i.focus();
+      if (i && !_aiChat.loading && window.innerWidth > 560) i.focus();
     }, 60);
   }
+}
+function aiAutosize() {
+  const t = document.getElementById('ai-chat-inp');
+  if (!t) return;
+  t.style.height = 'auto';
+  t.style.height = Math.min(120, t.scrollHeight) + 'px';
+}
+
+// ── اقتراح ما بعد الإعداد الأولي ───────────────────────────────
+// بعد ما يخلص المالك "خلنا نجهّز محلك" (أو أول بيعة لو تخطّاه)، يقظ الذكي
+// يقترح استكمال بيانات المنشأة الناقصة أو الإعداد المحاسبي — مرة وحدة لكل شركة
+function aiMaybeSetupNudge() {
+  try {
+    if (currentUser?.role !== 'owner' || !hasPlanFeature('ai_assistant')) return;
+    const db = getDB();
+    const s = db.settings || {};
+    if (s.ai_setup_nudge_done) return;
+    // ما نزاحم جولة التعريف بالصفحة أو نافذة مفتوحة — نعيد المحاولة لين تخلص
+    if (_activeTour || el('modal-container')?.innerHTML.trim()) { setTimeout(aiMaybeSetupNudge, 3000); return; }
+    const vatOn = s.vat_enabled !== false && s.vat_enabled !== 0;
+    const missing = [];
+    if (vatOn && !/^3\d{13}3$/.test(String(s.vat_number || '').trim())) missing.push('الرقم الضريبي');
+    if (!String(s.cr_number || '').trim()) missing.push('السجل التجاري');
+    if (!['street_name', 'building_number', 'district', 'city', 'postal_code'].every(k => String(s[k] || '').trim())) missing.push('العنوان الوطني');
+    const name = (currentUser?.full_name || '').split(' ')[0] || '';
+    const lines = [`محلك صار جاهز للبيع${name ? ` يا ${name}` : ''} 🎉 باقي خطوة تخلي حساباتك كاملة ودقيقة:`];
+    if (missing.length) lines.push(`- **بيانات المنشأة**: ناقص ${missing.join('، ')} — تطلع على فواتيرك وتلزم للفوترة الإلكترونية.`);
+    lines.push('- **البيانات المحاسبية**: أرصدة العملاء والموردين، الأصول الثابتة، ورأس المال — عشان الميزانية وكشوف الحسابات تطلع صح من أول يوم.');
+    lines.push('', 'تبي نكمّل وحدة منها الحين؟');
+    const actions = [];
+    if (missing.length) actions.push({ key: 'company', label: 'استكمال بيانات المنشأة' });
+    actions.push({ key: 'accounting', label: 'استكمال البيانات المحاسبية' });
+    actions.push({ key: 'later', label: 'لاحقًا' });
+    _aiChatHistory.push({ q: null, a: lines.join('\n'), kind: 'nudge', actions });
+    _aiSaveHistory();
+    db.settings = { ...s, ai_setup_nudge_done: true };
+    saveDB(db);
+    if (window._apiReachable && window._cloudApiFetch) {
+      window._cloudApiFetch('PUT', '/api/settings', { settings: { ai_setup_nudge_done: true } }).catch(e => console.warn('AI nudge flag sync:', e.message));
+    }
+    _aiNudgeBubble = true;
+    yq('Track', 'ai_setup_nudge_shown', { missing: missing.length });
+    renderAIChatButton();
+  } catch (e) { console.warn('AI setup nudge:', e); }
 }
 
 function toggleAIChat() {
@@ -2766,7 +2925,7 @@ async function sendAIMsg() {
     };
 
     const history = _aiChatHistory.slice(0, -1).slice(-6)
-      .filter(h => h.a)
+      .filter(h => h.a && h.q) // رسائل الاقتراح التلقائي بلا سؤال — ما تنرسل كمحادثة
       .map(h => ({ question: h.q, answer: h.a }));
 
     const res = await window._cloudApiFetch('POST', '/api/ai/assistant', { question: q, context: ctx, history });
@@ -3264,6 +3423,13 @@ function setPosDiscount(val) { posDiscount = val; updatePOSTotals(); }
 function posFindByScan(db, q) {
   return db.products.find(p=>String(p.barcode||'').toLowerCase()===q) || db.products.find(p=>p.code?.toLowerCase()===q);
 }
+// تكلفة كل صنف وقت البيع (FIFO من السيرفر) تُحفظ ببنود الفاتورة المحلية فورًا —
+// المرتجع يعكس التكلفة بها بدل آخر سعر شراء
+function withServerItemCosts(items, srv) {
+  const costs = {};
+  for (const it of (srv?.items || [])) if (it.product_id != null && it.unit_cost != null) costs[it.product_id] = parseFloat(it.unit_cost);
+  return (items || []).map(it => { const pid = it.product_id ?? it.id; return costs[pid] != null ? { ...it, cost: costs[pid] } : it; });
+}
 // Barcode / name search handler
 function posSearchInput(val) {
   const db=getDB();
@@ -3563,7 +3729,7 @@ async function doCheckout() {
     id: srv.id,
     invoice_no: srv.invoice_no,
     customer_name: draftInv.customer_name, customer_vat:'', customer_id: srv.customer_id||null,
-    items: draftInv.items,
+    items: withServerItemCosts(draftInv.items, srv),
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
     invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
@@ -3621,6 +3787,8 @@ async function doCheckout() {
   if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal, inv.customer_id);
   logActivity('مبيعات POS',`${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
   yq('Track', 'sale_completed', { items: cart.length, payment: posPayment, first_sale: db.invoices.length===1 });
+  // لو تخطّى الإعداد السريع، الاقتراح يجي مع أول بيعة (مرة وحدة لكل شركة)
+  if (db.invoices.length===1) setTimeout(aiMaybeSetupNudge, 2500);
   cart=[];posDiscount=0;posCustomer='';posPayment='نقدي';
   if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
@@ -4650,7 +4818,7 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     id: srv.id,
     invoice_no: srv.invoice_no,
     customer_name:customerName, customer_vat:customerVat, customer_id: srv.customer_id||null,
-    items,
+    items: withServerItemCosts(items, srv),
     subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
     payment_method:payment, status,
     invoice_type:invoiceType,
@@ -5655,7 +5823,11 @@ function _saveGoodsPurchaseActual(overrideToken) {
   showToast(`✅ ${lang==='ar'?`تم: ${p.vendor} — ${status}`:`Done: ${p.vendor} — ${status}`}`);
   _pendingInventoryItems = [..._goodsItems];
   _pendingPurchaseId = p.id;
-  showInventoryAddDialog();
+  // السيرفر يُدخل أصناف الفاتورة المعروفة للمخزون فور حفظها (purchases.create)،
+  // فخيار "تخطَّ" كان يزيد الكمية فعليًا ويترك قيمتها معلّقة بـ"بضاعة بالطريق"
+  // للأبد — المخزون بالدفاتر أقل من الموجود. الأصناف المعروفة تُدرج الآن مباشرة
+  // (ويُرحَّل قيدها لحساب المخزون)، والجديدة فقط تفتح نموذج إنشاء المنتج
+  doInventoryUpdate();
 }
 
 function showInventoryAddDialog() {
@@ -8115,7 +8287,7 @@ function calcReportData(db, filterFn) {
     }, 0)
   , 0);
   const netProfit = grossProfit - expenses;
-  return {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit,invs,purchs};
+  return {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit,invs,purchs,rets};
 }
 
 let reportPeriod = 'all'; // all, thisMonth, lastMonth, thisYear, custom
@@ -8280,14 +8452,17 @@ function renderReportsInner(c) {
             <tbody>${(()=>{
               const salesRows = d.invs.map(i=>({kind:'sale',ref:i.invoice_no,party:i.customer_name,date:(i.created_at||i.date||'').slice(0,10),base:i.subtotal,vat:i.vat_total,total:i.grand_total}));
               const purchRows = d.purchs.filter(p=>p.deductible!==false).map(p=>({kind:'purchase',ref:p.vendor||'',party:p.description||p.category||'',date:(p.created_at||p.date||'').slice(0,10),base:p.amount,vat:p.vat,total:p.total}));
-              const all = [...salesRows,...purchRows].sort((a,b)=>b.date.localeCompare(a.date));
+              // المرتجعات تنقص الضريبة (بالسالب) — بدونها مجموع السطور ما يطابق الإجمالي أعلاه
+              const retRows = (d.rets||[]).map(r=>({kind:r.type==='sales'?'sret':'pret',ref:r.return_no,party:r.party||'',date:(r.date||r.created_at||'').slice(0,10),
+                base:-(r.base_amount!=null?r.base_amount:(r.amount||0)/1.15),vat:-(r.vat_amount||0),total:-(r.amount||0)}));
+              const all = [...salesRows,...purchRows,...retRows].sort((a,b)=>b.date.localeCompare(a.date));
               if(!all.length) return `<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted);">${lang==='ar'?'لا توجد عمليات ضمن هذه الفترة':'No operations in this range'}</td></tr>`;
               return all.map(r=>`<tr>
-                <td><span class="badge ${r.kind==='sale'?'badge-green':'badge-amber'}">${r.kind==='sale'?(lang==='ar'?'بيع':'Sale'):(lang==='ar'?'شراء':'Purchase')}</span></td>
+                <td><span class="badge ${r.kind==='sale'||r.kind==='sret'?'badge-green':'badge-amber'}">${({sale:lang==='ar'?'بيع':'Sale',purchase:lang==='ar'?'شراء':'Purchase',sret:lang==='ar'?'مرتجع بيع':'Sales return',pret:lang==='ar'?'مرتجع شراء':'Purchase return'})[r.kind]}</span></td>
                 <td>${sanitize(r.ref)}${r.party?` — ${sanitize(r.party)}`:''}</td>
                 <td>${fmtDate(r.date)}</td>
                 <td style="text-align:end;">${fmtMoney(r.base)}</td>
-                <td style="text-align:end;color:${r.kind==='sale'?'#16a34a':'#dc2626'};">${fmtMoney(r.vat)}</td>
+                <td style="text-align:end;color:${r.kind==='sale'||r.kind==='sret'?'#16a34a':'#dc2626'};" dir="ltr">${fmtMoney(r.vat)}</td>
                 <td style="text-align:end;font-weight:700;">${fmtMoney(r.total)}</td>
               </tr>`).join('');
             })()}</tbody>
@@ -8310,9 +8485,10 @@ function renderReportsInner(c) {
           ${[
             {label:t('revenue'),v:revenue,color:'var(--success)',kind:'revenue'},
             {label:t('cogs'),v:-cogs,color:'var(--danger)',kind:'cogs'},
-            {label:t('grossProfit'),v:grossProfit,bold:true,kind:'gross'},
+            // الخسارة كانت تظهر برقم موجب تحت عنوان "الربح" (Math.abs) — نسمّيها خسارة بالأحمر
+            {label:grossProfit<0?(lang==='ar'?'مجمل الخسارة':'Gross Loss'):t('grossProfit'),v:grossProfit,bold:true,kind:'gross',color:grossProfit<0?'var(--danger)':undefined},
             {label:t('expenses'),v:-expenses,color:'var(--danger)',kind:'expenses'},
-            {label:t('netProfit'),v:netProfit,bold:true,big:true,kind:'net'}
+            {label:netProfit<0?(lang==='ar'?'صافي الخسارة':'Net Loss'):t('netProfit'),v:netProfit,bold:true,big:true,kind:'net',color:netProfit<0?'var(--danger)':'var(--success)'}
           ].map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-weight:${r.bold?800:500};font-size:${r.big?18:14}px;color:${r.color||'inherit'};cursor:pointer;" data-action="drillIncome" data-args='["${r.kind}"]' title="${lang==='ar'?'اضغط لعرض التفاصيل':'Click for details'}">
             <span>${r.label} ${icon('search',11)}</span>
             <span>${fmtMoney(Math.abs(r.v))}</span>
@@ -8374,13 +8550,21 @@ function renderCashFlow(db, d, periodFilter, period) {
 
   // الفرق بين الصافي الفعلي والمصنَّف (بعد إضافة الالتزامات) يُعرَض صراحة كبند
   // "حركات أخرى" بدل ما يختفي بصمت ويسبب تعارضًا مع رصيد الخزينة الحقيقي
-  const categorizedNet = (cashIn_receipts + cashIn_direct + cashIn_obligations) - (cashOut_vouchers + cashOut_purchases + cashOut_obligations);
+  // الرصيد الافتتاحي والرواتب والمرتجعات النقدية مرجعها معروف (OPENING/SAL-/RET-)
+  // — كانت كلها تنحشر ببند "حركات أخرى"، فيختلط إيداع افتتاحي بمصروف رواتب
+  const sumRef = (re, type) => allMovesInPeriod.filter(m => re.test(m.reference||'') && m.type===type).reduce((s,m)=>s+m.amount,0);
+  const cashIn_opening   = sumRef(/^OPENING/, 'in');
+  const cashOut_salaries = sumRef(/^SAL-/, 'out');
+  const cashOut_returns  = sumRef(/^RET-/, 'out');
+  const cashIn_returns   = sumRef(/^RET-/, 'in');
+  const categorizedNet = (cashIn_receipts + cashIn_direct + cashIn_obligations + cashIn_opening + cashIn_returns)
+    - (cashOut_vouchers + cashOut_purchases + cashOut_obligations + cashOut_salaries + cashOut_returns);
   const otherNet = Math.round((actualNetChange - categorizedNet)*100)/100;
   const cashIn_other  = Math.max(0, otherNet);
   const cashOut_other = Math.max(0, -otherNet);
 
-  const totalCashIn       = cashIn_receipts + cashIn_direct + cashIn_obligations + cashIn_other;
-  const totalCashOut      = cashOut_vouchers + cashOut_purchases + cashOut_obligations + cashOut_other;
+  const totalCashIn       = cashIn_receipts + cashIn_direct + cashIn_obligations + cashIn_opening + cashIn_returns + cashIn_other;
+  const totalCashOut      = cashOut_vouchers + cashOut_purchases + cashOut_obligations + cashOut_salaries + cashOut_returns + cashOut_other;
 
   const netCash     = actualNetChange;
   const closeBal    = db.treasury.balance;
@@ -8404,8 +8588,10 @@ function renderCashFlow(db, d, periodFilter, period) {
     </div>
     ${row(lang==='ar'?'سندات قبض من العملاء':'Customer receipts', cashIn_receipts, false, true)}
     ${row(lang==='ar'?'مبيعات نقدية مباشرة':'Direct cash sales', cashIn_direct, false, true)}
+    ${cashIn_opening>0.004?row(lang==='ar'?'الرصيد الافتتاحي':'Opening balance', cashIn_opening, false, true):''}
     ${cashIn_obligations>0.004?row(lang==='ar'?'استرداد التزامات':'Obligation refunds', cashIn_obligations, false, true):''}
-    ${cashIn_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/مرتجعات)':'Other movements (salaries/manual/returns)', cashIn_other, false, true):''}
+    ${cashIn_returns>0.004?row(lang==='ar'?'مرتجعات مشتريات (استرداد)':'Purchase return refunds', cashIn_returns, false, true):''}
+    ${cashIn_other>0.004?row(lang==='ar'?'حركات أخرى (إيداع يدوي وغيره)':'Other movements', cashIn_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الوارد':'Total Inflows', totalCashIn, true)}
 
     <div style="font-weight:800;font-size:13px;color:var(--danger);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #fee2e2;">
@@ -8414,7 +8600,9 @@ function renderCashFlow(db, d, periodFilter, period) {
     ${row(lang==='ar'?'سندات صرف للموردين':'Supplier payments', -cashOut_vouchers, false, true)}
     ${row(lang==='ar'?'مشتريات نقدية مباشرة':'Direct cash purchases', -cashOut_purchases, false, true)}
     ${cashOut_obligations>0.004?row(lang==='ar'?'سداد الالتزامات الدورية':'Recurring obligation payments', -cashOut_obligations, false, true):''}
-    ${cashOut_other>0.004?row(lang==='ar'?'حركات أخرى (رواتب/يدوي/مرتجعات)':'Other movements (salaries/manual/returns)', -cashOut_other, false, true):''}
+    ${cashOut_salaries>0.004?row(lang==='ar'?'الرواتب':'Salaries', -cashOut_salaries, false, true):''}
+    ${cashOut_returns>0.004?row(lang==='ar'?'مرتجعات مبيعات (رد للعميل)':'Sales return refunds', -cashOut_returns, false, true):''}
+    ${cashOut_other>0.004?row(lang==='ar'?'حركات أخرى (سحب يدوي وغيره)':'Other movements', -cashOut_other, false, true):''}
     ${row(lang==='ar'?'إجمالي الصادر':'Total Outflows', -totalCashOut, true)}
 
     <div style="margin-top:16px;padding:16px;background:${netCash>=0?'#dcfce7':'#fee2e2'};border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -10715,8 +10903,7 @@ function saveVoucher(type, printAfter=true) {
   const amount = Number(el('v-amount').value||0);
   if(!el('v-party').value||!amount){showToast(lang==='ar'?'الاسم والمبلغ مطلوبان':'Party and amount required','error');return;}
   const isReceipt = type==='receipt';
-  const num = (db.nextId.receipt||1);
-  db.nextId.receipt = num+1;
+  const num = nextReceiptId(db);
 
   // check if linked to invoice or purchase
   const linkSel = el('v-invoice-link');
@@ -10767,6 +10954,10 @@ function saveVoucher(type, printAfter=true) {
 }
 function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, linkedPurchaseId, partyVal, amount, partyIdVal, overrideToken) {
   const db = getDB();
+  // الرقم كان يُحسب بنسخة بيانات ما تنحفظ أبدًا، فالعدّاد يبقى 1 وكل سند جديد
+  // ياخذ نفس الرقم — السيرفر يعتبره تكرارًا لأول سند ويرميه. نحسبه ونحفظه هنا
+  // بنفس النسخة اللي ينحفظ فيها السند، وأكبر من أي رقم سند محلي موجود
+  num = nextReceiptId(db);
   const _voucherParty = partyVal || el('v-party').value;
   // نفضّل المعرّف اللي التقطناه وقت اختيار الطرف من القائمة (partyIdVal) —
   // بدون هذا، تطابق طرفين بنفس الاسم يختار أولهما بالترتيب صامتًا
@@ -11401,7 +11592,11 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
       if(!db.nextId.stock_move) db.nextId.stock_move=1;
       const oldQty=prod.qty;
       if(isSales) {
-        const unitCost = prod.buy_price||0;
+        // بتكلفته الأصلية وقت البيع (نفس ما يسجّله السيرفر بطبقة FIFO المرتجعة —
+        // returns.controller) لا بآخر سعر شراء، وإلا قيمة المخزون بالدفاتر
+        // تختلف عن قيمته الفعلية وتكلفة المبيعات تنعكس بقيمة غلط
+        const _origItem = (linkedRec?.items||[]).find(it => (it.product_id ?? it.id) === prodId && it.cost != null);
+        const unitCost = _origItem ? Number(_origItem.cost) : (prod.buy_price||0);
         returnCogsReversal = Math.round(qty*unitCost*100)/100;
         if(!prod.lots) prod.lots=[];
         prod.lots.push({qty, cost:unitCost, date:new Date().toISOString(), ref:ret.return_no});
@@ -12394,7 +12589,7 @@ function saveStockTransfer(){
   window._cloudApiFetch?.('POST', '/api/stock-transfers', {
     from_warehouse_id: fromId, to_warehouse_id: toId,
     items: items.map(it=>({product_id:it.product_id,qty:it.qty})),
-    client_local_id: transfer.id
+    client_local_id: clientKey(transfer.id)
   }).then(res => {
     if (res?.data?.id) {
       const _db = getDB();
@@ -13259,7 +13454,7 @@ function renderBalanceSheet(c) {
       <div class="card-pad" style="padding-top:6px;">
         ${items.map(row=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
           <span style="color:var(--text-muted);">${row.label}</span>
-          <span style="font-weight:700;color:${row.color||'inherit'};">${row.prefix||''}${fmtMoney(Math.abs(row.val))}${row.suffix||''}</span>
+          <span style="font-weight:700;color:${row.val<0?'var(--danger)':(row.color||'inherit')};" dir="ltr">${row.val<0?'−':(row.prefix||'')}${fmtMoney(Math.abs(row.val))}${row.suffix||''}</span>
         </div>`).join('')}
         <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-weight:900;font-size:15px;color:${color};">
           <span>${lang==='ar'?'الإجمالي':'Total'}</span><span>${fmtMoney(total)}</span>
@@ -13314,7 +13509,7 @@ function renderBalanceSheet(c) {
           ...(fixedAssets ? [{label:lang==='ar'?'الأصول الثابتة':'Fixed Assets', val:fixedAssets, color:'#7c3aed'}] : []),
           ...(vatReceivable ? [{label:lang==='ar'?'ضريبة قيمة مضافة مستردة':'VAT Receivable', val:vatReceivable, color:'#0f766e'}] : []),
           ...(otherAssets ? [{label:lang==='ar'?'أصول أخرى':'Other Assets', val:otherAssets, color:'#64748b'}] : []),
-        ],totalAssets)}
+        ],totalAssets, cash<0 ? `<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;line-height:1.7;">${lang==='ar'?'⚠️ رصيد النقدية بالسالب: المصروفات والمدفوعات المسجّلة أكبر من النقد المتوفر. غالبًا رصيد الصندوق الافتتاحي ناقص أو فيه مدفوعات سُجّلت من الصندوق وهي من حساب آخر — راجع الخزينة أو الأرصدة الافتتاحية.':'⚠️ Cash is negative: recorded payments exceed available cash. Review treasury or opening balances.'}</div>` : '')}
       </div>
 
       <!-- عمود الخصوم وحقوق الملكية -->
@@ -15391,8 +15586,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
   const remaining = Math.max(0, Math.round((inv.grand_total-(inv.paid_amount||0))*100)/100);
   if(amount>remaining){showToast(lang==='ar'?'المبلغ أكبر من المتبقي':'Amount exceeds remaining','error');return;}
 
-  const num = (db.nextId.receipt||1);
-  db.nextId.receipt = num+1;
+  const num = nextReceiptId(db);
   const voucher = {
     id: num, type:'receipt',
     voucher_no: `RCV-${String(num).padStart(4,'0')}`,
@@ -15504,8 +15698,7 @@ function saveQuickPayPurchase(purchaseId) {
   if(amount>remaining){showToast(lang==='ar'?'المبلغ أكبر من المتبقي':'Amount exceeds remaining','error');return;}
 
   // سند صرف
-  const num = (db.nextId.receipt||1);
-  db.nextId.receipt = num+1;
+  const num = nextReceiptId(db);
   const voucher = {
     id: num, type:'payment',
     voucher_no: `PAY-${String(num).padStart(4,'0')}`,
@@ -17089,6 +17282,8 @@ function qsFinish(page) {
   yq('Track', 'quickstart_finished', { products:_obData.products.length, has_cash:(+_obData.cash_box||0)>0, next_page:page||'' });
   obSaveAll();
   if (page && page!==currentPage) goTo(page);
+  // بعد ما تستقر الشاشة، يقظ الذكي يقترح استكمال بيانات المنشأة/المحاسبة
+  setTimeout(aiMaybeSetupNudge, 2500);
 }
 
 function qsSkip() {
@@ -18776,7 +18971,7 @@ async function runAISearchQuery(q) {
     return {
       // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (استجابة ضاعت بالشبكة)
       // عن فاتورة جديدة فعليًا — بدونه تُنشأ فاتورة مكرَّرة بسلسلة ICV جديدة
-      client_local_id: inv.id,
+      client_local_id: clientKey(inv.id),
       customer_id:   _custMatch?.id || null,
       customer_name: inv.customer_name||'',
       customer_vat:  inv.customer_vat||'',
@@ -18857,7 +19052,7 @@ async function runAISearchQuery(q) {
     return {
       // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (استجابة ضاعت
       // بالشبكة) عن منتج جديد فعليًا — بدونه تُنشأ نسخة مكرَّرة بالسيرفر
-      client_local_id: p.id,
+      client_local_id: clientKey(p.id),
       name: p.name, name_en: p.name_en||'', code: p.code||'',
       barcode: p.barcode||'',
       buy_price: parseFloat(p.buy_price)||0,
@@ -18957,7 +19152,7 @@ async function runAISearchQuery(q) {
     const _liveDBq = getDB();
     const _qCustMatch = (_liveDBq.customers||[]).find(c => (c.name||'').trim().toLowerCase() === (q.customer_name||'').trim().toLowerCase());
     return {
-      client_local_id: q.id,
+      client_local_id: clientKey(q.id),
       customer_id: _qCustMatch?.id || null,
       customer_name: q.customer_name || '',
       date: (q.created_at || new Date().toISOString()).slice(0, 10),
@@ -18981,7 +19176,7 @@ async function runAISearchQuery(q) {
       // voucher_no لم يعد يُرسَل — يُولَّد بالسيرفر حصريًا الآن (عدّاد مستقل
       // لكل شركة)؛ client_local_id يميّز إعادة إرسال نفس الطلب (استجابة ضاعت
       // بالشبكة) بدل الاعتماد على رقم السند المحلي القديم
-      client_local_id: v.id,
+      client_local_id: clientKey(v.id),
       type: v.type, party_type: v.party_type || null,
       party_name: v.party || '', amount: parseFloat(v.amount) || 0,
       payment_method: v.method || null, description: v.description || '',
@@ -19170,6 +19365,15 @@ async function runAISearchQuery(q) {
       // ── سندات القبض والصرف: اسحب أي سند سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
       if (vouchersRes?.data?.length) {
         db.receipts = db.receipts || [];
+        // علاج بيانات قديمة: سند وصل السيرفر بدون علامة _serverId (صار له نسخة
+        // "srv-…" مكررة) — نعلّمه ونحذف النسخة المكررة
+        const _srvVById = new Map(vouchersRes.data.map(row => [row.id, row]));
+        for (const v of db.receipts) {
+          const row = typeof v.id === 'number' && !v._serverId ? _srvVById.get(v.id) : null;
+          if (row && row.type === v.type && Math.abs(parseFloat(row.amount) - (parseFloat(v.amount) || 0)) < 0.005) v._serverId = row.id;
+        }
+        const _healed = new Set(db.receipts.filter(v => typeof v.id === 'number' && v._serverId).map(v => v._serverId));
+        db.receipts = db.receipts.filter(v => !(typeof v.id === 'string' && v.id.startsWith('srv-') && _healed.has(v._serverId)));
         const _knownVIds = new Set(db.receipts.map(v => v._serverId).filter(Boolean));
         const _vFromServer = vouchersRes.data
           .filter(row => !_knownVIds.has(row.id))
@@ -19547,7 +19751,7 @@ async function runAISearchQuery(q) {
         const old = (prev.customers || []).find(o => o.id === c.id);
         // client_local_id يميّز إعادة إرسال نفس طلب الإنشاء (لا يؤثر على التحديث،
         // السيرفر يتجاهله هناك) — بدونه تُنشأ نسخة مكرَّرة لو ضاعت الاستجابة بالشبكة
-        const body = { client_local_id: c.id, name: c.name, phone: c.phone, email: c.email, address: c.address,
+        const body = { client_local_id: clientKey(c.id), name: c.name, phone: c.phone, email: c.email, address: c.address,
                        vat_number: c.vat_num, credit_limit: c.credit_limit || 0,
                        balance: c.balance || 0, is_active: c.is_active !== false,
                        street_name: c.street_name || null, building_number: c.building_number || null,
@@ -19579,7 +19783,7 @@ async function runAISearchQuery(q) {
       // ── Suppliers: create / update / remove ─────────────
       for (const s of newDB.suppliers || []) {
         const old = (prev.suppliers || []).find(o => o.id === s.id);
-        const body = { client_local_id: s.id, name: s.name, phone: s.phone, email: s.email,
+        const body = { client_local_id: clientKey(s.id), name: s.name, phone: s.phone, email: s.email,
                        address: s.address, vat_number: s.vat_num,
                        balance: s.balance || 0, is_active: s.is_active !== false };
         // نفس منطق العملاء: السيرفر يتجاهل balance بالتحديث افتراضيًا، إلا بعلامة
@@ -19607,7 +19811,7 @@ async function runAISearchQuery(q) {
       // ── Employees: create / update / remove ─────────────
       for (const e of newDB.employees || []) {
         const old = (prev.employees || []).find(o => o.id === e.id);
-        const body = { client_local_id: e.id, name: e.name, position: e.position, department: e.department,
+        const body = { client_local_id: clientKey(e.id), name: e.name, position: e.position, department: e.department,
                        phone: e.phone, email: e.email, salary: e.salary || 0,
                        allowances: e.allowances || 0, status: e.status || 'active' };
         if (!old) {
@@ -19650,7 +19854,7 @@ async function runAISearchQuery(q) {
           const _pTok = window._periodOverrideTokens[`purchases:${p.id}`];
           delete window._periodOverrideTokens[`purchases:${p.id}`];
           const res = await apiFetch('POST', '/api/purchases', {
-            client_local_id: p.id,
+            client_local_id: clientKey(p.id),
             supplier_id:   _sup2?.id || null,
             supplier_name: p.vendor, description: p.description,
             category: p.category, date: (p.created_at || new Date().toISOString()).slice(0, 10),
@@ -19855,6 +20059,15 @@ async function runAISearchQuery(q) {
           const res = await apiFetch('POST', '/api/vouchers', voucherToAPI(v), _vTok ? { 'X-Period-Override-Token': _vTok } : undefined).catch(e => { console.warn('voucher sync:', e.message); return null; });
           if (res?.data?.id) {
             if (res.data.id !== v.id) _replaceLocalId('receipts', v.id, res.data.id);
+            // بدون علامة _serverId، السحب التالي ما يعرف إن السند وصل ويضيفه نسخة
+            // ثانية ("srv-…") — السند كان يتكرر بالتدفق النقدي وكشف حساب العميل
+            try {
+              const _dbS = getDB();
+              const _lv = (_dbS.receipts || []).find(x => x.id === res.data.id);
+              if (_lv) { _lv._serverId = res.data.id; _origSaveDB(_dbS); }
+              const _sv = (_snap?.receipts || []).find(x => x.id === res.data.id);
+              if (_sv) _sv._serverId = res.data.id;
+            } catch (e) { /* ignore */ }
             // رقم السند الرسمي (عدّاد مستقل لكل شركة بالسيرفر) يختلف عن الرقم
             // المؤقت المولَّد محليًا وقت الإنشاء — نفس مبدأ تصحيح رقم الفاتورة
             if (res.data.voucher_no) {
@@ -19929,7 +20142,7 @@ async function runAISearchQuery(q) {
             type: m.type, amount: m.amount,
             description: m.description || '', reference: m.reference || '',
             payment_method: m.method || null, branch_id: m.branch_id || null,
-            client_local_id: m.id
+            client_local_id: clientKey(m.id)
           }).catch(e => { console.warn('treasury move sync:', e.message); return null; });
 
           if (res?.data?.id) {
@@ -19963,7 +20176,7 @@ async function runAISearchQuery(q) {
         delete window._periodOverrideTokens[`journal:${j.id}`];
         const res = await apiFetch('POST', '/api/journal', {
           description: j.description || '', ref: j.ref || null, date: j.date || new Date().toISOString(),
-          entries: j.entries || [], client_local_id: j.id
+          entries: j.entries || [], client_local_id: clientKey(j.id)
         }, _jTok ? { 'X-Period-Override-Token': _jTok } : undefined).catch(e => { console.warn('journal entry sync:', e.message); return null; });
 
         if (res?.data?.id) {
@@ -19998,7 +20211,7 @@ async function runAISearchQuery(q) {
         const _rTok = window._periodOverrideTokens[`returns:${r.id}`];
         delete window._periodOverrideTokens[`returns:${r.id}`];
         const res = await apiFetch('POST', '/api/returns', {
-          client_local_id: r.id,
+          client_local_id: clientKey(r.id),
           type: r.type === 'sales' ? 'sales' : 'purchases',
           party_name: r.party || '', product_id: r.product_id || null, product_name: r.product_name || '',
           qty: r.qty || 0, base_amount: r.base_amount || 0, vat_amount: r.vat_amount || 0, amount: r.amount,
@@ -20040,7 +20253,7 @@ async function runAISearchQuery(q) {
           const res = await apiFetch('POST', '/api/purchase-orders', {
             supplier_name: po.supplier || '', items: po.items || [],
             notes: po.notes || '', expected_date: po.expected_delivery || null, status: po.status,
-            client_local_id: po.id
+            client_local_id: clientKey(po.id)
           }).catch(e => { console.warn('PO create sync:', e.message); return null; });
           if (res?.data?.id) {
             try {
@@ -20085,7 +20298,7 @@ async function runAISearchQuery(q) {
           type: sm.type, qty: sm.qty, reason: sm.reason || '',
           source: sm.source || '', reference: sm.reference || 'MANUAL',
           warehouse_id: sm.warehouse_id || null,
-          client_local_id: sm.id
+          client_local_id: clientKey(sm.id)
         }).catch(e => { console.warn('stock move sync:', e.message); return null; });
 
         if (res?.data?.id) {
@@ -20417,7 +20630,7 @@ async function runAISearchQuery(q) {
                 // اللي يفهمها السيرفر — تُرسَل كـ"آجل" ثم تُسجَّل الدفعة بطلب منفصل
                 const _isPartialCreate2 = p.payment_method === 'جزئي';
                 const res = await apiFetch('POST', '/api/purchases', {
-                  client_local_id: p.id,
+                  client_local_id: clientKey(p.id),
                   supplier_name: p.vendor||'', description: p.description||'',
                   category: p.category||'', date: _pDate,
                   purchase_type: p.purchase_type||'opex',
@@ -20632,5 +20845,6 @@ async function runAISearchQuery(q) {
   if (SYNC_LOG) console.log('🔌 Yaqiz API Bridge loaded v2');
 })();
 </script>
+<script src="/public/pw-toggle.js"></script>
 </body>
 </html>
