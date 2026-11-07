@@ -27,6 +27,12 @@ self.addEventListener('fetch', e => {
   const { request } = e;
   const url = new URL(request.url);
 
+  // الطلبات الخارجية (الخطوط، مكتبات CDN، التحليلات) تمر للمتصفح مباشرة —
+  // لو اعترضها الـSW تخضع لـconnect-src الخاص به فتُحجب (كانت خطوط Tajawal تنحجب)
+  if (url.origin !== self.location.origin) return;
+  // أحداث التحليلات (وسيط /ingest) لا تُخزَّن ولا لها بديل دون اتصال
+  if (url.pathname.startsWith('/ingest/')) return;
+
   // API calls → دائماً من الشبكة (لا نخزّنها)
   if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
     e.respondWith(fetch(request).catch(() =>

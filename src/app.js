@@ -59,6 +59,7 @@ app.use(helmet({
       // فالسماح العام بأي https: كان يُبطل الغرض الحقيقي من connect-src (منع
       // تسريب بيانات لخادم خارجي لو حصل XSS يومًا) — api.openai.com لم تُستخدَم
       // من المتصفح أصلًا (تأكَّد بالبحث)، كانت سماحًا زائدًا بلا فائدة
+      // تحليلات الاستخدام (PostHog) تمر عبر وسيط /ingest على نفس النطاق، لا استثناء هنا
       connectSrc:    ["'self'"],
       workerSrc:     ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
       frameSrc:      ["'none'"],
@@ -115,6 +116,8 @@ app.get('/sw.js', (_, res) => {
   res.sendFile(require('path').join(staticPath, 'sw.js'));
 });
 app.use(compression());
+// قبل express.json وapiLimiter: يحتاج الجسم الخام، وله حد طلبات خاص به
+app.use('/ingest', require('./routes/ingest.routes'));
 app.use(express.json({ limit: '5mb' }));
 app.use(apiLimiter);
 

@@ -356,6 +356,8 @@
       .foot { flex-direction:column; align-items:flex-start; }
     }
   </style>
+<script defer src="/public/posthog-1.438.12.js"></script>
+<script defer src="/public/analytics.js"></script>
 </head>
 <body>
 
@@ -855,6 +857,12 @@
 </div>
 
 <script>
+// تحليلات الاستخدام (public/analytics.js) — يُحمَّل defer، فالنداءات المبكرة تنتظر بطابور
+function yq(method, ...args) {
+  const q = window._yqQ = window._yqQ || [];
+  if (q.length < 100) q.push([method, args]);
+  if (window._yqFlush) window._yqFlush();
+}
 const PRICING = {
   basic:  { monthly:99, annual:990 },
   growth: { monthly:179, annual:1790 },
@@ -884,6 +892,7 @@ function setPricingCycle(cycle) {
 function openModal(plan) {
   document.getElementById('regOverlay').classList.add('show');
   document.body.style.overflow = 'hidden';
+  yq('Track', 'signup_opened', { plan: plan || '' });
   if (plan) pickPlan(plan);
   setTimeout(() => document.getElementById('f-co')?.focus(), 50);
 }
@@ -949,11 +958,13 @@ async function doReg(e) {
     const res  = await fetch('/api/register', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     const data = await res.json();
     if (data.success) {
+      yq('Track', 'signup_completed', { plan });
       localStorage.setItem('yaqiz_access_token', data.accessToken);
       localStorage.setItem('yaqiz_refresh_token', data.refreshToken);
       ok.textContent = 'تم إنشاء حسابك — جاري التوجيه...'; ok.classList.add('show');
       setTimeout(() => { window.location.href = '/VVIP.html'; }, 1600);
     } else {
+      yq('Track', 'signup_failed', { plan, reason: data.message || '' });
       err.textContent = data.message || 'حدث خطأ، حاول مجدداً'; err.classList.add('show');
       btn.textContent = 'إنشاء الحساب'; btn.disabled = false;
     }

@@ -95,6 +95,8 @@
     footer a { color:#94a3b8; text-decoration:none; }
     footer a:hover { color:#cbd5e1; }
   </style>
+<script defer src="/public/posthog-1.438.12.js"></script>
+<script defer src="/public/analytics.js"></script>
 </head>
 <body>
 
@@ -199,6 +201,12 @@
 </footer>
 
 <script>
+// تحليلات الاستخدام (public/analytics.js) — يُحمَّل defer، فالنداءات المبكرة تنتظر بطابور
+function yq(method, ...args) {
+  const q = window._yqQ = window._yqQ || [];
+  if (q.length < 100) q.push([method, args]);
+  if (window._yqFlush) window._yqFlush();
+}
 const PRICES = {
   basic:  { monthly:99, annual:990 },
   growth: { monthly:179, annual:1790 },
@@ -295,10 +303,12 @@ async function pay() {
     const data = await res.json();
 
     if (!data.success || !data.payment_url) {
+      yq('Track', 'payment_failed', { plan: selectedPlan, cycle: selectedCycle, reason: data.message || '' });
       showAlert(data.message || 'حدث خطأ في إنشاء الدفع');
       return;
     }
 
+    yq('Track', 'payment_started', { plan: selectedPlan, cycle: selectedCycle });
     window.location.href = data.payment_url;
 
   } catch (e) {

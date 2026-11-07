@@ -23,3 +23,13 @@ exports.registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'تم تجاوز الحد المسموح لإنشاء الحسابات، حاول بعد ساعة' }
 });
+
+// وسيط تحليلات الاستخدام (/ingest) — حد منفصل حتى لا تستهلك أحداث التتبع
+// حصة المستخدم من apiLimiter، وحتى لا يُستخدم الوسيط لإغراق السيرفر
+exports.ingestLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 0 }
+});

@@ -737,11 +737,19 @@ html[dir="ltr"] .user-corner { left: auto; right: 20px; }
   .qs-manual-row > .qs-field:first-child { grid-column: 1 / -1; }
 }
 </style>
+<script defer src="/public/posthog-1.438.12.js"></script>
+<script defer src="/public/analytics.js"></script>
 </head>
 <body>
 <div id="app"></div>
 
 <script>
+// تحليلات الاستخدام (public/analytics.js) — يُحمَّل defer، فالنداءات المبكرة تنتظر بطابور
+function yq(method, ...args) {
+  const q = window._yqQ = window._yqQ || [];
+  if (q.length < 100) q.push([method, args]);
+  if (window._yqFlush) window._yqFlush();
+}
 // ============ LOGO SVG ============
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" style="display:block;width:100%;height:100%;">
   <defs>
@@ -1348,7 +1356,20 @@ function renderApp() {
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
   if (!currentUser) { renderLogin(); return; }
   renderShell();
+  _yqIdentifyCurrent();
+  yq('Page', currentPage);
   checkOpeningBalances();
+}
+
+// يربط جلسة التحليلات بالمستخدم والشركة من توكن الدخول (معرّفات + الدور + الباقة فقط)
+function _yqIdentifyCurrent() {
+  try {
+    const tok = localStorage.getItem('yaqiz_access_token');
+    if (!tok) return;
+    const b64 = tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    const p = JSON.parse(atob(b64));
+    yq('Identify', { user_id:p.sub, company_id:p.company_id, role:p.role, plan:getCurrentPlan(), company_name:getDB().settings?.company_name||'' });
+  } catch(e) {}
 }
 
 function renderLogin() {
@@ -1525,12 +1546,14 @@ function doLogout() {
   if (currentUser?.shift_enabled) {
     showShiftSummary((cash, card, transfer) => {
       endShift(currentUser, cash, card, transfer);
+      yq('Track', 'logout'); yq('Reset');
       currentUser = null;
       localStorage.removeItem('yaqiz_user');
       window._finalizeLogoutCleanup?.();
       renderApp();
     });
   } else {
+    yq('Track', 'logout'); yq('Reset');
     currentUser = null;
     localStorage.removeItem('yaqiz_user');
     window._finalizeLogoutCleanup?.();
@@ -2792,6 +2815,7 @@ function goTo(page) {
   });
   if (window.innerWidth <= 768) closeMobileSidebar();
   renderPage();
+  yq('Page', page);
   maybeStartPageTour(page);
 }
 
@@ -3590,6 +3614,7 @@ async function doCheckout() {
   // loyalty points
   if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal, inv.customer_id);
   logActivity('مبيعات POS',`${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
+  yq('Track', 'sale_completed', { items: cart.length, payment: posPayment, first_sale: db.invoices.length===1 });
   cart=[];posDiscount=0;posCustomer='';posPayment='نقدي';
   if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
@@ -16740,12 +16765,14 @@ function showQuickStart() {
   const draft = {};
   QS_FIELDS.forEach(f => { draft[f] = String(s[f] || ''); });
   _qs = { active:true, step:1, vatOn: s.vat_enabled!==false && s.vat_enabled!==0, draft };
+  yq('Track', 'quickstart_started');
   renderQuickStart();
 }
 
 function renderQuickStart() {
   const mc = el('modal-container'); if (!mc) return;
   const cur = QS_STEPS[_qs.step-1];
+  yq('Track', 'quickstart_step', { step:_qs.step, key:cur.key });
   const rail = QS_STEPS.map((st,i) => {
     const n = i+1, state = n<_qs.step ? 'done' : n===_qs.step ? 'now' : 'next';
     return `<button type="button" class="qs-rail-item ${state}" ${n<_qs.step?`data-action="qsGo" data-args="[${n}]"`:'disabled'} ${n===_qs.step?'aria-current="step"':''}>
@@ -16979,11 +17006,13 @@ function qsFinish(page) {
   // حركة الرصيد الافتتاحي بالخزينة لازم تحمل فرعًا وإلا تظهر بإجمالي "الكل" فقط
   // ولا تُحتسب بصندوق أي فرع (نفس مبدأ إصلاح حركات الخزينة بلا فرع سابقًا)
   if (!_obData.branch_id) _obData.branch_id = resolveActiveBranchId();
+  yq('Track', 'quickstart_finished', { products:_obData.products.length, has_cash:(+_obData.cash_box||0)>0, next_page:page||'' });
   obSaveAll();
   if (page && page!==currentPage) goTo(page);
 }
 
 function qsSkip() {
+  yq('Track', 'quickstart_skipped', { step:_qs.step, key:QS_STEPS[_qs.step-1].key });
   _qs.active = false;
   const db = getDB();
   db.settings = { ...(db.settings||{}), opening_balances_done: true };
@@ -17000,6 +17029,7 @@ function qsOpenFullWizard() {
   if (_qs.step===3) _qsReadCash();
   const keep = { products:[..._obData.products], cash_box:_obData.cash_box, cash_bank:_obData.cash_bank, branch_id:_obData.branch_id };
   const staging = [..._obImportStaging];
+  yq('Track', 'quickstart_full_wizard', { step:_qs.step });
   _qs.active = false;
   showOpeningBalancesWizard(false);
   Object.assign(_obData, keep);
