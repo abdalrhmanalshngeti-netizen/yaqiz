@@ -57,6 +57,9 @@ router.get('/cost-analysis',            canAdmin('cost_analysis'), ctrl.costAnal
 router.get('/ai-usage/companies',            canAdmin('ai_usage'), ctrl.aiUsageCompanies);
 router.get('/ai-usage/companies/:id/questions', canAdmin('ai_usage'), ctrl.aiUsageQuestions);
 router.get('/log',                      canAdmin('activity_log'),  ctrl.platformLog);
+// الحارس المحاسبي — نتائج آخر فحص + تشغيل يدوي
+router.get('/ledger-guard',             canAdmin('dashboard'),     ctrl.ledgerGuard);
+router.post('/ledger-guard/run',        canAdmin('dashboard'),     ctrl.runLedgerGuardNow);
 router.get('/plans',                    canAdmin('plans'),         ctrl.getPlans);
 router.put('/companies/:id/status',     canAdmin('companies_manage'), ctrl.setCompanyStatus);
 router.put('/companies/:id/plan',       canAdmin('companies_manage'), ctrl.setCompanyPlan);

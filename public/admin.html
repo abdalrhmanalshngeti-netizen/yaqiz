@@ -412,6 +412,7 @@ html.light .me-chip .av{color:#0f766e}
       <button class="nav-tab" data-action="switchTab" data-args='["costs"]' id="tab-costs"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">تحليل التكلفة</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["plans"]' id="tab-plans"><svg class="ico"><use href="#i-package"/></svg><span class="nt-l">الباقات والإيرادات</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]' id="tab-aiusage"><svg class="ico"><use href="#i-spark"/></svg><span class="nt-l">استخدام الذكاء الاصطناعي</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["guard"]' id="tab-guard"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">الحارس المحاسبي</span> <span class="tab-badge" id="guard-badge" style="display:none;background:var(--red,#dc2626)">0</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["log"]' id="tab-log"><svg class="ico"><use href="#i-list"/></svg><span class="nt-l">سجل النشاط</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["employees"]' id="tab-employees"><svg class="ico"><use href="#i-idcard"/></svg><span class="nt-l">الموظفون</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["myteam"]' id="tab-myteam" style="display:none;"><svg class="ico"><use href="#i-users"/></svg><span class="nt-l">فريقي</span></button>
@@ -634,6 +635,18 @@ html.light .me-chip .av{color:#0f766e}
         <button class="btn-action" data-action="loadAIUsage">🔄 تحديث</button>
       </div>
       <div id="aiusage-content"><div class="loader"><span class="spinner"></span></div></div>
+    </div>
+
+    <!-- ══ الحارس المحاسبي ══ -->
+    <div class="section" id="sec-guard">
+      <div class="sec-head">
+        <div>
+          <div class="sec-title">الحارس المحاسبي</div>
+          <div class="sec-sub" id="guard-sub">فحص يومي لكل شركة: القيود، النقدية مع الخزينة، المخزون مع طبقات التكلفة، الذمم مع الأرصدة والفواتير</div>
+        </div>
+        <button class="fbtn active" id="guard-run-btn" data-action="runGuardNow">▶ افحص الآن</button>
+      </div>
+      <div class="panel"><div id="guard-list" style="padding:4px 0;"><div class="loader"><span class="spinner"></span></div></div></div>
     </div>
 
     <!-- ══ سجل النشاط ══ -->
@@ -920,6 +933,7 @@ function applyPermissionGating(){
   set('tab-aiusage',    hasPerm('ai_usage'));
   set('tab-plans',      hasPerm('plans'));
   set('tab-log',        hasPerm('activity_log'));
+  set('tab-guard',      hasPerm('dashboard'));
   set('tab-employees',  isOwner()); // إدارة الموظفين لا تُوكَّل أبداً
   if (!isOwner()) {
     const order = ['dashboard','tickets','customers','cost_analysis','plans','ai_usage','activity_log'];
@@ -942,7 +956,7 @@ async function apiFetch(path,opts={}){
 }
 
 // ── Tab Navigation ─────────────────────────────────────
-const TABS = ['dashboard','companies','newclients','users','tickets','plans','costs','aiusage','log','employees','myteam'];
+const TABS = ['dashboard','companies','newclients','users','tickets','plans','costs','aiusage','guard','log','employees','myteam'];
 function switchTab(name) {
   const _tt = $('top-title'), _lbl = $('tab-'+name)?.querySelector('.nt-l');
   if (_tt && _lbl) _tt.textContent = _lbl.textContent;
@@ -954,6 +968,7 @@ function switchTab(name) {
   if (name==='users'      && !_allUsers.length)   loadUsers();
   if (name==='tickets'    )                        loadTickets(_ticketFilter);
   if (name==='log'        )                        loadLog();
+  if (name==='guard'      )                        loadGuard();
   if (name==='plans'      )                        loadPlans();
   if (name==='aiusage'    )                        loadAIUsage();
   if (name==='newclients' )                        loadNewClients();
@@ -2588,6 +2603,64 @@ function renderCostSection(companies){
 }
 
 // ── Activity Log ───────────────────────────────────────
+// ── الحارس المحاسبي ─────────────────────────────────────
+const GUARD_HINT = {
+  unbalanced_entry: 'قيد مدينه ≠ دائنه — راجع مصدره بسجل القيود',
+  trial_balance: 'مجموع المدين ≠ مجموع الدائن بكل الدفاتر',
+  cash_vs_treasury: 'حركة خزينة بلا قيد أو قيد نقدية بلا حركة خزينة',
+  inventory_vs_lots: 'كمية دخلت/خرجت المخزون بلا قيد مطابق بنفس التكلفة',
+  product_qty_vs_lots: 'كمية المنتج ما تطابق طبقات التكلفة بالسيرفر',
+  product_qty_vs_warehouses: 'كمية المنتج ما تطابق مجموع مخزون الفروع',
+  negative_stock: 'بيع أو صرف أكثر من الموجود',
+  ar_vs_customers: 'رصيد عميل تغيّر بلا قيد أو قيد ذمم بلا رصيد',
+  ar_vs_invoices: 'الذمم ما تطابق المتبقي على الفواتير',
+  ap_vs_suppliers: 'رصيد مورد تغيّر بلا قيد أو قيد ذمم بلا رصيد',
+  ap_vs_purchases: 'الذمم ما تطابق المتبقي على فواتير الشراء',
+  invoice_without_cogs: 'فاتورة بيعت بلا خصم مخزون — الربح فيها وهمي',
+  goods_in_transit: 'فاتورة شراء أصنافها ما أُدرجت بالمخزون'
+};
+async function loadGuard(){
+  const box=$('guard-list');
+  box.innerHTML='<div class="loader"><span class="spinner"></span></div>';
+  try{
+    const res=await apiFetch('/api/admin/ledger-guard');
+    const { findings=[], last_run } = res.data||{};
+    const badge=$('guard-badge');
+    const nCo=new Set(findings.map(f=>f.company_id)).size;
+    if(badge){ badge.textContent=nCo; badge.style.display=nCo?'':'none'; }
+    $('guard-sub').textContent = last_run
+      ? `آخر فحص: ${fmtD(last_run.ran_at)} — ${last_run.companies} شركة، ${last_run.findings} فرق${last_run.error?' · '+last_run.error:''}`
+      : 'لم يُشغَّل الفحص بعد — يشتغل تلقائيًا كل يوم، أو اضغط «افحص الآن»';
+    if(!findings.length){ box.innerHTML='<div class="empty-state">✅ كل الدفاتر مطابقة — ما فيه أي فرق</div>'; return; }
+    const groups={};
+    for(const f of findings){ (groups[f.company_id]=groups[f.company_id]||{name:f.company_name,plan:f.plan,items:[]}).items.push(f); }
+    const num=v=>v==null?'—':Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    box.innerHTML=Object.entries(groups).map(([cid,g])=>`
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+          <div style="font-weight:800;">${escHtml(g.name)} <span style="color:var(--muted2);font-weight:600;font-size:12px;">#${cid} · ${escHtml(g.plan||'')}</span></div>
+          <button class="fbtn" data-action="runGuardNow" data-args='[${Number(cid)}]'>إعادة فحص الشركة</button>
+        </div>
+        <div class="cost-table-wrap"><table class="cost-table">
+          <thead><tr><th>الفحص</th><th>بالدفاتر</th><th>الفعلي</th><th>الفرق</th><th>منذ</th></tr></thead>
+          <tbody>${g.items.map(f=>`<tr>
+            <td><div style="font-weight:700;">${escHtml(f.title)}</div><div style="font-size:11px;color:var(--muted2);">${escHtml(GUARD_HINT[f.check_key]||'')}</div></td>
+            <td style="white-space:nowrap;">${num(f.expected)}</td><td style="white-space:nowrap;">${num(f.actual)}</td>
+            <td style="white-space:nowrap;color:#dc2626;font-weight:800;" dir="ltr">${num(f.diff)}</td>
+            <td style="white-space:nowrap;font-size:12px;">${fmtD(f.first_seen)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>`).join('');
+  }catch(e){ box.innerHTML='<div class="empty-state">خطأ في تحميل نتائج الحارس</div>'; }
+}
+async function runGuardNow(companyId){
+  const btn=$('guard-run-btn'); if(btn){ btn.disabled=true; btn.textContent='⏳ جارٍ الفحص...'; }
+  try{
+    await apiFetch('/api/admin/ledger-guard/run',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(companyId?{company_id:companyId}:{}) });
+    await loadGuard();
+  }catch(e){ toast('تعذّر تشغيل الفحص', 'var(--red)'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='▶ افحص الآن'; } }
+}
+
 async function loadLog(){
   $('log-list').innerHTML='<div class="loader"><span class="spinner"></span></div>';
   try{

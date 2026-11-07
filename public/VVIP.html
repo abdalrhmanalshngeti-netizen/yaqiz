@@ -6298,7 +6298,7 @@ function showProductModal(id) {
         </div>
       </div>`:''}
       <div class="form-row">
-        <div><label class="form-label">${t('quantity')}</label><input class="input" type="number" id="pr-qty" value="${p?.qty||0}" /></div>
+        <div><label class="form-label">${t('quantity')}${p?` <a href="#" data-action="closeModal" data-action2="showStockMoveModal" data-prevent-default="1" style="font-size:11px;font-weight:600;color:var(--primary);">${lang==='ar'?'تسوية مخزون':'Adjust stock'}</a>`:''}</label><input class="input" type="number" id="pr-qty" value="${p?.qty||0}" ${p?'readonly title="'+(lang==='ar'?'تتغيّر الكمية من التسوية أو البيع والشراء فقط':'Change quantity via a stock adjustment')+'" style="background:var(--bg);"':''} /></div>
         <div><label class="form-label">${t('minQty')}</label><input class="input" type="number" id="pr-min" value="${p?.min_qty||5}" /></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;">
@@ -6498,6 +6498,9 @@ function saveProduct(id) {
     buy_price: buyPrice, sell_price: sellPrice,
     qty:Number(el('pr-qty').value), min_qty:Number(el('pr-min').value)
   };
+  // تعديل منتج قائم ما يغيّر كميته (كان يكتب فوقها بلا حركة ولا قيد، والسيرفر
+  // يتجاهلها فترجع القديمة بعد دقيقة) — الكمية تتغيّر بالتسوية فقط
+  if (id) delete data.qty;
   if(!data.name){showToast(lang==='ar'?'اسم المنتج مطلوب':'Product name required','error');return;}
   // باركود مكرَّر يخلّي نقطة البيع تجيب منتج غلط عند المسح — نرفضه والنافذة
   // تبقى مفتوحة بنفس البيانات عشان يصحّحه بدون ما يعيد التعبئة
@@ -6534,6 +6537,7 @@ function saveProduct(id) {
       if (!db.productStock) db.productStock = {};
       db.productStock[newId] = { [whId]: data.qty };
     }
+    if (data.qty > 0) postOpeningStock(db, db.products.find(x=>x.id===newId), data.qty, 'منتج جديد');
   }
   saveDB(db);
   showToast(autoOn && polVal > 0 ? `✅ تم الحفظ — سعر البيع الجديد: ${sellPrice} ر.س` : `✅ ${t('save')}`);
@@ -6553,9 +6557,15 @@ function saveProduct(id) {
 }
 
 function deleteProduct(id) {
-  if(!confirm(t('confirm'))) return;
   const db=getDB();
   const prod=db.products.find(p=>p.id===id);
+  // منتج عنده رصيد: حذفه يخفيه من الشاشات بينما قيمته تبقى بحساب المخزون
+  // وطبقات التكلفة (مخزون "مخفي" بالميزانية) — لازم تصفير الكمية بتسوية أولًا
+  if (prod && Number(prod.qty) > 0) {
+    showToast(lang==='ar'?`⚠️ «${prod.name}» عنده رصيد ${prod.qty} — صفّر الكمية من «تسوية مخزون» (صادر بسبب واضح) قبل حذف المنتج`:`⚠️ "${prod.name}" still has ${prod.qty} in stock — zero it with a stock adjustment first`,'error');
+    return;
+  }
+  if(!confirm(t('confirm'))) return;
   db.products=db.products.filter(p=>p.id!==id);
   saveDB(db);
   if(prod) logActivity('المخزون', `حذف منتج «${prod.name}» — بواسطة ${currentUser?.full_name||currentUser?.username||''}`);
@@ -11516,7 +11526,8 @@ function onReturnLinkChange(type) {
   const sel=el('rt-link'); if(!sel) return;
   const opt=sel.options[sel.selectedIndex];
   if(opt.value) {
-    el('rt-party').value = opt.dataset.party||'';
+    // فاتورة نقطة بيع بلا عميل مسجّل — كان الاسم يجي فاضي فيُرفض الحفظ ("البيانات مطلوبة")
+    el('rt-party').value = opt.dataset.party || (type==='sales' ? t('cashCustomer') : '');
     el('rt-party-id').value = opt.dataset.partyId||'';
     const partySelect = el('rt-party-select');
     if(partySelect && opt.dataset.partyId) partySelect.value = opt.dataset.partyId;
@@ -12517,6 +12528,59 @@ function showStockMoveModal(){
   refreshIcons();
 }
 
+// تسوية كمية منتج موجود (وارد/صادر) — المسار الوحيد الصحيح لتغيير كمية منتج
+// قائم: حركة مخزون يدوية (تتزامن للسيرفر عبر /move) + قيد بالتكلفة. يستخدمها
+// شاشة التسوية والاستيراد — كان الاستيراد يكتب فوق الكمية مباشرة بلا حركة ولا
+// قيد، والسيرفر يتجاهلها فترجع القيمة القديمة بأول تحديث
+function applyStockAdjustment(db, prod, warehouseId, type, qty, reason, note, reference) {
+  const oldQty = prod.qty;
+  mutateWarehouseStock(db, prod.id, warehouseId, type==='in'?qty:-qty);
+  if(!db.stock_moves)db.stock_moves=[];
+  const move={
+    id:db.nextId.stock_move||1,
+    product_id:prod.id, product_name:prod.name, product_code:prod.code||'', warehouse_id:warehouseId,
+    type, qty, balance_before:oldQty, balance_after:prod.qty,
+    reason:reason||'', note:note||'', source:'', reference:reference||'MANUAL',
+    date:new Date().toISOString(), _manual:true
+  };
+  db.stock_moves.push(move); db.nextId.stock_move=(db.nextId.stock_move||1)+1;
+  const adjValue=Math.round(qty*(prod.buy_price||0)*100)/100;
+  if(adjValue>0){
+    if(!db.journal)db.journal=[];
+    if(!db.nextId.journal)db.nextId.journal=1;
+    const journalId=db.nextId.journal++;
+    move.journal_id=journalId;
+    db.journal.push({
+      id:journalId, date:new Date().toISOString(),
+      description:`تسوية مخزون يدوية (${move.reason||(type==='in'?'وارد':'صادر')}) — ${prod.name}`,
+      entries: type==='in' ? [
+        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:adjValue},
+        {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount:adjValue},
+      ] : [
+        {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount:adjValue},
+        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:adjValue},
+      ],
+      ref: move.reference
+    });
+  }
+  return move;
+}
+// منتج جديد بكمية افتتاحية: السيرفر يسجّلها طبقة تكلفة بسعر الشراء (products.create)،
+// فلازم قيد يقابلها (مخزون ← رأس المال، نفس قيد الإعداد الأولي) — وإلا قيمة
+// المخزون الفعلية أكبر من حساب المخزون بالدفاتر
+function postOpeningStock(db, prod, qty, label) {
+  const val = Math.round((Number(qty)||0)*(Number(prod.buy_price)||0)*100)/100;
+  if (val <= 0) return;
+  if(!db.journal)db.journal=[];
+  if(!db.nextId.journal)db.nextId.journal=1;
+  db.journal.push({ id:db.nextId.journal++, date:new Date().toISOString(),
+    description:`رصيد افتتاحي — ${label||'منتج جديد'}: ${prod.name} (${qty} × ${fmtMoney(prod.buy_price)})`,
+    entries:[
+      {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:val},
+      {account:lang==='ar'?'رأس المال':'Capital', account_code:'3000', side:'credit', amount:val},
+    ], ref:`OPEN-P${prod.id}` });
+}
+
 function saveStockMove(){
   if (blockedByExpiredSubscription()) return;
   const db=getDB();
@@ -12533,43 +12597,8 @@ function saveStockMove(){
     const curWhQty=getWarehouseStockQty(db, prod.id, warehouseId);
     if(qty>curWhQty){showToast(lang==='ar'?`الكمية بالمستودع غير كافية (المتاح: ${curWhQty})`:`Insufficient stock in warehouse (available: ${curWhQty})`,'error');return;}
   }
-  mutateWarehouseStock(db, prod.id, warehouseId, type==='in'?qty:-qty);
-  if(!db.stock_moves)db.stock_moves=[];
-  const move={
-    id:db.nextId.stock_move||1,
-    product_id:pid, product_name:opt.dataset.name, product_code:opt.dataset.code, warehouse_id:warehouseId,
-    type, qty, balance_before:oldQty, balance_after:prod.qty,
-    reason:el('sm-reason').value, note:el('sm-note').value,
-    source:el('sm-source')?.value||'',
-    reference:el('sm-ref')?.value||'MANUAL',
-    date:new Date().toISOString(),
-    _manual:true
-  };
-  db.stock_moves.push(move); db.nextId.stock_move=(db.nextId.stock_move||1)+1;
-
-  // قيد محاسبي — قيمة التسوية بسعر تكلفة الصنف الحالي (آخر سعر شراء) كتقدير
-  // فوري وقت الإدخال؛ لعملية "صادر" تحديدًا، تكلفة FIFO الحقيقية تصل لاحقًا
-  // من السيرفر وقت المزامنة (راجع تصحيح القيد بمعالج مزامنة stock_moves) —
-  // نخزّن معرّف القيد على الحركة نفسها ليُصحَّح لاحقًا بدل بقائه بتقدير خاطئ دائمًا
-  const adjValue=Math.round(qty*(prod.buy_price||0)*100)/100;
-  if(adjValue>0){
-    if(!db.journal)db.journal=[];
-    if(!db.nextId.journal)db.nextId.journal=1;
-    const journalId=db.nextId.journal++;
-    move.journal_id=journalId;
-    db.journal.push({
-      id:journalId, date:new Date().toISOString(),
-      description:`تسوية مخزون يدوية (${move.reason||(type==='in'?'وارد':'صادر')}) — ${opt.dataset.name}`,
-      entries: type==='in' ? [
-        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:adjValue},
-        {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount:adjValue},
-      ] : [
-        {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount:adjValue},
-        {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:adjValue},
-      ],
-      ref: move.reference
-    });
-  }
+  const move = applyStockAdjustment(db, prod, warehouseId, type, qty, el('sm-reason').value, el('sm-note').value, el('sm-ref')?.value||'MANUAL');
+  move.source = el('sm-source')?.value||'';
 
   saveDB(db);
   logActivity('مخزون',`حركة ${type==='in'?'وارد':'صادر'} — ${opt.dataset.name} — ${type==='in'?'+':'-'}${qty}`);
@@ -14534,10 +14563,12 @@ function confirmImport(data, type, format) {
     // منتج موجود فعليًا بكود مختلف قد يندمج صامتًا مع صنف آخر بنفس الاسم بالصدفة
     const ex = item.code ? db.products.find(p=>p.code===item.code) : db.products.find(p=>p.name===item.name);
     if(ex) {
-      Object.assign(ex, {buy_price:item.buy_price||ex.buy_price, sell_price:item.sell_price||ex.sell_price, qty:item.qty||ex.qty});
+      Object.assign(ex, {buy_price:item.buy_price||ex.buy_price, sell_price:item.sell_price||ex.sell_price});
+      _importSetQty(db, ex, item.qty);
       updated++;
     } else {
-      db.products.push({id:nextId(db,'product'),...item,min_qty:item.min_qty||5});
+      const _np = {id:nextId(db,'product'),...item,qty:0,min_qty:item.min_qty||5};
+      db.products.push(_np); _importNewQty(db, _np, item.qty);
       added++;
     }
   });
@@ -15866,6 +15897,29 @@ function getCashierTargetHTML() {
 }
 
 // ============ IMPORT PRODUCTS CSV ============
+// الاستيراد يحدّد الكمية المطلوبة (جرد): منتج قائم → تسوية بالفرق، منتج جديد →
+// رصيد افتتاحي بمستودع الفرع النشط
+function _importSetQty(db, prod, qty) {
+  const target = Number(qty);
+  if (!isFinite(target) || qty === '' || qty == null) return;
+  const whId = resolveActiveWarehouseId();
+  if (!whId) return;
+  const cur = (db.branches||[]).filter(b=>b.active!==false).length > 1 ? getWarehouseStockQty(db, prod.id, whId) : (Number(prod.qty)||0);
+  const delta = Math.round((target - cur)*1000)/1000;
+  if (Math.abs(delta) < 0.0005) return;
+  if (delta < 0 && -delta > getWarehouseStockQty(db, prod.id, whId) + 0.0005) return;
+  applyStockAdjustment(db, prod, whId, delta>0?'in':'out', Math.abs(delta), 'جرد (استيراد)', '', 'IMPORT');
+}
+function _importNewQty(db, prod, qty) {
+  const n = Number(qty)||0;
+  if (n <= 0) return;
+  prod.qty = n;
+  const branchId = resolveActiveBranchId(), whId = resolveWarehouseIdForBranch(db, branchId);
+  if (branchId) prod.branch_id = branchId;
+  if (whId) { if (!db.productStock) db.productStock = {}; db.productStock[prod.id] = { [whId]: n }; }
+  postOpeningStock(db, prod, n, 'استيراد');
+}
+
 function importProductsCSV(input) {
   const file=input.files[0]; if(!file)return;
   const reader=new FileReader();
@@ -15882,8 +15936,8 @@ function importProductsCSV(input) {
       // نفس مبدأ استيراد Excel/AI: الكود أولى عند وجوده، لا نطابق بالاسم إذا
       // كان لدينا كود صريح — يمنع اندماج صنف بكود مختلف بالصدفة بسبب تشابه الاسم
       const ex=code ? db.products.find(p=>p.code===code) : db.products.find(p=>p.name===name);
-      if(ex){ ex.buy_price=Number(buy_price)||ex.buy_price; ex.sell_price=Number(sell_price)||ex.sell_price; ex.qty=Number(qty)||ex.qty; }
-      else { db.products.push({id:nextId(db,'product'),code:code||`P${db.nextId.product}`,name,category:category||'عام',unit:'قطعة',buy_price:Number(buy_price)||0,sell_price:Number(sell_price)||0,qty:Number(qty)||0,min_qty:5}); added++; }
+      if(ex){ ex.buy_price=Number(buy_price)||ex.buy_price; ex.sell_price=Number(sell_price)||ex.sell_price; _importSetQty(db, ex, qty); }
+      else { const np={id:nextId(db,'product'),code:code||`P${db.nextId.product}`,name,category:category||'عام',unit:'قطعة',buy_price:Number(buy_price)||0,sell_price:Number(sell_price)||0,qty:0,min_qty:5}; db.products.push(np); _importNewQty(db, np, qty); added++; }
     });
     saveDB(db);
     showToast(`✅ ${lang==='ar'?`تم: ${added} منتج جديد، ${lines.length-1-added-skipped} محدّث`:`Done: ${added} new, ${lines.length-1-added-skipped} updated`}`);
@@ -18007,25 +18061,33 @@ function obSaveAll() {
   if (!db.treasury) db.treasury = { balance:0, moves:[] };
   if (!Array.isArray(db.treasury.moves)) db.treasury.moves = [];
   if (isEdit) {
-    const oldTotalCash = (oldData.cash_box||0)+(oldData.cash_bank||0);
-    if (oldTotalCash > 0) db.treasury.balance = Math.round((db.treasury.balance - oldTotalCash) * 100) / 100;
-    // حذف كل حركات الرصيد الافتتاحي القديمة (قد تكون حركة واحدة قديمة النمط
-    // قبل هذا الإصلاح، أو حركتان منفصلتان نقدي/بنك بعده) — لا نكتفي بأول تطابق
-    db.treasury.moves = db.treasury.moves.filter(m => m.reference !== 'OPENING');
-  }
-  // حركتان منفصلتان بدل حركة مدمجة واحدة — بلا method تُحتسَب "نقدي" تلقائيًا
-  // بصفحة الخزينة (isBankTreasuryMethod)، وبـmethod:'تحويل' تُحتسَب "بنك" بشكل
-  // صحيح؛ بدون هذا الفصل كانت كل النقدية/البنك تُحتسَب "نقدي" بالكامل
-  if (_obData.cash_box > 0) {
-    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_box,
-      description:'رصيد افتتاحي — نقدية', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
-  }
-  if (_obData.cash_bank > 0) {
-    db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_bank,
-      method:'تحويل', description:'رصيد افتتاحي — بنك', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
-  }
-  if (totalCash > 0) {
-    db.treasury.balance = Math.round((db.treasury.balance + totalCash) * 100) / 100;
+    // التعديل يسجّل حركة الفرق فقط (زيادة/نقص) ويبقي الحركة الأصلية — كان يحذف
+    // القديمة محليًا (حذف حركات الخزينة ما يتزامن) ويضيف حركة كاملة جديدة،
+    // فيتضاعف الرصيد الافتتاحي بخزينة السيرفر
+    const adj = (delta, label, method) => {
+      const d = Math.round(delta*100)/100;
+      if (Math.abs(d) < 0.01) return;
+      db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:d>0?'in':'out', amount:Math.abs(d),
+        ...(method?{method}:{}), description:`تعديل رصيد افتتاحي — ${label}`, reference:'OPENING-ADJ',
+        date:new Date().toISOString(), branch_id:_obData.branch_id });
+      db.treasury.balance = Math.round((db.treasury.balance + d) * 100) / 100;
+    };
+    adj((_obData.cash_box||0) - (oldData.cash_box||0), 'نقدية');
+    adj((_obData.cash_bank||0) - (oldData.cash_bank||0), 'بنك', 'تحويل');
+  } else {
+    // حركتان منفصلتان بدل حركة مدمجة واحدة — بلا method تُحتسَب "نقدي" تلقائيًا
+    // بصفحة الخزينة (isBankTreasuryMethod)، وبـmethod:'تحويل' تُحتسَب "بنك"
+    if (_obData.cash_box > 0) {
+      db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_box,
+        description:'رصيد افتتاحي — نقدية', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
+    }
+    if (_obData.cash_bank > 0) {
+      db.treasury.moves.unshift({ id:nextId(db,'treasury'), type:'in', amount:_obData.cash_bank,
+        method:'تحويل', description:'رصيد افتتاحي — بنك', reference:'OPENING', date:new Date().toISOString(), branch_id:_obData.branch_id });
+    }
+    if (totalCash > 0) {
+      db.treasury.balance = Math.round((db.treasury.balance + totalCash) * 100) / 100;
+    }
   }
 
   // المنتجات/الموظفون/الالتزامات — تُنشأ مرة واحدة فقط بأول تعبئة. بعدها تصير
@@ -20279,6 +20341,65 @@ async function runAISearchQuery(q) {
         }
       }
 
+      // ── حركات المخزون اليدوية فقط (تسويات) — الحركات التلقائية من الفواتير/المشتريات
+      // تُسجَّل في السيرفر تلقائياً عند مزامنة تلك الفواتير/المشتريات، فلا نكررها هنا ──
+      const _prevMoves2 = prev.stock_moves || [];
+      const _newMoves2  = newDB.stock_moves || [];
+      for (const sm of _newMoves2) {
+        if (!sm._manual || typeof sm.id === 'string' || sm._serverId) continue;
+        if (_prevMoves2.find(x => x.id === sm.id)) continue;
+
+        // نحل المنتج الحقيقي بالاسم وقت الدفع (لا بـsm.product_id المخزَّن) — نفس
+        // أسلوب حل customer_id/supplier_id: لو المنتج محلي لم يُزامَن بعد وقت
+        // تسجيل التسوية، معرّفه المحلي قد يتغيّر لاحقًا أو يتصادم مع منتج آخر
+        // فعليًا — استخدامه مباشرةً بمسار الـURL كان يعدّل مخزون منتج خاطئ تمامًا
+        const _ldbSm = getDB();
+        const _prodSm = _ldbSm.products.find(x => x.id === sm.product_id) || _ldbSm.products.find(x => x.name === sm.product_name);
+        if (!_prodSm) {
+          console.warn('stock move sync deferred: product not resolved yet', sm.product_name);
+          _revertSnapEntity('stock_moves', sm.id, null); // إعادة المحاولة بالتمريرة القادمة بدل تجاهله للأبد
+          continue;
+        }
+
+        if (SYNC_LOG) console.log('→ API: manual stock move', sm.product_name, sm.type, sm.qty);
+        const res = await apiFetch('POST', `/api/products/${_prodSm.id}/move`, {
+          type: sm.type, qty: sm.qty, reason: sm.reason || '',
+          source: sm.source || '', reference: sm.reference || 'MANUAL',
+          warehouse_id: sm.warehouse_id || null,
+          client_local_id: clientKey(sm.id)
+        }).catch(e => { console.warn('stock move sync:', e.message); return null; });
+
+        if (res?.data?.id) {
+          try {
+            const _db = getDB();
+            const _smv = (_db.stock_moves || []).find(x => x.id === sm.id);
+            if (_smv) { _smv._serverId = res.data.id; _origSaveDB(_db); }
+            const _ssm = (_snap?.stock_moves || []).find(x => x.id === sm.id);
+            if (_ssm) _ssm._serverId = res.data.id;
+
+            // "صادر" فقط: القيد المحلي أُنشئ بتقدير آخر سعر شراء (buy_price) —
+            // السيرفر يرجّع الآن تكلفة FIFO الحقيقية (res.data.unit_cost)، نصحّح
+            // بها مبلغ القيد المحفوظ مسبقًا بدل تركه بتقدير خاطئ دائمًا
+            const realUnitCost = parseFloat(res.data.unit_cost);
+            if (sm.type === 'out' && sm.journal_id != null && !isNaN(realUnitCost)) {
+              const realAdjValue = Math.round(sm.qty * realUnitCost * 100) / 100;
+              if (realAdjValue > 0) {
+                // القيد يتصحّح بكل النسخ (المحلية + الجارية بهذي التمريرة + اللقطة)
+                // قبل رفعه — هذا القسم صار يسبق قسم القيود، فيُرفَع القيد بالتكلفة
+                // الحقيقية. كان يُرفع أولًا بسعر الشراء ثم يتصحّح محليًا فقط
+                for (const _d of [_db, _currentPassDB, _snap]) {
+                  const _je = (_d?.journal || []).find(j => j.id === sm.journal_id);
+                  if (_je) _je.entries.forEach(e => { e.amount = realAdjValue; });
+                }
+                _origSaveDB(_db);
+              }
+            }
+          } catch (e) { /* ignore */ }
+        } else {
+          _revertSnapEntity('stock_moves', sm.id, null);
+        }
+      }
+
       // ── دفتر اليومية: قيود جديدة → إنشاء، قيود محذوفة محلياً → حذف من السيرفر ──
       const _prevJournal = prev.journal || [];
       const _newJournal  = newDB.journal || [];
@@ -20389,59 +20510,6 @@ async function runAISearchQuery(q) {
         }
       }
 
-      // ── حركات المخزون اليدوية فقط (تسويات) — الحركات التلقائية من الفواتير/المشتريات
-      // تُسجَّل في السيرفر تلقائياً عند مزامنة تلك الفواتير/المشتريات، فلا نكررها هنا ──
-      const _prevMoves2 = prev.stock_moves || [];
-      const _newMoves2  = newDB.stock_moves || [];
-      for (const sm of _newMoves2) {
-        if (!sm._manual || typeof sm.id === 'string' || sm._serverId) continue;
-        if (_prevMoves2.find(x => x.id === sm.id)) continue;
-
-        // نحل المنتج الحقيقي بالاسم وقت الدفع (لا بـsm.product_id المخزَّن) — نفس
-        // أسلوب حل customer_id/supplier_id: لو المنتج محلي لم يُزامَن بعد وقت
-        // تسجيل التسوية، معرّفه المحلي قد يتغيّر لاحقًا أو يتصادم مع منتج آخر
-        // فعليًا — استخدامه مباشرةً بمسار الـURL كان يعدّل مخزون منتج خاطئ تمامًا
-        const _ldbSm = getDB();
-        const _prodSm = _ldbSm.products.find(x => x.id === sm.product_id) || _ldbSm.products.find(x => x.name === sm.product_name);
-        if (!_prodSm) {
-          console.warn('stock move sync deferred: product not resolved yet', sm.product_name);
-          _revertSnapEntity('stock_moves', sm.id, null); // إعادة المحاولة بالتمريرة القادمة بدل تجاهله للأبد
-          continue;
-        }
-
-        if (SYNC_LOG) console.log('→ API: manual stock move', sm.product_name, sm.type, sm.qty);
-        const res = await apiFetch('POST', `/api/products/${_prodSm.id}/move`, {
-          type: sm.type, qty: sm.qty, reason: sm.reason || '',
-          source: sm.source || '', reference: sm.reference || 'MANUAL',
-          warehouse_id: sm.warehouse_id || null,
-          client_local_id: clientKey(sm.id)
-        }).catch(e => { console.warn('stock move sync:', e.message); return null; });
-
-        if (res?.data?.id) {
-          try {
-            const _db = getDB();
-            const _smv = (_db.stock_moves || []).find(x => x.id === sm.id);
-            if (_smv) { _smv._serverId = res.data.id; _origSaveDB(_db); }
-            const _ssm = (_snap?.stock_moves || []).find(x => x.id === sm.id);
-            if (_ssm) _ssm._serverId = res.data.id;
-
-            // "صادر" فقط: القيد المحلي أُنشئ بتقدير آخر سعر شراء (buy_price) —
-            // السيرفر يرجّع الآن تكلفة FIFO الحقيقية (res.data.unit_cost)، نصحّح
-            // بها مبلغ القيد المحفوظ مسبقًا بدل تركه بتقدير خاطئ دائمًا
-            const realUnitCost = parseFloat(res.data.unit_cost);
-            if (sm.type === 'out' && sm.journal_id != null && !isNaN(realUnitCost)) {
-              const realAdjValue = Math.round(sm.qty * realUnitCost * 100) / 100;
-              const _je = (_db.journal || []).find(j => j.id === sm.journal_id);
-              if (_je && realAdjValue > 0) {
-                _je.entries.forEach(e => { e.amount = realAdjValue; });
-                _origSaveDB(_db);
-              }
-            }
-          } catch (e) { /* ignore */ }
-        } else {
-          _revertSnapEntity('stock_moves', sm.id, null);
-        }
-      }
 
     } finally {
       _syncBusy = false;

@@ -1222,3 +1222,24 @@ exports.markAllNotifRead = async (req, res, next) => {
     res.json({ success: true });
   } catch (err) { next(err); }
 };
+
+// ── الحارس المحاسبي ─────────────────────────────────────────────
+exports.ledgerGuard = async (req, res, next) => {
+  try {
+    const { rows: findings } = await db.query(`
+      SELECT f.company_id, c.name AS company_name, c.plan, f.check_key, f.subject, f.title,
+             f.expected::float, f.actual::float, f.diff::float, f.first_seen, f.last_seen
+      FROM ledger_guard_findings f JOIN companies c ON c.id = f.company_id
+      ORDER BY f.first_seen ASC, f.company_id, f.check_key LIMIT 1000`);
+    const { rows: [lastRun] } = await db.query(`SELECT * FROM ledger_guard_runs ORDER BY id DESC LIMIT 1`);
+    res.json({ success: true, data: { findings, last_run: lastRun || null } });
+  } catch (err) { next(err); }
+};
+exports.runLedgerGuardNow = async (req, res, next) => {
+  try {
+    const { runLedgerGuard } = require('../services/ledgerGuard.service');
+    const companyId = req.body?.company_id ? parseInt(req.body.company_id) : null;
+    const result = await runLedgerGuard({ companyId, trigger: 'manual' });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+};

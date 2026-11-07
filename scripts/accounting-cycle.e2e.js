@@ -169,6 +169,15 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   await op('9. Payment voucher 400 to مورد الخليج', () => voucher('payment', 'مورد الخليج', 400),
     { g: { cash: -400, ap: -400 }, treasury: -400, supp: { 'مورد الخليج': -400 } });
 
+  const whMain = await page.evaluate(() => resolveActiveWarehouseId());
+  const stockMove = async (pid, type, qty, reason) => {
+    await page.evaluate(() => goTo('inventory')); await page.waitForTimeout(300);
+    await page.evaluate(() => showStockMoveModal()); await page.waitForTimeout(400);
+    await page.evaluate(({ pid, type, qty, reason, wh }) => { el('sm-product').value = String(pid); el('sm-type').value = type; el('sm-qty').value = String(qty); const r = el('sm-reason'); if (r) { if ([...r.options || []].some(o => o.value === reason)) r.value = reason; else if (r.options?.length) r.selectedIndex = 1; } const w = el('sm-warehouse'); if (w) w.value = String(wh); saveStockMove(); }, { pid, type, qty, reason, wh: whMain });
+  };
+  await op('9b. Damaged stock-out right after buying at a new price: A −2 → FIFO cost 20 (not last price 24)', () => stockMove(A, 'out', 2, 'تالف'),
+    { g: { inv: -20, exp: 20 }, qty: { 'صنف أ': -2 }, wait: 4500 });
+
   // ══ المرتجعات ══
   const ret = async (type, linkId, prodId, qty, amount) => {
     await page.evaluate(t => showReturnModal(t), type); await page.waitForTimeout(500);
@@ -209,12 +218,6 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
     { g: { ar: -92, rev: -80, vatOut: -12, cogs: -40, inv: 40 }, qty: { 'صنف أ': 4 }, cust: { 'شركة الأفق': -92 } });
 
   // ══ المخزون: تسويات وتحويل بين الفروع ══
-  const whMain = await page.evaluate(() => resolveActiveWarehouseId());
-  const stockMove = async (pid, type, qty, reason) => {
-    await page.evaluate(() => goTo('inventory')); await page.waitForTimeout(300);
-    await page.evaluate(() => showStockMoveModal()); await page.waitForTimeout(400);
-    await page.evaluate(({ pid, type, qty, reason, wh }) => { el('sm-product').value = String(pid); el('sm-type').value = type; el('sm-qty').value = String(qty); const r = el('sm-reason'); if (r) { if ([...r.options || []].some(o => o.value === reason)) r.value = reason; else if (r.options?.length) r.selectedIndex = 1; } const w = el('sm-warehouse'); if (w) w.value = String(wh); saveStockMove(); }, { pid, type, qty, reason, wh: whMain });
-  };
   // ج: بعد البيع (10 من طبقة 5) والشراء (30 بـ6): سعر الشراء الحالي 6
   await op('14. Manual stock-in (found): C +5', () => stockMove(C, 'in', 5, 'جرد'), { g: { inv: 30, rev: 30 }, qty: { 'صنف ج': 5 } });
   // أ: طبقات FIFO الحالية تبدأ بتكلفة 10 → خروج 3 = 30 (سعر الشراء الحالي 12 → قد يُقيَّد 36)
@@ -247,6 +250,96 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const brAfter = await page.evaluate(({ A, w2 }) => getWarehouseStockQty(getDB(), A, w2), { A, w2: wh2.w });
   ok(brAfter === 19, 'branch-2 stock dropped to 19 (sale deducted from the selling branch) — got ' + brAfter);
   await page.evaluate(() => { _manualActiveBranchId = null; });
+
+  // ══ مسارات المخزون الإضافية ══
+  await op('26. New product with opening qty (inventory → add product): D 10 @8', async () => {
+    await page.evaluate(() => goTo('inventory')); await page.waitForTimeout(300);
+    await page.evaluate(() => showProductModal()); await page.waitForTimeout(400);
+    await page.evaluate(() => { el('pr-name').value = 'صنف د'; el('pr-code').value = 'D-1'; el('pr-buy').value = '8'; el('pr-sell').value = '15'; el('pr-qty').value = '10'; saveProduct(); });
+  }, { g: { inv: 80, equity: 80 }, wait: 4500 });
+  const D = await prod('صنف د');
+  ok(await page.evaluate(id => getDB().products.find(p => p.id === id)?.qty === 10, D), 'D created with qty 10');
+  await op('27. Editing a product cannot change its quantity (field is read-only)', async () => {
+    await page.evaluate(id => showProductModal(id), D); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => el('pr-qty').readOnly === true), 'quantity field is read-only on edit');
+    await page.evaluate(id => { el('pr-qty').value = '99'; el('pr-sell').value = '16'; saveProduct(id); }, D);
+  }, { g: {}, qty: { 'صنف د': 0 }, wait: 3500 });
+  await op('28. Excel import: existing D set to 12 (+2 adjustment) and new E 5 @4 (opening)', () => page.evaluate(() => {
+    confirmImport([{ name: 'صنف د', code: 'D-1', qty: 12, buy_price: 8, sell_price: 16 }, { name: 'صنف هـ', code: 'E-1', qty: 5, buy_price: 4, sell_price: 9 }], 'inventory', 'excel');
+  }), { g: { inv: 36, rev: 16, equity: 20 }, qty: { 'صنف د': 2 }, wait: 5000 });
+  ok(await page.evaluate(() => getDB().products.find(p => p.name === 'صنف هـ')?.qty === 5), 'E imported with qty 5');
+
+  // أمر شراء ← استلام
+  await op('29. Purchase order (D×5 @8) → received as a credit purchase', async () => {
+    await page.evaluate(() => goTo('purchases')); await page.waitForTimeout(300);
+    await page.evaluate(() => { showPOModal(); }); await page.waitForTimeout(400);
+    await page.evaluate(() => { el('po-supplier').value = 'مورد الخليج'; window._poItems = [{ name: 'صنف د', qty: 5, price: 8, total: 40 }]; savePO(); });
+    await page.waitForTimeout(2500);
+    const poId = await page.evaluate(() => getDB().purchase_orders.slice(-1)[0].id);
+    await page.evaluate(id => { el('modal-container').innerHTML = ''; startPOReceive(id); }, poId); await page.waitForTimeout(500);
+    await page.selectOption('#gp-payment', 'آجل');
+    await page.evaluate(() => saveGoodsPurchase());
+  }, { g: { inv: 40, vatIn: 6, ap: 46 }, qty: { 'صنف د': 5 }, supp: { 'مورد الخليج': 46 }, wait: 5000 });
+  ok(await page.evaluate(() => getDB().purchase_orders.slice(-1)[0].status !== 'معلق'), 'purchase order no longer pending after receipt: ' + await page.evaluate(() => getDB().purchase_orders.slice(-1)[0].status));
+
+  // فاتورة شراء مقروءة بالذكاء الاصطناعي: صنف معروف + صنف جديد غير مسجّل
+  await op('30. AI-read supplier invoice (cash): C×4 @5 (known) + new item ×3 @7 (created from the purchase)', async () => {
+    await page.evaluate(() => goTo('purchases')); await page.waitForTimeout(300);
+    await page.evaluate(() => openPurchaseFormWithAIData({ vendor: 'مورد النخبة', invoice_no: 'AI-77', items: [{ description: 'صنف ج', qty: 4, unit_price: 5, total: 20 }, { description: 'صنف مستورد جديد', qty: 3, unit_price: 7, total: 21 }] }, null));
+    await page.waitForTimeout(500);
+    await page.selectOption('#gp-payment', 'نقدي');
+    await page.evaluate(() => saveGoodsPurchase());
+    await page.waitForTimeout(1500);
+    const missing = await page.evaluate(() => !!el('mp-code-0'));
+    ok(missing, 'new item opens the "create product" form');
+    if (missing) await page.evaluate(() => { el('mp-code-0').value = 'NEW-AI-1'; el('mp-sell-0').value = '12'; saveMissingProducts(); });
+  }, { g: { inv: 41, vatIn: 6.15, cash: -47.15 }, treasury: -47.15, qty: { 'صنف ج': 4 }, wait: 5500 });
+  ok(await page.evaluate(() => getDB().products.find(p => p.name === 'صنف مستورد جديد')?.qty === 3), 'new AI item exists with qty 3');
+
+  // شراء لفرع جدة
+  await op('31. Cash purchase into فرع جدة: A×10 @12', async () => {
+    await page.evaluate(() => goTo('purchases')); await page.waitForTimeout(300);
+    await page.evaluate(() => showAddGoodsPurchase()); await page.waitForTimeout(400);
+    await page.fill('#gp-vendor', 'مورد الخليج');
+    await page.evaluate(({ A, b }) => { const p = getDB().products.find(x => x.id === A); _goodsItems.push({ name: p.name, qty: 10, price: 12, line_total: 120, vat: 18, product_id: A }); const sel = el('gp-branch'); if (sel) sel.value = String(b); }, { A, b: wh2.b });
+    await page.selectOption('#gp-payment', 'نقدي');
+    await page.evaluate(() => saveGoodsPurchase());
+  }, { g: { inv: 120, vatIn: 18, cash: -138 }, treasury: -138, qty: { 'صنف أ': 10 }, wait: 5000 });
+  const br2A = await page.evaluate(({ A, w2 }) => getWarehouseStockQty(getDB(), A, w2), { A, w2: wh2.w });
+  ok(br2A === 29, 'فرع جدة warehouse received the 10 units (19 → 29): ' + br2A);
+
+  // بيع أكثر من المتوفر
+  const bAvail = await page.evaluate(B => getDB().products.find(p => p.id === B).qty, B);
+  await op('32a. POS: adding more than available stock is capped', async () => {
+    await page.evaluate(() => goTo('pos')); await page.waitForTimeout(500);
+    await page.evaluate(({ B, n }) => { cart = []; for (let i = 0; i < n + 3; i++) addToCart(B); }, { B, n: bAvail });
+    const inCart = await page.evaluate(B => (cart.find(c => c.id === B) || {}).qty || 0, B);
+    ok(inCart <= bAvail, `cart capped at available stock (${inCart} ≤ ${bAvail})`);
+    await page.evaluate(() => { cart = []; });
+  }, { g: {}, wait: 1000 });
+  const invCount0 = await page.evaluate(() => getDB().invoices.length);
+  await op('32b. Invoice for more than available stock is refused (nothing recorded)', () => newInvoice({ customer: 'شركة الأفق', type: 'tax', items: [[B, bAvail + 50]], payment: 'آجل' }),
+    { g: {}, qty: { 'صنف ب': 0 }, wait: 4000 });
+  ok(await page.evaluate(() => getDB().invoices.length) === invCount0, 'no invoice was created');
+  await page.evaluate(() => { el('modal-container').innerHTML = ''; });
+
+  // حذف منتج
+  await op('33a. Deleting a product that still has stock is refused', () => page.evaluate(id => deleteProduct(id), D), { g: {}, qty: { 'صنف د': 0 }, wait: 2500 });
+  ok(await page.evaluate(id => !!getDB().products.find(p => p.id === id), D), 'product with stock still exists');
+  await page.evaluate(() => { const db = getDB(); db.products.push({ id: nextId(db, 'product'), name: 'صنف فارغ', code: 'Z-0', buy_price: 1, sell_price: 2, qty: 0, min_qty: 0 }); saveDB(db); });
+  await settle(3500);
+  const Z = await prod('صنف فارغ');
+  await op('33b. Deleting a product with zero stock works', () => page.evaluate(id => deleteProduct(id), Z), { g: {}, wait: 4000 });
+  ok(!(await prod('صنف فارغ')), 'zero-stock product removed');
+
+  // تعديل الأرصدة الافتتاحية بعد حفظها
+  await op('34. Edit opening balances: cash in drawer 10000 → 11000', () => page.evaluate(() => {
+    showOpeningBalancesWizard(true);
+    _obData.cash_box = (_obData.cash_box || 0) + 1000;
+    _obStep = _obActiveSteps().length;
+    obSaveAll();
+  }), { g: { cash: 1000, equity: 1000 }, treasury: 1000, wait: 5000 });
+  await page.evaluate(() => { el('modal-container').innerHTML = ''; });
 
   // ══ عرض سعر ← فاتورة ══
   await op('18. Quote to شركة الأفق B×1 → converted to invoice', async () => {
@@ -343,7 +436,7 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   ok(Math.abs(fin.treasury - srvGroups.cash) < 0.01, `app treasury ${fin.treasury} = GL cash`);
   const lots = (await q(`select coalesce(sum(qty_remaining*unit_cost),0)::float v from stock_lots where company_id=$1`))[0].v;
   ok(Math.abs(r2(lots) - r2(srvGroups.inv + (gl['1350'] || 0))) < 0.01, `FIFO stock value ${r2(lots)} = GL inventory ${r2(srvGroups.inv + (gl['1350'] || 0))}`);
-  const pq = await q(`select p.name, p.qty::float q, coalesce((select sum(qty_remaining) from stock_lots l where l.product_id=p.id),0)::float lq, coalesce((select sum(qty) from product_stock w where w.product_id=p.id),0)::float wq from products p where p.company_id=$1`);
+  const pq = await q(`select p.name, p.qty::float q, coalesce((select sum(qty_remaining) from stock_lots l where l.product_id=p.id),0)::float lq, coalesce((select sum(qty) from product_stock w where w.product_id=p.id),0)::float wq from products p where p.company_id=$1 and p.is_active`);
   for (const r of pq) ok(Math.abs(r.q - r.lq) < 0.001 && Math.abs(r.q - r.wq) < 0.001 && Math.abs(r.q - fin.qty[r.name]) < 0.001, `${r.name}: qty ${r.q} = FIFO lots ${r.lq} = warehouses ${r.wq} = app ${fin.qty[r.name]}`);
   const custSum = (await q(`select coalesce(sum(balance),0)::float s from customers where company_id=$1`))[0].s;
   ok(Math.abs(r2(custSum) - srvGroups.ar) < 0.01, `customer balances ${r2(custSum)} = AR ${srvGroups.ar}`);
@@ -392,6 +485,10 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const tot2 = Object.values(gl2).reduce((s, v) => s + v, 0); ok(Math.abs(tot2) < 0.01, 'trial balance still balanced after closing');
   const BS2 = await page.evaluate(async () => (await window._cloudApiFetch('GET', '/api/reports/balance-sheet')).data);
   ok(Math.abs(BS2.assets.total - (BS2.liabilities.total + BS2.equity)) < 0.01 && Math.abs(BS2.equity - appBS.equity) < 0.01, `balance sheet unchanged & balanced after closing: equity ${BS2.equity} (before ${appBS.equity})`);
+  console.log('\n▶ Ledger guard on this company');
+  const { checkCompany } = require(path + 'src/services/ledgerGuard.service.js');
+  const gf = await checkCompany(cid);
+  ok(gf.length === 0, 'daily ledger guard finds no discrepancy (' + gf.length + ')' + (gf.length ? ': ' + gf.map(x => x.title + ' ' + x.diff).join(' | ') : ''));
   console.log('\nRESULT: ' + passes + ' passed, ' + fails + ' failed');
   console.log('ERRORS:', errs.length ? '\n' + errs.join('\n') : 'none');
   console.log('USER cyc' + sfx, 'COMPANY', cid);

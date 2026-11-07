@@ -153,6 +153,11 @@ exports.update = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
+    // منتج عنده رصيد ما يُعطَّل — قيمته تبقى بالمخزون والدفاتر بلا منتج ظاهر
+    const { rows: [p] } = await db.query(`SELECT qty FROM products WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id]);
+    if (p && parseFloat(p.qty) > 0.0005) {
+      return res.status(409).json({ success: false, code: 'HAS_STOCK', message: 'المنتج عنده رصيد — صفّر الكمية بتسوية مخزون قبل حذفه' });
+    }
     await db.query(
       `UPDATE products SET is_active = false WHERE id = $1 AND company_id = $2`,
       [req.params.id, req.user.company_id]

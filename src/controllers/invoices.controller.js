@@ -31,7 +31,7 @@ exports.list = async (req, res, next) => {
     // كانت تستبدل db.invoices محليًا بنسخة بلا items إطلاقًا — الفاتورة تفقد
     // أصنافها المعروضة خلال دقيقة من إنشائها على كل جهاز
     const { rows } = await db.query(`
-      SELECT i.*, c.name AS customer_name,
+      SELECT i.*, COALESCE(c.name, i.customer_name) AS customer_name,
              COALESCE(
                (SELECT json_agg(json_build_object(
                   'id', ii.id, 'product_id', ii.product_id, 'product_name', ii.product_name,
@@ -63,7 +63,7 @@ exports.list = async (req, res, next) => {
 exports.getOne = async (req, res, next) => {
   try {
     const { rows: [invoice] } = await db.query(
-      `SELECT i.*, c.name AS customer_name, c.vat_number AS customer_vat_db
+      `SELECT i.*, COALESCE(c.name, i.customer_name) AS customer_name, c.vat_number AS customer_vat_db
        FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id
        WHERE i.id = $1 AND i.company_id = $2`,
       [req.params.id, req.user.company_id]
@@ -261,6 +261,13 @@ exports.create = async (req, res, next) => {
           itemUnitCost = unitCostAvg;
         } catch (stockErr) {
           await client.query('ROLLBACK TO sp_stock');
+          // كمية غير كافية: الفاتورة كلها تُرفض — كانت تُنشأ بلا خصم مخزون وبتكلفة
+          // صفر (ربح وهمي)، والواجهة تخصم محليًا ثم ترجع الكمية بأول تحديث
+          if (stockErr.status === 400 && /غير كافية/.test(stockErr.message || '')) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, code: 'INSUFFICIENT_STOCK',
+              message: `الكمية غير كافية في المخزون: ${item.product_name || ''} (المطلوب ${item.qty})` });
+          }
           console.warn(`stock deduct skipped [${invoice_no}] product ${item.product_id}:`, stockErr.message);
         }
       }
