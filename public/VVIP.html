@@ -2815,6 +2815,7 @@ function goTo(page) {
   });
   if (window.innerWidth <= 768) closeMobileSidebar();
   renderPage();
+  if (page === 'pos' || page === 'inventory') window._pullIfStale?.();
   yq('Page', page);
   maybeStartPageTour(page);
 }
@@ -3258,6 +3259,11 @@ function renderPOS(sc) {
 
 function setPosCustomer(val) { posCustomer = val; }
 function setPosDiscount(val) { posDiscount = val; updatePOSTotals(); }
+// المسح يطابق الباركود المسجّل للمنتج أو كوده — كان يطابق الكود فقط، فمسح
+// باركود المنتج الحقيقي بالكاشير كان يطلع «لم يُعثر على»
+function posFindByScan(db, q) {
+  return db.products.find(p=>String(p.barcode||'').toLowerCase()===q) || db.products.find(p=>p.code?.toLowerCase()===q);
+}
 // Barcode / name search handler
 function posSearchInput(val) {
   const db=getDB();
@@ -3266,7 +3272,7 @@ function posSearchInput(val) {
   if(!q){if(res)res.style.display='none';filterProductGrid('');return;}
 
   // exact barcode match → add directly
-  const exact=db.products.find(p=>p.code?.toLowerCase()===q);
+  const exact=posFindByScan(db,q);
   if(exact){
     if(exact.qty<=0){
       showToast(lang==='ar'?`⚠️ ${exact.name}: نفد المخزون`:`⚠️ ${exact.name}: Out of stock`,'error');
@@ -3281,7 +3287,7 @@ function posSearchInput(val) {
 
   // partial match → show dropdown + filter grid
   filterProductGrid(q);
-  const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)).slice(0,6);
+  const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q)).slice(0,6);
   if(!res)return;
   if(matches.length===0){res.style.display='none';return;}
   res.style.display='block';
@@ -3302,7 +3308,7 @@ function posSearchKeydown(e) {
     if(!q) return;
     const db=getDB();
     // exact barcode match first (scanner sends barcode + Enter)
-    const exact=db.products.find(p=>p.code?.toLowerCase()===q);
+    const exact=posFindByScan(db,q);
     if(exact){
       if(exact.qty<=0){
         showToast(lang==='ar'?`⚠️ ${exact.name}: نفد المخزون`:`⚠️ ${exact.name}: Out of stock`,'error');
@@ -3316,14 +3322,14 @@ function posSearchKeydown(e) {
       return;
     }
     // no barcode match → show error
-    if(q.length>=3 && !db.products.some(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q))){
+    if(q.length>=3 && !db.products.some(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q))){
       showToast(lang==='ar'?`❌ لم يُعثر على: ${q}`:`❌ Not found: ${q}`,'error');
       el('pos-search').value='';
       el('pos-search').focus();
       return;
     }
     // fallback: single partial match
-    const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q));
+    const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q));
     if(matches.length===1){
       addToCart(matches[0].id);
       el('pos-search').value='';
@@ -3341,7 +3347,7 @@ function posSearchKeydown(e) {
 function filterProductGrid(q) {
   const db=getDB();
   const grid=el('products-grid'); if(!grid) return;
-  const matches=db.products.filter(p=>!q||p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q));
+  const matches=db.products.filter(p=>!q||p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q));
   grid.innerHTML=matches.map(p=>{ const _q=activeBranchStockQty(db,p); return `
     <div class="product-card ${_q<=p.min_qty?'low':''}" data-action="selectPosProductCard" data-args="${JSON.stringify([p.id])}" title="${sanitize(p.code)}">
       <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">${sanitize(p.code)}</div>
@@ -4413,7 +4419,7 @@ function niSearchInput(val) {
     el('ni-search').focus();
     return;
   }
-  const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)).slice(0,6);
+  const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q)).slice(0,6);
   if(!res)return;
   if(matches.length===0){
     res.style.display='block';
@@ -4449,7 +4455,7 @@ function niSearchKeydown(e) {
       el('ni-search').focus();
       return;
     }
-    const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q));
+    const matches=db.products.filter(p=>p.name.toLowerCase().includes(q)||p.code?.toLowerCase().includes(q)||p.barcode?.toLowerCase().includes(q));
     if(matches.length===1){
       addNewInvItem(matches[0].id);
       el('ni-search').value='';
@@ -6025,6 +6031,7 @@ function renderInventoryInner(c) {
   <div style="margin-top:8px;">
     ${tabsHtml}
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+      ${db.products.length?`<button class="btn btn-outline" data-action="showBarcodeGenerator">${icon('scan-barcode',16)} ${lang==='ar'?'طباعة باركود':'Print barcodes'}</button>`:''}
       ${has('inventory.manage')?`<button id="inv-add-btn" class="btn btn-primary" data-action="showAddInventoryMenu">${icon('plus',16)} ${t('add')}</button>`:''}
     </div>
     <div id="inv-table" class="card">
@@ -6035,7 +6042,8 @@ function renderInventoryInner(c) {
           <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
           <td><span class="badge ${q<=p.min_qty?'badge-red':'badge-green'}">${q}</span></td>
           <td>${p.min_qty}</td>
-          ${has('inventory.manage')?`<td>
+          ${has('inventory.manage')?`<td style="white-space:nowrap;">
+            <button class="icon-btn" style="width:28px;height:28px;margin-inline-end:4px;" title="${lang==='ar'?'طباعة باركود':'Print barcode'}" data-action="showBarcodeGenerator" data-args="${JSON.stringify([p.id])}">${icon('scan-barcode',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;" data-action="showProductModal" data-args="${JSON.stringify([p.id])}">${icon('edit',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" data-action="deleteProduct" data-args="${JSON.stringify([p.id])}">${icon('trash-2',13)}</button>
           </td>`:''}
@@ -6283,13 +6291,16 @@ function saveProduct(id) {
   if (blockedByExpiredSubscription()) return;
   const db = getDB();
 
-  const autoOn = el('pr-auto')?.checked || false;
-  const polVal = parseFloat(el('pr-policy-val')?.value) || 0;
+  // سياسة التسعير ميزة باقة احترافية — حقولها أصلًا مخفية بالنافذة لغيرها،
+  // وإرسالها كان يرجع 403 فتطلع رسالة "تعذّر الحفظ" مع إن المنتج انحفظ فعلًا
+  const canPrice = has('pricing.manage') && hasPlanFeature('pricing_policy');
+  const autoOn = canPrice && (el('pr-auto')?.checked || false);
+  const polVal = canPrice ? (parseFloat(el('pr-policy-val')?.value) || 0) : 0;
   const buyPrice = Number(el('pr-buy').value);
 
   // احسب سعر البيع فوراً إذا كان التسعير الديناميكي مفعّلاً
   let sellPrice = Number(el('pr-sell').value);
-  if (has('pricing.manage') && autoOn && polVal > 0 && buyPrice > 0) {
+  if (canPrice && autoOn && polVal > 0 && buyPrice > 0) {
     sellPrice = Math.round(buyPrice * (1 + polVal / 100) * 100) / 100;
   }
 
@@ -6301,8 +6312,14 @@ function saveProduct(id) {
     qty:Number(el('pr-qty').value), min_qty:Number(el('pr-min').value)
   };
   if(!data.name){showToast(lang==='ar'?'اسم المنتج مطلوب':'Product name required','error');return;}
+  // باركود مكرَّر يخلّي نقطة البيع تجيب منتج غلط عند المسح — نرفضه والنافذة
+  // تبقى مفتوحة بنفس البيانات عشان يصحّحه بدون ما يعيد التعبئة
+  if (data.barcode) {
+    const dup = db.products.find(x => x.id !== id && (String(x.barcode||'') === data.barcode || String(x.code||'') === data.barcode));
+    if (dup) { showToast(`⚠️ ${lang==='ar'?'هذا الباركود مستخدم للمنتج':'Barcode already used by'}: ${dup.name}`, 'error'); el('pr-barcode')?.focus(); return; }
+  }
 
-  if (has('pricing.manage')) {
+  if (canPrice) {
     data.auto_price_update   = autoOn;
     data.profit_policy_type  = autoOn ? 'percentage_on_cost' : 'none';
     data.profit_policy_value = polVal;
@@ -6318,13 +6335,25 @@ function saveProduct(id) {
       }
     }
   }
-  else { db.products.push({id:nextId(db,'product'), created_at:new Date().toISOString(), ...data}); }
+  else {
+    // المنتج الجديد ينضاف لمخزون الفرع النشط — بنفس الفرع اللي يرسله للسيرفر،
+    // وإلا (بشركة متعددة الفروع) يظهر بالمخزون ونقطة البيع بكمية صفر لين
+    // السحب التالي من السيرفر
+    const newId = nextId(db,'product');
+    const branchId = resolveActiveBranchId();
+    const whId = resolveWarehouseIdForBranch(db, branchId);
+    db.products.push({id:newId, created_at:new Date().toISOString(), ...data, ...(branchId?{branch_id:branchId}:{})});
+    if (data.qty && whId) {
+      if (!db.productStock) db.productStock = {};
+      db.productStock[newId] = { [whId]: data.qty };
+    }
+  }
   saveDB(db);
   showToast(autoOn && polVal > 0 ? `✅ تم الحفظ — سعر البيع الجديد: ${sellPrice} ر.س` : `✅ ${t('save')}`);
   closeModal(); renderPage();
 
   // إرسال سياسة التسعير للـ API (صلاحية مستقلة — للمنتجات الموجودة فقط)
-  if (id && has('pricing.manage') && window._cloudApiFetch) {
+  if (id && canPrice && window._cloudApiFetch) {
     window._cloudApiFetch('PUT', `/api/products/${id}/pricing-policy`, {
       profit_policy_type:  autoOn ? 'percentage_on_cost' : 'none',
       profit_policy_value: polVal,
@@ -15041,18 +15070,13 @@ function renderSettingsGeneral(c) {
     <!-- Import/Export & Barcode -->
     <div class="card"><div class="card-pad">
       <h3 style="margin-bottom:16px;font-weight:800;">📦 ${lang==='ar'?'استيراد وتصدير البيانات':'Import & Export'}</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="display:grid;gap:12px;">
         <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px dashed var(--border);">
           <div style="font-weight:800;margin-bottom:6px;">📥 ${lang==='ar'?'استيراد منتجات من Excel':'Import Products from Excel'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${lang==='ar'?'الأعمدة: الكود، الاسم، التصنيف، سعر الشراء، سعر البيع، الكمية':'Columns: Code, Name, Category, BuyPrice, SellPrice, Qty'}</div>
           <input type="file" id="import-file" accept=".csv" style="display:none;" data-onchange-el="importProductsCSV" />
           <button class="btn btn-outline btn-sm" data-action="clickImportFileInput">${icon('upload',14)} ${lang==='ar'?'استيراد CSV':'Import CSV'}</button>
           <button class="btn btn-outline btn-sm" style="margin-${lang==='ar'?'right':'left'}:8px;" data-action="downloadImportTemplate">${icon('download',14)} ${lang==='ar'?'نموذج':'Template'}</button>
-        </div>
-        <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px dashed var(--border);">
-          <div style="font-weight:800;margin-bottom:6px;">🔲 ${lang==='ar'?'توليد باركود للمنتجات':'Generate Product Barcodes'}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">${lang==='ar'?'اطبع بطاقات الباركود لمنتجاتك':'Print barcode labels for your products'}</div>
-          <button class="btn btn-outline btn-sm" data-action="showBarcodeGenerator">${icon('scan-barcode',14)} ${lang==='ar'?'فتح مولد الباركود':'Open Generator'}</button>
         </div>
       </div>
     </div></div>
@@ -15594,61 +15618,117 @@ function downloadImportTemplate() {
 }
 
 // ============ BARCODE GENERATOR ============
-function showBarcodeGenerator() {
+// الملصق يطبع باركود المنتج المسجّل فعلًا (اللي تبحث فيه نقطة البيع) — كان
+// يطبع كود المنتج الداخلي بدله، فالملصق ما يطابق الباركود المحفوظ. والمنتج
+// اللي بلا باركود ينولّد له رقم داخلي (EAN-13 يبدأ بـ2، نطاق المحلات الداخلي)
+// وينحفظ عليه قبل الطباعة، فأي ملصق مطبوع ينمسح ويطلع نفس المنتج دائمًا
+const JSBARCODE_SRC = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js';
+function _loadJsBarcode() {
+  if (window.JsBarcode) return Promise.resolve();
+  if (window._jsbLoading) return window._jsbLoading;
+  window._jsbLoading = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = JSBARCODE_SRC; sc.onload = res;
+    sc.onerror = () => { window._jsbLoading = null; rej(new Error('jsbarcode')); };
+    document.head.appendChild(sc);
+  });
+  return window._jsbLoading;
+}
+function _ean13Check(d12) {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(d12[i]) * (i % 2 ? 3 : 1);
+  return String((10 - sum % 10) % 10);
+}
+function _barcodeFormat(code) {
+  return (/^\d{13}$/.test(code) && _ean13Check(code.slice(0,12)) === code[12]) ? 'EAN13' : 'CODE128';
+}
+function _newInternalBarcode(db, prod) {
+  const taken = new Set((db.products||[]).flatMap(p => [String(p.barcode||''), String(p.code||'')]));
+  for (let n = 0; n < 1000; n++) {
+    const d12 = '2' + String(Number(prod.id) * 1000 + n).padStart(11, '0').slice(-11);
+    const code = d12 + _ean13Check(d12);
+    if (!taken.has(code)) return code;
+  }
+  return null;
+}
+function showBarcodeGenerator(pid) {
   const db=getDB();
   const mc=el('modal-container');
   mc.innerHTML=`
   <div class="modal-bg" data-action="closeModal">
     <div class="modal modal-lg" data-action="">
-      <div class="modal-head"><h3>🔲 ${lang==='ar'?'مولد الباركود':'Barcode Generator'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
-      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
-        <select class="select" id="bc-product" style="flex:1;">
+      <div class="modal-head"><h3>${icon('scan-barcode',18)} ${lang==='ar'?'طباعة باركود':'Print barcodes'}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select class="select" id="bc-product" style="flex:1;min-width:200px;" data-onchange="renderBarcodePreview">
           <option value="">${lang==='ar'?'اختر منتجاً':'Select product'}</option>
-          ${db.products.map(p=>`<option value="${p.id}">${sanitize(p.name)} — ${sanitize(p.code)}</option>`).join('')}
+          ${db.products.map(p=>`<option value="${p.id}" ${p.id===pid?'selected':''}>${sanitize(p.name)}${p.barcode?' — '+sanitize(p.barcode):''}</option>`).join('')}
         </select>
-        <input class="input" type="number" id="bc-count" value="1" min="1" max="50" style="width:80px;" placeholder="${lang==='ar'?'عدد':'Count'}" />
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;">${lang==='ar'?'عدد الملصقات':'Labels'}
+          <input class="input" type="number" id="bc-count" value="1" min="1" max="100" style="width:80px;" /></label>
         <button class="btn btn-primary" data-action="generateBarcodePrint">${icon('printer',16)} ${lang==='ar'?'طباعة':'Print'}</button>
       </div>
-      <div id="bc-preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:12px;background:var(--bg);border-radius:10px;min-height:100px;">
-        <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:30px;">${lang==='ar'?'اختر منتجاً لمعاينة الباركود':'Select a product to preview'}</div>
-      </div>
+      <div id="bc-preview" style="display:flex;justify-content:center;padding:16px;background:var(--bg);border-radius:10px;min-height:120px;"></div>
     </div>
   </div>`;
   refreshIcons();
+  renderBarcodePreview(pid ? String(pid) : '');
 }
-
-function generateBarcodePrint() {
+function _barcodeLabelHtml(prod, code, s) {
+  return `<div class="bc-label" style="border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;text-align:center;width:170px;display:inline-block;margin:4px;background:#fff;color:#0f172a;font-family:Tajawal,sans-serif;vertical-align:top;">
+      <div style="font-size:10px;font-weight:800;">${sanitize(s.company_name)||'يقظ'}</div>
+      <div style="font-size:12px;font-weight:900;margin:2px 0;">${sanitize(prod.name)}</div>
+      <svg class="bc-svg" data-code="${sanitize(code)}" data-format="${_barcodeFormat(code)}"></svg>
+      <div style="font-size:12px;font-weight:800;color:#0f766e;">${fmtMoney(prod.sell_price)}</div>
+    </div>`;
+}
+function _drawBarcodes(root) {
+  root.querySelectorAll('svg.bc-svg').forEach(svg => {
+    try { JsBarcode(svg, svg.dataset.code, { format: svg.dataset.format, width: 1.6, height: 44, fontSize: 12, margin: 4, displayValue: true }); }
+    catch (e) { try { JsBarcode(svg, svg.dataset.code, { format: 'CODE128', width: 1.4, height: 44, fontSize: 12, margin: 4 }); } catch (e2) { svg.outerHTML = '<div style="font-size:11px;color:#b91c1c;padding:8px 0;">باركود غير صالح للطباعة</div>'; } }
+  });
+}
+async function renderBarcodePreview(val) {
+  const box = el('bc-preview'); if (!box) return;
+  const db = getDB();
+  const prod = db.products.find(p => p.id === Number(val));
+  if (!prod) { box.innerHTML = `<div style="color:var(--text-muted);font-size:13px;align-self:center;">${lang==='ar'?'اختر منتجاً لمعاينة الملصق':'Select a product to preview'}</div>`; return; }
+  const code = String(prod.barcode||'').trim();
+  const note = code ? '' : `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${lang==='ar'?'هذا المنتج ما له باركود — بنولّد له رقم ونحفظه عليه عند الطباعة، فينمسح في نقطة البيع مباشرة':'No barcode yet — one will be generated and saved to the product when you print'}</div>`;
+  const shown = code || _newInternalBarcode(db, prod);
+  box.innerHTML = `<div style="text-align:center;">${_barcodeLabelHtml(prod, shown, db.settings||{})}${note}</div>`;
+  try { await _loadJsBarcode(); _drawBarcodes(box); }
+  catch (e) { showToast(lang==='ar'?'تعذّر تحميل أداة الباركود — تأكد من الاتصال':'Could not load the barcode tool','error'); }
+}
+async function generateBarcodePrint() {
   const db=getDB();
-  const pid=Number(el('bc-product')?.value); const count=Number(el('bc-count')?.value||1);
+  const pid=Number(el('bc-product')?.value);
+  const count=Math.min(100, Math.max(1, Number(el('bc-count')?.value)||1));
   if(!pid){showToast(lang==='ar'?'اختر منتجاً':'Select product','error');return;}
   const prod=db.products.find(p=>p.id===pid); if(!prod)return;
-  const s=db.settings||{};
+  let code = String(prod.barcode||'').trim();
+  if (!code) {
+    if (!has('inventory.manage')) { showToast(lang==='ar'?'المنتج ما له باركود — اطلب من المسؤول إضافته':'Product has no barcode','error'); return; }
+    code = _newInternalBarcode(db, prod);
+    if (!code) { showToast(lang==='ar'?'تعذّر توليد باركود':'Could not generate a barcode','error'); return; }
+    prod.barcode = code;
+    saveDB(db);
+    logActivity('المخزون', `توليد باركود «${prod.name}»: ${code} — بواسطة ${currentUser?.full_name||currentUser?.username||''}`);
+    showToast(`✅ ${lang==='ar'?'انحفظ الباركود على المنتج':'Barcode saved to product'}: ${code}`);
+  }
+  try { await _loadJsBarcode(); } catch (e) { showToast(lang==='ar'?'تعذّر تحميل أداة الباركود — تأكد من الاتصال':'Could not load the barcode tool','error'); return; }
+  // الرسم يصير هنا بالصفحة نفسها، ونافذة الطباعة تستلم SVG جاهز بدون أي سكربت
+  const tmp = document.createElement('div');
+  tmp.innerHTML = Array(count).fill(_barcodeLabelHtml(prod, code, db.settings||{})).join('');
+  _drawBarcodes(tmp);
   const win=window.open('','_blank','width=800,height=600');
-  const labels=Array(count).fill('').map(()=>`
-    <div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;width:140px;display:inline-block;margin:4px;font-family:Tajawal,sans-serif;">
-      <div style="font-size:10px;font-weight:800;margin-bottom:4px;">${sanitize(s.company_name)||'يقظ'}</div>
-      <div style="font-size:12px;font-weight:900;">${sanitize(prod.name)}</div>
-      <div id="bc-${Math.random().toString(36).slice(2)}" data-code="${prod.code}" style="margin:6px 0;"></div>
-      <div style="font-size:11px;font-weight:700;color:#0f766e;">${fmtMoney(prod.sell_price)}</div>
-      <div style="font-size:10px;color:#64748b;">${prod.code}</div>
-    </div>`).join('');
-  if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  if (!win) { showToast(lang==='ar'?'المتصفح منع نافذة الطباعة — اسمح بالنوافذ المنبثقة':'Popup blocked','error'); return; }
+  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${sanitize(prod.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
-  <style>body{padding:20px;background:white;}@media print{body{padding:0;}}</style></head>
-  <body>${labels}
-  <script>
-    window.onload=()=>{
-      document.querySelectorAll('[data-code]').forEach(d=>{
-        const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-        d.appendChild(svg);
-        try{JsBarcode(svg,d.dataset.code,{width:1.5,height:40,fontSize:10,displayValue:false});}catch(e){}
-      });
-      setTimeout(()=>window.print(),800);
-    };
-  <\/script></body></html>`);
+  <style>body{padding:20px;background:white;margin:0;}@media print{body{padding:0;}.bc-label{break-inside:avoid;}}</style></head>
+  <body>${tmp.innerHTML}</body></html>`);
   win.document.close();
+  setTimeout(() => { try { win.focus(); win.print(); } catch (e) {} }, 600);
+  closeModal(); renderPage();
 }
 
 // ============ RESTORE BACKUP ============
@@ -17888,9 +17968,39 @@ function init() {
 // data-action="" (فارغ عمدًا) بالعنصر الداخلي .modal — closest() يتوقف عند
 // أقرب سلف يحمل الخاصية بغض النظر عن قيمتها، فيمنع الضغط بالداخل من الوصول
 // لإجراء الخلفية، بنفس أثر event.stopPropagation() القديم بلا أي كود إضافي
+// إغلاق النافذة بالضغط على الخلفية: لازم الضغطة تبدأ على الخلفية نفسها — لو
+// بدأت داخل حقل وانسحب الماوس لبره (تحديد نص مثلًا)، المتصفح يعتبر "النقرة"
+// على الخلفية فكانت النافذة تنقفل وتضيع كل البيانات المكتوبة. ولو فيه بيانات
+// مكتوبة أصلًا نسأل قبل الإغلاق (زر × يبقى يقفل مباشرة)
+let _pressTarget = null;
+document.addEventListener('pointerdown', e => { _pressTarget = e.target; _markModalBase(e); }, true);
+// بصمة قيم الحقول لحظة فتح النافذة — بعض النوافذ تعبّي قيمها بالكود بعد
+// الرسم، فالمقارنة بـdefaultValue وحدها كانت تحسبها تعديل وتسأل بلا داعي
+function _formSig(root) {
+  return [...root.querySelectorAll('input, textarea, select')].map(f =>
+    (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') :
+    f.tagName === 'SELECT' ? [...f.options].map(o => o.selected ? '1' : '0').join('') : f.value
+  ).join('\u0001');
+}
+// البصمة تُؤخذ عند أول تفاعل مع النافذة (ضغطة أو تركيز حقل) — قبل أي كتابة
+// من المستخدم، وبعد ما الكود عبّى القيم الافتراضية. #modal-container نفسه
+// يُعاد بناؤه مع رسم التطبيق، فنربط البصمة بعنصر الخلفية لكل نافذة
+const _modalBase = new WeakMap();
+function _markModalBase(e) {
+  const bg = e.target?.closest?.('.modal-bg');
+  if (bg && !_modalBase.has(bg)) _modalBase.set(bg, _formSig(bg));
+}
+document.addEventListener('focusin', _markModalBase, true);
+function _modalHasEdits(root) {
+  return _modalBase.has(root) && _formSig(root) !== _modalBase.get(root);
+}
 document.addEventListener('click', function(e) {
   const el = e.target.closest('[data-action]');
   if (!el) return;
+  if (el.classList.contains('modal-bg') && e.target === el) {
+    if (_pressTarget !== el) return;
+    if (_modalHasEdits(el) && !confirm(lang==='ar'?'فيه بيانات ما انحفظت — تبي تقفل النافذة؟':'You have unsaved changes — close anyway?')) return;
+  }
   // data-prevent-default: بديل onclick="event.preventDefault();fn()" — يلزم
   // فقط للعناصر اللي لها سلوك متصفح افتراضي حقيقي (وسم <a> مثلًا)، لا لمجرد
   // منع الفقاعة (closest() أعلاه أصلًا يمنع وصول الحدث لعنصر data-action آخر)
@@ -18475,11 +18585,21 @@ async function runAISearchQuery(q) {
   // لو تعديل محلي لسه ما وصل (فشل الدفع، أو الجهاز بلا اتصال لحظيًا) —
   // فيُمحى صامتًا للأبد بلا أي إعادة محاولة لاحقة. _snap=null (لسه ما صار
   // أي حفظ محلي بعد تسجيل الدخول) يعني لا خطر إطلاقًا فنُرجع false دائمًا
+  // الكيانات اللي تجاوزها السحب الحالي لأن فيها تعديل معلّق — نهاية
+  // loadAllFromAPI تبقي نسختها القديمة بـ_snap (لا المحلية) حتى تبقى "معلّقة"
+  // وتنرفع بالتمريرة القادمة، بدل ما تنحسب واصلة وتنمسح بالسحب اللي بعده
+  let _pullSkipped = null;
   function _hasPendingLocalChanges(db, key) {
     if (!_snap) return false;
-    try { return JSON.stringify(db[key]) !== JSON.stringify(_snap[key]); }
-    catch (e) { return false; }
+    let pending;
+    try { pending = JSON.stringify(db[key]) !== JSON.stringify(_snap[key]); }
+    catch (e) { pending = false; }
+    if (pending && _pullSkipped) _pullSkipped.add(key);
+    return pending;
   }
+  // يزيد مع كل جدولة/تمريرة رفع — لو تغيّر أثناء سحب البيانات، رد السيرفر
+  // صار أقدم من البيانات المحلية (السحب انطلق قبل ما يوصل الرفع) فما نكتبه
+  let _syncEpoch = 0;
   // نسخة newDB الحيّة الجارية معالجتها بتمريرة _diffAndPush الحالية (إن وُجدت) —
   // getDB() يُرجع نسخة جديدة مُفكَّكة (JSON.parse) بكل استدعاء، منفصلة تمامًا عن
   // كائن newDB اللي تكرّر حلقات هذي التمريرة عليه، فتحديث السجلات المرتبطة داخل
@@ -18537,12 +18657,27 @@ async function runAISearchQuery(q) {
   // كل دقيقة، ويعيد رسم الصفحة الحالية فقط لو كانت آمنة لإعادة العرض بدون
   // مخاطرة فقدان إدخال قيد الكتابة بنموذج مفتوح
   const _SAFE_AUTOREFRESH_PAGES = ['dashboard'];
+  // نقطة البيع والمخزون تُعاد رسمها بعد السحب فقط لو ما فيه شغل قيد الإدخال:
+  // سلة فاضية، ولا حقل نشط (بحث/باركود) — وإلا نترك الشاشة كما هي للسحب التالي
+  function _idleOnDataPage() {
+    if (currentPage !== 'pos' && currentPage !== 'inventory') return false;
+    if (currentPage === 'pos' && typeof cart !== 'undefined' && cart.length) return false;
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value) return false;
+    return true;
+  }
+  let _lastPullAt = 0, _pullBusy = false;
   async function _periodicDataPull() {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token || !_apiReachable || !currentUser) return;
+    if (!token || !_apiReachable || !currentUser || _pullBusy) return;
+    _pullBusy = true;
+    const pageAtStart = currentPage;
+    let fresh = false;
+    try { fresh = await loadAllFromAPI(); } catch(e) { return; } finally { _pullBusy = false; }
+    if (!fresh) return;
+    _lastPullAt = Date.now();
     const modalOpen = !!(document.getElementById('modal-container')?.innerHTML?.trim());
-    try { await loadAllFromAPI(); } catch(e) { return; }
-    if (!modalOpen && _SAFE_AUTOREFRESH_PAGES.includes(currentPage)) window.renderPage?.();
+    if (!modalOpen && currentPage === pageAtStart && (_SAFE_AUTOREFRESH_PAGES.includes(currentPage) || _idleOnDataPage())) window.renderPage?.();
     window.refreshNavBadges?.();
     // إعادة محاولة رفع أي حالة ولاء/تسوية بنك محلية سبق أن فشل رفعها —
     // بلا هذا يبقى التعديل معلَّقًا محليًا للأبد لو فشلت محاولة الرفع الأصلية
@@ -18550,6 +18685,11 @@ async function runAISearchQuery(q) {
     window._retryBankReconIfDirty?.();
   }
   setInterval(_periodicDataPull, 60 * 1000);
+  // فتح نقطة البيع أو المخزون يجيب آخر نسخة فورًا (تعديل من جهاز آخر كان
+  // ينتظر لين دقيقة كاملة) — بحد أدنى 10 ثواني بين السحبين
+  window._pullIfStale = function () {
+    if (Date.now() - _lastPullAt > 10 * 1000) _periodicDataPull();
+  };
 
   // ═══════════════════════════════════════════════════════
   // 1. HTTP CLIENT
@@ -18854,6 +18994,7 @@ async function runAISearchQuery(q) {
   // 3. LOAD ALL DATA FROM API
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
+    const _epochAtStart = _syncEpoch;
     try {
       const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes, branchesRes, warehousesRes, stockByWhRes, loyaltyRes, bankReconRes] = await Promise.all([
         apiFetch('GET', '/api/products?active=all').catch(() => null),
@@ -18884,7 +19025,19 @@ async function runAISearchQuery(q) {
         apiFetch('GET', '/api/bank-recon').catch(() => null),
       ]);
 
+      // رفع محلي بدأ (أو لسه شغّال) أثناء هذا السحب: الرد ممكن ما يحتوي آخر
+      // التعديلات (منتجات الإعداد السريع كانت تختفي هنا لين السحب التالي) —
+      // نتجاهله كاملًا والسحب القادم يجيب النسخة المحدّثة
+      if (_syncBusy || _syncEpoch !== _epochAtStart) {
+        if (SYNC_LOG) console.log('⏭️ API pull raced a local sync — skipped');
+        return false;
+      }
+
       const db = getDB();
+      const _snapBefore = _snap;
+      _pullSkipped = new Set();
+      // فيه بيع/منتج/حركة مخزون محلية ما وصلت السيرفر؟ — يُحسب قبل أي دمج
+      const _stockPending = !!_snapBefore && ['products','invoices','purchases','returns','stock_moves'].some(k => JSON.stringify(db[k]) !== JSON.stringify(_snapBefore[k]));
 
       // كل استبدال هنا مشروط بعدم وجود تعديل محلي معلَّق لهذا الكيان تحديدًا
       // (راجع تعليق _hasPendingLocalChanges) — وإلا نتجاوز الاستبدال هذي
@@ -19183,8 +19336,11 @@ async function runAISearchQuery(q) {
       if (warehousesRes?.data) db.warehouses = warehousesRes.data.map(w=>({ ...w, active: w.is_active !== false }));
       // كمية كل (منتج، مستودع) — تُستبدل بالكامل بنسخة السيرفر (مصدر الحقيقة)،
       // بعكس بقية القوائم اللي تُدمج تراكميًا، لأن هذا الجدول مُشتق بالكامل
-      // ولا يحتاج تسوية مع تعديلات محلية معلّقة
-      if (stockByWhRes?.data) {
+      // ولا يحتاج تسوية مع تعديلات محلية معلّقة — إلا لو فيه بيع/منتج/حركة
+      // مخزون محلية ما وصلت السيرفر بعد: نسخة السيرفر وقتها أقدم من المحلية،
+      // واستبدالها كان يصفّر كمية منتج جديد أو يرجّع كمية مبيعة للحظات
+      // (_stockPending محسوب ببداية الدمج، قبل ما تتبدّل القوائم بنسخة السيرفر)
+      if (stockByWhRes?.data && !_stockPending) {
         db.productStock = {};
         for (const row of stockByWhRes.data) {
           if (!db.productStock[row.product_id]) db.productStock[row.product_id] = {};
@@ -19217,11 +19373,21 @@ async function runAISearchQuery(q) {
 
       _origSaveDB(db); // لا تستخدم saveDB الـ hooked حتى لا تُطلق _diffAndPush بناءً على بيانات API
       _snap = JSON.parse(JSON.stringify(db));
+      if (_snapBefore) for (const k of _pullSkipped) _snap[k] = JSON.parse(JSON.stringify(_snapBefore[k] ?? []));
+      _pullSkipped = null;
       _persistSnap();
+      // تعديلات معلّقة ما وصلت السيرفر (فشل رفع سابق) — نعيد محاولة رفعها الآن
+      if (_snapBefore && _snap) {
+        const pendingNow = Object.keys(db).some(k => JSON.stringify(db[k]) !== JSON.stringify(_snap[k]));
+        if (pendingNow) setTimeout(() => _attemptSync(), 100);
+      }
+      return true;
       if (SYNC_LOG) console.log('✅ API data loaded into localStorage');
     } catch (e) {
+      _pullSkipped = null;
       console.warn('⚠️ Could not load from API:', e.message);
     }
+    return false;
   }
 
   // تعريض apiFetch للكود الخارجي (لإدارة المستخدمين)
@@ -19269,6 +19435,15 @@ async function runAISearchQuery(q) {
         // بدونه يبقى سند/مرتجع أُنشئ وربط بفاتورة/مشترى بنفس جلسة إنشائه حاملاً
         // معرّفًا محليًا انتهت صلاحيته فور استبداله هنا، فيُرسَل لاحقًا للسيرفر
         // بمرجع خاطئ (قد يتصادم برقم مستند حقيقي آخر تمامًا بنفس الشركة)
+        // كميات الفروع ومراجع حركات المخزون مربوطة برقم المنتج — لو بقيت على
+        // الرقم المحلي، المنتج يبان بكمية صفر بالمخزون ونقطة البيع (شركة متعددة
+        // الفروع) لين يصير السحب التالي من السيرفر
+        if (entity === 'products') {
+          const ps = db.productStock;
+          if (ps && ps[localId]) { if (!ps[apiId]) ps[apiId] = ps[localId]; delete ps[localId]; }
+          for (const m of db.stock_moves || []) { if (m.product_id === localId) m.product_id = apiId; }
+          if (db === dbs[0]) for (const ci of (typeof cart !== 'undefined' ? cart : [])) { if (ci.id === localId) ci.id = apiId; }
+        }
         if (entity === 'invoices' || entity === 'purchases') {
           const linkField = entity === 'invoices' ? 'linked_invoice_id' : 'linked_purchase_id';
           for (const v of db.receipts || []) { if (v[linkField] === localId) v[linkField] = apiId; }
@@ -19321,6 +19496,7 @@ async function runAISearchQuery(q) {
 
   function _schedulSync(newDB) {
     if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); _persistSnap(); return; }
+    _syncEpoch++;
     setTimeout(() => _attemptSync(), 100);
   }
 
@@ -19340,6 +19516,7 @@ async function runAISearchQuery(q) {
   async function _diffAndPush(newDB, prev) {
     if (_syncBusy) return;
     _syncBusy = true;
+    _syncEpoch++;
     _currentPassDB = newDB;
     try {
 

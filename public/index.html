@@ -292,37 +292,6 @@
     .foot nav a { text-decoration:none; color:var(--body); }
     .foot nav a:hover { color:var(--brand-d); }
 
-    /* ── Modal (registration) ───────────────── */
-    .overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(6,21,33,.6); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:1rem; }
-    .overlay.show { display:flex; }
-    .modal { background:#fff; border-radius:20px; padding:32px; width:100%; max-width:520px; max-height:92vh; overflow-y:auto; position:relative; box-shadow:0 32px 80px rgba(0,0,0,.35); }
-    .modal-close { position:absolute; top:16px; left:16px; background:var(--bg); border:0; width:34px; height:34px; border-radius:50%; cursor:pointer; color:var(--muted); font-size:1rem; display:grid; place-items:center; }
-    .modal-close:hover { color:var(--text); background:var(--line); }
-    .modal h2 { font-size:1.4rem; margin-bottom:4px; }
-    .modal-sub { color:var(--muted); margin-bottom:22px; font-size:.95rem; }
-    .plan-picker { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
-    .plan-pick { padding:12px 8px; border-radius:12px; border:1.5px solid var(--line); background:var(--bg); cursor:pointer; text-align:center; transition:border-color .2s, background .2s, box-shadow .2s; }
-    .plan-pick b { display:block; color:var(--text); font-size:.95rem; font-weight:600; }
-    .plan-pick small { color:var(--muted); font-size:.8rem; }
-    .plan-pick.selected { border-color:var(--brand); background:var(--tint); box-shadow:0 0 0 3px rgba(13,148,136,.15); }
-    .fgroup { margin-bottom:14px; }
-    .fgroup label { display:block; font-weight:600; font-size:.88rem; color:var(--text); margin-bottom:6px; }
-    .fgroup input { width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; font-family:inherit; font-size:.97rem; color:var(--text); outline:none; transition:border-color .2s; background:#fff; }
-    .fgroup input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(13,148,136,.12); }
-    .frow { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .check-row { display:flex; align-items:flex-start; gap:10px; margin-top:4px; }
-    .check-row input { width:auto; margin-top:6px; accent-color:var(--brand); }
-    .check-row label { margin:0; font-weight:400; font-size:.86rem; color:var(--body); }
-    .malert { padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:.92rem; display:none; }
-    .malert.show { display:block; }
-    .malert-err { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
-    .malert-ok  { background:#effaf6; color:#0f766e; border:1px solid #bfe9df; }
-    hr.div { border:0; border-top:1px solid var(--line); margin:18px 0; }
-    .btn-submit { width:100%; margin-top:10px; }
-    .btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; }
-    .terms { text-align:center; font-size:.82rem; color:var(--muted); margin-top:12px; }
-    .terms a { color:var(--brand-d); }
-
     /* ── Responsive ──────────────────────────── */
     @media (max-width:1024px) {
       .hero-grid { grid-template-columns:1fr; gap:40px; }
@@ -351,7 +320,6 @@
       .steps::before { display:none; }
       .strip-grid { grid-template-columns:1fr; }
       .strip-item + .strip-item { border-inline-start:0; border-top:1px solid var(--line); }
-      .frow { grid-template-columns:1fr; }
       .cta { padding:48px 22px; }
       .foot { flex-direction:column; align-items:flex-start; }
     }
@@ -789,73 +757,6 @@
   </div>
 </footer>
 
-<!-- ══ MODAL ══ -->
-<div class="overlay" id="regOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="regTitle">
-    <button class="modal-close" data-action="closeModal" aria-label="إغلاق">✕</button>
-    <h2 id="regTitle">سجّل منشأتك في يقظ</h2>
-    <p class="modal-sub">تجربة مجانية 15 يومًا بكامل مميزات الباقة المختارة.</p>
-
-    <div class="plan-picker" id="planPicker">
-      <div class="plan-pick" data-plan="basic" data-action="pickPlan" data-args='["basic"]'><b>الأساسية</b><small>99 ر.س/شهر</small></div>
-      <div class="plan-pick selected" data-plan="growth" data-action="pickPlan" data-args='["growth"]'><b>النمو</b><small>179 ر.س/شهر</small></div>
-      <div class="plan-pick" data-plan="pro" data-action="pickPlan" data-args='["pro"]'><b>الاحترافية</b><small>299 ر.س/شهر</small></div>
-    </div>
-    <input type="hidden" id="chosen-plan" value="growth">
-
-    <div class="malert malert-err" id="mErr"></div>
-    <div class="malert malert-ok"  id="mOk"></div>
-    <form id="regForm" novalidate>
-      <div class="fgroup">
-        <label for="f-co">اسم الشركة / المنشأة *</label>
-        <input type="text" id="f-co" placeholder="مثال: مؤسسة النجاح للتجارة" required>
-      </div>
-      <hr class="div">
-      <div class="frow">
-        <div class="fgroup">
-          <label for="f-un">اسم المستخدم *</label>
-          <input type="text" id="f-un" placeholder="ahmed1" required autocomplete="username">
-        </div>
-        <div class="fgroup">
-          <label for="f-pw">كلمة المرور *</label>
-          <input type="password" id="f-pw" placeholder="Ahmed@123" required minlength="8" autocomplete="new-password">
-        </div>
-      </div>
-      <div class="frow">
-        <div class="fgroup">
-          <label for="f-fn">الاسم الكامل *</label>
-          <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required>
-        </div>
-        <div class="fgroup">
-          <label for="f-ph">رقم الجوال *</label>
-          <input type="tel" id="f-ph" placeholder="05xxxxxxxx" required>
-        </div>
-      </div>
-      <hr class="div">
-      <div class="frow">
-        <div class="fgroup">
-          <label for="f-cr">رقم السجل التجاري</label>
-          <input type="text" id="f-cr" placeholder="1234567890" pattern="\d{10}" maxlength="10" title="10 أرقام">
-        </div>
-        <div class="fgroup">
-          <label for="f-vt">الرقم الضريبي VAT</label>
-          <input type="text" id="f-vt" placeholder="300…" pattern="3\d{13}3" maxlength="15" title="15 رقمًا، يبدأ وينتهي بالرقم 3">
-        </div>
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="f-vat-reg" checked>
-        <label for="f-vat-reg">منشأتي مسجّلة بضريبة القيمة المضافة (VAT) — إن لم تكن مسجّلة، الفواتير لن تحتسب الضريبة تلقائيًا (يمكن تفعيلها لاحقًا من الإعدادات)</label>
-      </div>
-      <button type="submit" class="btn btn-primary btn-submit" id="regBtn">إنشاء الحساب</button>
-      <p class="terms">
-        بالتسجيل توافق على
-        <a href="/terms" target="_blank">شروط الاستخدام</a>
-        و<a href="/privacy" target="_blank">سياسة الخصوصية</a>
-      </p>
-    </form>
-  </div>
-</div>
-
 <script>
 // تحليلات الاستخدام (public/analytics.js) — يُحمَّل defer، فالنداءات المبكرة تنتظر بطابور
 function yq(method, ...args) {
@@ -889,25 +790,9 @@ function setPricingCycle(cycle) {
   });
 }
 
+// التسجيل صار بصفحة مستقلة (/signup): الباقات كاملة أولًا، ثم بيانات المنشأة
 function openModal(plan) {
-  document.getElementById('regOverlay').classList.add('show');
-  document.body.style.overflow = 'hidden';
-  yq('Track', 'signup_opened', { plan: plan || '' });
-  if (plan) pickPlan(plan);
-  setTimeout(() => document.getElementById('f-co')?.focus(), 50);
-}
-function pickPlan(plan) {
-  document.getElementById('chosen-plan').value = plan;
-  document.querySelectorAll('.plan-pick').forEach(el => el.classList.toggle('selected', el.dataset.plan === plan));
-}
-function closeModal() {
-  document.getElementById('regOverlay').classList.remove('show');
-  document.body.style.overflow = '';
-  document.getElementById('mErr').classList.remove('show');
-  document.getElementById('mOk').classList.remove('show');
-  document.getElementById('regForm').reset();
-  const b = document.getElementById('regBtn');
-  b.textContent = 'إنشاء الحساب'; b.disabled = false;
+  location.href = '/signup' + (plan ? '?plan=' + encodeURIComponent(plan) : '');
 }
 
 // بديل onclick="" الممنوعة بسياسة أمان المحتوى (CSP) — مستمع نقر مفوَّض واحد
@@ -922,57 +807,6 @@ document.addEventListener('click', function (e) {
   if (el.dataset.args) { try { args = JSON.parse(el.dataset.args); } catch (err) { args = []; } }
   fn.apply(el, args);
 });
-document.getElementById('regForm').addEventListener('submit', doReg);
-document.getElementById('regOverlay').addEventListener('click', e => { if (e.target === document.getElementById('regOverlay')) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-async function doReg(e) {
-  e.preventDefault();
-  const btn = document.getElementById('regBtn');
-  const err = document.getElementById('mErr');
-  const ok  = document.getElementById('mOk');
-  err.classList.remove('show'); ok.classList.remove('show');
-  const co = document.getElementById('f-co').value.trim();
-  const un = document.getElementById('f-un').value.trim();
-  const pw = document.getElementById('f-pw').value;
-  const fn = document.getElementById('f-fn').value.trim();
-  const ph = document.getElementById('f-ph').value.trim();
-  const cr = document.getElementById('f-cr').value.trim();
-  const vt = document.getElementById('f-vt').value.trim();
-  if (!co || !un || !pw || !fn || !ph) {
-    err.textContent = 'يرجى ملء جميع الحقول الإلزامية'; err.classList.add('show'); return;
-  }
-  if (un.length < 6 || !/\d/.test(un)) {
-    err.textContent = 'اسم المستخدم: 6 أحرف على الأقل ويحتوي على رقم (مثال: ahmed1)'; err.classList.add('show'); return;
-  }
-  if (pw.length < 8 || !/[a-z]/.test(pw) || !/[A-Z]/.test(pw)) {
-    err.textContent = 'كلمة المرور: 8 أحرف على الأقل، وفيها حرف إنجليزي كبير وصغير (مثال: Ahmed@123)'; err.classList.add('show'); return;
-  }
-  btn.textContent = 'جاري التسجيل...'; btn.disabled = true;
-  try {
-    const plan = document.getElementById('chosen-plan')?.value || 'basic';
-    const body = { company_name:co, username:un, password:pw, full_name:fn, contact_phone:ph, plan };
-    if (cr) body.cr_number = cr;
-    if (vt) body.vat_number = vt;
-    body.vat_registered = document.getElementById('f-vat-reg').checked;
-    const res  = await fetch('/api/register', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
-    const data = await res.json();
-    if (data.success) {
-      yq('Track', 'signup_completed', { plan });
-      localStorage.setItem('yaqiz_access_token', data.accessToken);
-      localStorage.setItem('yaqiz_refresh_token', data.refreshToken);
-      ok.textContent = 'تم إنشاء حسابك — جاري التوجيه...'; ok.classList.add('show');
-      setTimeout(() => { window.location.href = '/VVIP.html'; }, 1600);
-    } else {
-      yq('Track', 'signup_failed', { plan, reason: data.message || '' });
-      err.textContent = data.message || 'حدث خطأ، حاول مجدداً'; err.classList.add('show');
-      btn.textContent = 'إنشاء الحساب'; btn.disabled = false;
-    }
-  } catch {
-    err.textContent = 'تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مجددًا'; err.classList.add('show');
-    btn.textContent = 'إنشاء الحساب'; btn.disabled = false;
-  }
-}
 </script>
 </body>
 </html>

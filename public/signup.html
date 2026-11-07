@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="اختر باقة يقظ المناسبة لمنشأتك وابدأ تجربتك المجانية 15 يومًا — قارن المزايا والحدود بين الباقات.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#061521">
+  <title>اختر باقتك — يقظ</title>
+  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink:      #061521;
+      --ink-line: rgba(255,255,255,.09);
+      --brand:    #0d9488;
+      --brand-d:  #0f766e;
+      --brand-l:  #14b8a6;
+      --mint:     #5eead4;
+      --bg:       #f5f8f9;
+      --surface:  #ffffff;
+      --line:     #e2e9ec;
+      --text:     #0b1b26;
+      --body:     #44575f;
+      --muted:    #7b8d95;
+      --tint:     #ecf7f6;
+      --danger:   #b91c1c;
+      --radius:   16px;
+      --shadow:   0 1px 2px rgba(6,21,33,.04), 0 8px 24px -12px rgba(6,21,33,.12);
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } * { transition:none !important; } }
+    body {
+      font-family:'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif;
+      background:var(--bg); color:var(--body);
+      font-size:16px; line-height:1.7; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+    }
+    h1, h2, h3 { color:var(--text); font-weight:700; line-height:1.3; text-wrap:balance; }
+    a { color:inherit; }
+    :focus-visible { outline:2px solid var(--brand-l); outline-offset:3px; border-radius:8px; }
+    .wrap { max-width:1160px; margin-inline:auto; padding-inline:24px; }
+    .num { font-variant-numeric:tabular-nums; }
+    .ico { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+    [hidden] { display:none !important; }
+
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      font-family:inherit; font-size:1rem; font-weight:600; line-height:1;
+      padding:14px 24px; border-radius:12px; border:1px solid transparent;
+      cursor:pointer; text-decoration:none; transition:background .2s, border-color .2s, box-shadow .2s;
+    }
+    .btn-primary { background:var(--brand); color:#fff; box-shadow:0 6px 20px -8px rgba(13,148,136,.7); }
+    .btn-primary:hover { background:var(--brand-d); }
+    .btn-ghost { background:var(--surface); color:var(--text); border-color:var(--line); }
+    .btn-ghost:hover { border-color:var(--brand-l); color:var(--brand-d); }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+
+    /* nav */
+    .nav { background:var(--ink); border-bottom:1px solid var(--ink-line); }
+    .nav .wrap { display:flex; align-items:center; justify-content:space-between; height:64px; gap:16px; }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .brand img { width:34px; height:34px; border-radius:9px; display:block; }
+    .brand b { color:#fff; font-size:1.25rem; font-weight:700; }
+    .nav-links { display:flex; gap:6px; align-items:center; }
+    .nav-links a { color:rgba(255,255,255,.8); text-decoration:none; font-size:.93rem; font-weight:500; padding:8px 10px; }
+    .nav-links a:hover { color:#fff; }
+
+    /* stepper */
+    .top { background:var(--ink); color:#b7c6cd; padding:36px 0 84px; }
+    .stepper { display:flex; gap:10px; align-items:center; list-style:none; margin-bottom:20px; font-size:.9rem; }
+    .stepper li { display:flex; align-items:center; gap:8px; color:#7f97a1; }
+    .stepper li b { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:.82rem; border:1px solid rgba(255,255,255,.2); color:#b7c6cd; }
+    .stepper li.on { color:#fff; font-weight:600; }
+    .stepper li.on b { background:var(--brand); border-color:var(--brand); color:#fff; }
+    .stepper li.done b { background:rgba(94,234,212,.15); border-color:transparent; color:var(--mint); }
+    .stepper .sep { width:36px; height:1px; background:rgba(255,255,255,.18); }
+    .top h1 { color:#fff; font-size:clamp(1.7rem, 3.4vw, 2.4rem); margin-bottom:8px; }
+    .top p { max-width:620px; font-size:1.02rem; }
+
+    main { margin-top:-56px; padding-bottom:72px; }
+
+    /* cycle */
+    .cycle-row { display:flex; justify-content:center; margin-bottom:24px; }
+    .cycle { display:inline-flex; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:4px; gap:4px; box-shadow:var(--shadow); }
+    .cycle button { font-family:inherit; font-size:.93rem; font-weight:600; color:var(--body); background:transparent; border:0; border-radius:9px; padding:9px 18px; cursor:pointer; }
+    .cycle button.active { background:var(--ink); color:#fff; }
+    .cycle .tag { color:var(--mint); font-size:.78rem; margin-inline-start:4px; }
+    .cycle button:not(.active) .tag { color:var(--brand-d); }
+
+    /* plan cards */
+    .plans { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; align-items:stretch; }
+    .plan {
+      position:relative; background:var(--surface); border:1.5px solid var(--line); border-radius:20px;
+      padding:26px 24px; display:flex; flex-direction:column; transition:border-color .2s, box-shadow .2s;
+    }
+    .plan.featured { border-color:#9fd9d2; }
+    .plan.chosen { border-color:var(--brand); box-shadow:0 0 0 3px rgba(13,148,136,.18), 0 24px 48px -24px rgba(13,148,136,.45); }
+    .plan .badge { position:absolute; top:-12px; right:24px; background:var(--brand); color:#fff; font-size:.76rem; font-weight:600; padding:3px 12px; border-radius:100px; }
+    .plan h2 { font-size:1.2rem; }
+    .plan .tagline { font-size:.9rem; color:var(--muted); margin-bottom:16px; }
+    .price { display:flex; align-items:baseline; gap:6px; color:var(--text); }
+    .price-num { font-size:2.4rem; font-weight:700; line-height:1; letter-spacing:-1px; }
+    .price .cur { font-size:.92rem; color:var(--muted); }
+    .price-period { font-size:.86rem; color:var(--muted); margin-top:4px; }
+    .price-save { display:inline-block; margin-top:6px; font-size:.8rem; font-weight:600; color:var(--brand-d); background:var(--tint); border-radius:100px; padding:2px 10px; }
+    .price-save:empty { display:none; }
+    .limits { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:18px 0; }
+    .limit { background:var(--bg); border-radius:10px; padding:8px 10px; }
+    .limit b { display:block; color:var(--text); font-size:1rem; }
+    .limit small { color:var(--muted); font-size:.78rem; }
+    .feat-list { list-style:none; margin-bottom:20px; }
+    .feat-list li { display:flex; gap:8px; font-size:.9rem; padding:5px 0; color:var(--text); line-height:1.5; }
+    .feat-list li .ico { color:var(--brand); margin-top:2px; width:16px; height:16px; }
+    .feat-list li.sect { font-size:.75rem; font-weight:600; color:var(--muted); padding-top:12px; letter-spacing:.2px; }
+    .feat-list li.lead { color:var(--muted); font-size:.86rem; }
+    .plan .btn { margin-top:auto; width:100%; }
+
+    /* compare table */
+    .compare { margin-top:40px; background:var(--surface); border:1px solid var(--line); border-radius:20px; overflow:hidden; }
+    .compare h2 { font-size:1.15rem; padding:22px 24px 4px; }
+    .compare > p { padding:0 24px 14px; color:var(--muted); font-size:.92rem; }
+    .tbl-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; min-width:620px; font-size:.93rem; }
+    th, td { padding:12px 16px; text-align:center; border-top:1px solid var(--line); }
+    th:first-child, td:first-child { text-align:start; color:var(--text); }
+    thead th { background:var(--bg); color:var(--text); font-weight:600; position:sticky; top:0; }
+    tbody tr.grp td { background:#fafcfc; color:var(--muted); font-size:.78rem; font-weight:600; padding-block:8px; }
+    td.yes { color:var(--brand-d); font-weight:600; }
+    td.no { color:#b4c1c6; }
+    td .num { font-weight:600; color:var(--text); }
+    col.chosen-col { background:rgba(13,148,136,.06); }
+
+    /* step 2 */
+    .reg { display:grid; grid-template-columns:340px 1fr; gap:20px; align-items:start; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:26px; box-shadow:var(--shadow); }
+    .summary h2 { font-size:1rem; color:var(--muted); font-weight:600; margin-bottom:6px; }
+    .summary .pname { font-size:1.35rem; color:var(--text); font-weight:700; }
+    .summary .trial { margin:12px 0; background:var(--tint); color:var(--brand-d); border-radius:12px; padding:10px 12px; font-size:.9rem; font-weight:500; }
+    .summary ul { list-style:none; display:grid; gap:6px; margin:14px 0 18px; }
+    .summary li { display:flex; gap:8px; font-size:.9rem; color:var(--text); }
+    .summary li .ico { color:var(--brand); width:16px; height:16px; margin-top:3px; }
+    .linkbtn { background:none; border:0; font-family:inherit; color:var(--brand-d); font-weight:600; font-size:.93rem; cursor:pointer; padding:0; text-decoration:underline; text-underline-offset:3px; }
+    .form h2 { font-size:1.3rem; margin-bottom:4px; }
+    .form .sub { color:var(--muted); margin-bottom:20px; font-size:.94rem; }
+    .fgroup { margin-bottom:14px; }
+    .fgroup label { display:block; font-weight:600; font-size:.88rem; color:var(--text); margin-bottom:6px; }
+    .fgroup .hint { display:block; font-size:.78rem; color:var(--muted); margin-top:4px; }
+    .fgroup input { width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; font-family:inherit; font-size:.97rem; color:var(--text); outline:none; background:#fff; transition:border-color .2s; }
+    .fgroup input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(13,148,136,.12); }
+    .fgroup input[aria-invalid="true"] { border-color:var(--danger); box-shadow:0 0 0 3px rgba(185,28,28,.1); }
+    .frow { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .check-row { display:flex; align-items:flex-start; gap:10px; margin-top:4px; }
+    .check-row input { margin-top:6px; accent-color:var(--brand); }
+    .check-row label { font-size:.86rem; color:var(--body); }
+    .malert { padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:.92rem; display:none; }
+    .malert.show { display:block; }
+    .malert-err { background:#fef2f2; color:var(--danger); border:1px solid #fecaca; }
+    .malert-ok  { background:#effaf6; color:var(--brand-d); border:1px solid #bfe9df; }
+    hr.div { border:0; border-top:1px solid var(--line); margin:18px 0; }
+    .btn-submit { width:100%; margin-top:12px; }
+    .terms { text-align:center; font-size:.82rem; color:var(--muted); margin-top:12px; }
+    .terms a { color:var(--brand-d); }
+
+    @media (max-width:1024px) {
+      .plans { grid-template-columns:1fr; max-width:520px; margin-inline:auto; }
+      .reg { grid-template-columns:1fr; }
+    }
+    @media (max-width:720px) {
+      .wrap { padding-inline:16px; }
+      .nav-links a.hide-sm { display:none; }
+      .top { padding:28px 0 76px; }
+      .frow { grid-template-columns:1fr; }
+      .card { padding:20px; }
+      .stepper .sep { width:18px; }
+      table { min-width:0; font-size:.82rem; }
+      th, td { padding:10px 6px; }
+      th:first-child, td:first-child { padding-inline-start:12px; width:46%; }
+      .compare h2 { padding-inline:16px; }
+      .compare > p { padding-inline:16px; }
+    }
+  </style>
+<script defer src="/public/posthog-1.438.12.js"></script>
+<script defer src="/public/analytics.js"></script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="يقظ — الرئيسية"><img src="/public/icon.svg" alt="" width="34" height="34"><b>يقظ</b></a>
+    <nav class="nav-links">
+      <a href="/" class="hide-sm">الرئيسية</a>
+      <a href="/VVIP.html">عندي حساب — تسجيل الدخول</a>
+    </nav>
+  </div>
+</header>
+
+<section class="top">
+  <div class="wrap">
+    <ol class="stepper" aria-label="خطوات التسجيل">
+      <li id="st-1" class="on"><b>1</b>اختر الباقة</li>
+      <li class="sep" aria-hidden="true"></li>
+      <li id="st-2"><b>2</b>بيانات منشأتك</li>
+    </ol>
+    <h1 id="top-title">اختر الباقة المناسبة لمنشأتك</h1>
+    <p id="top-sub">كل الباقات تبدأ بتجربة مجانية 15 يومًا بكامل مميزاتها — بدون بطاقة بنكية. تقدر تغيّر باقتك لاحقًا من داخل المنصة.</p>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <!-- ══ الخطوة 1: الباقات ══ -->
+  <div id="step-plans">
+    <div class="cycle-row">
+      <div class="cycle" role="group" aria-label="دورة الفوترة">
+        <button type="button" class="active" data-cycle="monthly" data-action="setCycle" data-args='["monthly"]'>شهري</button>
+        <button type="button" data-cycle="annual" data-action="setCycle" data-args='["annual"]'>سنوي <span class="tag">شهرين مجانًا</span></button>
+      </div>
+    </div>
+
+    <div class="plans">
+      <article class="plan" data-plan="basic">
+        <h2>الأساسية</h2>
+        <div class="tagline">للمحلات والمنشآت الصغيرة</div>
+        <div class="price"><span class="price-num num" data-price="basic">99</span><span class="cur">ر.س</span></div>
+        <div class="price-period" data-period="basic">شهريًا</div>
+        <div class="price-save" data-save="basic"></div>
+        <div class="limits">
+          <div class="limit"><b class="num">3</b><small>مستخدمين</small></div>
+          <div class="limit"><b class="num">1</b><small>فرع</small></div>
+        </div>
+        <ul class="feat-list">
+          <li class="sect">البيع والفوترة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>فواتير إلكترونية متوافقة مع زاتكا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>نقطة بيع ومرتجعات المبيعات</li>
+          <li class="sect">المخزون والمشتريات</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المخزون بتكلفة FIFO وطباعة الباركود</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>فواتير الشراء والموردون</li>
+          <li class="sect">المالية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>سندات القبض والصرف</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>تقرير ضريبة القيمة المضافة والزكاة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>كشوفات حسابات الموردين</li>
+          <li class="sect">الذكاء الاصطناعي</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المساعد الذكي: 5 أسئلة يوميًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>قراءة فواتير الموردين: 30 شهريًا</li>
+        </ul>
+        <button type="button" class="btn btn-ghost" data-action="choosePlan" data-args='["basic"]'>اختر الأساسية</button>
+      </article>
+
+      <article class="plan featured" data-plan="growth">
+        <div class="badge">الأكثر اختيارًا</div>
+        <h2>النمو</h2>
+        <div class="tagline">للمنشآت بفريق وأكثر من فرع</div>
+        <div class="price"><span class="price-num num" data-price="growth">179</span><span class="cur">ر.س</span></div>
+        <div class="price-period" data-period="growth">شهريًا</div>
+        <div class="price-save" data-save="growth"></div>
+        <div class="limits">
+          <div class="limit"><b class="num">5</b><small>مستخدمين</small></div>
+          <div class="limit"><b class="num">3</b><small>فروع</small></div>
+        </div>
+        <ul class="feat-list">
+          <li class="lead">كل ما في الأساسية، وفوقها:</li>
+          <li class="sect">العملاء والفريق</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>إدارة العملاء (CRM)</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>الموظفون والرواتب والورديات</li>
+          <li class="sect">المحاسبة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>دفتر اليومية وميزان المراجعة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>إقفال الفترات المحاسبية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المصاريف الإدارية والالتزامات الدورية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>أوامر الشراء وحركة المخزون التفصيلية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التدفقات النقدية وتقارير تفصيلية</li>
+          <li class="sect">الذكاء الاصطناعي</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المساعد الذكي: 20 سؤال يوميًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>قراءة فواتير الموردين: 100 شهريًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التحليل المالي الذكي: 15 شهريًا</li>
+        </ul>
+        <button type="button" class="btn btn-primary" data-action="choosePlan" data-args='["growth"]'>اختر النمو</button>
+      </article>
+
+      <article class="plan" data-plan="pro">
+        <h2>الاحترافية</h2>
+        <div class="tagline">للمنشآت ذات المتطلبات المتقدمة</div>
+        <div class="price"><span class="price-num num" data-price="pro">299</span><span class="cur">ر.س</span></div>
+        <div class="price-period" data-period="pro">شهريًا</div>
+        <div class="price-save" data-save="pro"></div>
+        <div class="limits">
+          <div class="limit"><b>بلا حد</b><small>للمستخدمين</small></div>
+          <div class="limit"><b class="num">5</b><small>فروع</small></div>
+        </div>
+        <ul class="feat-list">
+          <li class="lead">كل ما في النمو، وفوقها:</li>
+          <li class="sect">التقارير المالية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>قائمة الدخل والميزانية العمومية</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>مقارنة الفترات وتقرير الذمم المتأخرة</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التسوية البنكية بمطابقة تلقائية</li>
+          <li class="sect">المبيعات</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>عروض الأسعار ونقاط الولاء</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التسعير التلقائي للمنتجات</li>
+          <li class="sect">الذكاء الاصطناعي</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>المساعد الذكي: 150 سؤال يوميًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>قراءة فواتير الموردين: 500 شهريًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>التحليل المالي الذكي: 200 شهريًا</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>استيراد كشف البنك: 10 مرات شهريًا</li>
+        </ul>
+        <button type="button" class="btn btn-ghost" data-action="choosePlan" data-args='["pro"]'>اختر الاحترافية</button>
+      </article>
+    </div>
+
+    <section class="compare" aria-labelledby="cmp-title">
+      <h2 id="cmp-title">مقارنة الباقات بالتفصيل</h2>
+      <p>الحدود والمزايا كما تشتغل فعليًا داخل المنصة.</p>
+      <div class="tbl-wrap">
+        <table>
+          <colgroup><col><col data-col="basic"><col data-col="growth"><col data-col="pro"></colgroup>
+          <thead><tr><th scope="col">الميزة</th><th scope="col">الأساسية</th><th scope="col">النمو</th><th scope="col">الاحترافية</th></tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ══ الخطوة 2: التسجيل ══ -->
+  <div id="step-register" hidden>
+    <div class="reg">
+      <aside class="card summary" aria-live="polite">
+        <h2>الباقة المختارة</h2>
+        <div class="pname" id="sum-name"></div>
+        <div class="price"><span class="price-num num" id="sum-price" style="font-size:1.8rem"></span><span class="cur">ر.س</span></div>
+        <div class="price-period" id="sum-period"></div>
+        <div class="trial">أول 15 يوم مجانًا بكامل المزايا — ما تدفع شي الحين.</div>
+        <ul id="sum-list"></ul>
+        <button type="button" class="linkbtn" data-action="backToPlans">تغيير الباقة</button>
+      </aside>
+
+      <div class="card form">
+        <h2>بيانات منشأتك</h2>
+        <p class="sub">دقيقة وحدة وحسابك جاهز.</p>
+        <div class="malert malert-err" id="mErr" role="alert"></div>
+        <div class="malert malert-ok" id="mOk" role="status"></div>
+        <form id="regForm" novalidate>
+          <div class="fgroup">
+            <label for="f-co">اسم الشركة / المنشأة *</label>
+            <input type="text" id="f-co" placeholder="مثال: مؤسسة النجاح للتجارة" required autocomplete="organization">
+          </div>
+          <hr class="div">
+          <div class="frow">
+            <div class="fgroup">
+              <label for="f-un">اسم المستخدم *</label>
+              <input type="text" id="f-un" placeholder="ahmed1" required autocomplete="username" dir="ltr">
+              <span class="hint">6 أحرف على الأقل وفيه رقم</span>
+            </div>
+            <div class="fgroup">
+              <label for="f-pw">كلمة المرور *</label>
+              <input type="password" id="f-pw" placeholder="Ahmed@123" required minlength="8" autocomplete="new-password" dir="ltr">
+              <span class="hint">8 أحرف، وفيها حرف إنجليزي كبير وصغير</span>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="fgroup">
+              <label for="f-fn">الاسم الكامل *</label>
+              <input type="text" id="f-fn" placeholder="محمد بن سعد العمري" required autocomplete="name">
+            </div>
+            <div class="fgroup">
+              <label for="f-ph">رقم الجوال *</label>
+              <input type="tel" id="f-ph" placeholder="05xxxxxxxx" required autocomplete="tel" dir="ltr">
+            </div>
+          </div>
+          <hr class="div">
+          <div class="frow">
+            <div class="fgroup">
+              <label for="f-cr">رقم السجل التجاري</label>
+              <input type="text" id="f-cr" placeholder="1234567890" maxlength="10" inputmode="numeric" dir="ltr">
+            </div>
+            <div class="fgroup">
+              <label for="f-vt">الرقم الضريبي VAT</label>
+              <input type="text" id="f-vt" placeholder="300…" maxlength="15" inputmode="numeric" dir="ltr">
+            </div>
+          </div>
+          <div class="check-row">
+            <input type="checkbox" id="f-vat-reg" checked>
+            <label for="f-vat-reg">منشأتي مسجّلة بضريبة القيمة المضافة (VAT) — إن لم تكن مسجّلة، الفواتير لن تحتسب الضريبة تلقائيًا (يمكن تفعيلها لاحقًا من الإعدادات)</label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-submit" id="regBtn">إنشاء الحساب وبدء التجربة</button>
+          <p class="terms">بالتسجيل توافق على <a href="/terms" target="_blank">شروط الاستخدام</a> و<a href="/privacy" target="_blank">سياسة الخصوصية</a></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// تحليلات الاستخدام (public/analytics.js) — يُحمَّل defer، فالنداءات المبكرة تنتظر بطابور
+function yq(method, ...args) {
+  const q = window._yqQ = window._yqQ || [];
+  if (q.length < 100) q.push([method, args]);
+  if (window._yqFlush) window._yqFlush();
+}
+
+// نفس الأسعار والحدود المطبَّقة بالسيرفر (users/branches/ai controllers)
+const PLANS = {
+  basic:  { name:'الأساسية',  monthly:99,  annual:990,  users:'3 مستخدمين', branches:'فرع واحد' },
+  growth: { name:'النمو',      monthly:179, annual:1790, users:'5 مستخدمين', branches:'حتى 3 فروع' },
+  pro:    { name:'الاحترافية', monthly:299, annual:2990, users:'مستخدمون بلا حد', branches:'حتى 5 فروع' },
+};
+// صفوف المقارنة: قيمة نصية = حد، true/false = متاح أو لا
+const COMPARE = [
+  ['الفريق والفروع'],
+  ['المستخدمون', '3', '5', 'بلا حد'],
+  ['الفروع', '1', '3', '5'],
+  ['البيع والمخزون'],
+  ['فواتير إلكترونية متوافقة مع زاتكا', true, true, true],
+  ['نقطة البيع والمرتجعات', true, true, true],
+  ['المخزون (FIFO) وطباعة الباركود', true, true, true],
+  ['فواتير الشراء والموردون', true, true, true],
+  ['أوامر الشراء وحركة المخزون التفصيلية', false, true, true],
+  ['عروض الأسعار', false, false, true],
+  ['نقاط الولاء', false, false, true],
+  ['التسعير التلقائي للمنتجات', false, false, true],
+  ['العملاء والموظفون'],
+  ['إدارة العملاء (CRM)', false, true, true],
+  ['الموظفون والرواتب والورديات', false, true, true],
+  ['المحاسبة والتقارير'],
+  ['سندات القبض والصرف', true, true, true],
+  ['تقرير ضريبة القيمة المضافة والزكاة', true, true, true],
+  ['دفتر اليومية وميزان المراجعة', false, true, true],
+  ['إقفال الفترات المحاسبية', false, true, true],
+  ['المصاريف الإدارية والالتزامات الدورية', false, true, true],
+  ['التدفقات النقدية وتقارير تفصيلية', false, true, true],
+  ['قائمة الدخل والميزانية العمومية', false, false, true],
+  ['مقارنة الفترات والذمم المتأخرة', false, false, true],
+  ['التسوية البنكية', false, false, true],
+  ['الذكاء الاصطناعي'],
+  ['المساعد الذكي (أسئلة يوميًا)', '5', '20', '150'],
+  ['قراءة فواتير الموردين (شهريًا)', '30', '100', '500'],
+  ['التحليل المالي الذكي (شهريًا)', false, '15', '200'],
+  ['استيراد كشف البنك (شهريًا)', false, false, '10'],
+];
+
+let cycle = 'monthly';
+let chosen = null;
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US');
+
+function renderCompare() {
+  $('cmp-body').innerHTML = COMPARE.map(r => {
+    if (r.length === 1) return `<tr class="grp"><td colspan="4">${r[0]}</td></tr>`;
+    const cell = v => v === true ? '<td class="yes" aria-label="متاح">✓</td>'
+                    : v === false ? '<td class="no" aria-label="غير متاح">—</td>'
+                    : `<td><span class="num">${v}</span></td>`;
+    return `<tr><td>${r[0]}</td>${cell(r[1])}${cell(r[2])}${cell(r[3])}</tr>`;
+  }).join('');
+}
+
+function setCycle(c) {
+  cycle = c;
+  document.querySelectorAll('.cycle button').forEach(b => b.classList.toggle('active', b.dataset.cycle === c));
+  Object.keys(PLANS).forEach(k => {
+    const p = PLANS[k];
+    document.querySelector(`[data-price="${k}"]`).textContent = fmt(c === 'annual' ? p.annual : p.monthly);
+    document.querySelector(`[data-period="${k}"]`).textContent = c === 'annual' ? 'سنويًا' : 'شهريًا';
+    document.querySelector(`[data-save="${k}"]`).textContent = c === 'annual' ? `توفّر ${fmt(p.monthly * 12 - p.annual)} ر.س سنويًا` : '';
+  });
+  if (chosen) renderSummary();
+}
+
+function markChosen(plan) {
+  document.querySelectorAll('.plan').forEach(el => el.classList.toggle('chosen', el.dataset.plan === plan));
+  document.querySelectorAll('col[data-col]').forEach(c => c.classList.toggle('chosen-col', c.dataset.col === plan));
+}
+
+function renderSummary() {
+  const p = PLANS[chosen];
+  $('sum-name').textContent = p.name;
+  $('sum-price').textContent = fmt(cycle === 'annual' ? p.annual : p.monthly);
+  $('sum-period').textContent = (cycle === 'annual' ? 'سنويًا' : 'شهريًا') + ' بعد انتهاء التجربة';
+  const keys = [...document.querySelectorAll(`.plan[data-plan="${chosen}"] .feat-list li:not(.sect):not(.lead)`)].slice(0, 5).map(li => li.textContent.trim());
+  $('sum-list').innerHTML = [p.users + ' · ' + p.branches, ...keys]
+    .map(t => `<li><svg class="ico"><use href="#i-check"/></svg>${t}</li>`).join('');
+}
+
+function showStep(n) {
+  $('step-plans').hidden = n !== 1;
+  $('step-register').hidden = n !== 2;
+  $('st-1').className = n === 1 ? 'on' : 'done';
+  $('st-2').className = n === 2 ? 'on' : '';
+  $('top-title').textContent = n === 1 ? 'اختر الباقة المناسبة لمنشأتك' : 'سجّل منشأتك في يقظ';
+  $('top-sub').textContent = n === 1
+    ? 'كل الباقات تبدأ بتجربة مجانية 15 يومًا بكامل مميزاتها — بدون بطاقة بنكية. تقدر تغيّر باقتك لاحقًا من داخل المنصة.'
+    : 'باقي خطوة وحدة: بياناتك الأساسية، وبعدها تدخل المنصة مباشرة.';
+  window.scrollTo({ top: 0 });
+}
+
+function choosePlan(plan) {
+  if (!PLANS[plan]) return;
+  chosen = plan;
+  markChosen(plan);
+  renderSummary();
+  yq('Track', 'plan_selected', { plan, cycle });
+  history.pushState({ step: 2, plan }, '', `/signup?plan=${plan}#register`);
+  showStep(2);
+  yq('Track', 'signup_opened', { plan });
+  // على الجوال التركيز التلقائي يفتح الكيبورد وينزّل الصفحة بعيد عن ملخص الباقة
+  if (window.matchMedia('(min-width: 1025px)').matches) setTimeout(() => $('f-co').focus({ preventScroll: true }), 50);
+}
+function backToPlans() {
+  // الرجوع للباقات ما يمسح أي حقل — نفس الصفحة، والبيانات المكتوبة تبقى
+  if (history.state && history.state.step === 2) history.back();
+  else { history.replaceState({ step: 1, plan: chosen }, '', `/signup${chosen ? '?plan=' + chosen : ''}`); showStep(1); }
+}
+window.addEventListener('popstate', e => {
+  const st = e.state || {};
+  if (st.step === 2 && PLANS[st.plan]) { chosen = st.plan; markChosen(chosen); renderSummary(); showStep(2); }
+  else showStep(1);
+});
+
+// مسوّدة النموذج تُحفظ بالجلسة (بلا كلمة المرور) — تحديث الصفحة أو الرجوع
+// بالخطأ ما يضيّع اللي انكتب
+const DRAFT_KEY = 'yaqiz_signup_draft';
+const DRAFT_FIELDS = ['f-co','f-un','f-fn','f-ph','f-cr','f-vt'];
+function saveDraft() {
+  try {
+    const d = {}; DRAFT_FIELDS.forEach(id => { d[id] = $(id).value; });
+    d.vat = $('f-vat-reg').checked;
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+  } catch (e) {}
+}
+function loadDraft() {
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null'); if (!d) return;
+    DRAFT_FIELDS.forEach(id => { if (typeof d[id] === 'string') $(id).value = d[id]; });
+    if (typeof d.vat === 'boolean') $('f-vat-reg').checked = d.vat;
+  } catch (e) {}
+}
+
+function clearErr() {
+  $('mErr').classList.remove('show');
+  document.querySelectorAll('#regForm [aria-invalid]').forEach(i => i.removeAttribute('aria-invalid'));
+}
+// الخطأ يطلع فوق النموذج، والحقل الغلط يتلوّن ويصير عليه المؤشر — والنموذج
+// يبقى بكل بياناته، يصحّح الحقل ويعيد الإرسال
+function showErr(msg, fieldId) {
+  const err = $('mErr');
+  err.textContent = msg; err.classList.add('show');
+  if (fieldId) { const f = $(fieldId); f.setAttribute('aria-invalid', 'true'); f.focus({ preventScroll: true }); }
+  err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+async function doReg(e) {
+  e.preventDefault();
+  clearErr();
+  const btn = $('regBtn'), ok = $('mOk');
+  const v = id => $(id).value.trim();
+  const co = v('f-co'), un = v('f-un'), pw = $('f-pw').value, fn = v('f-fn'), ph = v('f-ph'), cr = v('f-cr'), vt = v('f-vt');
+  const missing = [['f-co', co], ['f-un', un], ['f-pw', pw], ['f-fn', fn], ['f-ph', ph]].find(([, val]) => !val);
+  if (missing) return showErr('يرجى تعبئة الحقول الإلزامية (المعلَّمة بـ *)', missing[0]);
+  if (un.length < 6 || !/\d/.test(un)) return showErr('اسم المستخدم: 6 أحرف على الأقل ويحتوي على رقم (مثال: ahmed1)', 'f-un');
+  if (pw.length < 8 || !/[a-z]/.test(pw) || !/[A-Z]/.test(pw)) return showErr('كلمة المرور: 8 أحرف على الأقل، وفيها حرف إنجليزي كبير وصغير (مثال: Ahmed@123)', 'f-pw');
+  if (cr && !/^\d{10}$/.test(cr)) return showErr('رقم السجل التجاري يتكوّن من 10 أرقام', 'f-cr');
+  if (vt && !/^3\d{13}3$/.test(vt)) return showErr('الرقم الضريبي 15 رقمًا، يبدأ وينتهي بالرقم 3', 'f-vt');
+  btn.textContent = 'جاري إنشاء الحساب...'; btn.disabled = true;
+  const plan = chosen || 'growth';
+  try {
+    const body = { company_name:co, username:un, password:pw, full_name:fn, contact_phone:ph, plan, vat_registered: $('f-vat-reg').checked };
+    if (cr) body.cr_number = cr;
+    if (vt) body.vat_number = vt;
+    const res  = await fetch('/api/register', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+    const data = await res.json();
+    if (data.success) {
+      yq('Track', 'signup_completed', { plan });
+      localStorage.setItem('yaqiz_access_token', data.accessToken);
+      localStorage.setItem('yaqiz_refresh_token', data.refreshToken);
+      try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {}
+      ok.textContent = 'تم إنشاء حسابك — جاري التوجيه...'; ok.classList.add('show');
+      setTimeout(() => { window.location.href = '/VVIP.html'; }, 1200);
+      return;
+    }
+    yq('Track', 'signup_failed', { plan, reason: data.message || '' });
+    const m = data.message || 'حدث خطأ، حاول مجددًا';
+    const field = /مستخدم/.test(m) ? 'f-un' : /مرور/.test(m) ? 'f-pw' : /جوال|هاتف/.test(m) ? 'f-ph' : /سجل/.test(m) ? 'f-cr' : /ضريب/.test(m) ? 'f-vt' : /شركة|منشأة/.test(m) ? 'f-co' : null;
+    showErr(m, field);
+  } catch (err) {
+    showErr('تعذّر الاتصال بالخادم، تحقق من الإنترنت وحاول مجددًا');
+  }
+  btn.textContent = 'إنشاء الحساب وبدء التجربة'; btn.disabled = false;
+}
+
+// بديل onclick="" الممنوعة بسياسة أمان المحتوى (CSP) — نفس نمط بقية الصفحات
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const fn = window[el.dataset.action];
+  if (typeof fn !== 'function') return;
+  let args = [];
+  if (el.dataset.args) { try { args = JSON.parse(el.dataset.args); } catch (err) { args = []; } }
+  fn.apply(el, args);
+});
+$('regForm').addEventListener('submit', doReg);
+$('regForm').addEventListener('input', e => { if (e.target.id !== 'f-pw') saveDraft(); if (e.target.getAttribute('aria-invalid')) e.target.removeAttribute('aria-invalid'); });
+$('f-vat-reg').addEventListener('change', saveDraft);
+
+(function init() {
+  renderCompare();
+  loadDraft();
+  const params = new URLSearchParams(location.search);
+  const pre = params.get('plan');
+  if (PLANS[pre]) { chosen = pre; markChosen(pre); renderSummary(); }
+  if (location.hash === '#register' && chosen) {
+    history.replaceState({ step: 2, plan: chosen }, '', location.href);
+    showStep(2);
+    yq('Track', 'signup_opened', { plan: chosen });
+  } else {
+    history.replaceState({ step: 1, plan: chosen }, '', location.pathname + location.search);
+    yq('Track', 'plans_viewed', { preselected: pre || '' });
+  }
+})();
+</script>
+</body>
+</html>

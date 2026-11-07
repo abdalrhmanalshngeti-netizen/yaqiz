@@ -174,6 +174,11 @@ app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   sendHtmlWithNonce(require('path').join(staticPath, 'index.html'), req, res);
 });
+// اختيار الباقة ثم التسجيل — صفحة مستقلة بدل النافذة المنبثقة بالرئيسية
+app.get('/signup', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  sendHtmlWithNonce(require('path').join(staticPath, 'signup.html'), req, res);
+});
 app.get('/privacy',          (_, res) => res.sendFile(require('path').join(staticPath, 'privacy.html')));
 app.get('/terms',            (_, res) => res.sendFile(require('path').join(staticPath, 'terms.html')));
 app.get('/subscribe', (req, res) => {
