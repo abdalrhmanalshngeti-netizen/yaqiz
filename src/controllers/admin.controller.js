@@ -1226,13 +1226,31 @@ exports.markAllNotifRead = async (req, res, next) => {
 // ── الحارس المحاسبي ─────────────────────────────────────────────
 exports.ledgerGuard = async (req, res, next) => {
   try {
-    const { rows: findings } = await db.query(`
-      SELECT f.company_id, c.name AS company_name, c.plan, f.check_key, f.subject, f.title,
-             f.expected::float, f.actual::float, f.diff::float, f.first_seen, f.last_seen
-      FROM ledger_guard_findings f JOIN companies c ON c.id = f.company_id
-      ORDER BY f.first_seen ASC, f.company_id, f.check_key LIMIT 1000`);
+    // مؤشر صحة المنصة فقط — مالك المنصة ما يراجع حسابات كل شركة. خلل النظام
+    // (category=system) يُعدّ «مؤكدًا» لو استمر 12 ساعة+ (عبر تشغيلين يوميين على
+    // الأقل)، وإلا «قيد التأكد» (غالبًا جهاز ما زامن بعد). ملاحظات بيانات الشركات
+    // (category=user) تصل لأصحابها مباشرة — هنا عددها فقط
+    const { rows: sys } = await db.query(`
+      SELECT f.check_key, f.company_id, f.title, f.diff::float, f.first_seen, f.last_seen,
+             (f.last_seen - f.first_seen) >= INTERVAL '12 hours' AS confirmed
+      FROM ledger_guard_findings f WHERE f.category = 'system'
+      ORDER BY f.first_seen`);
+    const { rows: [usr] } = await db.query(`
+      SELECT COUNT(*)::int AS open, COUNT(DISTINCT company_id)::int AS companies
+      FROM ledger_guard_findings WHERE category = 'user'`);
     const { rows: [lastRun] } = await db.query(`SELECT * FROM ledger_guard_runs ORDER BY id DESC LIMIT 1`);
-    res.json({ success: true, data: { findings, last_run: lastRun || null } });
+    const confirmed = sys.filter(x => x.confirmed);
+    const byCheck = {};
+    for (const x of confirmed) (byCheck[x.check_key] = byCheck[x.check_key] || new Set()).add(x.company_id);
+    res.json({ success: true, data: {
+      healthy: confirmed.length === 0,
+      system_issues: Object.entries(byCheck).map(([check_key, set]) => ({ check_key, companies: set.size })),
+      system_pending: sys.filter(x => !x.confirmed).length,
+      // للمطوّر عند الحاجة فقط (تفاصيل مطويّة بالواجهة)
+      developer_details: confirmed.map(x => ({ company_id: x.company_id, check_key: x.check_key, title: x.title, diff: x.diff, since: x.first_seen })),
+      user_alerts: usr,
+      last_run: lastRun || null
+    } });
   } catch (err) { next(err); }
 };
 exports.runLedgerGuardNow = async (req, res, next) => {

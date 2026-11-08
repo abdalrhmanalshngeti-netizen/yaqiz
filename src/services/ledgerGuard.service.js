@@ -1,8 +1,12 @@
 const db = require('../config/db');
 
 // الحارس المحاسبي اليومي: لكل شركة، يطابق الدفاتر (دفتر اليومية) مع السجلات
-// الفرعية اللي يفترض تساويها، ويسجّل أي فرق بجدول ledger_guard_findings ليظهر
-// بلوحة الإدارة قبل ما يلاحظه العميل. يقرأ فقط — ما يعدّل أي بيانات شركة.
+// الفرعية اللي يفترض تساويها. نوعان من النتائج:
+//  • system — خلل بالنظام نفسه (لا يقدر العميل يسببه أو يصلحه): يظهر لمالك
+//    المنصة كمؤشر صحة عام فقط، ولا يُعدّ إلا لو استمر أكثر من تشغيل
+//  • user — ملاحظة على بيانات الشركة نفسها: تصل لصاحب المنشأة كإشعار بجرس
+//    التطبيق (مرة وحدة لكل ملاحظة)، بلغة بسيطة ووش يسوي
+// يقرأ فقط — ما يعدّل أي بيانات محاسبية.
 // ملاحظة: القيود تُبنى بالمتصفح وتُزامَن، فجهاز ما زامن بعد قد يسبب فرقًا مؤقتًا
 // يختفي بالتشغيل التالي؛ الفرق اللي يستمر أكثر من تشغيل هو المشكلة الحقيقية.
 const TOL = 0.01;
@@ -13,7 +17,7 @@ async function checkCompany(cid) {
   const findings = [];
   const add = (check_key, subject, title, expected, actual) => {
     const diff = r2(actual - expected);
-    if (Math.abs(diff) > TOL) findings.push({ check_key, subject: String(subject || ''), title, expected: r2(expected), actual: r2(actual), diff });
+    if (Math.abs(diff) > TOL) findings.push({ check_key, category: 'system', subject: String(subject || ''), title, expected: r2(expected), actual: r2(actual), diff });
   };
 
   // 1) كل قيد متوازن
@@ -86,14 +90,23 @@ async function checkCompany(cid) {
     LIMIT 50`);
   for (const r of noCost) findings.push({ check_key: 'invoice_without_cogs', subject: r.invoice_no, title: `فاتورة ${r.invoice_no} بيعت بلا خصم مخزون (تكلفة المبيعات صفر)`, expected: null, actual: null, diff: null });
 
-  // 12) بضاعة بالطريق معلّقة أكثر من 7 أيام (اشتريت ولم تُدرج بالمخزون)
+  // ── ملاحظات على بيانات الشركة (تصل لصاحب المنشأة) ──
+  // 12) بضاعة بالطريق معلّقة أكثر من 7 أيام (اشتراها ولم يُدرجها بالمخزون)
   const transit = g('1350');
   if (transit > TOL) {
     const [old] = await q(`
       SELECT COUNT(*)::int AS n FROM journal_items ji JOIN journal_entries je ON je.id = ji.entry_id
       WHERE je.company_id = $1 AND ji.account_code = '1350' AND ji.side = 'debit' AND je.date < CURRENT_DATE - 7`);
-    if (old.n > 0) findings.push({ check_key: 'goods_in_transit', subject: '', title: `بضاعة بالطريق معلّقة أكثر من أسبوع (${r2(transit)} ر.س) — أصناف مشتراة لم تُدرج بالمخزون`, expected: 0, actual: r2(transit), diff: r2(transit) });
+    if (old.n > 0) findings.push({ check_key: 'goods_in_transit', category: 'user', subject: '',
+      title: 'بضاعة مشتراة لم تُدرج بالمخزون',
+      message: `عندك أصناف من فواتير شراء بقيمة ${r2(transit)} ر.س ما زالت «بضاعة بالطريق» من أكثر من أسبوع — ما تظهر بالمخزون ولا تقدر تبيعها. من المشتريات، افتح الفاتورة اللي عليها زر «استكمال الإدراج بالمخزون» وأكمل إنشاء الأصناف.`,
+      link: '/VVIP.html#purchases', expected: 0, actual: r2(transit), diff: r2(transit) });
   }
+  // 13) رصيد الصندوق بالسالب — مدفوعات مسجّلة أكثر من النقد الموجود
+  if (g('1100') < -TOL) findings.push({ check_key: 'negative_cash', category: 'user', subject: '',
+    title: 'رصيد الصندوق بالسالب',
+    message: `رصيد النقدية بالدفاتر ${r2(g('1100'))} ر.س — يعني انسجّلت مصروفات ومدفوعات أكثر من النقد المتوفر. غالبًا رصيد الصندوق الافتتاحي ناقص، أو فيه مدفوعات انسجّلت من الصندوق وهي فعليًا من حساب آخر أو من جيب المالك (سجّلها «إيداع من المالك»). راجع الخزينة أو الأرصدة الافتتاحية.`,
+    link: '/VVIP.html#treasury', expected: 0, actual: r2(g('1100')), diff: r2(g('1100')) });
 
   return findings;
 }
@@ -105,13 +118,23 @@ async function saveFindings(cid, findings) {
     const keys = [];
     for (const f of findings) {
       keys.push(`${f.check_key}|${f.subject}`);
-      await client.query(`
-        INSERT INTO ledger_guard_findings (company_id, check_key, subject, title, expected, actual, diff)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      const { rows: [row] } = await client.query(`
+        INSERT INTO ledger_guard_findings (company_id, check_key, subject, title, expected, actual, diff, category)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (company_id, check_key, subject) DO UPDATE
           SET title = EXCLUDED.title, expected = EXCLUDED.expected, actual = EXCLUDED.actual,
-              diff = EXCLUDED.diff, last_seen = NOW()`,
-        [cid, f.check_key, f.subject, f.title, f.expected, f.actual, f.diff]);
+              diff = EXCLUDED.diff, category = EXCLUDED.category, last_seen = NOW()
+        RETURNING notified_at`,
+        [cid, f.check_key, f.subject, f.title, f.expected, f.actual, f.diff, f.category || 'system']);
+      // ملاحظة على بيانات الشركة: إشعار لصاحب المنشأة أول مرة تظهر فقط
+      if (f.category === 'user' && !row.notified_at) {
+        const { rows: owners } = await client.query(`SELECT id FROM users WHERE company_id = $1 AND role = 'owner' AND COALESCE(active, true)`, [cid]);
+        for (const o of owners) {
+          await client.query(`INSERT INTO notifications (company_id, user_id, type, title, message, link) VALUES ($1,$2,'accounting_check',$3,$4,$5)`,
+            [cid, o.id, f.title, f.message || f.title, f.link || '/VVIP.html']);
+        }
+        await client.query(`UPDATE ledger_guard_findings SET notified_at = NOW() WHERE company_id = $1 AND check_key = $2 AND subject = $3`, [cid, f.check_key, f.subject]);
+      }
     }
     // ما ظهر بهذا التشغيل = اتصلح
     await client.query(`

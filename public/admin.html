@@ -412,7 +412,7 @@ html.light .me-chip .av{color:#0f766e}
       <button class="nav-tab" data-action="switchTab" data-args='["costs"]' id="tab-costs"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">تحليل التكلفة</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["plans"]' id="tab-plans"><svg class="ico"><use href="#i-package"/></svg><span class="nt-l">الباقات والإيرادات</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["aiusage"]' id="tab-aiusage"><svg class="ico"><use href="#i-spark"/></svg><span class="nt-l">استخدام الذكاء الاصطناعي</span></button>
-      <button class="nav-tab" data-action="switchTab" data-args='["guard"]' id="tab-guard"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">الحارس المحاسبي</span> <span class="tab-badge" id="guard-badge" style="display:none;background:var(--red,#dc2626)">0</span></button>
+      <button class="nav-tab" data-action="switchTab" data-args='["guard"]' id="tab-guard"><svg class="ico"><use href="#i-calc"/></svg><span class="nt-l">صحة الدورة المحاسبية</span> <span class="tab-badge" id="guard-badge" style="display:none;background:var(--red,#dc2626)">0</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["log"]' id="tab-log"><svg class="ico"><use href="#i-list"/></svg><span class="nt-l">سجل النشاط</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["employees"]' id="tab-employees"><svg class="ico"><use href="#i-idcard"/></svg><span class="nt-l">الموظفون</span></button>
       <button class="nav-tab" data-action="switchTab" data-args='["myteam"]' id="tab-myteam" style="display:none;"><svg class="ico"><use href="#i-users"/></svg><span class="nt-l">فريقي</span></button>
@@ -641,8 +641,8 @@ html.light .me-chip .av{color:#0f766e}
     <div class="section" id="sec-guard">
       <div class="sec-head">
         <div>
-          <div class="sec-title">الحارس المحاسبي</div>
-          <div class="sec-sub" id="guard-sub">فحص يومي لكل شركة: القيود، النقدية مع الخزينة، المخزون مع طبقات التكلفة، الذمم مع الأرصدة والفواتير</div>
+          <div class="sec-title">صحة الدورة المحاسبية</div>
+          <div class="sec-sub" id="guard-sub">فحص تلقائي يومي إن النظام يسجّل القيود والمخزون والأرصدة صح بكل المنشآت</div>
         </div>
         <button class="fbtn active" id="guard-run-btn" data-action="runGuardNow">▶ افحص الآن</button>
       </div>
@@ -2603,54 +2603,47 @@ function renderCostSection(companies){
 }
 
 // ── Activity Log ───────────────────────────────────────
-// ── الحارس المحاسبي ─────────────────────────────────────
-const GUARD_HINT = {
-  unbalanced_entry: 'قيد مدينه ≠ دائنه — راجع مصدره بسجل القيود',
-  trial_balance: 'مجموع المدين ≠ مجموع الدائن بكل الدفاتر',
-  cash_vs_treasury: 'حركة خزينة بلا قيد أو قيد نقدية بلا حركة خزينة',
-  inventory_vs_lots: 'كمية دخلت/خرجت المخزون بلا قيد مطابق بنفس التكلفة',
-  product_qty_vs_lots: 'كمية المنتج ما تطابق طبقات التكلفة بالسيرفر',
-  product_qty_vs_warehouses: 'كمية المنتج ما تطابق مجموع مخزون الفروع',
-  negative_stock: 'بيع أو صرف أكثر من الموجود',
-  ar_vs_customers: 'رصيد عميل تغيّر بلا قيد أو قيد ذمم بلا رصيد',
-  ar_vs_invoices: 'الذمم ما تطابق المتبقي على الفواتير',
-  ap_vs_suppliers: 'رصيد مورد تغيّر بلا قيد أو قيد ذمم بلا رصيد',
-  ap_vs_purchases: 'الذمم ما تطابق المتبقي على فواتير الشراء',
-  invoice_without_cogs: 'فاتورة بيعت بلا خصم مخزون — الربح فيها وهمي',
-  goods_in_transit: 'فاتورة شراء أصنافها ما أُدرجت بالمخزون'
+// ── صحة الدورة المحاسبية ─────────────────────────────────
+// مؤشر واحد لمالك المنصة: هل النظام نفسه يمشي صح؟ ما يعرض حسابات كل منشأة —
+// ملاحظات بيانات العملاء تروح لهم مباشرة بجرس التطبيق، مو هنا
+const GUARD_LABEL = {
+  unbalanced_entry: 'قيود غير متوازنة', trial_balance: 'ميزان المراجعة غير متوازن',
+  cash_vs_treasury: 'النقدية ≠ الخزينة', inventory_vs_lots: 'المخزون بالدفاتر ≠ المخزون الفعلي',
+  product_qty_vs_lots: 'كميات المنتجات ≠ طبقات التكلفة', product_qty_vs_warehouses: 'كميات المنتجات ≠ مخزون الفروع',
+  negative_stock: 'كميات سالبة', ar_vs_customers: 'ذمم العملاء ≠ أرصدتهم', ar_vs_invoices: 'ذمم العملاء ≠ الفواتير المفتوحة',
+  ap_vs_suppliers: 'ذمم الموردين ≠ أرصدتهم', ap_vs_purchases: 'ذمم الموردين ≠ فواتير الشراء', invoice_without_cogs: 'فواتير بلا تكلفة مبيعات'
 };
 async function loadGuard(){
   const box=$('guard-list');
   box.innerHTML='<div class="loader"><span class="spinner"></span></div>';
   try{
     const res=await apiFetch('/api/admin/ledger-guard');
-    const { findings=[], last_run } = res.data||{};
+    const d=res.data||{};
     const badge=$('guard-badge');
-    const nCo=new Set(findings.map(f=>f.company_id)).size;
-    if(badge){ badge.textContent=nCo; badge.style.display=nCo?'':'none'; }
-    $('guard-sub').textContent = last_run
-      ? `آخر فحص: ${fmtD(last_run.ran_at)} — ${last_run.companies} شركة، ${last_run.findings} فرق${last_run.error?' · '+last_run.error:''}`
-      : 'لم يُشغَّل الفحص بعد — يشتغل تلقائيًا كل يوم، أو اضغط «افحص الآن»';
-    if(!findings.length){ box.innerHTML='<div class="empty-state">✅ كل الدفاتر مطابقة — ما فيه أي فرق</div>'; return; }
-    const groups={};
-    for(const f of findings){ (groups[f.company_id]=groups[f.company_id]||{name:f.company_name,plan:f.plan,items:[]}).items.push(f); }
-    const num=v=>v==null?'—':Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-    box.innerHTML=Object.entries(groups).map(([cid,g])=>`
-      <div style="padding:14px 18px;border-bottom:1px solid var(--border2);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
-          <div style="font-weight:800;">${escHtml(g.name)} <span style="color:var(--muted2);font-weight:600;font-size:12px;">#${cid} · ${escHtml(g.plan||'')}</span></div>
-          <button class="fbtn" data-action="runGuardNow" data-args='[${Number(cid)}]'>إعادة فحص الشركة</button>
-        </div>
-        <div class="cost-table-wrap"><table class="cost-table">
-          <thead><tr><th>الفحص</th><th>بالدفاتر</th><th>الفعلي</th><th>الفرق</th><th>منذ</th></tr></thead>
-          <tbody>${g.items.map(f=>`<tr>
-            <td><div style="font-weight:700;">${escHtml(f.title)}</div><div style="font-size:11px;color:var(--muted2);">${escHtml(GUARD_HINT[f.check_key]||'')}</div></td>
-            <td style="white-space:nowrap;">${num(f.expected)}</td><td style="white-space:nowrap;">${num(f.actual)}</td>
-            <td style="white-space:nowrap;color:#dc2626;font-weight:800;" dir="ltr">${num(f.diff)}</td>
-            <td style="white-space:nowrap;font-size:12px;">${fmtD(f.first_seen)}</td></tr>`).join('')}</tbody>
-        </table></div>
-      </div>`).join('');
-  }catch(e){ box.innerHTML='<div class="empty-state">خطأ في تحميل نتائج الحارس</div>'; }
+    const nIssues=(d.system_issues||[]).length;
+    if(badge){ badge.textContent='!'; badge.style.display=nIssues?'':'none'; }
+    $('guard-sub').textContent = d.last_run
+      ? `آخر فحص تلقائي: ${fmtD(d.last_run.ran_at)} — ${d.last_run.companies} منشأة`
+      : 'لم يُشغَّل الفحص بعد — يشتغل تلقائيًا كل يوم';
+    const status = d.healthy
+      ? `<div style="display:flex;gap:14px;align-items:center;padding:22px;">
+          <div style="font-size:34px;">✅</div>
+          <div><div style="font-size:18px;font-weight:800;">الدورة المحاسبية تشتغل صح</div>
+          <div style="color:var(--muted2);font-size:13px;margin-top:4px;">النظام يسجّل القيود والمخزون والخزينة والأرصدة بشكل متطابق في كل المنشآت. ما تحتاج تسوي شي.</div></div></div>`
+      : `<div style="display:flex;gap:14px;align-items:center;padding:22px;">
+          <div style="font-size:34px;">⚠️</div>
+          <div><div style="font-size:18px;font-weight:800;color:#dc2626;">فيه خلل في النظام يحتاج المطوّر</div>
+          <div style="color:var(--muted2);font-size:13px;margin-top:4px;">هذا خلل برمجي وليس خطأ من العملاء — أرسل هذي الصفحة للمطوّر.</div>
+          <ul style="margin:10px 0 0;padding-inline-start:18px;font-size:13px;">${(d.system_issues||[]).map(x=>`<li>${escHtml(GUARD_LABEL[x.check_key]||x.check_key)} — ${x.companies} منشأة</li>`).join('')}</ul></div></div>`;
+    const pending = d.system_pending ? `<div style="padding:0 22px 14px;color:var(--muted2);font-size:12px;">⏳ ${d.system_pending} فرق ظهر بآخر فحص وقيد التأكد — غالبًا جهاز عميل ما زامن بعد، ويختفي تلقائيًا لو كان مؤقتًا.</div>` : '';
+    const ua = d.user_alerts||{};
+    const users = `<div style="padding:14px 22px;border-top:1px solid var(--border2);font-size:13px;color:var(--muted2);">🔔 ملاحظات على بيانات العملاء أُرسلت لهم مباشرة بالتطبيق: ${ua.open||0} ملاحظة عند ${ua.companies||0} منشأة (مثل صندوق بالسالب أو بضاعة ما أُدرجت) — يتعاملون معها بأنفسهم.</div>`;
+    const dev = (d.developer_details||[]).length ? `<details style="padding:0 22px 18px;"><summary style="cursor:pointer;font-size:12px;color:var(--muted2);">تفاصيل للمطوّر</summary>
+        <div class="cost-table-wrap" style="margin-top:8px;"><table class="cost-table"><thead><tr><th>منشأة</th><th>الفحص</th><th>الفرق</th><th>منذ</th></tr></thead><tbody>
+        ${d.developer_details.map(x=>`<tr><td>#${x.company_id}</td><td>${escHtml(x.title)}</td><td dir="ltr">${x.diff==null?'—':Number(x.diff).toFixed(2)}</td><td>${fmtD(x.since)}</td></tr>`).join('')}
+        </tbody></table></div></details>` : '';
+    box.innerHTML = status + pending + dev + users;
+  }catch(e){ box.innerHTML='<div class="empty-state">خطأ في تحميل حالة الدورة المحاسبية</div>'; }
 }
 async function runGuardNow(companyId){
   const btn=$('guard-run-btn'); if(btn){ btn.disabled=true; btn.textContent='⏳ جارٍ الفحص...'; }

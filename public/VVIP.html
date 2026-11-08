@@ -12868,6 +12868,8 @@ function _notifTypeStyle(type) {
   if (type==='support_reply')                  return { bg:'var(--info-bg)', color:'var(--info)', icon:'headphones' };
   if (type==='plan_upgrade_opening_balances')  return { bg:'var(--info-bg)', color:'var(--info)', icon:'clipboard-list' };
   if (type==='branch_sync_rejected')           return { bg:'var(--warning-bg)', color:'var(--warning)', icon:'git-branch' };
+  // ملاحظة الفحص المحاسبي اليومي على بيانات المنشأة (صندوق بالسالب، بضاعة لم تُدرج)
+  if (type==='accounting_check')               return { bg:'var(--warning-bg)', color:'var(--warning)', icon:'scale' };
   return { bg:'var(--neutral-bg)', color:'var(--neutral)', icon:'bell' };
 }
 
