@@ -2240,7 +2240,7 @@ async function toggleNotifDropdown(){
     const items=res.data||[];
     if(!items.length){dd.innerHTML='<div class="empty-state" style="padding:24px;">لا توجد إشعارات</div>';return;}
     dd.innerHTML=items.map(n=>`
-      <div class="hover-row-soft" data-action="openNotif" data-args="${JSON.stringify([n.ticket_id||null])}" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${n.is_read?'opacity:.6;':''}">
+      <div class="hover-row-soft" data-action="openNotif" data-args='${JSON.stringify([n.ticket_id||null, n.type||""])}' style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${n.is_read?'opacity:.6;':''}">
         <div style="font-weight:800;font-size:13px;color:#f0f4ff;">${escHtml(n.title||'')}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(n.message||'')}</div>
         <div style="font-size:11px;color:var(--muted2);margin-top:3px;">${fmtD(n.created_at)}</div>
@@ -2249,8 +2249,10 @@ async function toggleNotifDropdown(){
     loadAdminNotifBadge();
   }catch{dd.innerHTML='<div class="empty-state">خطأ في التحميل</div>';}
 }
-function openNotif(ticketId){
+function openNotif(ticketId, type){
   $('admin-notif-dropdown').style.display='none';
+  // تنبيه الحارس المحاسبي يفتح صفحة صحة الدورة المحاسبية
+  if(type==='ledger_guard'){ if(hasPerm('dashboard')) switchTab('guard'); return; }
   if(!ticketId||!hasPerm('tickets'))return;
   switchTab('tickets');
   openTicketDetail(ticketId);

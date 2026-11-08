@@ -284,11 +284,11 @@ setTimeout(() => {
 
 // الحارس المحاسبي اليومي (src/services/ledgerGuard.service.js): يطابق الدفاتر مع
 // الخزينة والمخزون وأرصدة العملاء/الموردين لكل شركة ويسجّل أي فرق للوحة الإدارة.
-// أول تشغيل بعد 10 دقائق من الإقلاع، ثم كل 24 ساعة (يقرأ فقط، لا يعدّل بيانات)
+// أول تشغيل بعد 10 دقائق من الإقلاع، ثم كل 12 ساعة (خلل نظامي يُبلَّغ لو استمر بين تشغيلين) (يقرأ فقط، لا يعدّل بيانات)
 const { runLedgerGuard } = require('./services/ledgerGuard.service');
 const _guardRun = () => runLedgerGuard({ trigger: 'schedule' })
   .then(r => console.log(`[LedgerGuard] ✅ ${r.companies} companies, ${r.findings} findings, ${r.duration_ms}ms`))
   .catch(err => console.error('[LedgerGuard]', err.message));
-setTimeout(() => { _guardRun(); setInterval(_guardRun, 24 * 60 * 60 * 1000); }, 10 * 60 * 1000);
+setTimeout(() => { _guardRun(); setInterval(_guardRun, 12 * 60 * 60 * 1000); }, 10 * 60 * 1000);
 
 module.exports = app;

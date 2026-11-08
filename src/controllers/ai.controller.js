@@ -1,4 +1,5 @@
 const db  = require('../config/db');
+const { normalizeExtractedInvoice } = require('../services/invoiceNormalize.service');
 const ai  = require('../services/ai.service');
 
 function cleanJSON(raw) {
@@ -110,6 +111,9 @@ exports.extract = async (req, res, next) => {
     if (!parsed) {
       return res.status(422).json({ success: false, message: 'تعذّرت قراءة الفاتورة — حاول مع صورة أوضح' });
     }
+    // مطابقة حسابية لناتج النموذج: أصناف صافية دائمًا، بلا صفوف إجماليات أو
+    // مكررة، ونسبة ضريبة الفاتورة الفعلية — راجع invoiceNormalize.service.js
+    parsed = normalizeExtractedInvoice(parsed);
 
     res.json({
       success: true,

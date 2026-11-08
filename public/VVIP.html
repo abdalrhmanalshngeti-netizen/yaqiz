@@ -1354,7 +1354,7 @@ function branchFieldHtml(inputId, labelOverride, selectedId) {
   const activeId = selectedId || resolveActiveBranchId();
   return `<div style="margin-bottom:12px;"><label class="form-label">${labelOverride||(lang==='ar'?'الفرع / المستودع':'Branch / Warehouse')} <span style="color:#ef4444">*</span></label>
     <select class="select" id="${inputId}">
-      ${branches.map(b=>`<option value="${b.id}" ${b.id===activeId?'selected':''}>${sanitize(b.name)}</option>`).join('')}
+      ${branches.map(b=>`<option value="${b.id}" ${b.id===activeId?'selected':''}>${sanitize(dl(b.name))}</option>`).join('')}
     </select>
   </div>`;
 }
@@ -1386,13 +1386,13 @@ function localDateStr(input) {
 }
 function localYearMonthStr(input) { return localDateStr(input).slice(0,7); }
 function fmtHijri(s) {
-  try { return new Date(s).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'}); } catch { return ''; }
+  try { return new Date(s).toLocaleDateString(lang==='ar'?'ar-SA-u-ca-islamic-nu-latn':'en-US-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'}); } catch { return ''; }
 }
 function fmtDateBoth(s) {
   try {
     const d = new Date(s);
-    const greg = d.toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'});
-    const hijri = d.toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'});
+    const greg = d.toLocaleDateString(lang==='ar'?'ar-SA-u-nu-latn':'en-GB',{year:'numeric',month:'long',day:'numeric'});
+    const hijri = d.toLocaleDateString(lang==='ar'?'ar-SA-u-ca-islamic-nu-latn':'en-US-u-ca-islamic',{year:'numeric',month:'long',day:'numeric'});
     return `${greg} | ${hijri}`;
   } catch { return s; }
 }
@@ -1419,6 +1419,7 @@ function logActivity(category, details) {
 function showToast(msg, type='success') {
   const el = document.getElementById('toast');
   if (!el) return;
+  if (lang === 'en' && window.obTr) msg = window.obTr(msg);
   el.textContent = msg; el.className = `toast ${type}`; el.style.display='block';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.style.display='none'; }, 3000);
@@ -2547,12 +2548,13 @@ function aiFormat(text) {
 // أسئلة مقترحة حسب الدور — تساعد المستخدم يبدأ بدل الصندوق الفاضي
 function aiSuggestions() {
   const owner = currentUser?.role === 'owner';
+  const A = lang === 'ar';
   const list = [
-    { ico: 'trending-up', q: 'كم مبيعاتي اليوم مقارنة بأمس؟' },
-    { ico: 'package', q: 'وش الأصناف اللي قربت تخلص؟' },
+    { ico: 'trending-up', q: A ? 'كم مبيعاتي اليوم مقارنة بأمس؟' : 'How are today’s sales compared to yesterday?' },
+    { ico: 'package', q: A ? 'وش الأصناف اللي قربت تخلص؟' : 'Which items are running low?' },
   ];
-  if (owner) list.push({ ico: 'wallet', q: 'كم رصيد الصندوق، ومين العملاء اللي عليهم مبالغ؟' });
-  list.push({ ico: 'help-circle', q: 'كيف أطبع باركود لمنتج؟' });
+  if (owner) list.push({ ico: 'wallet', q: A ? 'كم رصيد الصندوق، ومين العملاء اللي عليهم مبالغ؟' : 'What’s my cash balance, and which customers owe me?' });
+  list.push({ ico: 'help-circle', q: A ? 'كيف أطبع باركود لمنتج؟' : 'How do I print a barcode for a product?' });
   return list;
 }
 function aiAskSuggestion(q) {
@@ -2675,18 +2677,23 @@ function aiMaybeSetupNudge() {
     if (_activeTour || el('modal-container')?.innerHTML.trim()) { setTimeout(aiMaybeSetupNudge, 3000); return; }
     const vatOn = s.vat_enabled !== false && s.vat_enabled !== 0;
     const missing = [];
-    if (vatOn && !/^3\d{13}3$/.test(String(s.vat_number || '').trim())) missing.push('الرقم الضريبي');
-    if (!String(s.cr_number || '').trim()) missing.push('السجل التجاري');
-    if (!['street_name', 'building_number', 'district', 'city', 'postal_code'].every(k => String(s[k] || '').trim())) missing.push('العنوان الوطني');
+    const A = lang === 'ar';
+    if (vatOn && !/^3\d{13}3$/.test(String(s.vat_number || '').trim())) missing.push(A ? 'الرقم الضريبي' : 'VAT number');
+    if (!String(s.cr_number || '').trim()) missing.push(A ? 'السجل التجاري' : 'commercial registration');
+    if (!['street_name', 'building_number', 'district', 'city', 'postal_code'].every(k => String(s[k] || '').trim())) missing.push(A ? 'العنوان الوطني' : 'national address');
     const name = (currentUser?.full_name || '').split(' ')[0] || '';
-    const lines = [`محلك صار جاهز للبيع${name ? ` يا ${name}` : ''} 🎉 باقي خطوة تخلي حساباتك كاملة ودقيقة:`];
-    if (missing.length) lines.push(`- **بيانات المنشأة**: ناقص ${missing.join('، ')} — تطلع على فواتيرك وتلزم للفوترة الإلكترونية.`);
-    lines.push('- **البيانات المحاسبية**: أرصدة العملاء والموردين، الأصول الثابتة، ورأس المال — عشان الميزانية وكشوف الحسابات تطلع صح من أول يوم.');
-    lines.push('', 'تبي نكمّل وحدة منها الحين؟');
+    const lines = A
+      ? [`محلك صار جاهز للبيع${name ? ` يا ${name}` : ''} 🎉 باقي خطوة تخلي حساباتك كاملة ودقيقة:`]
+      : [`Your store is ready to sell${name ? `, ${name}` : ''} 🎉 One more step makes your books complete and accurate:`];
+    if (missing.length) lines.push(A ? `- **بيانات المنشأة**: ناقص ${missing.join('، ')} — تطلع على فواتيرك وتلزم للفوترة الإلكترونية.`
+                                     : `- **Business details**: missing ${missing.join(', ')} — they print on your invoices and are required for e-invoicing.`);
+    lines.push(A ? '- **البيانات المحاسبية**: أرصدة العملاء والموردين، الأصول الثابتة، ورأس المال — عشان الميزانية وكشوف الحسابات تطلع صح من أول يوم.'
+                 : '- **Accounting setup**: customer and supplier balances, fixed assets and capital — so your balance sheet and statements are right from day one.');
+    lines.push('', A ? 'تبي نكمّل وحدة منها الحين؟' : 'Want to finish one of these now?');
     const actions = [];
-    if (missing.length) actions.push({ key: 'company', label: 'استكمال بيانات المنشأة' });
-    actions.push({ key: 'accounting', label: 'استكمال البيانات المحاسبية' });
-    actions.push({ key: 'later', label: 'لاحقًا' });
+    if (missing.length) actions.push({ key: 'company', label: A ? 'استكمال بيانات المنشأة' : 'Complete business details' });
+    actions.push({ key: 'accounting', label: A ? 'استكمال البيانات المحاسبية' : 'Complete accounting setup' });
+    actions.push({ key: 'later', label: A ? 'لاحقًا' : 'Later' });
     _aiChatHistory.push({ q: null, a: lines.join('\n'), kind: 'nudge', actions });
     _aiSaveHistory();
     db.settings = { ...s, ai_setup_nudge_done: true };
@@ -3320,7 +3327,7 @@ function renderPOS(sc) {
   const _posActiveBranchId = resolveActiveBranchId();
   const posBranchPickerHtml = (isMultiBranchUser() && _posBranches.length>1) ? `
     <div class="tabs" style="margin-bottom:10px;">
-      ${_posBranches.map(b=>`<button class="tab-btn ${b.id===_posActiveBranchId?'active':''}" data-action="setManualActiveBranchId" data-args='${JSON.stringify([b.id])}'>🏬 ${sanitize(b.name)}</button>`).join('')}
+      ${_posBranches.map(b=>`<button class="tab-btn ${b.id===_posActiveBranchId?'active':''}" data-action="setManualActiveBranchId" data-args='${JSON.stringify([b.id])}'>🏬 ${sanitize(dl(b.name))}</button>`).join('')}
     </div>` : '';
 
   sc.innerHTML = `
@@ -3396,7 +3403,7 @@ function renderPOS(sc) {
             <button class="btn ${posPayment===m?'btn-primary':'btn-outline'} btn-sm"
               style="flex:1;padding:7px 4px;font-size:12px;"
               data-paymethod="${m}"
-              data-action="setPosPayment" data-args='${JSON.stringify([m])}'>${m}</button>`).join('')}
+              data-action="setPosPayment" data-args='${JSON.stringify([m])}'>${dl(m)}</button>`).join('')}
         </div>
         <div id="pos-totals">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('subtotal')}</span><span>${fmtMoney(afterDisc)}</span></div>
@@ -4537,7 +4544,7 @@ function saveQuickCustomer() {
   if(el('ni-customer')) el('ni-customer').value = name;
   if(el('ni-customer-vat') && newCust.vat_num) el('ni-customer-vat').value = newCust.vat_num;
   const warn=el('ni-customer-warn'); if(warn) warn.style.display='none';
-  const dl=el('ni-cust-list'); if(dl) dl.innerHTML+=`<option value="${sanitize(name)}">`;
+  const _dlEl=el('ni-cust-list'); if(_dlEl) _dlEl.innerHTML+=`<option value="${sanitize(name)}">`;
   document.getElementById('quick-cust-modal')?.remove();
   showToast(`✅ ${lang==='ar'?'تم إضافة العميل':'Customer added'}: ${name}`);
 }
@@ -5271,12 +5278,12 @@ function printPurchaseInvoice(id) {
     </div>
     <div class="info-box">
       <div class="lbl">طريقة الدفع</div><div class="val">${p.payment_method||'—'}</div>
-      <div style="margin-top:6px;"><div class="lbl">التصنيف</div><div class="val">${sanitize(p.category)||'—'}</div></div>
+      <div style="margin-top:6px;"><div class="lbl">التصنيف</div><div class="val">${sanitize(dl(p.category))||'—'}</div></div>
     </div>
   </div>
   ${(p.items||[]).length?`
   <table>
-    <thead><tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الحبة (ق.ض)</th><th>ضريبة الحبة</th><th>إجمالي (ق.ض)</th><th>الضريبة</th><th>شامل الضريبة</th></tr></thead>
+    <thead><tr><th>#</th><th>${lang==='ar'?'الصنف':'Item'}</th><th>${lang==='ar'?'الكمية':'Qty'}</th><th>${lang==='ar'?'سعر الحبة (ق.ض)':'Unit price (ex-VAT)'}</th><th>${lang==='ar'?'ضريبة الحبة':'Unit VAT'}</th><th>${lang==='ar'?'إجمالي (ق.ض)':'Total (ex-VAT)'}</th><th>${lang==='ar'?'الضريبة':'VAT'}</th><th>${lang==='ar'?'شامل الضريبة':'Incl. VAT'}</th></tr></thead>
     <tbody>${(p.items).map((it,i)=>{
       const unitP    = Number(it.price||it.unit_price||0);
       const qty      = Number(it.qty||1);
@@ -5425,7 +5432,7 @@ function renderPurchContent() {
           </td>
           <td><b>${sanitize(p.vendor)}</b></td>
           <td style="color:var(--text-muted);font-size:12px;">${sanitize(_itemDesc||p.description)}</td>
-          <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${sanitize(p.category)}</span></td>
+          <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${sanitize(dl(p.category))}</span></td>
           <td>${fmtMoney(p.amount)}</td>
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
           <td><b>${fmtMoney(p.total)}</b></td>
@@ -5577,7 +5584,7 @@ function showAddGoodsPurchase(keepItems) {
         <input class="input" type="number" id="gp-iqty" value="1" placeholder="${lang==='ar'?'الكمية':'Qty'}" min="1" data-oninput="calcGPLine" />
         <div>
           <input class="input" type="number" id="gp-iunit" value="0" placeholder="${lang==='ar'?'سعر الحبة (ق.ض)':'Unit Price (ex-VAT)'}" data-oninput="calcGPLine" />
-          <div id="gp-unit-vat" style="font-size:10px;color:#f59e0b;padding:2px 4px;">ضريبة الحبة: 0.00 ر.س</div>
+          <div id="gp-unit-vat" style="font-size:10px;color:#f59e0b;padding:2px 4px;">${lang==='ar'?'ضريبة الحبة: 0.00 ر.س':'Unit VAT: SAR 0.00'}</div>
         </div>
         <input class="input" type="number" id="gp-iline" value="0" placeholder="${lang==='ar'?'إجمالي (ق.ض)':'Total (ex-VAT)'}" readonly style="background:var(--bg);" />
         <button class="btn btn-primary" data-action="addGPItem">${icon('plus',16)}</button>
@@ -5632,7 +5639,7 @@ function calcGPLine() {
   const lineVat  = _gpVatOn ? Math.round(linePre * 0.15 * 100) / 100 : 0;
   const lineIncl = Math.round((linePre + lineVat) * 100) / 100;
   if (el('gp-iline'))        el('gp-iline').value = linePre.toFixed(2);
-  if (el('gp-unit-vat'))     el('gp-unit-vat').textContent = `ضريبة الحبة: ${unitVat.toFixed(2)} ر.س`;
+  if (el('gp-unit-vat'))     el('gp-unit-vat').textContent = lang==='ar' ? `ضريبة الحبة: ${unitVat.toFixed(2)} ر.س` : `Unit VAT: SAR ${unitVat.toFixed(2)}`;
   const sumEl = el('gp-line-summary');
   if (sumEl) sumEl.style.display = price > 0 ? 'block' : 'none';
   if (el('gp-line-vat-show'))   el('gp-line-vat-show').textContent   = lineVat.toFixed(2);
@@ -5761,6 +5768,8 @@ function updateGPRemaining() {
 function saveGoodsPurchase() {
   if (blockedByExpiredSubscription()) return;
   if(!el('gp-vendor')?.value){showToast(lang==='ar'?'المورد مطلوب':'Supplier required','error');return;}
+  const _dupP = _findDuplicatePurchase(getDB(), el('gp-vendor').value, el('gp-ref')?.value);
+  if (_dupP && !confirm(lang==='ar'?`فاتورة المورد رقم «${el('gp-ref').value}» مسجّلة سابقًا (${fmtDate(_dupP.created_at)}). تسجيلها مرة ثانية يكرر المخزون والمبالغ — متأكد؟`:'This supplier invoice number is already recorded. Record it again?')) return;
   if(!_goodsItems.length){showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'Add at least one item','error');return;}
   guardClosedPeriod(el('gp-date')?.value||new Date().toISOString().slice(0,10), (overrideToken) => _saveGoodsPurchaseActual(overrideToken));
 }
@@ -5835,7 +5844,7 @@ function _saveGoodsPurchaseActual(overrideToken) {
 
   saveDB(db);
   logActivity('مشتريات',`فاتورة بضاعة من ${p.vendor} — ${fmtMoney(total)} — ${status}`);
-  showToast(`✅ ${lang==='ar'?`تم: ${p.vendor} — ${status}`:`Done: ${p.vendor} — ${status}`}`);
+  showToast(`✅ ${lang==='ar'?`تم: ${p.vendor} — ${status}`:`Done: ${p.vendor} — ${dl(status)}`}`);
   _pendingInventoryItems = [..._goodsItems];
   _pendingPurchaseId = p.id;
   // السيرفر يُدخل أصناف الفاتورة المعروفة للمخزون فور حفظها (purchases.create)،
@@ -6211,7 +6220,7 @@ function renderInventoryInner(c) {
   const tabsHtml = (isOwner && multiBranch) ? `
     <div class="tabs" style="margin-bottom:12px;">
       <button class="tab-btn ${invBranchFilter==='total'?'active':''}" data-action="setInvBranchFilter" data-args='["total"]'>${lang==='ar'?'الكل (توتال)':'All (Total)'}</button>
-      ${branches.map(b=>`<button class="tab-btn ${invBranchFilter===String(b.id)?'active':''}" data-action="setInvBranchFilter" data-args='${JSON.stringify([String(b.id)])}'>${sanitize(b.name)}</button>`).join('')}
+      ${branches.map(b=>`<button class="tab-btn ${invBranchFilter===String(b.id)?'active':''}" data-action="setInvBranchFilter" data-args='${JSON.stringify([String(b.id)])}'>${sanitize(dl(b.name))}</button>`).join('')}
     </div>` : '';
 
   c.innerHTML = `
@@ -6225,7 +6234,7 @@ function renderInventoryInner(c) {
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
         <tbody>${db.products.map(p=>{ const q=qtyFor(p); return `<tr>
-          <td><code>${sanitize(p.code)}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(p.category)}</td>
+          <td><code>${sanitize(p.code)}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(dl(p.category))}</td>
           <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
           <td><span class="badge ${q<=p.min_qty?'badge-red':'badge-green'}">${q}</span></td>
           <td>${p.min_qty}</td>
@@ -6273,27 +6282,27 @@ function showProductModal(id) {
       </div>
       <div class="form-row">
         <div><label class="form-label">${t('category')}</label>
-          <select class="select" id="pr-cat">${['مواد غذائية','مشروبات','إلكترونيات','ملابس','أخرى'].map(x=>`<option ${x===(p?.category||'')?'selected':''}>${x}</option>`).join('')}</select>
+          <select class="select" id="pr-cat">${['مواد غذائية','مشروبات','إلكترونيات','ملابس','أخرى'].map(x=>`<option value="${x}" ${x===(p?.category||'')?'selected':''}>${lang==='ar'?x:({'مواد غذائية':'Groceries','مشروبات':'Beverages','إلكترونيات':'Electronics','ملابس':'Clothing','أخرى':'Other'})[x]}</option>`).join('')}</select>
         </div>
-        <div><label class="form-label">${lang==='ar'?'الوحدة':'Unit'}</label><input class="input" id="pr-unit" value="${sanitize(p?.unit||'قطعة')}" /></div>
+        <div><label class="form-label">${lang==='ar'?'الوحدة':'Unit'}</label><input class="input" id="pr-unit" value="${sanitize(p?.unit||(lang==='ar'?'قطعة':'pcs'))}" /></div>
       </div>
       <div class="form-row">
-        <div><label class="form-label">${t('buyPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(سعر الشراء / التكلفة)</span></label><input class="input" type="number" id="pr-buy" value="${p?.buy_price||0}" data-oninput="updatePricingPreview" /></div>
-        <div><label class="form-label">${t('sellPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">(قبل الضريبة)</span></label><input class="input" type="number" id="pr-sell" value="${p?.sell_price||0}" /></div>
+        <div><label class="form-label">${t('buyPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${lang==='ar'?'(سعر الشراء / التكلفة)':'(purchase cost)'}</span></label><input class="input" type="number" id="pr-buy" value="${p?.buy_price||0}" data-oninput="updatePricingPreview" /></div>
+        <div><label class="form-label">${t('sellPrice')} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${lang==='ar'?'(قبل الضريبة)':'(before VAT)'}</span></label><input class="input" type="number" id="pr-sell" value="${p?.sell_price||0}" /></div>
       </div>
       ${id?`<div style="margin-bottom:12px;"><button type="button" class="btn btn-outline btn-sm" data-action="showPriceHistory" data-args="${JSON.stringify([id])}">📋 ${lang==='ar'?'سجل تغييرات السعر':'Price change history'}</button></div>`:''}
       ${(has('pricing.manage')&&hasPlanFeature('pricing_policy'))?`
       <div style="margin-top:12px;padding:14px 16px;background:rgba(20,184,166,.06);border:1.5px solid rgba(20,184,166,.3);border-radius:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div style="font-size:13px;font-weight:900;color:#5eead4;">⚡ التسعير الديناميكي</div>
+          <div style="font-size:13px;font-weight:900;color:#5eead4;">⚡ ${lang==='ar'?'التسعير الديناميكي':'Dynamic pricing'}</div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;padding:10px 12px;background:rgba(20,184,166,.08);border-radius:8px;">
           <input type="checkbox" id="pr-auto" ${p?.auto_price_update?'checked':''} data-onchange="togglePrPolicyFields" style="width:16px;height:16px;accent-color:#14b8a6;" />
-          <span style="font-size:13px;font-weight:700;color:var(--text-main)">تحديث سعر البيع تلقائياً عند استلام فاتورة شراء جديدة</span>
+          <span style="font-size:13px;font-weight:700;color:var(--text-main)">${lang==='ar'?'تحديث سعر البيع تلقائياً عند استلام فاتورة شراء جديدة':'Update the selling price automatically when a new purchase invoice arrives'}</span>
         </label>
         <div id="pr-policy-fields" style="display:${p?.auto_price_update?'block':'none'}">
           <label class="form-label" style="margin-bottom:6px;">نسبة هامش الربح المطلوبة % <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(يُحسب على سعر الشراء)</span></label>
-          <input class="input" type="number" id="pr-policy-val" step="0.01" min="0" placeholder="مثال: 15.5" value="${p?.profit_policy_value||0}" data-oninput="updatePricingPreview" />
+          <input class="input" type="number" id="pr-policy-val" step="0.01" min="0" placeholder="${lang==='ar'?'مثال: 15.5':'e.g. 15.5'}" value="${p?.profit_policy_value||0}" data-oninput="updatePricingPreview" />
           <div id="pr-pricing-preview" style="margin-top:10px;padding:12px 14px;background:rgba(15,32,68,.7);border-radius:10px;font-size:12px;line-height:2;min-height:48px;"></div>
         </div>
       </div>`:''}
@@ -6437,7 +6446,7 @@ async function showEntityAuditLog(entityType, entityId, title) {
         ${rows.map(r=>`<div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
             <span>👤 <b style="color:var(--text-main);">${sanitize(r.username||'-')}</b></span>
-            <span>${new Date(r.created_at).toLocaleString('ar-SA-u-nu-latn')}</span>
+            <span>${new Date(r.created_at).toLocaleString(lang==='ar'?'ar-SA-u-nu-latn':'en-GB')}</span>
           </div>
           <div style="font-size:13px;">${sanitize(r.details||r.action)}</div>
         </div>`).join('')}
@@ -6941,7 +6950,7 @@ function renderTreasury(c) {
   const tabsHtml = (isOwner && multiBranch) ? `
     <div class="tabs" style="margin-bottom:12px;">
       <button class="tab-btn ${trBranchFilter==='total'?'active':''}" data-action="setTrBranchFilter" data-args='["total"]'>${lang==='ar'?'الكل (توتال)':'All (Total)'}</button>
-      ${branches.map(b=>`<button class="tab-btn ${trBranchFilter===String(b.id)?'active':''}" data-action="setTrBranchFilter" data-args='${JSON.stringify([String(b.id)])}'>${sanitize(b.name)}</button>`).join('')}
+      ${branches.map(b=>`<button class="tab-btn ${trBranchFilter===String(b.id)?'active':''}" data-action="setTrBranchFilter" data-args='${JSON.stringify([String(b.id)])}'>${sanitize(dl(b.name))}</button>`).join('')}
     </div>` : '';
 
   c.innerHTML = `
@@ -7049,6 +7058,21 @@ function saveTreasuryMove(type) {
 // حالة الانسداد/الانكشاف لكل تصنيف
 if (!window._accOpen) window._accOpen = {0:true,1:true,2:true,3:true,4:true};
 
+// اسم الحساب بلغة الواجهة — القيود تخزّن اسم الحساب بالعربي وقت إنشائها،
+// فبالإنجليزي نجيب name_en من دليل الحسابات برقم الحساب
+function accLabel(code, fallback) {
+  const a = (getDB().accounts||[]).find(x => String(x.code) === String(code));
+  if (lang === 'ar') return a?.name || fallback || '';
+  return a?.name_en || fallback || a?.name || '';
+}
+// عرض فقط — القيمة المخزّنة تبقى عربية (تُقارَن بها في المنطق)، فلا تُستخدم في value الحقول
+const _DATA_EN = { 'الفرع الرئيسي':'Main branch', 'المستودع الرئيسي':'Main warehouse', 'بضاعة':'Goods', 'مواد خام':'Raw materials',
+  'بضاعة جاهزة':'Finished goods', 'مواد تغليف':'Packaging', 'نقدي':'Cash', 'شبكة':'Card', 'تحويل بنكي':'Bank transfer', 'آجل':'Credit',
+  'قطعة':'pcs', 'مواد غذائية':'Groceries', 'مشروبات':'Beverages', 'إلكترونيات':'Electronics', 'ملابس':'Clothing', 'أخرى':'Other',
+  'قيود افتتاحية — أرصدة بداية النشاط':'Opening entries — starting balances' };
+const dl = v => (lang === 'ar' || v == null) ? v : (_DATA_EN[String(v).trim()] || v);
+const ACC_TYPE_EN = { 'أصول':'Assets', 'التزامات':'Liabilities', 'حقوق الملكية':'Equity', 'حقوق ملكية':'Equity', 'إيرادات':'Revenue', 'مصروفات':'Expenses', 'أخرى':'Other' };
+const accType = t => lang === 'ar' ? t : (ACC_TYPE_EN[t] || t);
 const _ACC_CATS = [
   { type:'أصول',         key:0, icon:'🏦', color:'badge-blue'  },
   { type:'التزامات',      key:1, icon:'⚖️', color:'badge-amber' },
@@ -7373,7 +7397,7 @@ function renderAccounts(c) {
         <div style="display:flex;align-items:center;gap:12px">
           <span style="font-size:22px">${cat.icon}</span>
           <div>
-            <div style="font-weight:900;font-size:15px">${cat.type}</div>
+            <div style="font-weight:900;font-size:15px">${accType(cat.type)}</div>
             <div style="font-size:12px;color:var(--text-muted)">${group?.code||''} · ${children.length} ${lang==='ar'?'حساب':'accounts'}</div>
           </div>
         </div>
@@ -7386,8 +7410,8 @@ function renderAccounts(c) {
         ${children.length ? `<table class="tbl" style="margin:0"><tbody>
           ${children.map(a=>`<tr>
             <td style="width:90px"><code style="font-weight:700">${a.code}</code></td>
-            <td style="font-weight:600">${sanitize(a.name)}${a.name_en?`<span style="font-size:11px;color:var(--text-muted);margin-inline-start:6px">${a.name_en}</span>`:''}</td>
-            <td><span class="badge ${cat.color}" style="font-size:11px">${a.sub_type||cat.type}</span></td>
+            <td style="font-weight:600">${sanitize(lang==='ar'?a.name:(a.name_en||a.name))}${lang==='ar'&&a.name_en?`<span style="font-size:11px;color:var(--text-muted);margin-inline-start:6px">${sanitize(a.name_en)}</span>`:''}</td>
+            <td><span class="badge ${cat.color}" style="font-size:11px">${sanitize(accType(a.sub_type||cat.type))}</span></td>
             ${has('accounts.manage')?`<td style="width:40px"><button class="icon-btn" style="width:26px;height:26px" data-action="deleteAccount" data-args="${JSON.stringify([a.id])}">${icon('trash-2',12)}</button></td>`:''}
           </tr>`).join('')}
         </tbody></table>`
@@ -7461,7 +7485,7 @@ function showAddAccount(catKey) {
       <div id="acc-detail-section" style="display:${cat?'block':'none'}">
         <div class="form-label" style="margin-bottom:10px">٣ — ${lang==='ar'?'بيانات الحساب':'Account Details'}</div>
         <div class="form-row" style="margin-bottom:12px">
-          <div><label class="form-label">${lang==='ar'?'الرمز':'Code'} *</label><input class="input" id="ac-code" placeholder="مثال: 1210" /></div>
+          <div><label class="form-label">${lang==='ar'?'الرمز':'Code'} *</label><input class="input" id="ac-code" placeholder="${lang==='ar'?'مثال: 1210':'e.g. 1210'}" /></div>
           <div><label class="form-label">${lang==='ar'?'اسم الحساب':'Name'} *</label><input class="input" id="ac-name" placeholder="${lang==='ar'?'مثال: حساب الراجحي':'e.g. Rajhi Bank'}" /></div>
         </div>
         <div style="margin-bottom:16px"><label class="form-label">${lang==='ar'?'الاسم بالإنجليزية (اختياري)':'English Name (optional)'}</label>
@@ -7697,7 +7721,7 @@ function renderTrialBalance(c) {
     // بصرف النظر عن طبيعة الحساب، وإلا ينعكس عرض حسابات الإيرادات/الالتزامات/حقوق الملكية عند رصيدها الطبيعي
     const debit  = Math.max(0, net);
     const credit = Math.max(0, -net);
-    return { code, name: entry.name, type, debit, credit };
+    return { code, name: accLabel(code, entry.name), type, debit, credit };
   }).filter(r=>r.debit>0.004||r.credit>0.004);
 
   const totDebit  = rows.reduce((s,r)=>s+r.debit,0);
@@ -7780,7 +7804,7 @@ function drillAccount(code, name) {
   const rows = lines.map(l=>{
     running += l.side==='debit' ? l.amount : -l.amount;
     return [
-      fmtDate(l.date), sanitize(l.description||''), sanitize(l.ref||'-'),
+      fmtDate(l.date), sanitize(dl(l.description||'')), sanitize(l.ref||'-'),
       l.side==='debit'?fmtMoney(l.amount):'-', l.side==='credit'?fmtMoney(l.amount):'-',
       fmtMoney(running),
     ];
@@ -8429,6 +8453,64 @@ function drillIncome(kind) {
 
 // حقول "من - إلى" موحّدة نستخدمها بأي تبويب يحتاج فترة مخصصة (الضريبة، قائمة
 // الدخل) — نفس شكل ونمط الحقول عشان يصير للمستخدم عادة واحدة واضحة لتحديد التاريخ
+// ── الفترة الضريبية (تقرير الضريبة) ─────────────────────────
+// قائمة فترات جاهزة (أرباع وأشهر) متاحة لكل الباقات — كل منشأة مسجّلة بالضريبة
+// تقدّم إقرارًا عن فترة محددة، بغض النظر عن ميزة "الفترة المخصصة" بالتقارير
+let vatPeriodKey = '';
+const _MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const _MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const _Q_AR = ['الربع الأول','الربع الثاني','الربع الثالث','الربع الرابع'];
+function _ymd(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function _lastDay(y, m) { return new Date(y, m, 0).getDate(); }
+function vatPeriods() {
+  const now = new Date(), out = [];
+  const M = lang==='ar' ? _MONTHS_AR : _MONTHS_EN;
+  let y = now.getFullYear(), q = Math.floor(now.getMonth()/3);
+  for (let i = 0; i < 8; i++) {
+    const m1 = q*3+1, m3 = q*3+3;
+    out.push({ key:`Q${y}-${q+1}`, group:'q', from:_ymd(y,m1,1), to:_ymd(y,m3,_lastDay(y,m3)),
+      label: lang==='ar' ? `${_Q_AR[q]} ${y} (${M[m1-1]} – ${M[m3-1]})` : `Q${q+1} ${y} (${M[m1-1]} – ${M[m3-1]})` });
+    if (--q < 0) { q = 3; y--; }
+  }
+  y = now.getFullYear(); let m = now.getMonth()+1;
+  for (let i = 0; i < 12; i++) {
+    out.push({ key:`M${y}-${m}`, group:'m', from:_ymd(y,m,1), to:_ymd(y,m,_lastDay(y,m)), label:`${M[m-1]} ${y}` });
+    if (--m < 1) { m = 12; y--; }
+  }
+  return out;
+}
+function setVatPeriod(key) {
+  const p = vatPeriods().find(x => x.key === key);
+  if (!p) return;
+  vatPeriodKey = key; reportPeriod = 'custom'; reportFrom = p.from; reportTo = p.to;
+  renderPage();
+}
+// آخر موعد للتقديم والسداد: آخر يوم من الشهر التالي لنهاية الفترة
+function vatDeadline(to) {
+  const [y, m] = to.split('-').map(Number);
+  const ny = m === 12 ? y+1 : y, nm = m === 12 ? 1 : m+1;
+  return _ymd(ny, nm, _lastDay(ny, nm));
+}
+function vatNetExplanation(vatNet, to) {
+  const due = to ? fmtDate(vatDeadline(to)) : '';
+  if (vatNet > 0.005) return { tone:'due', text: lang==='ar'
+    ? `عليك للهيئة ${fmtMoney(vatNet)} عن هذي الفترة — ضريبة مبيعاتك أكبر من ضريبة مشترياتك. قدّم الإقرار وسدّد المبلغ${due?` قبل ${due}`:''}.`
+    : `You owe ZATCA ${fmtMoney(vatNet)} for this period — output VAT exceeds input VAT. File the return and pay${due?` by ${due}`:''}.` };
+  if (vatNet < -0.005) return { tone:'credit', text: lang==='ar'
+    ? `لك رصيد لدى الهيئة ${fmtMoney(-vatNet)} — ضريبة مشترياتك أكبر من ضريبة مبيعاتك بهذي الفترة. الرصيد يُرحَّل ويُخصم من المستحق عليك بالفترات الجاية.`
+    : `You have a credit of ${fmtMoney(-vatNet)} with ZATCA — input VAT exceeds output VAT this period. It carries forward against future periods.` };
+  return { tone:'zero', text: lang==='ar' ? 'لا يوجد مبلغ مستحق عليك ولا لك بهذي الفترة.' : 'Nothing payable or refundable for this period.' };
+}
+function vatPeriodSelectHtml() {
+  const ps = vatPeriods();
+  const opt = p => `<option value="${p.key}" ${p.key===vatPeriodKey?'selected':''}>${p.label}</option>`;
+  return `<select class="select" style="min-width:240px;width:auto;flex:0 1 320px;" data-onchange="setVatPeriod" aria-label="${lang==='ar'?'الفترة الضريبية':'Tax period'}">
+    <option value="" ${vatPeriodKey?'':'selected'}>${lang==='ar'?'اختر الفترة الضريبية…':'Choose tax period…'}</option>
+    <optgroup label="${lang==='ar'?'ربع سنوي':'Quarterly'}">${ps.filter(p=>p.group==='q').map(opt).join('')}</optgroup>
+    <optgroup label="${lang==='ar'?'شهري':'Monthly'}">${ps.filter(p=>p.group==='m').map(opt).join('')}</optgroup>
+  </select>`;
+}
+
 function dateRangeControlsHtml(exportFn) {
   return `
     ${hasPlanFeature('custom_period')?`
@@ -8469,11 +8551,19 @@ function renderReportsInner(c) {
 
     <div id="report-content">
       ${reportTab==='vat'?`
+        <div class="card" style="margin-bottom:16px;"><div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <b>${lang==='ar'?'الفترة الضريبية':'Tax period'}</b>
+          ${vatPeriodSelectHtml()}
+          <span style="font-size:12px;color:var(--text-muted);">${reportPeriod==='custom'&&reportFrom&&reportTo?`${fmtDate(reportFrom)} → ${fmtDate(reportTo)}`:(lang==='ar'?'تعرض الآن كل الفترات':'Showing all periods')}</span>
+          <button class="btn btn-primary btn-sm" style="margin-inline-start:auto;" data-action="exportVATReportPDF">${icon('file-text',14)} ${lang==='ar'?'تصدير الإقرار':'Export return'}</button>
+        </div></div>
         <div class="stats-grid">
-          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('vatOutput')}</div><div class="stat-value">${fmtMoney(vatOutput)}</div></div>
-          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${t('vatInput')}</div><div class="stat-value">${fmtMoney(vatInput)}</div></div>
-          <div class="stat-card"><div class="stat-icon red">${icon('file-text',22)}</div><div class="stat-label">${t('vatNet')}</div><div class="stat-value">${fmtMoney(vatNet)}</div></div>
+          <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'ضريبة المبيعات (المخرجات)':'Output VAT (sales)'}</div><div class="stat-value">${fmtMoney(vatOutput)}</div></div>
+          <div class="stat-card"><div class="stat-icon amber">${icon('trending-down',22)}</div><div class="stat-label">${lang==='ar'?'ضريبة المشتريات (المدخلات)':'Input VAT (purchases)'}</div><div class="stat-value">${fmtMoney(vatInput)}</div></div>
+          <div class="stat-card"><div class="stat-icon ${vatNet>0.005?'red':'green'}">${icon('file-text',22)}</div><div class="stat-label">${vatNet>0.005?(lang==='ar'?'المستحق عليك للهيئة':'Payable to ZATCA'):vatNet<-0.005?(lang==='ar'?'رصيدك لدى الهيئة':'Your credit with ZATCA'):(lang==='ar'?'الصافي':'Net')}</div><div class="stat-value">${fmtMoney(Math.abs(vatNet))}</div></div>
         </div>
+        ${(()=>{ const ex = vatNetExplanation(vatNet, reportPeriod==='custom'?reportTo:''); const c = ex.tone==='due'?['var(--warning-bg)','var(--warning)']:ex.tone==='credit'?['var(--success-bg)','var(--success)']:['var(--neutral-bg)','var(--neutral)'];
+          return `<div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:${c[0]};color:${c[1]};font-weight:700;font-size:13.5px;line-height:1.8;">${ex.text}</div>`; })()}
         <div class="card" style="margin-top:16px;">
           <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border);">
             <span style="font-weight:800;">📋 ${lang==='ar'?'كل العمليات (مبيعات ومشتريات) في الفترة':'All Operations (Sales & Purchases) in Range'}</span>
@@ -9555,7 +9645,7 @@ function showUserModal(id) {
         <div id="u-branch-wrap" style="${u?.all_branches?'display:none;':''}">
           <select class="select" id="u-branch">
             <option value="">${lang==='ar'?'— بدون فرع —':'— No branch —'}</option>
-            ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(b.name)} (#${sanitize(b.branch_number)})</option>`).join('')}
+            ${(db.branches||[]).filter(b=>b.active!==false).map(b=>`<option value="${b.id}" ${u?.branch_id===b.id?'selected':''}>${sanitize(dl(b.name))} (#${sanitize(b.branch_number)})</option>`).join('')}
           </select>
         </div>
       </div>`:''}
@@ -9813,13 +9903,13 @@ function renderBranches(c) {
       <div style="display:flex;align-items:flex-start;gap:12px;">
         <div style="width:44px;height:44px;border-radius:12px;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0;">${sanitize((b.name||'ف')[0])}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:16.5px;font-weight:900;line-height:1.25;">${sanitize(b.name)}</div>
+          <div style="font-size:16.5px;font-weight:900;line-height:1.25;">${sanitize(dl(b.name))}</div>
           <div style="font-size:12.5px;font-weight:600;color:var(--text-muted);">${lang==='ar'?'رقم الفرع':'Branch #'}: ${sanitize(b.branch_number)}</div>
         </div>
         <span class="badge ${isActive?'badge-green':'badge-gray'}">${isActive?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'معطّل':'Disabled')}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding-top:14px;border-top:1px solid var(--border);">
-        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'المستودع':'Warehouse'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${wh?sanitize(wh.name):'—'}</div></div>
+        <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'المستودع':'Warehouse'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${wh?sanitize(dl(wh.name)):'—'}</div></div>
         <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'المستخدمون':'Users'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${userCount}</div></div>
         <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'تاريخ الإضافة':'Added'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${b.created_at?fmtDate(b.created_at):'—'}</div></div>
         <div><div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.02em;">${lang==='ar'?'الحالة':'Status'}</div><div style="font-size:13px;font-weight:800;margin-top:4px;">${b.is_main?(lang==='ar'?'رئيسي':'Main'):(lang==='ar'?'فرعي':'Sub-branch')}</div></div>
@@ -10459,7 +10549,7 @@ function renderGeneralExpenses(c) {
               </td>
               <td><b>${sanitize(p.vendor)}</b></td>
               <td style="color:var(--text-muted);font-size:12px;">${sanitize(p.description)}</td>
-              <td><span class="badge badge-blue">${sanitize(p.category)}</span></td>
+              <td><span class="badge badge-blue">${sanitize(dl(p.category))}</span></td>
               <td>${fmtMoney(p.amount)}</td>
               <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
               <td><b>${fmtMoney(p.total)}</b></td>
@@ -12489,7 +12579,7 @@ function showStockMoveModal(){
     ${_warehouses.length>1?`
     <div style="margin-bottom:16px;"><label class="form-label">${lang==='ar'?'المستودع':'Warehouse'} *</label>
       <select class="select" id="sm-warehouse">
-        ${_warehouses.map(w=>`<option value="${w.id}" ${w.id===_activeWh?'selected':''}>${sanitize(w.name)}</option>`).join('')}
+        ${_warehouses.map(w=>`<option value="${w.id}" ${w.id===_activeWh?'selected':''}>${sanitize(dl(w.name))}</option>`).join('')}
       </select>
     </div>`:`<input type="hidden" id="sm-warehouse" value="${_activeWh||''}" />`}
     <div class="form-row">
@@ -12619,13 +12709,13 @@ function showStockTransferModal(){
         <div><label class="form-label">${lang==='ar'?'من مستودع':'From Warehouse'} *</label>
           <select class="select" id="tr-from" data-onchange="renderTransferItemsList">
             <option value="">${lang==='ar'?'اختر':'Select'}</option>
-            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(w.name)}</option>`).join('')}
+            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(dl(w.name))}</option>`).join('')}
           </select>
         </div>
         <div><label class="form-label">${lang==='ar'?'إلى مستودع':'To Warehouse'} *</label>
           <select class="select" id="tr-to">
             <option value="">${lang==='ar'?'اختر':'Select'}</option>
-            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(w.name)}</option>`).join('')}
+            ${warehouses.map(w=>`<option value="${w.id}">${sanitize(dl(w.name))}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -12941,7 +13031,7 @@ function renderNotifPanel() {
       <div class="notif-body">
         <div class="notif-text">${sanitize(n.title||'')}</div>
         <div class="notif-desc">${sanitize(n.message||'')}</div>
-        <div class="notif-time">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn')}</div>
+        <div class="notif-time">${new Date(n.created_at).toLocaleString(lang==='ar'?'ar-SA-u-nu-latn':'en-GB')}</div>
       </div>
       ${!n.is_read?`<div class="notif-right"><span class="notif-dot"></span></div>`:''}
     </div>`;
@@ -13026,7 +13116,7 @@ function showShiftOpenScreen(user, onProceed) {
       <div style="margin-bottom:16px;">
         <label class="form-label">🏬 ${lang==='ar'?'الفرع':'Branch'}</label>
         <select class="select" id="so-branch">
-          ${_branches.map(b=>`<option value="${b.id}" ${b.id===_defaultBranchId?'selected':''}>${sanitize(b.name)}</option>`).join('')}
+          ${_branches.map(b=>`<option value="${b.id}" ${b.id===_defaultBranchId?'selected':''}>${sanitize(dl(b.name))}</option>`).join('')}
         </select>
       </div>`:`<input type="hidden" id="so-branch" value="${_defaultBranchId||''}" />`}
       <div style="margin-bottom:16px;">
@@ -13578,7 +13668,7 @@ function renderBalanceSheet(c) {
     <div class="page-header">
       <div>
         <div class="page-title-lg">${lang==='ar'?'الميزانية العمومية':'Balance Sheet'}</div>
-        <div class="page-sub">${lang==='ar'?'حتى تاريخ:':'As of:'} ${new Date().toLocaleDateString('ar-SA-u-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</div>
+        <div class="page-sub">${lang==='ar'?'حتى تاريخ:':'As of:'} ${new Date().toLocaleDateString(lang==='ar'?'ar-SA-u-nu-latn':'en-GB',{year:'numeric',month:'long',day:'numeric'})}</div>
       </div>
     </div>
 
@@ -13713,8 +13803,8 @@ function renderJournal(c) {
           :entries.flatMap(e=>e.entries.map((row,i)=>`<tr style="${i===0?'border-top:2px solid var(--border-strong)':''}">
             ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${e.id}</td>
             <td rowspan="${e.entries.length}" style="font-size:11px;vertical-align:top;">${fmtDate(e.date)}</td>
-            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(e.description)}</td>`:''}
-            <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${sanitize(row.account)} <code style="font-size:10px;">${sanitize(row.account_code)}</code></td>
+            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(dl(e.description))}</td>`:''}
+            <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${sanitize(accLabel(row.account_code, row.account))} <code style="font-size:10px;">${sanitize(row.account_code)}</code></td>
             <td style="color:var(--danger);font-weight:700;">${row.side==='debit'?fmtMoney(row.amount):'-'}</td>
             <td style="color:var(--success);font-weight:700;">${row.side==='credit'?fmtMoney(row.amount):'-'}</td>
             ${i===0?`<td rowspan="${e.entries.length}" style="vertical-align:top;"><code style="font-size:11px;">${e.ref||'-'}</code></td>`:''}
@@ -13760,7 +13850,7 @@ function renderJELines() {
     <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-bottom:8px;">
       <select class="select" data-onchange-el="jeSetAccount" data-onchange-el-args="[${i}]">
         <option value="">${lang==='ar'?'اختر حساب':'Select account'}</option>
-        ${accounts.map(a=>`<option value="${a.code}" ${a.code===e.account_code?'selected':''}>${a.code} - ${sanitize(a.name)}</option>`).join('')}
+        ${accounts.map(a=>`<option value="${a.code}" ${a.code===e.account_code?'selected':''}>${a.code} - ${sanitize(lang==='ar'?a.name:(a.name_en||a.name))}</option>`).join('')}
       </select>
       <select class="select" data-onchange="jeSetSide" data-onchange-args="[${i}]">
         <option value="debit" ${e.side==='debit'?'selected':''}>${lang==='ar'?'مدين':'Debit'}</option>
@@ -14974,20 +15064,20 @@ async function renderAdminSessionsTab(mc) {
     <div class="card"><div class="card-pad">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <div>
-          <h3 style="font-weight:900;font-size:15px;">🔐 جلسات الدخول الإداري</h3>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">كل مرة يدخل فيها الأدمن على حسابك</div>
+          <h3 style="font-weight:900;font-size:15px;">🔐 ${lang==='ar'?'جلسات الدخول الإداري':'Admin access sessions'}</h3>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${lang==='ar'?'كل مرة يدخل فيها الأدمن على حسابك':'Every time platform support signs in to your account'}</div>
         </div>
         <button data-action="revokeAdminSessions" style="padding:9px 18px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:10px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
-          🚫 إلغاء جميع الجلسات
+          🚫 ${lang==='ar'?'إلغاء جميع الجلسات':'Revoke all sessions'}
         </button>
       </div>
-      <div id="admin-sessions-list"><div style="text-align:center;padding:20px;color:var(--text-muted);">⟳ جاري التحميل...</div></div>
+      <div id="admin-sessions-list"><div style="text-align:center;padding:20px;color:var(--text-muted);">⟳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div></div>
     </div></div>
 
     <div class="card" style="margin-top:16px;"><div class="card-pad">
-      <h3 style="font-weight:900;font-size:15px;margin-bottom:2px;">💻 أجهزتي</h3>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">الأجهزة المسجّلة دخولها بحسابك الآن — تقدر تنهي أي جلسة فوراً</div>
-      <div id="my-sessions-list"><div style="text-align:center;padding:20px;color:var(--text-muted);">⟳ جاري التحميل...</div></div>
+      <h3 style="font-weight:900;font-size:15px;margin-bottom:2px;">💻 ${lang==='ar'?'أجهزتي':'My devices'}</h3>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">${lang==='ar'?'الأجهزة المسجّلة دخولها بحسابك الآن — تقدر تنهي أي جلسة فوراً':'Devices signed in to your account right now — you can end any session instantly'}</div>
+      <div id="my-sessions-list"><div style="text-align:center;padding:20px;color:var(--text-muted);">⟳ ${lang==='ar'?'جاري التحميل...':'Loading...'}</div></div>
     </div></div>
   </div>`;
   loadMyDeviceSessions();
@@ -14996,7 +15086,7 @@ async function renderAdminSessionsTab(mc) {
     const list = el('admin-sessions-list');
     if (!list) return;
     if (!res?.data?.length) {
-      list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">✅ لا توجد جلسات إدارية مسجّلة</div>`;
+      list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">✅ ${lang==='ar'?'لا توجد جلسات إدارية مسجّلة':'No admin sessions recorded'}</div>`;
       return;
     }
     list.innerHTML = res.data.map(r => {
@@ -15011,42 +15101,42 @@ async function renderAdminSessionsTab(mc) {
     }).join('');
   } catch {
     const list = el('admin-sessions-list');
-    if (list) list.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:10px;">خطأ في التحميل</div>`;
+    if (list) list.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:10px;">${lang==='ar'?'خطأ في التحميل':'Failed to load'}</div>`;
   }
 }
 
 async function revokeAdminSessions() {
-  if (!confirm('هل تريد إلغاء جميع جلسات الدخول الإداري الحالية؟\nسيُطرد الأدمن فوراً إذا كان متصلاً.')) return;
+  if (!confirm((lang==='ar'?'هل تريد إلغاء جميع جلسات الدخول الإداري الحالية؟\nسيُطرد الأدمن فوراً إذا كان متصلاً.':'Revoke all current admin sessions?\nSupport will be signed out immediately if connected.'))) return;
   try {
     await window._cloudApiFetch('POST', '/api/auth/revoke-admin-sessions');
-    showToast('✅ تم إلغاء جميع جلسات الأدمن', 'success');
+    showToast((lang==='ar'?'✅ تم إلغاء جميع جلسات الأدمن':'✅ All admin sessions revoked'), 'success');
     renderAdminSessionsTab(el('settings-main-content'));
-  } catch { showToast('خطأ في الإلغاء', 'error'); }
+  } catch { showToast((lang==='ar'?'خطأ في الإلغاء':'Could not revoke'), 'error'); }
 }
 
 function parseUADevice(ua){
-  if(!ua) return 'جهاز غير معروف';
-  if(/Mobile|Android|iPhone/i.test(ua)) return '📱 جهاز جوال';
-  if(/Windows/i.test(ua)) return '🖥️ ويندوز';
-  if(/Macintosh|Mac OS/i.test(ua)) return '🖥️ ماك';
-  if(/Linux/i.test(ua)) return '🖥️ لينكس';
-  return '💻 متصفح';
+  if(!ua) return (lang==='ar'?'جهاز غير معروف':'Unknown device');
+  if(/Mobile|Android|iPhone/i.test(ua)) return (lang==='ar'?'📱 جهاز جوال':'📱 Mobile');
+  if(/Windows/i.test(ua)) return (lang==='ar'?'🖥️ ويندوز':'🖥️ Windows');
+  if(/Macintosh|Mac OS/i.test(ua)) return (lang==='ar'?'🖥️ ماك':'🖥️ Mac');
+  if(/Linux/i.test(ua)) return (lang==='ar'?'🖥️ لينكس':'🖥️ Linux');
+  return (lang==='ar'?'💻 متصفح':'💻 Browser');
 }
 async function loadMyDeviceSessions(){
   const box = el('my-sessions-list'); if(!box) return;
   try {
     const res = await window._cloudApiFetch('GET', '/api/auth/sessions');
     const sessions = res?.data || [];
-    if (!sessions.length) { box.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:13px;">لا توجد جلسات نشطة</div>`; return; }
+    if (!sessions.length) { box.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:13px;">${lang==='ar'?'لا توجد جلسات نشطة':'No active sessions'}</div>`; return; }
     box.innerHTML = sessions.map(s => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
         <div>
-          <div style="font-size:13px;font-weight:700;">${parseUADevice(s.user_agent)} ${s.id===res.current_session_id?'<span style="font-size:10px;padding:2px 8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:999px;margin-right:6px;">هذا الجهاز</span>':''}</div>
+          <div style="font-size:13px;font-weight:700;">${parseUADevice(s.user_agent)} ${s.id===res.current_session_id?'<span style="font-size:10px;padding:2px 8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:999px;margin-right:6px;">'+(lang==='ar'?'هذا الجهاز':'This device')+'</span>':''}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sanitize(s.ip_address||'')} · ${fmtDate(s.created_at)}</div>
         </div>
         ${s.id!==res.current_session_id?`<button data-action="revokeMyDeviceSession" data-args="[${s.id}]" style="padding:6px 14px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">إنهاء</button>`:''}
       </div>`).join('');
-  } catch { box.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:10px;">خطأ في التحميل</div>`; }
+  } catch { box.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:10px;">${lang==='ar'?'خطأ في التحميل':'Failed to load'}</div>`; }
 }
 async function revokeMyDeviceSession(id){
   try {
@@ -15072,7 +15162,7 @@ function renderPricingPolicies(c) {
     return `<div style="display:grid;grid-template-columns:1fr 90px 90px 90px auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div>
         <div style="font-size:13px;font-weight:700;">${sanitize(p.name)}</div>
-        <div style="font-size:11px;color:var(--text-muted);">${sanitize(p.category)}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${sanitize(dl(p.category))}</div>
       </div>
       <div style="font-size:12px;color:var(--text-muted);">شراء: <strong style="color:var(--text-main)">${buy} ر.س</strong></div>
       <div style="font-size:12px;color:var(--text-muted);">بيع: <strong style="color:#5eead4">${sell} ر.س</strong></div>
@@ -15085,20 +15175,20 @@ function renderPricingPolicies(c) {
     <div class="card"><div class="card-pad">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <div>
-          <h3 style="font-weight:900;font-size:15px;">⚡ سياسات التسعير الديناميكي</h3>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">المنتجات التي يتحدث سعر بيعها تلقائياً عند استلام مشتريات جديدة</div>
+          <h3 style="font-weight:900;font-size:15px;">⚡ ${lang==='ar'?'سياسات التسعير الديناميكي':'Dynamic pricing policies'}</h3>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${lang==='ar'?'المنتجات التي يتحدث سعر بيعها تلقائياً عند استلام مشتريات جديدة':'Products whose selling price updates automatically when new purchases arrive'}</div>
         </div>
-        <div style="font-size:12px;color:var(--text-muted);">${withPolicy.length} منتج مفعّل من أصل ${prods.length}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${lang==='ar'?`${withPolicy.length} منتج مفعّل من أصل ${prods.length}`:`${withPolicy.length} of ${prods.length} products enabled`}</div>
       </div>
       ${withPolicy.length === 0
         ? `<div style="text-align:center;padding:32px;color:var(--text-muted);">
              <div style="font-size:32px;margin-bottom:8px;">⚙️</div>
-             <div style="font-size:14px;font-weight:700;">لم يتم تفعيل التسعير الديناميكي لأي منتج بعد</div>
-             <div style="font-size:12px;margin-top:6px;">اذهب إلى المخزون ← اختر منتجاً ← فعّل "التسعير الديناميكي"</div>
+             <div style="font-size:14px;font-weight:700;">${lang==='ar'?'لم يتم تفعيل التسعير الديناميكي لأي منتج بعد':'Dynamic pricing isn’t enabled on any product yet'}</div>
+             <div style="font-size:12px;margin-top:6px;">${lang==='ar'?'اذهب إلى المخزون ← اختر منتجاً ← فعّل &quot;التسعير الديناميكي&quot;':'Go to Inventory → pick a product → turn on &quot;Dynamic pricing&quot;'}</div>
            </div>`
         : `<div style="margin-bottom:4px;">
              <div style="display:grid;grid-template-columns:1fr 90px 90px 90px auto;gap:12px;padding:6px 0;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-muted);font-weight:800;">
-               <span>المنتج</span><span>سعر الشراء</span><span>سعر البيع</span><span>هامش الربح</span><span>الحالة</span>
+               <span>${lang==='ar'?'المنتج':'Product'}</span><span>${lang==='ar'?'سعر الشراء':'Cost'}</span><span>${lang==='ar'?'سعر البيع':'Price'}</span><span>${lang==='ar'?'هامش الربح':'Margin'}</span><span>${lang==='ar'?'الحالة':'Status'}</span>
              </div>
              ${withPolicy.map(row).join('')}
            </div>`
@@ -15106,7 +15196,7 @@ function renderPricingPolicies(c) {
     </div></div>
     ${noPolicy.length > 0 ? `
     <div class="card" style="margin-top:12px;"><div class="card-pad">
-      <div style="font-size:13px;font-weight:800;margin-bottom:12px;color:var(--text-muted);">🔴 منتجات بدون سياسة تسعير (${noPolicy.length})</div>
+      <div style="font-size:13px;font-weight:800;margin-bottom:12px;color:var(--text-muted);">🔴 ${lang==='ar'?'منتجات بدون سياسة تسعير':'Products without a pricing policy'} (${noPolicy.length})</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         ${noPolicy.map(p=>`<span data-action="showProductModal" data-args="[${p.id}]" style="cursor:pointer;padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-size:12px;font-weight:600;">${sanitize(p.name)}</span>`).join('')}
       </div>
@@ -15265,9 +15355,9 @@ function renderSettingsGeneral(c) {
     <!-- ── بطاقة الباقة الحالية ── -->
     ${(()=>{
       const planMeta = {
-        basic:  {label:'أساسي',   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:'المحاسبة الأساسية — 99 ريال/شهر'},
-        growth: {label:'نمو',     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:'الموظفون والرواتب والولاء — 179 ريال/شهر'},
-        pro:    {label:'احترافي', color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:'جميع الميزات بلا قيود — 299 ريال/شهر'},
+        basic:  {label:(lang==='ar'?'أساسي':'Basic'),   color:'#16a34a', bg:'#dcfce7', icon:'📗', desc:(lang==='ar'?'المحاسبة الأساسية — 99 ريال/شهر':'Core accounting — SAR 99/month')},
+        growth: {label:(lang==='ar'?'نمو':'Growth'),     color:'#1d4ed8', bg:'#dbeafe', icon:'📘', desc:(lang==='ar'?'الموظفون والرواتب والولاء — 179 ريال/شهر':'Employees, payroll and loyalty — SAR 179/month')},
+        pro:    {label:(lang==='ar'?'احترافي':'Pro'), color:'#7c3aed', bg:'#ede9fe', icon:'📙', desc:(lang==='ar'?'جميع الميزات بلا قيود — 299 ريال/شهر':'Every feature, no limits — SAR 299/month')},
       };
       const cur = getCurrentPlan();
       let storedPlan = db.settings?.plan || 'basic';
@@ -15379,7 +15469,7 @@ function renderSettingsGeneral(c) {
           ${target>0?`<div style="background:var(--border);border-radius:999px;height:8px;overflow:hidden;">
             <div style="background:${pct>=100?'var(--success)':pct>=70?'var(--warning)':'var(--primary)'};height:100%;width:${pct}%;border-radius:999px;transition:width 0.5s;"></div>
           </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${pct}% ${lang==='ar'?'من الهدف':'of target'} • ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>`:'<div style="font-size:11px;color:var(--text-muted);">${lang===\'ar\'?\'لم يُحدد هدف بعد — أدخل رقماً واضغط حفظ\':\'No target set — enter a value and save\'}</div>'}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${pct}% ${lang==='ar'?'من الهدف':'of target'} • ${fmtMoney(todaySales)} / ${fmtMoney(target)}</div>`:`<div style="font-size:11px;color:var(--text-muted);">${lang==='ar'?'لم يُحدد هدف بعد — أدخل رقماً واضغط حفظ':'No target set — enter a value and save'}</div>`}
         </div>`;
       }).join('')}
     </div></div>
@@ -16268,10 +16358,17 @@ function getPrintStyles() {
 function exportVATReportPDF() {
   const db = getDB(); const s = db.settings||{};
   const now = new Date();
+  const A = lang==='ar', X = (a, e) => A ? a : e;
+  const loc = A ? 'ar-SA-u-nu-latn' : 'en-GB';
   const periodFilter = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
   const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
-  const periodLabels={all:'كل الفترات',thisMonth:'هذا الشهر',lastMonth:'الشهر الماضي',thisYear:'هذه السنة',custom:`${reportFrom} → ${reportTo}`};
-  const period = periodLabels[reportPeriod]||'';
+  const periodLabels={all:X('كل الفترات','All periods'),thisMonth:X('هذا الشهر','This month'),lastMonth:X('الشهر الماضي','Last month'),thisYear:X('هذه السنة','This year'),custom:`${reportFrom} → ${reportTo}`};
+  const _vp = vatPeriodKey ? vatPeriods().find(p=>p.key===vatPeriodKey) : null;
+  const period = _vp && reportPeriod==='custom' ? `${_vp.label} (${reportFrom} → ${reportTo})` : (periodLabels[reportPeriod]||'');
+  const _ex = vatNetExplanation(d.vatNet, reportPeriod==='custom'?reportTo:'');
+  const SAR = X('(ر.س)','(SAR)');
+  const retRows = (d.rets||[]).map(r=>`<tr><td>${r.type==='sales'?X('مرتجع مبيعات','Sales return'):X('مرتجع مشتريات','Purchase return')} ${sanitize(r.return_no||'')}</td><td>${fmtDate(r.date||r.created_at)}</td><td>${sanitize(r.party||'')}</td>
+    <td>${(-(r.base_amount!=null?r.base_amount:(r.amount||0)/1.15)).toFixed(2)}</td><td>${(-(r.vat_amount||0)).toFixed(2)}</td></tr>`).join('');
 
   const invRows = d.invs.map(i=>`<tr>
     <td>${i.invoice_no}</td><td>${fmtDate(i.created_at)}</td><td>${sanitize(i.customer_name)}</td>
@@ -16279,37 +16376,42 @@ function exportVATReportPDF() {
     <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
   </tr>`).join('');
   const purRows = d.purchs.filter(p=>p.deductible!==false).map(p=>`<tr>
-    <td>${sanitize(p.vendor)}</td><td>${fmtDate(p.created_at)}</td><td>${sanitize(p.description||p.category)}</td>
+    <td>${sanitize(p.vendor)}</td><td>${fmtDate(p.created_at)}</td><td>${sanitize(dl(p.description||p.category))}</td>
     <td>${Number(p.amount).toFixed(2)}</td><td style="color:#dc2626;">${Number(p.vat).toFixed(2)}</td>
   </tr>`).join('');
 
   const win = window.open('','_blank');
   if (!win) return;
-  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">${getPrintStyles()}<title>تقرير الضريبة</title></head><body>
+  win.document.write(`<!DOCTYPE html><html lang="${A?'ar':'en'}" dir="${A?'rtl':'ltr'}"><head><meta charset="UTF-8">${getPrintStyles()}<title>${X('تقرير الضريبة','VAT return')}</title></head><body>
   <div class="rpt-header">
-    <div><div class="rpt-company">${sanitize(s.company_name)||'يقظ'}</div><div class="rpt-sub">الرقم الضريبي: ${sanitize(s.vat_number)||'-'}</div></div>
-    <div><div class="rpt-title">تقرير ضريبة القيمة المضافة</div><div class="rpt-date">الفترة: ${period} | طُبع: ${now.toLocaleDateString('ar-SA-u-nu-latn')}</div></div>
+    <div><div class="rpt-company">${sanitize(s.company_name)||X('يقظ','Yaqiz')}</div><div class="rpt-sub">${X('الرقم الضريبي','VAT number')}: ${sanitize(s.vat_number)||'-'}</div></div>
+    <div><div class="rpt-title">${X('تقرير ضريبة القيمة المضافة','VAT Return Report')}</div><div class="rpt-date">${X('الفترة','Period')}: ${period} | ${X('طُبع','Printed')}: ${now.toLocaleDateString(loc)}</div></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-    <div class="stat-box"><div class="stat-val green">${Number(d.vatOutput).toFixed(2)}</div><div class="stat-lbl">ضريبة المخرجات (ر.س)</div></div>
-    <div class="stat-box"><div class="stat-val red">${Number(d.vatInput).toFixed(2)}</div><div class="stat-lbl">ضريبة المدخلات (ر.س)</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:${d.vatNet>=0?'#0f766e':'#dc2626'};">${Number(d.vatNet).toFixed(2)}</div><div class="stat-lbl">صافي الضريبة المستحقة (ر.س)</div></div>
+    <div class="stat-box"><div class="stat-val green">${Number(d.vatOutput).toFixed(2)}</div><div class="stat-lbl">${X('ضريبة المخرجات','Output VAT')} ${SAR}</div></div>
+    <div class="stat-box"><div class="stat-val red">${Number(d.vatInput).toFixed(2)}</div><div class="stat-lbl">${X('ضريبة المدخلات','Input VAT')} ${SAR}</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:${d.vatNet>0.005?'#b45309':'#0f766e'};">${Math.abs(Number(d.vatNet)).toFixed(2)}</div><div class="stat-lbl">${d.vatNet>0.005?X('المستحق للهيئة','Payable to ZATCA'):d.vatNet<-0.005?X('رصيدك لدى الهيئة','Your credit with ZATCA'):X('الصافي','Net')} ${SAR}</div></div>
   </div>
+  <div style="margin:0 0 18px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:700;">${_ex.text}</div>
   <div class="section">
-    <div class="section-title">المبيعات وضريبة المخرجات (${d.invs.length} فاتورة)</div>
-    <table><thead><tr><th>رقم الفاتورة</th><th>التاريخ</th><th>العميل</th><th>الوعاء (ر.س)</th><th>الضريبة (ر.س)</th><th>الإجمالي (ر.س)</th></tr></thead>
+    <div class="section-title">${A?`المبيعات وضريبة المخرجات (${d.invs.length} فاتورة)`:`Sales and output VAT (${d.invs.length} invoices)`}</div>
+    <table><thead><tr><th>${X('رقم الفاتورة','Invoice no.')}</th><th>${X('التاريخ','Date')}</th><th>${X('العميل','Customer')}</th><th>${X('الوعاء','Taxable amount')} ${SAR}</th><th>${X('الضريبة','VAT')} ${SAR}</th><th>${X('الإجمالي','Total')} ${SAR}</th></tr></thead>
     <tbody>${invRows}</tbody>
-    <tfoot><tr class="total-row"><td colspan="3">الإجمالي</td><td>${Number(d.invs.reduce((s,i)=>s+i.subtotal,0)).toFixed(2)}</td><td class="green">${Number(d.vatOutput).toFixed(2)}</td><td>${Number(d.invs.reduce((s,i)=>s+i.grand_total,0)).toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr class="total-row"><td colspan="3">${X('الإجمالي','Total')}</td><td>${Number(d.invs.reduce((s,i)=>s+i.subtotal,0)).toFixed(2)}</td><td class="green">${Number(d.vatOutput).toFixed(2)}</td><td>${Number(d.invs.reduce((s,i)=>s+i.grand_total,0)).toFixed(2)}</td></tr></tfoot>
     </table>
   </div>
   ${purRows?`<div class="section">
-    <div class="section-title">المشتريات وضريبة المدخلات القابلة للحسم</div>
-    <table><thead><tr><th>المورد</th><th>التاريخ</th><th>البيان</th><th>الوعاء (ر.س)</th><th>الضريبة (ر.س)</th></tr></thead>
+    <div class="section-title">${X('المشتريات وضريبة المدخلات القابلة للحسم','Purchases and deductible input VAT')}</div>
+    <table><thead><tr><th>${X('المورد','Supplier')}</th><th>${X('التاريخ','Date')}</th><th>${X('البيان','Description')}</th><th>${X('الوعاء','Taxable amount')} ${SAR}</th><th>${X('الضريبة','VAT')} ${SAR}</th></tr></thead>
     <tbody>${purRows}</tbody>
-    <tfoot><tr class="total-row"><td colspan="3">الإجمالي</td><td>${Number(d.purchs.filter(p=>p.deductible!==false).reduce((s,p)=>s+p.amount,0)).toFixed(2)}</td><td class="red">${Number(d.vatInput).toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr class="total-row"><td colspan="3">${X('الإجمالي','Total')}</td><td>${Number(d.purchs.filter(p=>p.deductible!==false).reduce((s,p)=>s+p.amount,0)).toFixed(2)}</td><td class="red">${Number(d.purchs.filter(p=>p.deductible!==false).reduce((s,p)=>s+(p.vat||0),0)).toFixed(2)}</td></tr></tfoot>
     </table>
   </div>`:''}
-  <div class="footer"><span>يقظ — نظام محاسبي متوافق مع ZATCA</span><span>${now.toLocaleDateString('ar-SA-u-nu-latn')} ${now.toLocaleTimeString('ar-SA-u-nu-latn',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  ${retRows?`<div class="section">
+    <div class="section-title">${X('المرتجعات (تُخصم من الضريبة)','Returns (deducted from VAT)')}</div>
+    <table><thead><tr><th>${X('المستند','Document')}</th><th>${X('التاريخ','Date')}</th><th>${X('الطرف','Party')}</th><th>${X('الوعاء','Taxable amount')} ${SAR}</th><th>${X('الضريبة','VAT')} ${SAR}</th></tr></thead><tbody>${retRows}</tbody></table>
+  </div>`:''}
+  <div class="footer"><span>${X('يقظ — نظام محاسبي متوافق مع ZATCA','Yaqiz — ZATCA-compliant accounting')}</span><span>${now.toLocaleDateString(loc)} ${now.toLocaleTimeString(loc,{hour:'2-digit',minute:'2-digit'})}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -17013,6 +17115,7 @@ let _obChatSeenSteps  = {};  // {stepKey:true} — شرح تلقائي مرة و
 function obChatWelcomeText() {
   const name    = currentUser?.full_name || '';
   const company = getDB().settings?.company_name || '';
+  if (lang !== 'ar') return `Welcome to Yaqiz, ${name}${company ? ` — and welcome, ${company}` : ''}. I’ll walk you through each step of your opening balances; ask me anything along the way.`;
   return `أهلاً بك في منصة يقظ، يقظ نظام محاسبي يساعدك على إدارة أعمالك بسهولة. أهلاً بك ${name} وأهلاً بمنشأتك ${company} في منصة يقظ المحاسبية، يقظ أكثر من مجرد نظام محاسبي.`;
 }
 
@@ -17056,7 +17159,7 @@ async function obChatSendProactive(key) {
   obChatScrollToBottom();
   try {
     const res = await window._cloudApiFetch('POST', '/api/ai/opening-balance-assistant', {
-      question: 'اشرح لي هذه الخطوة الحالية بأسلوب ودود ومختصر.',
+      question: lang==='ar' ? 'اشرح لي هذه الخطوة الحالية بأسلوب ودود ومختصر.' : 'Explain this current step to me in a friendly, concise way. Reply in English.',
       context: { step_key:key, step_title:OB_STEP_TITLES[key]||key, step_guide:OB_GUIDE[key]||{}, ob_data_snapshot:obChatDataSnapshot(), is_proactive:true },
       history: _obChatApiHistory.slice(-6),
     });
@@ -17166,11 +17269,12 @@ let _obImportStaging = []; // {name, qty, buy_price, sell_price} — صفوف م
 // يُحسب تلقائيًا هناك)، وبيانات المحل عبر _validateCompanyInfo/_persistCompanyInfo
 // نفس صفحة الإعدادات بالضبط
 let _qs = { active:false, step:1, vatOn:true, draft:{} };
+const _qsStep = (key, icon, ar, arSub, en, enSub) => ({ key, icon, get title() { return lang==='ar'?ar:en; }, get sub() { return lang==='ar'?arSub:enSub; } });
 const QS_STEPS = [
-  { key:'store', icon:'store',   title:'بيانات محلك', sub:'اللي تطلع على فاتورة زبونك' },
-  { key:'goods', icon:'package', title:'بضاعتك',      sub:'صوّر فاتورة المورد أو ارفع ملف' },
-  { key:'cash',  icon:'wallet',  title:'الصندوق',     sub:'كم في الدرج الحين؟' },
-  { key:'ready', icon:'rocket',  title:'جاهز للبيع',  sub:'جرّب أول بيعة' },
+  _qsStep('store', 'store',   'بيانات محلك', 'اللي تطلع على فاتورة زبونك', 'Store details', 'What your customers see on receipts'),
+  _qsStep('goods', 'package', 'بضاعتك',      'صوّر فاتورة المورد أو ارفع ملف', 'Your stock', 'Snap a supplier invoice or upload a file'),
+  _qsStep('cash',  'wallet',  'الصندوق',     'كم في الدرج الحين؟', 'Cash drawer', 'How much is in the till?'),
+  _qsStep('ready', 'rocket',  'جاهز للبيع',  'جرّب أول بيعة', 'Ready to sell', 'Make your first sale'),
 ];
 const QS_FIELDS = ['company_name','vat_number','cr_number','phone','address','street_name','building_number','district','city','postal_code','additional_number'];
 const QS_VAT_RE = /^3\d{13}3$/;
@@ -17204,25 +17308,25 @@ function renderQuickStart() {
   mc.innerHTML = `<div class="qs-overlay">
     <div class="qs-shell" role="dialog" aria-modal="true" aria-labelledby="qs-title">
       <aside class="qs-rail">
-        <div class="qs-hello"><span class="qs-hello-ico">${icon('sparkles',18)}</span><div><b>خلنا نجهّز محلك</b><small>4 خطوات، دقايق معدودة</small></div></div>
+        <div class="qs-hello"><span class="qs-hello-ico">${icon('sparkles',18)}</span><div><b>${lang==='ar'?'خلنا نجهّز محلك':'Let’s set up your store'}</b><small>${lang==='ar'?'4 خطوات، دقايق معدودة':'4 quick steps, a few minutes'}</small></div></div>
         <div class="qs-rail-list">${rail}</div>
         <div class="qs-rail-foot">
-          <button type="button" class="qs-link" data-action="qsOpenFullWizard">${icon('calculator',14)} الإعداد المحاسبي الكامل</button>
-          <small>للمحاسب: العملاء والموردين والأصول ورأس المال</small>
+          <button type="button" class="qs-link" data-action="qsOpenFullWizard">${icon('calculator',14)} ${lang==='ar'?'الإعداد المحاسبي الكامل':'Full accounting setup'}</button>
+          <small>${lang==='ar'?'للمحاسب: العملاء والموردين والأصول ورأس المال':'For your accountant: customers, suppliers, assets and capital'}</small>
         </div>
       </aside>
       <section class="qs-main">
         <header class="qs-head">
           <div class="qs-progress" aria-hidden="true">${QS_STEPS.map((_,i)=>`<i class="${i<_qs.step?'on':''}"></i>`).join('')}</div>
-          <div class="qs-count">الخطوة ${_qs.step} من ${QS_STEPS.length}</div>
+          <div class="qs-count">${lang==='ar'?`الخطوة ${_qs.step} من ${QS_STEPS.length}`:`Step ${_qs.step} of ${QS_STEPS.length}`}</div>
           <h2 id="qs-title">${cur.title}</h2>
-          <button type="button" class="qs-link qs-full-m" data-action="qsOpenFullWizard">${icon('calculator',14)} الإعداد المحاسبي الكامل (للمحاسب)</button>
+          <button type="button" class="qs-link qs-full-m" data-action="qsOpenFullWizard">${icon('calculator',14)} ${lang==='ar'?'الإعداد المحاسبي الكامل (للمحاسب)':'Full accounting setup (for accountants)'}</button>
         </header>
         <div class="qs-body">${bodies[cur.key]()}</div>
         ${isLast ? '' : `<footer class="qs-foot">
-          ${_qs.step>1 ? `<button type="button" class="btn btn-outline" data-action="qsGo" data-args="[${_qs.step-1}]">${icon('arrow-right',16)} السابق</button>`
-                       : `<button type="button" class="qs-later" data-action="qsSkip">أكمل لاحقًا</button>`}
-          <button type="button" class="btn btn-primary qs-next" data-action="qsNext">${goodsEmpty?'تخطّ الحين':'التالي'} ${icon('arrow-left',16)}</button>
+          ${_qs.step>1 ? `<button type="button" class="btn btn-outline" data-action="qsGo" data-args="[${_qs.step-1}]">${icon(lang==='ar'?'arrow-right':'arrow-left',16)} ${lang==='ar'?'السابق':'Back'}</button>`
+                       : `<button type="button" class="qs-later" data-action="qsSkip">${lang==='ar'?'أكمل لاحقًا':'Finish later'}</button>`}
+          <button type="button" class="btn btn-primary qs-next" data-action="qsNext">${goodsEmpty?(lang==='ar'?'تخطّ الحين':'Skip for now'):(lang==='ar'?'التالي':'Next')} ${icon(lang==='ar'?'arrow-left':'arrow-right',16)}</button>
         </footer>`}
       </section>
     </div>
@@ -17245,31 +17349,31 @@ function qsStoreStep() {
   const v = _qs.vatOn;
   return `<div class="qs-store">
     <div class="qs-form">
-      <p class="qs-lead">هذي البيانات تطلع على كل فاتورة تعطيها لزبونك. شوف المعاينة وأنت تكتب.</p>
+      <p class="qs-lead">${lang==='ar'?'هذي البيانات تطلع على كل فاتورة تعطيها لزبونك. شوف المعاينة وأنت تكتب.':'These details print on every receipt you give a customer. Watch the preview as you type.'}</p>
       <div class="qs-grid">
-        ${qsField('company_name','اسم المحل',{req:true,span:true,ph:'مثال: بقالة الحي'})}
-        <div class="qs-field span"><span>هل محلك مسجّل في ضريبة القيمة المضافة؟</span>
+        ${qsField('company_name',lang==='ar'?'اسم المحل':'Store name',{req:true,span:true,ph:lang==='ar'?'مثال: بقالة الحي':'e.g. Corner Grocery'})}
+        <div class="qs-field span"><span>${lang==='ar'?'هل محلك مسجّل في ضريبة القيمة المضافة؟':'Is your store registered for VAT?'}</span>
           <div class="qs-seg" role="radiogroup">
-            <button type="button" role="radio" aria-checked="${v}" class="${v?'on':''}" data-action="qsSetVat" data-args="[true]">نعم، مسجّل</button>
-            <button type="button" role="radio" aria-checked="${!v}" class="${!v?'on':''}" data-action="qsSetVat" data-args="[false]">لا، غير مسجّل</button>
+            <button type="button" role="radio" aria-checked="${v}" class="${v?'on':''}" data-action="qsSetVat" data-args="[true]">${lang==='ar'?'نعم، مسجّل':'Yes, registered'}</button>
+            <button type="button" role="radio" aria-checked="${!v}" class="${!v?'on':''}" data-action="qsSetVat" data-args="[false]">${lang==='ar'?'لا، غير مسجّل':'No, not registered'}</button>
           </div>
         </div>
-        ${v ? qsField('vat_number','الرقم الضريبي',{req:true,max:15,ph:'3XXXXXXXXXXXXX3',dir:'ltr'}) : ''}
-        ${qsField('cr_number','السجل التجاري',{max:10,ph:'اختياري',dir:'ltr'})}
-        ${qsField('phone','جوال المحل',{ph:'05XXXXXXXX',dir:'ltr'})}
+        ${v ? qsField('vat_number',lang==='ar'?'الرقم الضريبي':'VAT number',{req:true,max:15,ph:'3XXXXXXXXXXXXX3',dir:'ltr'}) : ''}
+        ${qsField('cr_number',lang==='ar'?'السجل التجاري':'Commercial registration (CR)',{max:10,ph:lang==='ar'?'اختياري':'Optional',dir:'ltr'})}
+        ${qsField('phone',lang==='ar'?'جوال المحل':'Store mobile',{ph:'05XXXXXXXX',dir:'ltr'})}
       </div>
-      <div class="qs-sub-head">${icon('map-pin',15)} العنوان الوطني ${v?'<em>مطلوب للمسجّل في الضريبة</em>':'<em>اختياري</em>'}</div>
+      <div class="qs-sub-head">${icon('map-pin',15)} ${lang==='ar'?'العنوان الوطني':'National address'} ${v?`<em>${lang==='ar'?'مطلوب للمسجّل في الضريبة':'Required for VAT-registered stores'}</em>`:`<em>${lang==='ar'?'اختياري':'Optional'}</em>`}</div>
       <div class="qs-grid">
-        ${qsField('city','المدينة',{req:v})}
-        ${qsField('district','الحي',{req:v})}
-        ${qsField('street_name','الشارع',{req:v,span:true})}
-        ${qsField('building_number','رقم المبنى',{req:v,max:4,ph:'4 أرقام',dir:'ltr'})}
-        ${qsField('postal_code','الرمز البريدي',{req:v,max:5,ph:'5 أرقام',dir:'ltr'})}
-        ${qsField('additional_number','الرقم الإضافي',{req:v,max:4,ph:'4 أرقام',dir:'ltr'})}
+        ${qsField('city',lang==='ar'?'المدينة':'City',{req:v})}
+        ${qsField('district',lang==='ar'?'الحي':'District',{req:v})}
+        ${qsField('street_name',lang==='ar'?'الشارع':'Street',{req:v,span:true})}
+        ${qsField('building_number',lang==='ar'?'رقم المبنى':'Building no.',{req:v,max:4,ph:lang==='ar'?'4 أرقام':'4 digits',dir:'ltr'})}
+        ${qsField('postal_code',lang==='ar'?'الرمز البريدي':'Postal code',{req:v,max:5,ph:lang==='ar'?'5 أرقام':'5 digits',dir:'ltr'})}
+        ${qsField('additional_number',lang==='ar'?'الرقم الإضافي':'Additional no.',{req:v,max:4,ph:lang==='ar'?'4 أرقام':'4 digits',dir:'ltr'})}
       </div>
-      <div class="qs-hint">${icon('info',14)} تلقى العنوان الوطني في تطبيق «سبل» أو موقع البريد السعودي.</div>
+      <div class="qs-hint">${icon('info',14)} ${lang==='ar'?'تلقى العنوان الوطني في تطبيق «سبل» أو موقع البريد السعودي.':'You’ll find your national address in the Subul app or on the Saudi Post website.'}</div>
     </div>
-    <div class="qs-preview-wrap"><div class="qs-preview-cap">معاينة فاتورة زبونك</div><div id="qs-preview">${qsReceiptPreview()}</div></div>
+    <div class="qs-preview-wrap"><div class="qs-preview-cap">${lang==='ar'?'معاينة فاتورة زبونك':'Customer receipt preview'}</div><div id="qs-preview">${qsReceiptPreview()}</div></div>
   </div>`;
 }
 function qsDraft(value, field) {
@@ -17286,18 +17390,18 @@ function qsReceiptPreview() {
   const addr = String(d.address||'').trim() || _qsComposedAddress(d);
   const sub = 20, vat = v ? 3 : 0;
   return `<div class="qs-receipt">
-    <div class="qs-r-name">${sanitize(d.company_name||'').trim() ? sanitize(d.company_name) : miss('اسم المحل')}</div>
+    <div class="qs-r-name">${sanitize(d.company_name||'').trim() ? sanitize(d.company_name) : miss(lang==='ar'?'اسم المحل':'Store name')}</div>
     ${addr ? `<div class="qs-r-meta">${sanitize(addr)}</div>` : ''}
-    ${v ? `<div class="qs-r-meta">الرقم الضريبي: ${QS_VAT_RE.test(String(d.vat_number||'').trim()) ? `<b dir="ltr">${sanitize(d.vat_number)}</b>` : miss('مطلوب — 15 رقم')}</div>` : ''}
-    ${String(d.cr_number||'').trim() ? `<div class="qs-r-meta">س.ت: <span dir="ltr">${sanitize(d.cr_number)}</span></div>` : ''}
-    <div class="qs-r-title">${v ? 'فاتورة ضريبية مبسطة' : 'فاتورة'}</div>
+    ${v ? `<div class="qs-r-meta">${lang==='ar'?'الرقم الضريبي:':'VAT no.:'} ${QS_VAT_RE.test(String(d.vat_number||'').trim()) ? `<b dir="ltr">${sanitize(d.vat_number)}</b>` : miss(lang==='ar'?'مطلوب — 15 رقم':'Required — 15 digits')}</div>` : ''}
+    ${String(d.cr_number||'').trim() ? `<div class="qs-r-meta">${lang==='ar'?'س.ت:':'CR:'} <span dir="ltr">${sanitize(d.cr_number)}</span></div>` : ''}
+    <div class="qs-r-title">${v ? (lang==='ar'?'فاتورة ضريبية مبسطة':'Simplified Tax Invoice') : (lang==='ar'?'فاتورة':'Receipt')}</div>
     <div class="qs-r-row muted"><span>${new Date().toLocaleDateString('en-GB')}</span><span>${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span></div>
     <div class="qs-r-sep"></div>
-    <div class="qs-r-row"><span>منتج تجريبي × 2</span><span>${(sub).toFixed(2)}</span></div>
+    <div class="qs-r-row"><span>${lang==='ar'?'منتج تجريبي':'Sample item'} × 2</span><span>${(sub).toFixed(2)}</span></div>
     <div class="qs-r-sep"></div>
-    ${v ? `<div class="qs-r-row muted"><span>ضريبة القيمة المضافة 15%</span><span>${vat.toFixed(2)}</span></div>` : ''}
-    <div class="qs-r-row total"><span>الإجمالي</span><span>${(sub+vat).toFixed(2)} ر.س</span></div>
-    ${v ? `<div class="qs-r-qr">${icon('qr-code',46)}<small>رمز QR يُنشأ تلقائيًا</small></div>` : ''}
+    ${v ? `<div class="qs-r-row muted"><span>${lang==='ar'?'ضريبة القيمة المضافة 15%':'VAT 15%'}</span><span>${vat.toFixed(2)}</span></div>` : ''}
+    <div class="qs-r-row total"><span>${lang==='ar'?'الإجمالي':'Total'}</span><span>${(sub+vat).toFixed(2)} ${lang==='ar'?'ر.س':'SAR'}</span></div>
+    ${v ? `<div class="qs-r-qr">${icon('qr-code',46)}<small>${lang==='ar'?'رمز QR يُنشأ تلقائيًا':'QR code generated automatically'}</small></div>` : ''}
   </div>`;
 }
 
@@ -17305,8 +17409,8 @@ function _qsSaveStore() {
   _qsReadStore();
   const d = { ..._qs.draft };
   QS_FIELDS.forEach(f => { d[f] = String(d[f]||'').trim(); });
-  if (!d.company_name) return 'اكتب اسم المحل — يطلع أعلى كل فاتورة';
-  if (_qs.vatOn && !QS_VAT_RE.test(d.vat_number)) return 'الرقم الضريبي لازم يكون 15 رقم، يبدأ وينتهي بـ 3';
+  if (!d.company_name) return lang==='ar'?'اكتب اسم المحل — يطلع أعلى كل فاتورة':'Enter the store name — it prints at the top of every receipt';
+  if (_qs.vatOn && !QS_VAT_RE.test(d.vat_number)) return lang==='ar'?'الرقم الضريبي لازم يكون 15 رقم، يبدأ وينتهي بـ 3':'The VAT number must be 15 digits, starting and ending with 3';
   // غير المسجّل بالضريبة لا يُطبع له رقم ضريبي على الفاتورة أصلًا
   if (!_qs.vatOn) d.vat_number = '';
   const err = _validateCompanyInfo(d);
@@ -17335,46 +17439,46 @@ function qsGoodsBody() {
       <td><input class="input num" type="number" value="${it.qty}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"qty"]' /></td>
       <td><input class="input num" type="number" value="${it.buy_price}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"buy_price"]' /></td>
       <td><input class="input num" type="number" value="${it.sell_price}" data-onchange="obImportStagingEditField" data-onchange-args='[${i},"sell_price"]' /></td>
-      <td><button type="button" class="qs-x" aria-label="حذف" data-action="obImportRemoveStagingRow" data-args="[${i}]">${icon('x',14)}</button></td></tr>`).join('');
+      <td><button type="button" class="qs-x" aria-label="${lang==='ar'?'حذف':'Remove'}" data-action="obImportRemoveStagingRow" data-args="[${i}]">${icon('x',14)}</button></td></tr>`).join('');
   const list = _obData.products.map((p,i)=>`<li>
-      <div><b>${sanitize(p.name)}</b><small>${p.qty} قطعة · شراء ${fmtMoney(p.buy_price)} · بيع ${fmtMoney(p.sell_price)}</small></div>
-      <button type="button" class="qs-x" aria-label="حذف" data-action="obRemoveProduct" data-args="[${i}]">${icon('x',14)}</button></li>`).join('');
-  return `<p class="qs-lead">أضف البضاعة اللي في محلك الحين. أسرع طريقة: صوّر فاتورة من موردك والذكاء الاصطناعي يقرأ الأصناف والأسعار.</p>
-    ${branchFieldHtml('ob-branch', 'الفرع اللي فيه هالبضاعة', _obData.branch_id)}
+      <div><b>${sanitize(p.name)}</b><small>${lang==='ar'?`${p.qty} قطعة · شراء ${fmtMoney(p.buy_price)} · بيع ${fmtMoney(p.sell_price)}`:`${p.qty} pcs · cost ${fmtMoney(p.buy_price)} · price ${fmtMoney(p.sell_price)}`}</small></div>
+      <button type="button" class="qs-x" aria-label="${lang==='ar'?'حذف':'Remove'}" data-action="obRemoveProduct" data-args="[${i}]">${icon('x',14)}</button></li>`).join('');
+  return `<p class="qs-lead">${lang==='ar'?'أضف البضاعة اللي في محلك الحين. أسرع طريقة: صوّر فاتورة من موردك والذكاء الاصطناعي يقرأ الأصناف والأسعار.':'Add the stock you have in store right now. Fastest way: snap a supplier invoice and AI reads the items and prices.'}</p>
+    ${branchFieldHtml('ob-branch', lang==='ar'?'الفرع اللي فيه هالبضاعة':'Branch holding this stock', _obData.branch_id)}
     <div class="qs-tiles">
-      <label class="qs-tile primary">${icon('camera',22)}<b>صوّر فاتورة المورد</b><small>صورة أو PDF، ونقرأها لك</small>
+      <label class="qs-tile primary">${icon('camera',22)}<b>${lang==='ar'?'صوّر فاتورة المورد':'Snap a supplier invoice'}</b><small>${lang==='ar'?'صورة أو PDF، ونقرأها لك':'Photo or PDF — we read it for you'}</small>
         <input type="file" accept="image/*,.pdf" hidden data-onchange-el="obImportAIChange" /></label>
-      <label class="qs-tile">${icon('file-spreadsheet',22)}<b>ارفع ملف Excel</b><small>الاسم، الكمية، سعر الشراء، سعر البيع</small>
+      <label class="qs-tile">${icon('file-spreadsheet',22)}<b>${lang==='ar'?'ارفع ملف Excel':'Upload an Excel file'}</b><small>${lang==='ar'?'الاسم، الكمية، سعر الشراء، سعر البيع':'Name, quantity, cost price, selling price'}</small>
         <input type="file" accept=".xlsx,.xls" hidden data-onchange-el="obImportExcelChange" /></label>
     </div>
     <div id="ob-import-status"></div>
     ${_obImportStaging.length ? `<div class="qs-review">
-      <div class="qs-review-head">${icon('sparkles',15)} راجع الأصناف قبل الإضافة (${_obImportStaging.length})</div>
-      <div class="tbl-wrap"><table class="tbl qs-tbl"><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الشراء</th><th>سعر البيع</th><th></th></tr></thead><tbody>${staging}</tbody></table></div>
-      <div class="qs-review-actions"><button type="button" class="btn btn-primary" data-action="obImportCommitStaging">${icon('check',15)} إضافة الكل</button>
-        <button type="button" class="btn btn-outline" data-action="obImportClearStaging">إلغاء</button></div></div>` : ''}
+      <div class="qs-review-head">${icon('sparkles',15)} ${lang==='ar'?'راجع الأصناف قبل الإضافة':'Review items before adding'} (${_obImportStaging.length})</div>
+      <div class="tbl-wrap"><table class="tbl qs-tbl"><thead><tr><th>${lang==='ar'?'الصنف':'Item'}</th><th>${lang==='ar'?'الكمية':'Qty'}</th><th>${lang==='ar'?'سعر الشراء':'Cost price'}</th><th>${lang==='ar'?'سعر البيع':'Selling price'}</th><th></th></tr></thead><tbody>${staging}</tbody></table></div>
+      <div class="qs-review-actions"><button type="button" class="btn btn-primary" data-action="obImportCommitStaging">${icon('check',15)} ${lang==='ar'?'إضافة الكل':'Add all'}</button>
+        <button type="button" class="btn btn-outline" data-action="obImportClearStaging">${lang==='ar'?'إلغاء':'Cancel'}</button></div></div>` : ''}
     <div class="qs-manual">
-      <div class="qs-manual-head">${icon('plus',14)} أو أضف صنف بيدك</div>
+      <div class="qs-manual-head">${icon('plus',14)} ${lang==='ar'?'أو أضف صنف بيدك':'Or add an item manually'}</div>
       <div class="qs-manual-row">
-        <label class="qs-field"><span>اسم الصنف</span><input class="input" id="ob-p-name" placeholder="مثال: ماء 330 مل" data-enter-action="obAddProduct" /></label>
-        <label class="qs-field"><span>الكمية</span><input class="input" type="number" id="ob-p-qty" value="1" min="0" /></label>
-        <label class="qs-field"><span>سعر الشراء</span><input class="input" type="number" id="ob-p-buy" placeholder="0.00" /></label>
-        <label class="qs-field"><span>سعر البيع</span><input class="input" type="number" id="ob-p-sell" placeholder="0.00" data-enter-action="obAddProduct" /></label>
-        <button type="button" class="btn btn-primary qs-add" aria-label="إضافة" data-action="obAddProduct">${icon('plus',18)}</button>
+        <label class="qs-field"><span>${lang==='ar'?'اسم الصنف':'Item name'}</span><input class="input" id="ob-p-name" placeholder="${lang==='ar'?'مثال: ماء 330 مل':'e.g. Water 330 ml'}" data-enter-action="obAddProduct" /></label>
+        <label class="qs-field"><span>${lang==='ar'?'الكمية':'Qty'}</span><input class="input" type="number" id="ob-p-qty" value="1" min="0" /></label>
+        <label class="qs-field"><span>${lang==='ar'?'سعر الشراء':'Cost price'}</span><input class="input" type="number" id="ob-p-buy" placeholder="0.00" /></label>
+        <label class="qs-field"><span>${lang==='ar'?'سعر البيع':'Selling price'}</span><input class="input" type="number" id="ob-p-sell" placeholder="0.00" data-enter-action="obAddProduct" /></label>
+        <button type="button" class="btn btn-primary qs-add" aria-label="${lang==='ar'?'إضافة':'Add'}" data-action="obAddProduct">${icon('plus',18)}</button>
       </div>
     </div>
     ${_obData.products.length ? `<ul class="qs-list">${list}</ul>
-      <div class="qs-total"><span>${_obData.products.length} صنف</span><span>قيمة البضاعة: <b>${fmtMoney(total)}</b></span></div>`
-      : `<div class="qs-empty">${icon('package',20)}<span>ما أضفت أصناف للحين. تقدر تتخطّى وتضيفها بعدين من صفحة المخزون.</span></div>`}`;
+      <div class="qs-total"><span>${_obData.products.length} ${lang==='ar'?'صنف':'items'}</span><span>${lang==='ar'?'قيمة البضاعة:':'Stock value:'} <b>${fmtMoney(total)}</b></span></div>`
+      : `<div class="qs-empty">${icon('package',20)}<span>${lang==='ar'?'ما أضفت أصناف للحين. تقدر تتخطّى وتضيفها بعدين من صفحة المخزون.':'No items yet. You can skip and add them later from the Inventory page.'}</span></div>`}`;
 }
 
 // ── الخطوة 3: الدرج ──
 function qsCashStep() {
-  return `<p class="qs-lead">كم المبلغ الموجود في درج الكاشير الحين؟ يصير هو رصيد الصندوق في المنصة، وكل بيعة نقدية تنضاف عليه.</p>
-    <label class="qs-cash">${icon('banknote',24)}<span>النقد في الدرج</span>
-      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-box" min="0" placeholder="0" value="${_obData.cash_box||''}" /><em>ر.س</em></div></label>
-    <label class="qs-cash small">${icon('landmark',20)}<span>رصيد حساب البنك <em class="opt">اختياري</em></span>
-      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-bank" min="0" placeholder="0" value="${_obData.cash_bank||''}" /><em>ر.س</em></div></label>`;
+  return `<p class="qs-lead">${lang==='ar'?'كم المبلغ الموجود في درج الكاشير الحين؟ يصير هو رصيد الصندوق في المنصة، وكل بيعة نقدية تنضاف عليه.':'How much cash is in the till right now? It becomes your cash balance, and every cash sale adds to it.'}</p>
+    <label class="qs-cash">${icon('banknote',24)}<span>${lang==='ar'?'النقد في الدرج':'Cash in the till'}</span>
+      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-box" min="0" placeholder="0" value="${_obData.cash_box||''}" /><em>${lang==='ar'?'ر.س':'SAR'}</em></div></label>
+    <label class="qs-cash small">${icon('landmark',20)}<span>${lang==='ar'?'رصيد حساب البنك':'Bank balance'} <em class="opt">${lang==='ar'?'اختياري':'Optional'}</em></span>
+      <div class="qs-cash-in"><input class="input" type="number" id="qs-cash-bank" min="0" placeholder="0" value="${_obData.cash_bank||''}" /><em>${lang==='ar'?'ر.س':'SAR'}</em></div></label>`;
 }
 function _qsReadCash() {
   const b = el('qs-cash-box'), k = el('qs-cash-bank');
@@ -17388,17 +17492,17 @@ function qsReadyStep() {
   const val = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
   const row = (ok, ico, title, detail) => `<li class="${ok?'ok':''}"><span class="qs-ready-ico">${icon(ok?'check':ico,16)}</span><div><b>${title}</b><small>${detail}</small></div></li>`;
   return `<div class="qs-ready">
-    <div class="qs-ready-hero">${icon('party-popper',30)}<div><b>محلك جاهز يا ${sanitize((currentUser?.full_name||'').split(' ')[0]||'هلا')}!</b><small>آخر خطوة: جرّب أول بيعة وشوف فاتورتك.</small></div></div>
+    <div class="qs-ready-hero">${icon('party-popper',30)}<div><b>${lang==='ar'?`محلك جاهز يا ${sanitize((currentUser?.full_name||'').split(' ')[0]||'هلا')}!`:`You’re all set, ${sanitize((currentUser?.full_name||'').split(' ')[0]||'there')}!`}</b><small>${lang==='ar'?'آخر خطوة: جرّب أول بيعة وشوف فاتورتك.':'Last step: make your first sale and see your receipt.'}</small></div></div>
     <ul class="qs-ready-list">
-      ${row(true,'store', sanitize(d.company_name), _qs.vatOn ? 'مسجّل في الضريبة · الرقم الضريبي على الفاتورة' : 'غير مسجّل في الضريبة')}
-      ${row(_obData.products.length>0,'package', _obData.products.length ? `${_obData.products.length} صنف` : 'ما فيه أصناف للحين', _obData.products.length ? `قيمتها ${fmtMoney(val)}` : 'تقدر تضيفها من صفحة المخزون')}
-      ${row(_obData.cash_box+_obData.cash_bank>0,'wallet', `الصندوق: ${fmtMoney(_obData.cash_box||0)}`, _obData.cash_bank ? `والبنك: ${fmtMoney(_obData.cash_bank)}` : 'رصيد الدرج الافتتاحي')}
+      ${row(true,'store', sanitize(d.company_name), _qs.vatOn ? (lang==='ar'?'مسجّل في الضريبة · الرقم الضريبي على الفاتورة':'VAT registered · VAT number on receipts') : (lang==='ar'?'غير مسجّل في الضريبة':'Not VAT registered'))}
+      ${row(_obData.products.length>0,'package', _obData.products.length ? (lang==='ar'?`${_obData.products.length} صنف`:`${_obData.products.length} items`) : (lang==='ar'?'ما فيه أصناف للحين':'No items yet'), _obData.products.length ? (lang==='ar'?`قيمتها ${fmtMoney(val)}`:`Worth ${fmtMoney(val)}`) : (lang==='ar'?'تقدر تضيفها من صفحة المخزون':'Add them from the Inventory page'))}
+      ${row(_obData.cash_box+_obData.cash_bank>0,'wallet', (lang==='ar'?'الصندوق: ':'Cash: ')+fmtMoney(_obData.cash_box||0), _obData.cash_bank ? (lang==='ar'?'والبنك: ':'Bank: ')+fmtMoney(_obData.cash_bank) : (lang==='ar'?'رصيد الدرج الافتتاحي':'Opening till balance'))}
     </ul>
     <div class="qs-ready-cta">
-      <button type="button" class="btn btn-primary qs-go-pos" data-action="qsFinish" data-args='["pos"]'>${icon('scan-line',18)} افتح نقطة البيع</button>
-      <button type="button" class="btn btn-outline" data-action="qsFinish" data-args='["dashboard"]'>روح للوحة التحكم</button>
+      <button type="button" class="btn btn-primary qs-go-pos" data-action="qsFinish" data-args='["pos"]'>${icon('scan-line',18)} ${lang==='ar'?'افتح نقطة البيع':'Open the POS'}</button>
+      <button type="button" class="btn btn-outline" data-action="qsFinish" data-args='["dashboard"]'>${lang==='ar'?'روح للوحة التحكم':'Go to dashboard'}</button>
     </div>
-    <p class="qs-ready-note">${icon('info',14)} العملاء والموردين والأصول تقدر تضيفها لاحقًا من الإعدادات ← الأرصدة الافتتاحية.</p>
+    <p class="qs-ready-note">${icon('info',14)} ${lang==='ar'?'العملاء والموردين والأصول تقدر تضيفها لاحقًا من الإعدادات ← الأرصدة الافتتاحية.':'You can add customers, suppliers and assets later from Settings → Opening balances.'}</p>
   </div>`;
 }
 
@@ -17465,20 +17569,20 @@ function qsChecklistCard(db) {
   const vatOn = s.vat_enabled!==false && s.vat_enabled!==0;
   const items = [
     { ok: !!String(s.company_name||'').trim() && (!vatOn || QS_VAT_RE.test(String(s.vat_number||'').trim())),
-      ico:'store', title:'بيانات المحل على الفاتورة', sub: vatOn ? 'الاسم والرقم الضريبي والعنوان' : 'الاسم والعنوان', act:'goTo', args:'["settings"]' },
-    { ok: (db.products||[]).length>0, ico:'package', title:'أضف بضاعتك', sub:'صوّر فاتورة المورد أو ارفع Excel', act:'goTo', args:'["inventory"]' },
-    { ok: (db.invoices||[]).some(i=>i.status!=='ملغاة'), ico:'scan-line', title:'أول بيعة', sub:'من نقطة البيع', act:'goTo', args:'["pos"]' },
+      ico:'store', title:(lang==='ar'?'بيانات المحل على الفاتورة':'Store details on receipts'), sub: vatOn ? (lang==='ar'?'الاسم والرقم الضريبي والعنوان':'Name, VAT number and address') : (lang==='ar'?'الاسم والعنوان':'Name and address'), act:'goTo', args:'["settings"]' },
+    { ok: (db.products||[]).length>0, ico:'package', title:(lang==='ar'?'أضف بضاعتك':'Add your stock'), sub:(lang==='ar'?'صوّر فاتورة المورد أو ارفع Excel':'Snap a supplier invoice or upload Excel'), act:'goTo', args:'["inventory"]' },
+    { ok: (db.invoices||[]).some(i=>i.status!=='ملغاة'), ico:'scan-line', title:(lang==='ar'?'أول بيعة':'First sale'), sub:(lang==='ar'?'من نقطة البيع':'From the POS'), act:'goTo', args:'["pos"]' },
   ];
   const done = items.filter(i=>i.ok).length;
   if (done === items.length) return '';
   return `<div class="card qs-check">
     <div class="qs-check-head">
-      <div><b>خطوات البداية</b><small>${done} من ${items.length} · كمّلها وصار محلك جاهز للبيع</small></div>
-      <button type="button" class="qs-x" aria-label="إخفاء" title="إخفاء" data-action="qsDismissChecklist">${icon('x',15)}</button>
+      <div><b>${lang==='ar'?'خطوات البداية':'Getting started'}</b><small>${lang==='ar'?`${done} من ${items.length} · كمّلها وصار محلك جاهز للبيع`:`${done} of ${items.length} · finish these and your store is ready to sell`}</small></div>
+      <button type="button" class="qs-x" aria-label="${lang==='ar'?'إخفاء':'Hide'}" title="${lang==='ar'?'إخفاء':'Hide'}" data-action="qsDismissChecklist">${icon('x',15)}</button>
     </div>
     <div class="qs-check-bar"><i style="width:${Math.round(done/items.length*100)}%"></i></div>
     <div class="qs-check-items">${items.map(i=>`<button type="button" class="qs-check-item ${i.ok?'ok':''}" ${i.ok?'disabled':`data-action="${i.act}" data-args='${i.args}'`}>
-      <span class="qs-check-ico">${icon(i.ok?'check':i.ico,16)}</span><span><b>${i.title}</b><small>${i.ok?'تم':i.sub}</small></span>${i.ok?'':icon('chevron-left',16)}</button>`).join('')}</div>
+      <span class="qs-check-ico">${icon(i.ok?'check':i.ico,16)}</span><span><b>${i.title}</b><small>${i.ok?(lang==='ar'?'تم':'Done'):i.sub}</small></span>${i.ok?'':icon(lang==='ar'?'chevron-left':'chevron-right',16)}</button>`).join('')}</div>
   </div>`;
 }
 function qsDismissChecklist() {
@@ -17764,7 +17868,7 @@ function renderOBWizard() {
   const curKey = active[_obStep-1];
   const mc = el('modal-container');
   if (!mc) return;
-  mc.innerHTML = '<div style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:16px;overflow-y:auto;padding:20px 16px;">'
+  mc.innerHTML = '<div id="ob-wizard-root" style="position:fixed;inset:0;background:rgba(15,23,42,0.88);z-index:9999;display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:16px;overflow-y:auto;padding:20px 16px;">'
     +'<div style="background:var(--card);border-radius:20px;width:100%;max-width:700px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);margin:auto;">'
     +'<div style="background:linear-gradient(135deg,#0f766e,#0d9488);padding:22px 28px;color:#fff;">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
@@ -18240,9 +18344,9 @@ function renderOpeningBalancesSettings(c) {
   if (!data) {
     c.innerHTML = '<div style="text-align:center;padding:40px;">'
       +'<div style="font-size:48px;margin-bottom:16px;">📋</div>'
-      +'<div style="font-weight:800;font-size:16px;margin-bottom:8px;">لم تُعبأ الأرصدة الافتتاحية بعد</div>'
-      +'<div style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">أضف أرصدة بداية نشاطك التجاري ليبدأ النظام من النقطة الصحيحة</div>'
-      +'<button class="btn btn-primary" data-action="showOpeningBalancesWizard" data-args="[false]">بدء معالج الأرصدة الافتتاحية</button>'
+      +'<div style="font-weight:800;font-size:16px;margin-bottom:8px;">'+(lang==='ar'?'لم تُعبأ الأرصدة الافتتاحية بعد':'Opening balances haven’t been entered yet')+'</div>'
+      +'<div style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">'+(lang==='ar'?'أضف أرصدة بداية نشاطك التجاري ليبدأ النظام من النقطة الصحيحة':'Add your starting balances so the books begin from the right point')+'</div>'
+      +'<button class="btn btn-primary" data-action="showOpeningBalancesWizard" data-args="[false]">'+(lang==='ar'?'بدء معالج الأرصدة الافتتاحية':'Start the opening balances wizard')+'</button>'
       +'</div>';
     return;
   }
@@ -18254,27 +18358,27 @@ function renderOpeningBalancesSettings(c) {
   const obligations  = (data.obligations||[]).reduce((s,o)=>s+o.amount,0);
   c.innerHTML = '<div style="max-width:720px;margin-top:16px;">'
     +'<div class="card" style="margin-bottom:12px;">'
-    +'<div class="card-head"><h3>📋 الأرصدة الافتتاحية</h3>'
+    +'<div class="card-head"><h3>📋 '+(lang==='ar'?'الأرصدة الافتتاحية':'Opening balances')+'</h3>'
     +'<div style="display:flex;gap:8px;align-items:center;">'
-    +(date?'<span style="font-size:11px;color:var(--text-muted);">بتاريخ: '+fmtDate(date)+'</span>':'')
+    +(date?'<span style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'بتاريخ: ':'As of ')+fmtDate(date)+'</span>':'')
     // تعديل الأرصدة الافتتاحية يحذف القيد الافتتاحي القديم ويُنشئ آخر بدله
     // (obSaveAll، عند isEdit) — نفس فعل حذف قيد يومية، فيُقيَّد بنفس صلاحية
     // إدارة الحسابات المستخدَمة الآن بـDELETE /api/journal/:id
-    +(has('accounts.manage')?'<button class="btn btn-outline btn-sm" data-action="showOpeningBalancesWizard" data-args="[true]">✎ تعديل</button>':'')
+    +(has('accounts.manage')?'<button class="btn btn-outline btn-sm" data-action="showOpeningBalancesWizard" data-args="[true]">✎ '+(lang==='ar'?'تعديل':'Edit')+'</button>':'')
     +'</div></div>'
     +'<div class="card-pad">'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">💰 النقدية</div><div style="font-weight:900;color:#16a34a;">'+fmtMoney(totalCash)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">📦 المخزون</div><div style="font-weight:900;color:#0f766e;">'+fmtMoney(inventoryVal)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">👥 ذمم مدينة</div><div style="font-weight:900;color:#16a34a;">'+fmtMoney(receivables)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">🏗️ أصول ثابتة</div><div style="font-weight:900;color:#0f766e;">'+fmtMoney(fixedAssets)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">🏭 ذمم دائنة</div><div style="font-weight:900;color:#dc2626;">'+fmtMoney(payables)+'</div></div>'
-    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">📋 التزامات</div><div style="font-weight:900;color:#dc2626;">'+fmtMoney(obligations)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'💰 النقدية':'💰 Cash')+'</div><div style="font-weight:900;color:#16a34a;">'+fmtMoney(totalCash)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'📦 المخزون':'📦 Inventory')+'</div><div style="font-weight:900;color:#0f766e;">'+fmtMoney(inventoryVal)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'👥 ذمم مدينة':'👥 Receivables')+'</div><div style="font-weight:900;color:#16a34a;">'+fmtMoney(receivables)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'🏗️ أصول ثابتة':'🏗️ Fixed assets')+'</div><div style="font-weight:900;color:#0f766e;">'+fmtMoney(fixedAssets)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'🏭 ذمم دائنة':'🏭 Payables')+'</div><div style="font-weight:900;color:#dc2626;">'+fmtMoney(payables)+'</div></div>'
+    +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:var(--text-muted);">'+(lang==='ar'?'📋 التزامات':'📋 Commitments')+'</div><div style="font-weight:900;color:#dc2626;">'+fmtMoney(obligations)+'</div></div>'
     +'</div>'
     +'<div style="margin-top:12px;display:flex;gap:12px;font-size:13px;color:var(--text-muted);">'
-    +'<span>👨‍💼 '+(data.employees||[]).length+' موظف</span><span>•</span>'
-    +'<span>📦 '+(data.products||[]).length+' صنف</span><span>•</span>'
-    +'<span>👥 '+(data.customers||[]).length+' عميل</span>'
+    +'<span>👨‍💼 '+(data.employees||[]).length+' '+(lang==='ar'?'موظف':'employees')+'</span><span>•</span>'
+    +'<span>📦 '+(data.products||[]).length+' '+(lang==='ar'?'صنف':'items')+'</span><span>•</span>'
+    +'<span>👥 '+(data.customers||[]).length+' '+(lang==='ar'?'عميل':'customers')+'</span>'
     +'</div></div></div></div>';
 }
 
@@ -18330,6 +18434,16 @@ function _formSig(root) {
     f.tagName === 'SELECT' ? [...f.options].map(o => o.selected ? '1' : '0').join('') : f.value
   ).join('\u0001');
 }
+// معالج الأرصدة الافتتاحية بالوضع الإنجليزي: كل محتوى يُرسم داخله (17 مكان
+// تحديث جزئي + لوحة الدليل) يمر على قاموس public/i18n-ob-en.js
+new MutationObserver(muts => {
+  if (lang !== 'en' || !window.obLocalize) return;
+  for (const m of muts) for (const n of m.addedNodes) {
+    const host = n.nodeType === 1 ? n : n.parentElement;
+    if (host?.closest?.('#ob-wizard-root, #ob-guide-panel')) window.obLocalize(host);
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 // البصمة تُؤخذ عند أول تفاعل مع النافذة (ضغطة أو تركيز حقل) — قبل أي كتابة
 // من المستخدم، وبعد ما الكود عبّى القيم الافتراضية. #modal-container نفسه
 // يُعاد بناؤه مع رسم التطبيق، فنربط البصمة بعنصر الخلفية لكل نافذة
@@ -18675,14 +18789,27 @@ function openPurchaseFormWithAIData(data, usage) {
   // بناء الأصناف قبل فتح النموذج حتى لا يمسحها showAddGoodsPurchase
   _goodsItems = [];
   const rawItems = Array.isArray(data.items) ? data.items : [];
+  // الأصناف تصل من السيرفر صافية (قبل الضريبة) بعد المطابقة الحسابية، ومعها نسبة
+  // ضريبة الفاتورة الفعلية — كانت تُضاف 15% فوق كل صنف دائمًا، فتنحسب الضريبة
+  // مرتين لو أسعار الفاتورة شاملة، أو تُخترع ضريبة لمورد ما يحسبها
+  const _db = getDB();
+  const _vatOn = _db.settings?.vat_enabled!==false && _db.settings?.vat_enabled!==0;
+  const _ratio = data.normalized ? (Number(data.vat_ratio) || 0) : 0.15;
   if (rawItems.length > 0) {
     rawItems.forEach(it => {
       const qty   = parseFloat(it.qty)        || 1;
-      const price = parseFloat(it.unit_price) || parseFloat(it.total) / (parseFloat(it.qty) || 1) || 0;
-      const total = parseFloat(it.total)      || qty * price;
-      const vat   = Math.round(total * 0.15 * 100) / 100;
+      let price = parseFloat(it.unit_price) || parseFloat(it.total) / (parseFloat(it.qty) || 1) || 0;
+      let total = parseFloat(it.total)      || qty * price;
+      let vat   = Math.round(total * _ratio * 100) / 100;
+      // منشأة غير مسجّلة بالضريبة: ضريبة المورد جزء من تكلفة البضاعة (لا تُخصم)
+      if (!_vatOn) { total = Math.round((total + vat) * 100) / 100; price = total / qty; vat = 0; }
       _goodsItems.push({ name: it.description || 'بند', qty, price, line_total: total, vat, product_id: null });
     });
+    // فرق التقريب يتصحّح بآخر صنف حتى يطابق مجموع الضريبة ضريبة الفاتورة بالضبط
+    if (_vatOn && data.normalized && _goodsItems.length) {
+      const diff = Math.round(((Number(data.vat_amount) || 0) - _goodsItems.reduce((s, i) => s + i.vat, 0)) * 100) / 100;
+      if (Math.abs(diff) > 0 && Math.abs(diff) < 0.05 * _goodsItems.length) _goodsItems[_goodsItems.length - 1].vat = Math.round((_goodsItems[_goodsItems.length - 1].vat + diff) * 100) / 100;
+    }
   } else {
     const grand = parseFloat(data.grand_total) || 0;
     const vat   = parseFloat(data.vat_amount)  || grand * 15 / 115;
@@ -18700,6 +18827,31 @@ function openPurchaseFormWithAIData(data, usage) {
 
   renderGPItems();
   updateGPTotals();
+
+  // تنبيهات القراءة + فاتورة مسجّلة سابقًا بنفس الرقم لنفس المورد
+  const _w = lang==='ar' ? data.warnings : (data.warnings_en || data.warnings);
+  const notes = [...(Array.isArray(_w) ? _w : [])];
+  const dup = _findDuplicatePurchase(_db, data.vendor, data.invoice_no);
+  if (dup) notes.unshift(lang==='ar' ? `هذي الفاتورة (رقم ${data.invoice_no}) من «${data.vendor}» مسجّلة سابقًا بتاريخ ${fmtDate(dup.created_at)} — تأكد إنك ما تسجّلها مرتين`
+                                       : `This invoice (no. ${data.invoice_no}) from “${data.vendor}” was already recorded on ${fmtDate(dup.created_at)} — make sure you don’t record it twice`);
+  if (data.lines_were_gross && _vatOn) notes.push(lang==='ar' ? 'أسعار الأصناف بالفاتورة كانت شاملة الضريبة — حوّلناها لأسعار قبل الضريبة عشان ما تنحسب الضريبة مرتين'
+                                                       : 'Item prices on the invoice included VAT — we converted them to pre-VAT prices so VAT isn’t counted twice');
+  const modal = document.querySelector('#modal-container .modal');
+  if (notes.length && modal) {
+    const box = document.createElement('div');
+    box.style.cssText = 'margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--warning-bg);color:var(--warning);border:1px solid #fcd34d;font-size:12.5px;line-height:1.8;';
+    box.innerHTML = notes.map(n => '⚠️ ' + sanitize(n)).join('<br>');
+    const head = modal.querySelector('.modal-head');
+    head ? head.insertAdjacentElement('afterend', box) : modal.prepend(box);
+  }
+}
+
+// فاتورة شراء بنفس رقم مرجع المورد لنفس المورد (غير ملغاة)
+function _findDuplicatePurchase(db, vendor, ref) {
+  const r = String(ref || '').trim(), v = String(vendor || '').trim().toLowerCase();
+  if (!r) return null;
+  return (db.purchases || []).find(p => String(p.supplier_ref || '').trim() === r && p.status !== 'ملغاة' &&
+    (!v || String(p.vendor || '').trim().toLowerCase() === v)) || null;
 }
 
 async function runAIAnalysis() {
@@ -21031,6 +21183,7 @@ async function runAISearchQuery(q) {
   if (SYNC_LOG) console.log('🔌 Yaqiz API Bridge loaded v2');
 })();
 </script>
+<script src="/public/i18n-ob-en.js"></script>
 <script src="/public/pw-toggle.js"></script>
 </body>
 </html>

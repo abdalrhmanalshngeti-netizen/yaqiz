@@ -131,7 +131,7 @@ exports.vatReport = async (req, res, next) => {
         vat_collected:  collected,
         vat_deductible: deductible,
         net_vat_due:    net_vat,
-        status: net_vat > 0 ? 'payable' : 'refundable'
+        status: net_vat > 0.005 ? 'payable' : net_vat < -0.005 ? 'credit_carried_forward' : 'nil'   // الرصيد الدائن يُرحَّل للفترات الجاية (لا استرداد)
       }
     });
   } catch (err) { next(err); }

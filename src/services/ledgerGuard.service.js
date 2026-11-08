@@ -127,7 +127,7 @@ async function saveFindings(cid, findings) {
         RETURNING notified_at`,
         [cid, f.check_key, f.subject, f.title, f.expected, f.actual, f.diff, f.category || 'system']);
       // ملاحظة على بيانات الشركة: إشعار لصاحب المنشأة أول مرة تظهر فقط
-      if (f.category === 'user' && !row.notified_at) {
+      if (f.category === 'user' && (!row.notified_at || Date.now() - new Date(row.notified_at).getTime() > 7 * 24 * 3600 * 1000)) {
         const { rows: owners } = await client.query(`SELECT id FROM users WHERE company_id = $1 AND role = 'owner' AND COALESCE(active, true)`, [cid]);
         for (const o of owners) {
           await client.query(`INSERT INTO notifications (company_id, user_id, type, title, message, link) VALUES ($1,$2,'accounting_check',$3,$4,$5)`,
@@ -143,6 +143,25 @@ async function saveFindings(cid, findings) {
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}
+
+// خلل نظامي استمر 12 ساعة+ (ليس مزامنة متأخرة) ولم يُبلَّغ بعد → سطر واحد بجرس
+// لوحة الإدارة لكل مدير مالك. الخلل نفسه ما يتكرر إشعاره ما دام قائمًا.
+// 11 ساعة لا 12: التشغيلان بينهما 12 ساعة بالضبط، ومدة الفحص تتفاوت — بـ12
+// ممكن يفوت الخلل بثوانٍ ويتأخر إشعاره دورة كاملة
+async function notifyPlatformOwner() {
+  const { rows } = await db.query(`
+    SELECT company_id FROM ledger_guard_findings
+    WHERE category = 'system' AND notified_at IS NULL AND last_seen - first_seen >= INTERVAL '11 hours'`);
+  if (!rows.length) return;
+  const companies = new Set(rows.map(r => r.company_id)).size;
+  const { rows: admins } = await db.query(`SELECT id FROM platform_admins WHERE role = 'owner' AND COALESCE(active, true)`);
+  for (const a of admins) {
+    await db.query(`INSERT INTO admin_notifications (admin_id, type, title, message) VALUES ($1, 'ledger_guard', $2, $3)`,
+      [a.id, 'خلل بالدورة المحاسبية يحتاج المطوّر', `${companies} منشأة فيها فرق مستمر بين الدفاتر والسجلات — افتح «صحة الدورة المحاسبية» وأرسل التفاصيل للمطوّر`]);
+  }
+  await db.query(`UPDATE ledger_guard_findings SET notified_at = NOW()
+    WHERE category = 'system' AND notified_at IS NULL AND last_seen - first_seen >= INTERVAL '11 hours'`);
 }
 
 // يشغّل الفحص على كل الشركات (أو شركة وحدة) ويسجّل التشغيل
@@ -162,6 +181,7 @@ async function runLedgerGuard({ companyId = null, trigger = 'schedule' } = {}) {
       console.error(`[LedgerGuard] company ${c.id}:`, e.message);
     }
   }
+  try { await notifyPlatformOwner(); } catch (e) { console.error('[LedgerGuard] admin notify:', e.message); }
   const duration = Date.now() - t0;
   await db.query(
     `INSERT INTO ledger_guard_runs (trigger, companies, findings, duration_ms, error) VALUES ($1,$2,$3,$4,$5)`,
@@ -169,4 +189,4 @@ async function runLedgerGuard({ companyId = null, trigger = 'schedule' } = {}) {
   return { companies: companies.length, findings: total, failed, duration_ms: duration };
 }
 
-module.exports = { runLedgerGuard, checkCompany };
+module.exports = { runLedgerGuard, checkCompany, notifyPlatformOwner };
