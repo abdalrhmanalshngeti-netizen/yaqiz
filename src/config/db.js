@@ -22,11 +22,32 @@ types.setTypeParser(1082, (val) => val); // 1082 = OID لنوع DATE بـPostgre
 // "client.query() أثناء تنفيذ استعلام آخر بنفس العميل")
 const PG_OPTIONS = '-c TimeZone=Asia/Riyadh';
 
+// تشفير الاتصال بقاعدة البيانات بالإنتاج:
+//  • DATABASE_CA_CERT (نص الشهادة PEM، أو base64 لها): اتصال مشفّر مع التحقق من
+//    هوية الخادم — يمنع انتحال قاعدة البيانات (الأفضل لو الاتصال يمر بشبكة عامة)
+//  • DB_SSL=disable: بلا تشفير — فقط لو الاتصال بشبكة خاصة داخلية (مثل
+//    postgres.railway.internal)
+//  • غير ذلك (الافتراضي الحالي): مشفّر بلا تحقق من الشهادة — قواعد البيانات
+//    المُدارة غالبًا بشهادة موقّعة ذاتيًا، فالتحقق بدون شهادتها يقطع الاتصال
+function sslConfig() {
+  if (!isProduction) return false;
+  if (String(process.env.DB_SSL || '').toLowerCase() === 'disable') return false;
+  let ca = process.env.DATABASE_CA_CERT || '';
+  if (ca && !ca.includes('BEGIN CERTIFICATE')) {
+    try { ca = Buffer.from(ca, 'base64').toString('utf8'); } catch { ca = ''; }
+  }
+  // لوحات الاستضافة كثيرًا تحفظ الأسطر الجديدة كنص حرفي «\n»
+  if (ca.includes('BEGIN CERTIFICATE')) return { ca: ca.replace(/\\n/g, '\n'), rejectUnauthorized: true };
+  console.warn('[db] الاتصال بقاعدة البيانات مشفّر بدون تحقق من الشهادة — أضف DATABASE_CA_CERT للتحقق الكامل');
+  return { rejectUnauthorized: false };
+}
+const SSL = sslConfig();
+
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       options: PG_OPTIONS,
-      ssl: isProduction ? { rejectUnauthorized: false } : false,
+      ssl: SSL,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -38,7 +59,7 @@ const pool = process.env.DATABASE_URL
       user:     process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       options:  PG_OPTIONS,
-      ssl:      isProduction ? { rejectUnauthorized: false } : false,
+      ssl:      SSL,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,

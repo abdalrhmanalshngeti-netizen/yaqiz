@@ -183,11 +183,31 @@ exports.remove = async (req, res, next) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: 'يجب فتح السنوات المالية الأحدث أولاً' });
       }
-      // يعكس قيد التصفير المرتبط (لو وُجد) قبل حذف صف القفل — cascade يحذف journal_items تلقائياً
-      await client.query(
-        `DELETE FROM journal_entries WHERE company_id = $1 AND source_type = 'period_close' AND source_id = $2`,
+      // قيد التصفير ما يُحذف (الدفاتر لا تُمحى) — يُعكس بقيد مقابل بنفس تاريخه،
+      // فترجع أرصدة الإيرادات/المصروفات لتلك السنة، وإعادة الإقفال لاحقًا تحسب
+      // صافيًا صحيحًا (الأصل + عكسه = صفر)
+      const { rows: closings } = await client.query(
+        `SELECT je.id, je.entry_no, je.date FROM journal_entries je
+         WHERE je.company_id = $1 AND je.source_type = 'period_close' AND je.source_id = $2
+           AND NOT EXISTS (SELECT 1 FROM journal_entries r WHERE r.company_id = je.company_id
+                           AND r.source_type = 'period_close_reversal' AND r.reference = je.entry_no)`,
         [req.user.company_id, period.id]
       );
+      for (const ce of closings) {
+        const { rows: lines } = await client.query(`SELECT * FROM journal_items WHERE entry_id = $1`, [ce.id]);
+        const revSeq = await nextDocNumber(client, req.user.company_id, 'entry');
+        const { rows: [rev] } = await client.query(`
+          INSERT INTO journal_entries (company_id, entry_no, description, date, source_type, source_id, reference, created_by)
+          VALUES ($1,$2,$3,$4,'period_close_reversal',$5,$6,$7) RETURNING id`,
+          [req.user.company_id, `JE-${String(revSeq).padStart(6, '0')}`, `عكس قيد إقفال ${period.period_key} — إعادة فتح السنة`,
+           ce.date, period.id, ce.entry_no, req.user.sub]);
+        for (const l of lines) {
+          await client.query(`
+            INSERT INTO journal_items (entry_id, account_id, account_code, account_name, side, amount)
+            VALUES ($1,$2,$3,$4,$5,$6)`,
+            [rev.id, l.account_id, l.account_code, l.account_name, l.side === 'debit' ? 'credit' : 'debit', l.amount]);
+        }
+      }
     }
 
     await client.query(`DELETE FROM closed_periods WHERE id = $1 AND company_id = $2`, [req.params.id, req.user.company_id]);

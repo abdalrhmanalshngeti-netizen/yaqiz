@@ -152,13 +152,15 @@ exports.create = async (req, res, next) => {
       INSERT INTO purchases
         (company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
          purchase_type, category, description, date, amount, vat_amount, total,
-         remaining, payment_method, status, deductible, notes, created_by, branch_id, client_local_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         remaining, payment_method, status, deductible, notes, created_by, branch_id, client_local_id, paid_amount)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
       RETURNING *
     `, [company_id, purchase_no, supplier_id, supplier_name, supplier_ref,
         purchase_type || 'goods', category, description, date,
         baseAmount, vatAmount, total,
-        remaining, payment_method, purchStatus, deductible !== false, notes, user_id, resolvedBranchId, client_local_id || null]);
+        remaining, payment_method, purchStatus, deductible !== false, notes, user_id, resolvedBranchId, client_local_id || null,
+        // المدفوعة نقدًا كانت تُحفظ بمدفوع = 0 — فتظهر بالجهاز بعد المزامنة كأنها غير مسددة
+        isPaid ? total : 0]);
 
     // إضافة المخزون لو كانت مشتريات بضاعة مع بنود
     if (purchase_type !== 'opex' && items.length) {
@@ -396,4 +398,106 @@ exports.reversePayment = async (req, res, next) => {
     await client.query('COMMIT');
     res.json({ success: true, data: { paid_amount: newPaid, remaining: newRem, status: newStatus } });
   } catch (err) { await client.query('ROLLBACK'); next(err); } finally { client.release(); }
+};
+
+// تصحيح فاتورة شراء/مصروف مسجّلة بالغلط — بقيد عكسي، لا حذف ولا تعديل (الأصل يبقى
+// بحالة reversed). السيرفر مسؤول عن الشق اللي يملكه هو: المخزون (طبقة هذي الفاتورة
+// بالذات)، رصيد المورد، وحالة الفاتورة. القيد العكسي وحركة الخزينة يُنشآن بالجهاز
+// ويتزامنان مثل أي قيد/حركة، ويُحسبان من الأصناف اللي يرجّعها هذا الطلب.
+// بضاعة انباع منها شي → رفض: التصحيح وقتها مرتجع مشتريات بالكمية الباقية
+exports.reverse = async (req, res, next) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { company_id, sub: user_id } = req.user;
+    const reason = String(req.body.reason || '').trim().slice(0, 500);
+    if (!reason) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'سبب التصحيح مطلوب' }); }
+
+    const { rows: [pur] } = await client.query(
+      `SELECT * FROM purchases WHERE id = $1 AND company_id = $2 FOR UPDATE`, [req.params.id, company_id]);
+    if (!pur) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' }); }
+    if (pur.status === 'reversed') { await client.query('ROLLBACK'); return res.status(409).json({ success: false, code: 'ALREADY', message: 'الفاتورة معكوسة مسبقًا' }); }
+    if (pur.status === 'cancelled') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'الفاتورة ملغاة' }); }
+
+    // القيد العكسي بتاريخ اليوم — فالفترة المعنية هي فترة اليوم لا فترة الأصل
+    const periodCheck = await periodClose.assertPeriodNotClosed(
+      client, company_id, todayLocalDateStr(), req.headers['x-period-override-token']);
+    if (periodCheck.blocked) {
+      await client.query('ROLLBACK');
+      return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
+    }
+
+    const { rows: [ret] } = await client.query(
+      `SELECT 1 FROM returns WHERE company_id = $1 AND linked_purchase_id = $2 LIMIT 1`, [company_id, pur.id]);
+    if (ret) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'HAS_RETURNS', message: 'على هذي الفاتورة مرتجع مسجّل — صحّح الفرق بمرتجع مشتريات بدل عكس الفاتورة كاملة' });
+    }
+    const { rows: [vch] } = await client.query(
+      `SELECT 1 FROM vouchers WHERE company_id = $1 AND linked_purchase_id = $2 LIMIT 1`, [company_id, pur.id]);
+    if (vch) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, code: 'HAS_PAYMENTS', message: 'على هذي الفاتورة سند صرف — احذف السند أول (ينعكس أثره)، ثم اعكس الفاتورة' });
+    }
+
+    const removed = [];
+    if (pur.purchase_type !== 'opex') {
+      const { warehouse_id } = await branch.resolveWarehouseForBranch(client, company_id, pur.branch_id, false);
+      const { rows: items } = await client.query(`SELECT * FROM purchase_items WHERE purchase_id = $1 ORDER BY sort_order`, [pur.id]);
+      for (const it of items) {
+        let pid = it.product_id;
+        // صنف أُنشئ منتجه بعد حفظ الفاتورة (إدراج لاحق) — ما انربط بالفاتورة، نوصله بالاسم
+        if (!pid && it.product_name) {
+          const { rows: [p] } = await client.query(
+            `SELECT id FROM products WHERE company_id = $1 AND name = $2 ORDER BY id LIMIT 1`, [company_id, it.product_name]);
+          pid = p?.id || null;
+        }
+        if (!pid) continue; // ما دخل المخزون أصلًا (بضاعة بالطريق)
+        const qty = parseFloat(it.qty) || 0;
+        if (qty <= 0) continue;
+        // كمية هذي الفاتورة لازم تكون كاملة بطبقتها — لو نقصت يعني انباع منها
+        const { rows: [lot] } = await client.query(
+          `SELECT COALESCE(SUM(qty_remaining),0)::float AS rem, COUNT(*)::int AS n FROM stock_lots
+           WHERE company_id = $1 AND product_id = $2 AND source_type = 'purchase' AND source_id = $3`, [company_id, pid, pur.id]);
+        const { rows: [ps] } = await client.query(
+          `SELECT COALESCE(qty,0)::float AS qty FROM product_stock WHERE product_id = $1 AND warehouse_id = $2`, [pid, warehouse_id]);
+        const available = lot.n ? lot.rem : (ps?.qty || 0);
+        if (available + 1e-6 < qty) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ success: false, code: 'SOLD',
+            message: `انباع جزء من «${it.product_name}» من هذي الفاتورة — صحّحها بمرتجع مشتريات بالكمية الباقية بدل العكس` });
+        }
+        await stock.deduct(client, {
+          company_id, product_id: pid, warehouse_id, qty,
+          source_type: 'purchase_reversal', source_id: pur.id, user_id,
+          reason: 'عكس فاتورة شراء مسجّلة بالخطأ', reference: pur.purchase_no,
+          preferLot: { source_type: 'purchase', source_id: pur.id },
+        });
+        removed.push({ product_id: pid, name: it.product_name, qty });
+      }
+    }
+
+    // المتبقي على الفاتورة يرجع من رصيد المورد (المدفوع يرجع للخزينة بالجهاز)
+    const remaining = parseFloat(pur.remaining) || 0;
+    if (pur.supplier_id && remaining > 0) {
+      await client.query(`UPDATE suppliers SET balance = balance - $1 WHERE id = $2 AND company_id = $3`, [remaining, pur.supplier_id, company_id]);
+    }
+    await client.query(
+      `UPDATE purchases SET status = 'reversed', remaining = 0, reversed_at = NOW(), reversed_by = $1, reversal_reason = $2 WHERE id = $3`,
+      [user_id, reason, pur.id]);
+    await client.query('COMMIT');
+    res.json({ success: true, data: { removed, paid_amount: parseFloat(pur.paid_amount) || 0, remaining } });
+
+    logAudit({
+      companyId: company_id, userId: user_id, action: 'purchase_reverse',
+      entityType: 'purchase', entityId: pur.id, ip: req.ip,
+      oldValues: { status: pur.status, remaining: pur.remaining }, newValues: { status: 'reversed' },
+      details: `عكس فاتورة شراء ${pur.purchase_no} — ${Number(pur.total).toFixed(2)} ر.س — السبب: ${reason}`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
 };

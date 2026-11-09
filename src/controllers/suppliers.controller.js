@@ -145,6 +145,13 @@ exports.statement = async (req, res, next) => {
              0 AS debit, total AS credit
       FROM purchases
       WHERE supplier_id = $1 AND company_id = $2 ${dateFilter}
+      UNION ALL
+      -- العكس سطر مستقل بتاريخه، والفاتورة الأصلية تبقى ظاهرة
+      SELECT purchase_no AS ref, reversed_at::date AS date, 'عكس فاتورة مشتريات' AS type,
+             total AS debit, 0 AS credit
+      FROM purchases
+      WHERE supplier_id = $1 AND company_id = $2 AND status = 'reversed' AND reversed_at IS NOT NULL
+        ${dateFilter.replace(/date/g, 'reversed_at::date')}
     `, params);
 
     const { rows: payments } = await db.query(`

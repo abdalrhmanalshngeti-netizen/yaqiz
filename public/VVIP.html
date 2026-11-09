@@ -3044,7 +3044,7 @@ function renderDashboard(c) {
   // الفرع فقط (الفواتير/المشتريات/الورديات فيها branch_id أصلاً)؛ "الكل" = بلا فلترة
   const viewBid = getViewBranchId();
   const dashInvoices  = filterByViewBranch(db.invoices);
-  const dashPurchases = filterByViewBranch(db.purchases);
+  const dashPurchases = filterByViewBranch(db.purchases).filter(p=>p.status!=='معكوسة');
 
   const todaySales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
   const monthSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
@@ -5348,7 +5348,7 @@ function renderPurchMainContent() {
 function renderPurchasesInner(c) {
   const db = getDB();
   const branchPurchases = filterByViewBranch(db.purchases);
-  const goods = branchPurchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة');
+  const goods = branchPurchases.filter(p=>(p.purchase_type==='goods'||p.category==='بضاعة')&&p.status!=='معكوسة');
   const goodsTotal = goods.reduce((s,p)=>s+p.total,0);
 
   c.innerHTML = `
@@ -5362,14 +5362,14 @@ function renderPurchasesInner(c) {
     <div id="purch-stats-grid" class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
       <div class="stat-card">
         <div class="stat-icon amber">${icon('package',20)}</div>
-        <div class="stat-label">${lang==='ar'?'مصاريف تشغيلية':'Operating Expenses'}</div>
+        <div class="stat-label">${lang==='ar'?'مشتريات البضاعة':'Goods purchases'}</div>
         <div class="stat-value" style="font-size:18px;">${fmtMoney(goodsTotal)}</div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${goods.length} ${lang==='ar'?'فاتورة':'invoices'}</div>
       </div>
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon">${icon('percent',20)}</div>
         <div class="stat-label">${lang==='ar'?'إجمالي ضريبة المدخلات':'Total Input VAT'}</div>
-        <div class="stat-value" style="font-size:18px;">${fmtMoney(branchPurchases.reduce((s,p)=>s+p.vat,0))}</div>
+        <div class="stat-value" style="font-size:18px;">${fmtMoney(branchPurchases.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.vat),0))}</div>
       </div>
       <div class="stat-card" style="cursor:default;">
         <div class="stat-icon green">${icon('layers',20)}</div>
@@ -5401,7 +5401,7 @@ function renderPurchContent() {
   <div id="purch-table" class="card">
     <div class="card-head">
       <h3>${isGoods
-        ?(lang==='ar'?'📦 البضاعة والموردون — تكلفة البضاعة المباعة (COGS)':'📦 Operating Expenses — Cost of Goods Sold (COGS)')
+        ?(lang==='ar'?'📦 البضاعة والموردون — تكلفة البضاعة المباعة (COGS)':'📦 Goods & suppliers — Cost of Goods Sold (COGS)')
         :(lang==='ar'?'💼 المصاريف الإدارية — Administrative Expenses (OPEX)':'💼 Administrative Expenses (OPEX)')}</h3>
       <div style="font-size:11px;color:var(--text-muted);text-align:end;">
         ${isGoods
@@ -5425,7 +5425,7 @@ function renderPurchContent() {
           ?`<tr><td colspan="${isGoods?9:7}" style="text-align:center;padding:32px;color:var(--text-muted);">${emptyMsg}</td></tr>`
           :rows.map(p=>{
             const _itemDesc = p.items?.length ? p.items.map(i=>i.name).join('، ') : p.description;
-            return `<tr>
+            return `<tr style="${p.status==='معكوسة'?'opacity:.55':''}">
           <td>
             <div>${fmtDate(p.created_at)}</div>
             <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
@@ -5437,8 +5437,8 @@ function renderPurchContent() {
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
           <td><b>${fmtMoney(p.total)}</b></td>
           ${isGoods?`
-          <td style="color:var(--text-muted);font-size:12px;">${p.payment_method||'—'}
-            ${p.items?.some(i=>!i.stocked)?(()=>{
+          <td style="color:var(--text-muted);font-size:12px;">${p.status==='معكوسة'?`<span class="badge badge-red" style="font-size:10px;" title="${sanitize(p.reversal_reason||'')}">${lang==='ar'?'معكوسة':'Reversed'}</span>`:sanitize(dl(p.payment_method)||'—')}
+            ${p.status!=='معكوسة'&&p.items?.some(i=>!i.stocked)?(()=>{
               const daysAgo = Math.floor((Date.now()-new Date(p.created_at).getTime())/86400000);
               const aging = daysAgo>=7;
               return `<div style="margin-top:4px;"><span class="badge ${aging?'badge-red':'badge-amber'}" style="font-size:10px;" title="${lang==='ar'?'بعض الأصناف لم تُدرج بالمخزون بعد — مسجّلة كبضاعة بالطريق':'Some items not yet added to inventory — recorded as goods in transit'}">📦 ${lang==='ar'?'بضاعة بالطريق':'In transit'}${daysAgo>0?` · ${lang==='ar'?`${daysAgo} يوم`:`${daysAgo}d`}`:''}</span></div>`;
@@ -5447,7 +5447,8 @@ function renderPurchContent() {
           <td>
             <div style="display:flex;gap:4px;">
               <button class="icon-btn" style="width:28px;height:28px;" data-action="printPurchaseInvoice" data-args="${JSON.stringify([p.id])}" title="${lang==='ar'?'عرض PDF':'View PDF'}">${icon('file-text',14)}</button>
-              ${p.items?.some(i=>!i.stocked)?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" data-action="retryInventoryAdd" data-args="${JSON.stringify([p.id])}" title="${lang==='ar'?'استكمال الإدراج بالمخزون':'Complete inventory add'}">${icon('package-plus',14)}</button>`:''}
+              ${has('accounts.manage')&&p.status!=='معكوسة'?`<button class="icon-btn" style="width:28px;height:28px;" data-action="showPurchaseCorrection" data-args="${JSON.stringify([p.id])}" title="${lang==='ar'?'تصحيح':'Correct'}" aria-label="${lang==='ar'?'تصحيح':'Correct'}">${icon('rotate-ccw',14)}</button>`:''}
+              ${p.status!=='معكوسة'&&p.items?.some(i=>!i.stocked)?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" data-action="retryInventoryAdd" data-args="${JSON.stringify([p.id])}" title="${lang==='ar'?'استكمال الإدراج بالمخزون':'Complete inventory add'}">${icon('package-plus',14)}</button>`:''}
             </div>
           </td>`:''}
         </tr>`;}).join('')}
@@ -5455,12 +5456,12 @@ function renderPurchContent() {
       ${rows.length>0?`<tfoot>
         <tr style="background:var(--primary-soft);font-weight:900;">
           <td colspan="4" style="padding:12px 14px;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
-          <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.amount,0))}</td>
-          <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.vat,0))}</td>
-          <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(rows.reduce((s,p)=>s+p.total,0))}</td>
+          <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.amount),0))}</td>
+          <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.vat),0))}</td>
+          <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.total),0))}</td>
           ${isGoods?`
-          <td style="padding:12px 14px;color:var(--success);">${fmtMoney(rows.reduce((s,p)=>s+(p.paid_amount||0),0))}</td>
-          <td style="padding:12px 14px;color:var(--danger);">${fmtMoney(rows.reduce((s,p)=>s+Math.max(0,(p.total||0)-(p.paid_amount||0)),0))}</td>
+          <td style="padding:12px 14px;color:var(--success);">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:(p.paid_amount||0)),0))}</td>
+          <td style="padding:12px 14px;color:var(--danger);">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:Math.max(0,(p.total||0)-(p.paid_amount||0))),0))}</td>
           <td></td>`:''}
         </tr>
       </tfoot>`:''}
@@ -8307,7 +8308,12 @@ function calcReportData(db, filterFn) {
   // الفواتير الملغاة تُستبعد دائماً — عُكس أثرها بالكامل بقيد ومخزون عكسي عند الإلغاء
   const activeInvoices = db.invoices.filter(i=>i.status!=='ملغاة');
   const invs = filterFn ? activeInvoices.filter(filterFn) : activeInvoices;
-  const purchs = filterFn ? db.purchases.filter(filterFn) : db.purchases;
+  // فاتورة معكوسة: تبقى بفترتها الأصلية، وعكسها سطر سالب بتاريخ التصحيح (نفس القيد العكسي)
+  const _revP = (db.purchases||[]).filter(p=>p.status==='معكوسة'&&p.reversed_at).map(p=>({ ...p, id:'rev-'+p.id,
+    created_at:p.reversed_at, date:p.reversed_at, amount:-(p.amount||0), vat:-(p.vat||0), total:-(p.total||0), items:[],
+    description:(lang==='ar'?'عكس: ':'Reversal: ')+(p.description||p.category||''), _reversal:true }));
+  const _allPurchs = [...(db.purchases||[]), ..._revP];
+  const purchs = filterFn ? _allPurchs.filter(filterFn) : _allPurchs;
   const rets = filterFn ? (db.returns||[]).filter(filterFn) : (db.returns||[]);
 
   const returnedSalesVat = rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.vat_amount||0),0);
@@ -10204,6 +10210,7 @@ function renderEmployees(c) {
           <td><span class="badge ${e.status==='active'?'badge-green':'badge-red'}">${e.status==='active'?(lang==='ar'?'نشط':'Active'):(lang==='ar'?'موقوف':'Inactive')}</span></td>
           ${has('employees.manage')?`<td>
             ${e.status==='active'?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" data-action="showPaySalaryModal" data-args="${JSON.stringify([e.id])}" title="${lang==='ar'?'دفع الراتب':'Pay Salary'}">${icon('banknote',13)}</button>`:''}
+            <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" data-action="showSalaryHistory" data-args="${JSON.stringify([e.id])}" title="${lang==='ar'?'دفعات الراتب':'Salary payments'}" aria-label="${lang==='ar'?'دفعات الراتب':'Salary payments'}">${icon('receipt',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" data-action="showEmployeeModal" data-args="${JSON.stringify([e.id])}">${icon('edit',13)}</button>
             <button class="icon-btn" style="width:28px;height:28px;margin-inline-start:4px;" data-action="deleteEmployee" data-args="${JSON.stringify([e.id])}">${icon('trash-2',13)}</button>
           </td>`:''}
@@ -10499,9 +10506,10 @@ function renderObligationsInner(c) {
 function renderGeneralExpenses(c) {
   const db = getDB();
   const branchPurchases = filterByViewBranch(db.purchases);
-  const opex = branchPurchases.filter(p=>p.purchase_type==='opex');
+  const _opexAll = branchPurchases.filter(p=>p.purchase_type==='opex');
+  const opex = _opexAll.filter(p=>p.status!=='معكوسة');
   const opexTotal = opex.reduce((s,p)=>s+p.total,0);
-  const rows = [...opex].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const rows = [..._opexAll].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
 
   c.innerHTML = `
   <div>
@@ -10538,11 +10546,12 @@ function renderGeneralExpenses(c) {
           <th>${t('amount')}</th>
           <th>${lang==='ar'?'ضريبة 15%':'VAT 15%'}</th>
           <th>${t('total')}</th>
+          <th></th>
         </tr></thead>
         <tbody>
           ${rows.length===0
-            ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد مصاريف عامة':'No general expenses'}</td></tr>`
-            : rows.map(p=>`<tr>
+            ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد مصاريف عامة':'No general expenses'}</td></tr>`
+            : rows.map(p=>`<tr style="${p.status==='معكوسة'?'opacity:.55':''}">
               <td>
                 <div>${fmtDate(p.created_at)}</div>
                 <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
@@ -10553,14 +10562,17 @@ function renderGeneralExpenses(c) {
               <td>${fmtMoney(p.amount)}</td>
               <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
               <td><b>${fmtMoney(p.total)}</b></td>
+              <td>${p.status==='معكوسة'?`<span class="badge badge-red" style="font-size:10px;" title="${sanitize(p.reversal_reason||'')}">${lang==='ar'?'معكوس':'Reversed'}</span>`
+                :(has('accounts.manage')?`<button class="icon-btn" style="width:28px;height:28px;" data-action="showPurchaseCorrection" data-args="${JSON.stringify([p.id])}" title="${lang==='ar'?'تصحيح':'Correct'}" aria-label="${lang==='ar'?'تصحيح':'Correct'}">${icon('rotate-ccw',14)}</button>`:'')}</td>
             </tr>`).join('')}
         </tbody>
         ${rows.length>0?`<tfoot>
           <tr style="background:var(--primary-soft);font-weight:900;">
             <td colspan="4" style="padding:12px 14px;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
-            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.amount,0))}</td>
-            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+p.vat,0))}</td>
-            <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(rows.reduce((s,p)=>s+p.total,0))}</td>
+            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.amount),0))}</td>
+            <td style="padding:12px 14px;">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.vat),0))}</td>
+            <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(rows.reduce((s,p)=>s+(p.status==='معكوسة'?0:p.total),0))}</td>
+            <td></td>
           </tr>
         </tfoot>`:''}
       </table></div>
@@ -11329,7 +11341,7 @@ function printVoucher(id) {
 }
 
 function deleteReceipt(id) {
-  if(!confirm(lang==='ar'?'حذف السند؟ سيتم عكس جميع التأثيرات المحاسبية.':'Delete voucher? All accounting effects will be reversed.'))return;
+  if(!confirm(lang==='ar'?'إلغاء السند؟ ينضاف قيد عكسي يلغي كل أثره (القيد الأصلي يبقى بالدفتر).':'Cancel voucher? A reversing entry will cancel all its effects (the original stays in the books).'))return;
   const db=getDB();
   const v=(db.receipts||[]).find(r=>r.id===id);
   if(!v){db.receipts=(db.receipts||[]).filter(r=>r.id!==id);saveDB(db);renderPage();return;}
@@ -11346,8 +11358,19 @@ function deleteReceipt(id) {
     description:`عكس ${isReceipt?'سند قبض':'سند صرف'} محذوف ${v.voucher_no}: ${v.party||''}`, reference:`DEL-${v.voucher_no}`,
     date:new Date().toISOString(), method:v.method||'نقدي', branch_id:resolveActiveBranchId() });
 
-  // 2. حذف القيد اليومي (بالرقم الحالي أو المحلي الأصلي قبل المزامنة)
-  if(db.journal) db.journal = db.journal.filter(j=>!_vRefs.includes(j.ref));
+  // 2. القيد اليومي ما يُحذف (الدفاتر لا تُمحى) — قيد عكسي يلغي أثره
+  // نفس القيد ممكن يكون موجود مرتين محليًا (نسخته + نسخة مسحوبة من السيرفر قبل
+  // ما يرجع رقمه) — يُعكس مرة وحدة فقط لكل قيد فعلي
+  const _revKeys = new Set();
+  for (const j of (db.journal||[]).filter(j=>_vRefs.includes(j.ref) && !jeReversalOf(db, j))) {
+    const _k = jeKey(j) || ('L'+j.id);
+    if (_revKeys.has(_k)) continue; _revKeys.add(_k);
+    if (!db.nextId.journal) db.nextId.journal = 1;
+    db.journal.push({ id:db.nextId.journal++, date:new Date().toISOString(),
+      description:`عكس ${isReceipt?'سند قبض':'سند صرف'} ملغى ${v.voucher_no}: ${v.party||''}`,
+      entries:(j.entries||[]).map(e=>({...e, side:e.side==='debit'?'credit':'debit'})),
+      ref:`REV-${j.ref}#${jeKey(j)||('L'+j.id)}` });
+  }
 
   // 3. عكس الفاتورة/الفواتير (إذا سند قبض)
   if(isReceipt) {
@@ -11403,7 +11426,7 @@ function deleteReceipt(id) {
 
   db.receipts=(db.receipts||[]).filter(r=>r.id!==id);
   saveDB(db);
-  showToast(`✅ ${lang==='ar'?'تم حذف السند وعكس جميع التأثيرات':'Voucher deleted & all effects reversed'}`);
+  showToast(`✅ ${lang==='ar'?'انلغى السند بقيد عكسي':'Voucher cancelled with a reversing entry'}`);
   renderPage();
 }
 
@@ -13779,6 +13802,78 @@ function renderBalanceSheet(c) {
 
 
 // ============ JOURNAL ENTRIES (القيود اليومية) ============
+// ============ التصحيح بقيد عكسي ============
+// الدفاتر ما يُحذف منها شي ولا يُعدَّل: الغلط يتصحّح بقيد عكسي بتاريخ اليوم يرجّع
+// أثره، والأصل يبقى ظاهر بعلامة «معكوس». مفتاح القيد الثابت بين الأجهزة هو رقمه
+// بالسيرفر، فالقيد لازم يكون متزامن قبل عكسه (وإلا ممكن ينعكس مرتين من جهازين)
+function jeKey(j) { return j && j._serverId ? String(j._serverId) : null; }
+function jeReversalOf(db, j) {
+  const k = jeKey(j);
+  return k ? (db.journal || []).find(x => /^REV-/.test(x.ref || '') && (x.ref || '').endsWith('#' + k)) || null : null;
+}
+function isReversalEntry(j) { return /^REV-/.test(j?.ref || ''); }
+function postReversalEntry(db, j, description) {
+  if (!db.nextId.journal) db.nextId.journal = 1;
+  const entry = { id: db.nextId.journal++, date: new Date().toISOString(), description,
+    entries: (j.entries || []).map(e => ({ ...e, side: e.side === 'debit' ? 'credit' : 'debit' })),
+    ref: `REV-${String(j.ref || 'JE').slice(0, 60)}#${jeKey(j)}`,
+    created_by: currentUser?.username, created_at: new Date().toISOString() };
+  db.journal.push(entry);
+  return entry;
+}
+// نافذة سبب التصحيح — موحّدة لكل أنواع العكس
+function askCorrectionReason(title, body, onConfirm) {
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:480px;">
+      <div class="modal-head"><h3>↩️ ${sanitize(title)}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
+      <div style="font-size:13px;line-height:1.9;color:var(--text-muted);margin-bottom:12px;">${body}</div>
+      <label class="form-label">${lang==='ar'?'سبب التصحيح *':'Reason for correction *'}</label>
+      <textarea class="input" id="corr-reason" rows="2" placeholder="${lang==='ar'?'مثال: المبلغ انكتب غلط':'e.g. Amount was entered wrong'}"></textarea>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary btn-full" id="corr-ok">${lang==='ar'?'اعكس القيد':'Post reversing entry'}</button>
+        <button class="btn btn-outline" data-action="closeModal">${lang==='ar'?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div>`;
+  el('corr-ok').addEventListener('click', () => {
+    const reason = (el('corr-reason').value || '').trim();
+    if (!reason) { showToast(lang==='ar'?'اكتب سبب التصحيح':'Enter a reason','error'); el('corr-reason').focus(); return; }
+    onConfirm(reason);
+  });
+  refreshIcons();
+}
+
+// قيد يدوي مسجّل بالغلط → عكسه (ومعه أثره على الخزينة لو مسّ النقدية)
+function reverseManualJournal(id) {
+  const db = getDB();
+  const j = (db.journal || []).find(x => x.id === id);
+  if (!j) return;
+  if (!jeKey(j)) { showToast(lang==='ar'?'القيد لسه ما تزامن مع السيرفر — انتظر ثواني وحاول':'Entry not synced yet — try again in a moment','error'); return; }
+  if (jeReversalOf(db, j)) { showToast(lang==='ar'?'هذا القيد معكوس مسبقًا':'Already reversed','error'); return; }
+  askCorrectionReason(lang==='ar'?'عكس قيد يدوي':'Reverse manual entry',
+    lang==='ar'?'القيد الأصلي يبقى بالدفتر، وينضاف قيد عكسي بتاريخ اليوم يلغي أثره. بعدها سجّل القيد الصحيح.':'The original stays in the books; a reversing entry dated today cancels its effect. Then record the correct entry.',
+    (reason) => guardClosedPeriod(new Date().toISOString().slice(0,10), () => {
+      const db2 = getDB();
+      const j2 = (db2.journal || []).find(x => x.id === id);
+      if (!j2 || jeReversalOf(db2, j2)) return;
+      const rev = postReversalEntry(db2, j2, `عكس قيد يدوي #${j2.id}: ${j2.description} — السبب: ${reason}`);
+      const cashNet = Math.round(rev.entries.filter(e=>String(e.account_code)==='1100')
+        .reduce((s,e)=>s+(e.side==='debit'?1:-1)*(Number(e.amount)||0),0)*100)/100;
+      if (Math.abs(cashNet) >= 0.01) {
+        db2.treasury.balance = Math.round((db2.treasury.balance + cashNet)*100)/100;
+        db2.treasury.moves.unshift({ id:nextId(db2,'treasury'), type:cashNet>0?'in':'out', amount:Math.abs(cashNet),
+          description:`عكس قيد يدوي #${j2.id}`, reference:`REV-JE-${j2.id}`, date:new Date().toISOString(),
+          method:'نقدي', _manual:true, branch_id:resolveActiveBranchId() });
+      }
+      saveDB(db2);
+      logActivity('قيود يومية', `عكس قيد يدوي #${j2.id} — السبب: ${reason}`);
+      showToast(lang==='ar'?'✅ انعكس القيد — سجّل القيد الصحيح الحين':'✅ Entry reversed — now record the correct one');
+      closeModal(); renderPage();
+    }));
+}
+
 function renderJournal(c) {
   const db = getDB();
   const entries = [...(db.journal||[])].reverse();
@@ -13803,7 +13898,11 @@ function renderJournal(c) {
           :entries.flatMap(e=>e.entries.map((row,i)=>`<tr style="${i===0?'border-top:2px solid var(--border-strong)':''}">
             ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${e.id}</td>
             <td rowspan="${e.entries.length}" style="font-size:11px;vertical-align:top;">${fmtDate(e.date)}</td>
-            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(dl(e.description))}</td>`:''}
+            <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(dl(e.description))}
+              ${jeReversalOf(db, e)?`<div><span class="badge badge-red" style="font-size:10px;">${lang==='ar'?'معكوس':'Reversed'}</span></div>`:''}
+              ${isReversalEntry(e)?`<div><span class="badge badge-amber" style="font-size:10px;">${lang==='ar'?'قيد عكسي':'Reversing entry'}</span></div>`:''}
+              ${e.ref==='MANUAL'&&has('accounts.manage')&&!jeReversalOf(db, e)?`<button class="btn btn-outline btn-sm" style="margin-top:6px;padding:3px 10px;font-size:11px;" data-action="reverseManualJournal" data-args="${JSON.stringify([e.id])}">↩️ ${lang==='ar'?'عكس القيد':'Reverse'}</button>`:''}
+            </td>`:''}
             <td style="padding-${lang==='ar'?'right':'left'}:${row.side==='credit'?'24':'8'}px;font-weight:${row.side==='debit'?700:400};">${sanitize(accLabel(row.account_code, row.account))} <code style="font-size:10px;">${sanitize(row.account_code)}</code></td>
             <td style="color:var(--danger);font-weight:700;">${row.side==='debit'?fmtMoney(row.amount):'-'}</td>
             <td style="color:var(--success);font-weight:700;">${row.side==='credit'?fmtMoney(row.amount):'-'}</td>
@@ -15919,6 +16018,7 @@ function saveQuickPayPurchase(purchaseId) {
     description: lang==='ar'?`سداد مشتريات ${p.invoice_no||'#'+p.id}`:`Purchase payment ${p.invoice_no||'#'+p.id}`,
     method: el('qpp-method').value,
     ref: p.invoice_no||'',
+    linked_purchase_id: p.id, party_id: p.supplier_id || null,
     date: new Date().toISOString().slice(0,10),
     created_at: new Date().toISOString()
   };
@@ -18289,8 +18389,13 @@ function obSaveAll() {
   if (!db.journal) db.journal = [];
   if (!db.nextId.journal) db.nextId.journal = 1;
   if (isEdit) {
-    const oldJIdx = db.journal.findIndex(j => j.ref === 'OPENING');
-    if (oldJIdx >= 0) db.journal.splice(oldJIdx, 1);
+    // القيد الافتتاحي القديم ما يُحذف — قيد عكسي يلغيه، ثم الجديد ينضاف عادي
+    for (const oj of db.journal.filter(j => j.ref === 'OPENING' && !jeReversalOf(db, j) && !db.journal.some(x => x.ref === `REV-OPENING#L${j.id}`))) {
+      db.journal.push({ id:db.nextId.journal++, date:new Date().toISOString(),
+        description:'عكس القيد الافتتاحي السابق — تعديل الأرصدة الافتتاحية',
+        entries:(oj.entries||[]).map(e=>({...e, side:e.side==='debit'?'credit':'debit'})),
+        ref:`REV-OPENING#${jeKey(oj)||('L'+oj.id)}` });
+    }
   }
   const jEntries = [];
   if (totalCash>0)    jEntries.push({ account:'النقدية والبنك',      account_code:'1100', side:'debit',  amount:totalCash    });
@@ -18846,12 +18951,247 @@ function openPurchaseFormWithAIData(data, usage) {
   }
 }
 
-// فاتورة شراء بنفس رقم مرجع المورد لنفس المورد (غير ملغاة)
+// فاتورة شراء بنفس رقم مرجع المورد لنفس المورد (غير ملغاة ولا معكوسة)
 function _findDuplicatePurchase(db, vendor, ref) {
   const r = String(ref || '').trim(), v = String(vendor || '').trim().toLowerCase();
   if (!r) return null;
-  return (db.purchases || []).find(p => String(p.supplier_ref || '').trim() === r && p.status !== 'ملغاة' &&
+  return (db.purchases || []).find(p => String(p.supplier_ref || '').trim() === r && p.status !== 'ملغاة' && p.status !== 'معكوسة' &&
     (!v || String(p.vendor || '').trim().toLowerCase() === v)) || null;
+}
+
+// ============ تصحيح فاتورة شراء / مصروف ============
+// نوعان نظاميًا: (1) انسجّلت بالغلط → قيد عكسي بتاريخ اليوم يلغي أثرها كامل
+// والأصل يبقى «معكوسة»، ثم تُسجَّل الصحيحة. (2) مرتجع أو خصم فعلي من المورد →
+// هذا ما هو تصحيح خطأ، يحتاج إشعار دائن من المورد ويُسجَّل مرتجع مشتريات
+function _purchaseLaterPayments(db, p) {
+  return (db.receipts || []).filter(v => v.type === 'payment' && (v.linked_purchase_id === p.id
+    || (v.applied_purchases || []).some(a => a.id === p.id)
+    // سندات السداد السريع القديمة (قبل ربطها بالفاتورة) — وصفها فيه رقم الفاتورة
+    || (!v.linked_purchase_id && new RegExp('#' + p.id + '(\\D|$)').test(v.description || '') && (v.party || '') === (p.vendor || ''))));
+}
+function showPurchaseCorrection(id) {
+  const db = getDB(); const p = db.purchases.find(x => x.id === id); if (!p) return;
+  if (p.status === 'معكوسة') { showToast(lang==='ar'?'هذي الفاتورة معكوسة مسبقًا':'Already reversed','error'); return; }
+  const A = lang === 'ar', isOpex = p.purchase_type === 'opex';
+  const origMonth = localDateStr(p.created_at).slice(0, 7), nowMonth = localDateStr(new Date()).slice(0, 7);
+  const vatNote = p.vat > 0 && origMonth < nowMonth
+    ? `<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--warning-bg);color:var(--warning);font-size:12.5px;line-height:1.8;">⚠️ ${A
+        ? `القيد العكسي بتاريخ اليوم، فضريبة المدخلات (${fmtMoney(p.vat)}) تنخصم من إقرار الفترة الحالية. لو إقرار فترة الفاتورة انقدّم والفرق بالضريبة 15,000 ريال أو أكثر، لازم تعدّل الإقرار السابق أو تبلّغ الهيئة خلال 20 يوم من اكتشاف الخطأ.`
+        : `The reversing entry is dated today, so its input VAT (${fmtMoney(p.vat)}) comes off the current period's return. If the original period's return was already filed and the VAT difference is SAR 15,000 or more, amend that return or notify ZATCA within 20 days of finding the error.`}</div>` : '';
+  const opt = (val, title, desc, checked) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;margin-bottom:8px;">
+      <input type="radio" name="corr-type" value="${val}" ${checked?'checked':''} style="margin-top:4px;">
+      <span><b style="font-size:13.5px;">${title}</b><div style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-top:2px;">${desc}</div></span></label>`;
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:520px;">
+      <div class="modal-head"><h3>↩️ ${isOpex?(A?'تصحيح مصروف':'Correct expense'):(A?'تصحيح فاتورة شراء':'Correct purchase invoice')}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
+      <div style="font-size:13px;margin-bottom:12px;"><b>${sanitize(p.vendor)}</b> — ${fmtMoney(p.total)} — ${fmtDate(p.created_at)}${p.purchase_no?` — <code>${sanitize(p.purchase_no)}</code>`:''}</div>
+      ${opt('wrong', A?'انسجّلت غلط':'Recorded by mistake',
+        A?'مبلغ أو صنف أو مورد غلط، أو مسجّلة مرتين. ينضاف قيد عكسي بتاريخ اليوم يلغي أثرها كامل'+(isOpex?' (المصروف والضريبة والخزينة)':' (المخزون والضريبة والمورد أو الخزينة)')+'، والأصل يبقى ظاهر بعلامة «معكوسة». بعدها تسجّل الصحيحة.'
+         :'Wrong amount, item or supplier, or recorded twice. A reversing entry dated today cancels its full effect, and the original stays visible as "Reversed". Then you record the correct one.', true)}
+      ${isOpex?'':opt('return', A?'رجّعت بضاعة للمورد أو عطاك خصم':'Returned goods or got a discount from the supplier',
+        A?'هذا مو خطأ تسجيل — هذا مرتجع مشتريات ويحتاج إشعار دائن من المورد. بنفتح لك شاشة المرتجع.':'Not a data-entry error — it’s a purchase return and needs a credit note from the supplier. We’ll open the return screen.', false)}
+      <div id="corr-reason-wrap"><label class="form-label" style="margin-top:6px;">${A?'سبب التصحيح *':'Reason *'}</label>
+      <textarea class="input" id="corr-reason" rows="2" placeholder="${A?'مثال: المبلغ انكتب 1,100 والصحيح 1,000':'e.g. Entered 1,100, correct is 1,000'}"></textarea></div>
+      ${vatNote}
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-primary btn-full" id="corr-go" data-action="doPurchaseCorrection" data-args="${JSON.stringify([id])}">${A?'متابعة':'Continue'}</button>
+        <button class="btn btn-outline" data-action="closeModal">${A?'إلغاء':'Cancel'}</button>
+      </div>
+    </div>
+  </div>`;
+  mc.querySelectorAll('input[name="corr-type"]').forEach(r => r.addEventListener('change', () => {
+    el('corr-reason-wrap').style.display = r.value === 'return' && r.checked ? 'none' : '';
+  }));
+  refreshIcons();
+}
+function doPurchaseCorrection(id) {
+  const db = getDB(); const p = db.purchases.find(x => x.id === id); if (!p) return;
+  const A = lang === 'ar';
+  const type = document.querySelector('input[name="corr-type"]:checked')?.value || 'wrong';
+  if (type === 'return') {
+    closeModal();
+    showReturnModal('purchases');
+    const link = el('rt-link');
+    if (link) { link.value = String(id); link.dispatchEvent(new Event('change', { bubbles: true })); }
+    const rr = el('rt-reason');
+    if (rr) { rr.value = A ? 'إشعار دائن من المورد رقم: ' : 'Supplier credit note no.: '; rr.focus(); }
+    return;
+  }
+  const reason = (el('corr-reason')?.value || '').trim();
+  if (!reason) { showToast(A?'اكتب سبب التصحيح':'Enter a reason','error'); el('corr-reason')?.focus(); return; }
+  if (!p.purchase_no) { showToast(A?'الفاتورة لسه ما تزامنت مع السيرفر — انتظر ثواني وحاول':'Not synced yet — try again in a moment','error'); return; }
+  if ((db.returns || []).some(r => r.type === 'purchases' && r.linked_id === p.id)) {
+    showToast(A?'على هذي الفاتورة مرتجع مسجّل — صحّح الفرق بمرتجع مشتريات بدل العكس':'This invoice has a return — correct the difference with a purchase return instead','error'); return;
+  }
+  const pays = _purchaseLaterPayments(db, p);
+  if (pays.length) {
+    showToast(A?`على هذي الفاتورة سند صرف (${pays.map(v=>v.voucher_no).join('، ')}) — ألغِ السند أول من «سندات القبض والصرف»، ثم اعكس الفاتورة`
+               :`This invoice has payment voucher(s) ${pays.map(v=>v.voucher_no).join(', ')} — cancel them first from Vouchers, then reverse the invoice`,'error'); return;
+  }
+  guardClosedPeriod(localDateStr(new Date()), (tok) => _reversePurchaseActual(id, reason, tok));
+}
+async function _reversePurchaseActual(id, reason, overrideToken) {
+  const A = lang === 'ar';
+  if (typeof window._cloudApiFetch !== 'function') { showToast(A?'التصحيح يحتاج اتصال بالإنترنت':'Correction needs an internet connection','error'); return; }
+  const btn = el('corr-go'); if (btn) { btn.disabled = true; btn.textContent = A ? 'جاري العكس…' : 'Reversing…'; }
+  let res;
+  try {
+    res = await window._cloudApiFetch('POST', `/api/purchases/${id}/reverse`, { reason }, overrideToken ? { 'X-Period-Override-Token': overrideToken } : undefined);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = A ? 'متابعة' : 'Continue'; }
+    showToast('⚠️ ' + (e.message || (A?'تعذّر العكس':'Could not reverse')), 'error'); return;
+  }
+  if (!res?.success) { if (btn) btn.disabled = false; return; }
+  const db = getDB(); const p = db.purchases.find(x => x.id === id); if (!p) return;
+  const isOpex = p.purchase_type === 'opex';
+  const amount = Math.round((parseFloat(p.amount) || 0) * 100) / 100;
+  const vat = Math.round((parseFloat(p.vat) || 0) * 100) / 100;
+  const T = Math.round((amount + vat) * 100) / 100;
+  // المتبقي من السيرفر (قبل العكس) هو المرجع: المدفوع = الإجمالي − المتبقي
+  const remaining = Math.min(T, Math.max(0, Math.round((parseFloat(res.data?.remaining) || 0) * 100) / 100));
+  const paid = Math.round((T - remaining) * 100) / 100;
+
+  // المخزون: نفس الكميات اللي شالها السيرفر من طبقة هذي الفاتورة
+  const whId = p.warehouse_id || resolveWarehouseIdForBranch(db, p.branch_id) || resolveActiveWarehouseId();
+  let stocked = 0;
+  if (!db.stock_moves) db.stock_moves = [];
+  if (!db.nextId.stock_move) db.nextId.stock_move = 1;
+  for (const r of (res.data?.removed || [])) {
+    const prod = db.products.find(x => x.id === r.product_id) || db.products.find(x => (x.name||'').trim() === (r.name||'').trim());
+    const it = (p.items || []).find(i => (i.name||'').trim().toLowerCase() === (r.name||'').trim().toLowerCase());
+    stocked += (parseFloat(r.qty) || 0) * (parseFloat(it?.price) || parseFloat(prod?.buy_price) || 0);
+    if (prod) {
+      const before = prod.qty;
+      mutateWarehouseStock(db, prod.id, whId, -(parseFloat(r.qty) || 0));
+      db.stock_moves.push({ id: db.nextId.stock_move++, product_id: prod.id, product_name: prod.name, product_code: prod.code, warehouse_id: whId,
+        type: 'out', qty: parseFloat(r.qty) || 0, balance_before: before, balance_after: prod.qty,
+        reason: `عكس فاتورة شراء ${p.purchase_no}`, reference: `REV-${p.purchase_no}`, date: new Date().toISOString() });
+    }
+  }
+  stocked = Math.min(amount, Math.round(stocked * 100) / 100);
+
+  // القيد العكسي: يرجّع كل طرف من أطراف قيد الفاتورة الأصلي
+  const entries = [];
+  if (isOpex) entries.push({ account: p.category || (A?'مصاريف تشغيلية':'Operating expenses'), account_code: '5200', side: 'credit', amount });
+  else {
+    if (stocked > 0) entries.push({ account: A?'المخزون':'Inventory', account_code: '1300', side: 'credit', amount: stocked });
+    const transit = Math.round((amount - stocked) * 100) / 100;
+    if (transit > 0.005) entries.push({ account: A?'بضاعة بالطريق':'Goods in Transit', account_code: '1350', side: 'credit', amount: transit });
+  }
+  if (vat > 0) entries.push({ account: A?'ضريبة المدخلات':'Input VAT', account_code: '2210', side: 'credit', amount: vat });
+  if (paid > 0) entries.push({ account: A?'النقدية':'Cash', account_code: '1100', side: 'debit', amount: paid });
+  if (remaining > 0) postSupplierPayable(db, entries, p.vendor, remaining, 'decrease', remaining, p.supplier_id);
+  if (!db.journal) db.journal = [];
+  if (!db.nextId.journal) db.nextId.journal = 1;
+  db.journal.push({ id: db.nextId.journal++, date: new Date().toISOString(),
+    description: `عكس ${isOpex?'مصروف':'فاتورة شراء'} ${p.purchase_no} — ${p.vendor} — السبب: ${reason}`,
+    entries, ref: `REV-${p.purchase_no}`, created_by: currentUser?.username, created_at: new Date().toISOString() });
+
+  // المدفوع يرجع للخزينة (التسجيل الغلط ما طلّع فلوس فعلًا — الصحيح يُسجَّل بعدها بالمدفوع الحقيقي)
+  if (paid > 0) {
+    const m = ['آجل','جزئي'].includes(p.payment_method) ? 'نقدي' : (p.payment_method || 'نقدي');
+    db.treasury.balance = Math.round((db.treasury.balance + paid) * 100) / 100;
+    db.treasury.moves.unshift({ id: nextId(db,'treasury'), type: 'in', amount: paid, method: m,
+      description: `عكس ${isOpex?'مصروف':'فاتورة شراء'} ${p.purchase_no}: ${p.vendor}`, reference: `REV-${p.purchase_no}`,
+      date: new Date().toISOString(), branch_id: p.branch_id || null });
+  }
+  p.status = 'معكوسة'; p.reversed_at = new Date().toISOString(); p.reversal_reason = reason; p.remaining_amount = 0;
+  saveDB(db);
+  logActivity(isOpex?'مصاريف إدارية':'مشتريات', `عكس ${p.purchase_no} — ${p.vendor} — ${fmtMoney(T)} — السبب: ${reason}`);
+  // بعد العكس: سجّل الصحيحة مباشرة (نسخة معبّأة يعدّلها)
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" data-action="closeModal" data-action2="renderPage">
+    <div class="modal" data-action="" style="max-width:440px;text-align:center;">
+      <div style="font-size:40px;margin:6px 0;">✅</div>
+      <h3 style="margin:0 0 8px;">${A?'انعكست الفاتورة':'Invoice reversed'}</h3>
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.8;margin:0 0 16px;">${A?'الأصل باقي بعلامة «معكوسة»، والقيد العكسي انسجّل بتاريخ اليوم. تبي تسجّل الصحيحة الحين؟ بنفتح لك نسخة معبّأة تعدّل عليها.':'The original stays marked "Reversed" and the reversing entry is dated today. Record the correct one now? We’ll open a pre-filled copy.'}</p>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-full" data-action="reEnterPurchase" data-args="${JSON.stringify([id])}">${A?'سجّل الصحيحة':'Record the correct one'}</button>
+        <button class="btn btn-outline" data-action="closeModal" data-action2="renderPage">${A?'لاحقًا':'Later'}</button>
+      </div>
+    </div>
+  </div>`;
+  refreshIcons();
+}
+function reEnterPurchase(id) {
+  const db = getDB(); const p = db.purchases.find(x => x.id === id); if (!p) return;
+  closeModal();
+  if (p.purchase_type === 'opex') {
+    showAddOpexPurchase();
+    const set = (k, v) => { const e = el(k); if (e && v != null) e.value = v; };
+    set('p-vendor', p.vendor); set('p-desc', p.description); set('p-cat', p.category);
+    set('p-amount', p.amount); set('p-opex-date', localDateStr(new Date()));
+    el('p-amount')?.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  openPurchaseFormWithAIData({
+    vendor: p.vendor, invoice_no: p.supplier_ref || '', date: localDateStr(p.created_at),
+    items: (p.items || []).map(i => ({ description: i.name, qty: i.qty, unit_price: i.price, total: i.line_total || (i.qty * i.price) })),
+    normalized: true, vat_ratio: p.amount > 0 ? p.vat / p.amount : 0, vat_amount: p.vat, warnings: [], warnings_en: [],
+  });
+}
+
+// ============ تصحيح دفعة راتب ============
+// دفعات الراتب مصدرها دفتر اليومية (ref يبدأ بـSAL-) — ثابت بين الأجهزة ويتزامن
+function _salaryEntries(db, e) {
+  return (db.journal || []).filter(j => /^SAL-/.test(j.ref || '') && (j.description || '').startsWith(`راتب موظف: ${e.name}`))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+function showSalaryHistory(eid) {
+  const db = getDB(); const e = db.employees.find(x => x.id === eid); if (!e) return;
+  const A = lang === 'ar';
+  const rows = _salaryEntries(db, e);
+  const amt = j => (j.entries || []).filter(x => x.side === 'credit').reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const mc = el('modal-container');
+  mc.innerHTML = `
+  <div class="modal-bg" data-action="closeModal">
+    <div class="modal" data-action="" style="max-width:560px;">
+      <div class="modal-head"><h3>🧾 ${A?'دفعات الراتب':'Salary payments'}: ${sanitize(e.name)}</h3><button class="icon-btn" data-action="closeModal">${icon('x',18)}</button></div>
+      ${rows.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>${A?'التاريخ':'Date'}</th><th>${A?'المبلغ':'Amount'}</th><th>${A?'البيان':'Description'}</th><th></th></tr></thead><tbody>
+        ${rows.map(j => { const rv = jeReversalOf(db, j); return `<tr style="${rv?'opacity:.55':''}">
+          <td>${fmtDate(j.date)}</td><td><b>${fmtMoney(amt(j))}</b></td>
+          <td style="font-size:12px;color:var(--text-muted);">${sanitize(dl(j.description))}</td>
+          <td>${rv ? `<span class="badge badge-red" style="font-size:10px;">${A?'معكوسة':'Reversed'}</span>`
+                 : (has('accounts.manage') ? `<button class="btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;" data-action="reverseSalaryPayment" data-args="${JSON.stringify([j.id, eid])}">↩️ ${A?'تصحيح':'Correct'}</button>` : '')}</td>
+        </tr>`; }).join('')}
+      </tbody></table></div>` : `<div style="text-align:center;padding:24px;color:var(--text-muted);">${A?'ما فيه دفعات راتب مسجّلة':'No salary payments recorded'}</div>`}
+    </div>
+  </div>`;
+  refreshIcons();
+}
+function reverseSalaryPayment(jid, eid) {
+  const A = lang === 'ar';
+  const db = getDB(); const j = (db.journal || []).find(x => x.id === jid); const e = db.employees.find(x => x.id === eid);
+  if (!j || !e) return;
+  if (!jeKey(j)) { showToast(A?'الدفعة لسه ما تزامنت مع السيرفر — انتظر ثواني وحاول':'Not synced yet — try again in a moment','error'); return; }
+  if (jeReversalOf(db, j)) { showToast(A?'هذي الدفعة معكوسة مسبقًا':'Already reversed','error'); return; }
+  askCorrectionReason(A?'تصحيح دفعة راتب':'Correct salary payment',
+    A?`دفعة ${fmtDate(j.date)} لـ${sanitize(e.name)}: ينضاف قيد عكسي بتاريخ اليوم يلغي المصروف، والمبلغ يرجع للخزينة. الأصل يبقى ظاهر بعلامة «معكوسة». بعدها سجّل الراتب الصحيح من زر «دفع راتب».`
+     :`Payment of ${fmtDate(j.date)} to ${sanitize(e.name)}: a reversing entry dated today cancels the expense and the amount returns to the treasury. The original stays marked "Reversed". Then record the correct salary from "Pay salary".`,
+    (reason) => guardClosedPeriod(localDateStr(new Date()), () => {
+      const db2 = getDB(); const j2 = (db2.journal || []).find(x => x.id === jid); const e2 = db2.employees.find(x => x.id === eid);
+      if (!j2 || jeReversalOf(db2, j2)) return;
+      postReversalEntry(db2, j2, `عكس راتب موظف: ${e2?.name||''} (${fmtDate(j2.date)}) — السبب: ${reason}`);
+      const cash = Math.round((j2.entries || []).filter(x => String(x.account_code) === '1100' && x.side === 'credit').reduce((s, x) => s + (Number(x.amount) || 0), 0) * 100) / 100;
+      if (cash > 0) {
+        const orig = (db2.treasury.moves || []).find(m => m.reference === j2.ref && m.type === 'out');
+        db2.treasury.balance = Math.round((db2.treasury.balance + cash) * 100) / 100;
+        db2.treasury.moves.unshift({ id: nextId(db2,'treasury'), type: 'in', amount: cash, method: orig?.method || 'نقدي',
+          description: `عكس راتب: ${e2?.name||''}`, reference: `REV-${j2.ref}`, date: new Date().toISOString() });
+      }
+      if (e2) {
+        const left = _salaryEntries(db2, e2).filter(x => !jeReversalOf(db2, x));
+        e2.last_paid_date = left[0]?.date || null;
+        e2.last_paid_amount = left[0] ? (left[0].entries || []).filter(x => x.side === 'credit').reduce((s, x) => s + (Number(x.amount) || 0), 0) : null;
+      }
+      saveDB(db2);
+      logActivity('الموظفون', `عكس دفعة راتب ${e2?.name||''} — السبب: ${reason}`);
+      showToast(A?'✅ انعكست الدفعة — سجّل الراتب الصحيح من «دفع راتب»':'✅ Payment reversed — record the correct salary from "Pay salary"');
+      closeModal(); renderPage();
+    }));
 }
 
 async function runAIAnalysis() {
@@ -18864,7 +19204,7 @@ async function runAIAnalysis() {
   const thisMonth = now.toISOString().slice(0,7);
 
   const monthInvoices  = db.invoices.filter(i=>(i.date||i.created_at||'').startsWith(thisMonth));
-  const monthPurchases = db.purchases.filter(p=>(p.date||p.created_at||'').startsWith(thisMonth));
+  const monthPurchases = db.purchases.filter(p=>p.status!=='معكوسة'&&(p.date||p.created_at||'').startsWith(thisMonth));
   const monthReturns   = (db.returns||[]).filter(r=>(r.date||r.created_at||'').startsWith(thisMonth));
 
   // الإيراد بدون ضريبة (subtotal)، وتكلفة البضاعة الحقيقية (FIFO) لا إجمالي المشتريات
@@ -19411,7 +19751,8 @@ async function runAISearchQuery(q) {
       supplier_ref: p.supplier_ref||'',
       notes: p.notes||'',
       deductible: p.deductible!==false,
-      status: p.status||'unpaid',
+      status: p.status==='reversed' ? 'معكوسة' : (p.status||'unpaid'),
+      reversed_at: p.reversed_at||null, reversal_reason: p.reversal_reason||'',
       purchase_no: p.purchase_no||'',
       branch_id: p.branch_id||null,
       created_at: p.created_at
@@ -20200,6 +20541,8 @@ async function runAISearchQuery(q) {
           } else {
             _revertSnapEntity('purchases', p.id, null);
           }
+        } else if (p.status === 'معكوسة') {
+          // العكس انطبق على السيرفر مباشرة (_reversePurchaseActual) — لا شيء يُرسَل هنا
         } else if (JSON.stringify(p) !== JSON.stringify(old)) {
           const _oldPaid = parseFloat(old.paid_amount||0);
           const _newPaid = parseFloat(p.paid_amount||0);

@@ -21,7 +21,7 @@ exports.dashboard = async (req, res, next) => {
         SELECT
           COALESCE(SUM(total),0) AS total_month,
           COALESCE(SUM(remaining),0) AS payable
-        FROM purchases WHERE company_id=$1 AND date >= $2
+        FROM purchases WHERE company_id=$1 AND date >= $2 AND COALESCE(status,'') NOT IN ('reversed','cancelled')
       `, [cid, monthStart]),
 
       db.query(`
@@ -93,14 +93,21 @@ exports.vatReport = async (req, res, next) => {
       `, [cid, from || null, to || null]),
 
       db.query(`
+        -- فاتورة معكوسة: تبقى بفترتها الأصلية، والعكس يُخصم بفترة تاريخ التصحيح
+        -- (القيد العكسي بتاريخ اليوم — نفس ما يظهر بالدفاتر)
         SELECT
-          COALESCE(SUM(amount),0)     AS taxable_purchases,
-          COALESCE(SUM(vat_amount),0) AS vat_deductible,
-          COUNT(*)                     AS purchase_count
-        FROM purchases
-        WHERE company_id=$1 AND deductible=true
-          AND ($2::date IS NULL OR date >= $2)
-          AND ($3::date IS NULL OR date <= $3)
+          COALESCE(SUM(sgn * amount),0)     AS taxable_purchases,
+          COALESCE(SUM(sgn * vat_amount),0) AS vat_deductible,
+          COUNT(*) FILTER (WHERE sgn = 1)   AS purchase_count
+        FROM (
+          SELECT 1 AS sgn, amount, vat_amount, date AS d FROM purchases
+            WHERE company_id=$1 AND deductible=true
+          UNION ALL
+          SELECT -1, amount, vat_amount, reversed_at::date FROM purchases
+            WHERE company_id=$1 AND deductible=true AND status='reversed' AND reversed_at IS NOT NULL
+        ) x
+        WHERE ($2::date IS NULL OR d >= $2)
+          AND ($3::date IS NULL OR d <= $3)
       `, [cid, from || null, to || null]),
 
       db.query(`

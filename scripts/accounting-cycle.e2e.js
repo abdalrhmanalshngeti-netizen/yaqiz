@@ -409,7 +409,109 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   await page.waitForTimeout(2000);
   const vdel = await page.evaluate(() => getDB().receipts.filter(r => r.amount === 25).map(r => ({ id: r.id, no: r.voucher_no, sid: r._serverId })));
   console.log('    voucher to delete:', JSON.stringify(vdel));
+  const vRef = await page.evaluate(() => getDB().journal.filter(j => /^(RCV|RCP)-/.test(j.ref || '') && (j.entries || []).some(e => Number(e.amount) === 25)).map(j => ({ id: j.id, ref: j.ref, sid: j._serverId })));
+  console.log('    its journal entries before cancelling:', JSON.stringify(vRef));
   await op('23b. Delete that voucher after it synced', () => page.evaluate(id => deleteReceipt(id), vdel[0].id), { g: { cash: -25, ar: 25 }, treasury: -25, cust: { 'شركة الأفق': 25 }, wait: 4000 });
+  {
+    const ref0 = vRef[0] && vRef[0].ref;
+    const jv = await page.evaluate(r => getDB().journal.filter(j => j.ref === r || (j.ref || '').startsWith('REV-' + r + '#')).map(j => j.ref), ref0);
+    ok(jv.length === 2 && jv.some(r => r.startsWith('REV-')), 'cancelled voucher: original journal entry kept + one reversing entry added → ' + JSON.stringify(jv));
+  }
+
+  // ══ التصحيح بقيد عكسي (لا حذف ولا تعديل) ══
+  // رقم الفاتورة الجديد بعد ما تتزامن (معرّفها المحلي يتبدّل بمعرّف السيرفر)
+  const knownNos = () => page.evaluate(() => getDB().purchases.map(p => p.purchase_no).filter(Boolean));
+  const newPurchaseNo = async (before, ms = 20000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      const n = await page.evaluate(b => getDB().purchases.map(p => p.purchase_no).filter(x => x && !b.includes(x)), before);
+      if (n.length) return n[0]; await page.waitForTimeout(700);
+    }
+    return null;
+  };
+  const reversePurchase = async (pid, reason) => {
+    await page.evaluate(id => { el('modal-container').innerHTML = ''; showPurchaseCorrection(id); }, pid); await page.waitForTimeout(300);
+    await page.evaluate(r => { el('corr-reason').value = r; }, reason);
+    await page.evaluate(id => doPurchaseCorrection(id), pid);
+  };
+  const purchaseByNo = no => page.evaluate(no => getDB().purchases.find(p => p.purchase_no === no), no);
+  let nos = await knownNos();
+  await op('26a. Credit purchase (mistake): B×10 @40', async () => {
+    await purchase('مورد الخليج', [[B, 10, 40]], 'آجل');
+    await page.waitForTimeout(300);
+  }, { g: { inv: 400, vatIn: 60, ap: 460 }, qty: { 'صنف ب': 10 }, supp: { 'مورد الخليج': 460 }, wait: 4500 });
+  const noWrong = await newPurchaseNo(nos);
+  const pWrong = await purchaseByNo(noWrong);
+  ok(!!noWrong, 'purchase synced to server: ' + noWrong);
+  await op('26b. Reverse it ("recorded by mistake") → stock, VAT and supplier all restored', () => reversePurchase(pWrong.id, 'الكمية الصحيحة 8 مو 10'),
+    { g: { inv: -400, vatIn: -60, ap: -460 }, qty: { 'صنف ب': -10 }, supp: { 'مورد الخليج': -460 }, treasury: 0, wait: 4500 });
+  {
+    const p = await purchaseByNo(noWrong);
+    const js = await page.evaluate(no => getDB().journal.filter(j => (j.ref || '') === 'REV-' + no).length, noWrong);
+    const srv = (await pool.query("select status, remaining::float r, reversal_reason from purchases where purchase_no=$1 and company_id=(select company_id from users where username=$2)", [noWrong, 'cyc' + sfx])).rows[0];
+    ok(p && p.status === 'معكوسة', 'original purchase kept, marked "معكوسة" (not deleted)');
+    ok(js === 1, 'one reversing journal entry REV-' + noWrong);
+    ok(srv && srv.status === 'reversed' && srv.r === 0 && /الكمية/.test(srv.reversal_reason || ''), 'server: purchase reversed, remaining 0, reason stored → ' + JSON.stringify(srv));
+  }
+  const dlg = []; page.on('dialog', d => dlg.push(d.message()));
+  await op('26c. Re-enter the correct one (pre-filled copy, qty 8) — not flagged as duplicate', async () => {
+    await page.evaluate(id => reEnterPurchase(id), pWrong.id); await page.waitForTimeout(500);
+    await page.evaluate(() => { _goodsItems[0].qty = 8; _goodsItems[0].line_total = 320; _goodsItems[0].vat = 48; renderGPItems(); updateGPTotals(); });
+    await page.selectOption('#gp-payment', 'آجل');
+    await page.evaluate(() => saveGoodsPurchase());
+  }, { g: { inv: 320, vatIn: 48, ap: 368 }, qty: { 'صنف ب': 8 }, supp: { 'مورد الخليج': 368 }, wait: 4500 });
+  ok(!dlg.some(m => /مسجّلة سابقًا|already recorded/.test(m)), 'no duplicate-invoice warning against the reversed one');
+  nos = await knownNos();
+  await op('26d. Cash purchase (mistake): C×10 @6', () => purchase('مورد النخبة', [[C, 10, 6]], 'نقدي'),
+    { g: { inv: 60, vatIn: 9, cash: -69 }, treasury: -69, qty: { 'صنف ج': 10 }, wait: 4500 });
+  const noCash = await newPurchaseNo(nos); const pCash = await purchaseByNo(noCash);
+  await op('26e. Reverse the cash purchase → money back to treasury', () => reversePurchase(pCash.id, 'مسجّلة مرتين'),
+    { g: { inv: -60, vatIn: -9, cash: 69 }, treasury: 69, qty: { 'صنف ج': -10 }, wait: 4500 });
+  nos = await knownNos();
+  let noPaid = null;
+  await op('26f. Credit purchase A×5 @12 then quick-pay 30', async () => {
+    await purchase('مورد الخليج', [[A, 5, 12]], 'آجل'); await page.waitForTimeout(500);
+    noPaid = await newPurchaseNo(nos);
+    const pp = await purchaseByNo(noPaid);
+    await page.evaluate(id => { el('modal-container').innerHTML = ''; quickPayPurchase(id); }, pp.id); await page.waitForTimeout(300);
+    await page.evaluate(id => { el('qpp-amount').value = '30'; saveQuickPayPurchase(id); }, pp.id);
+  }, { g: { inv: 60, vatIn: 9, ap: 39, cash: -30 }, treasury: -30, qty: { 'صنف أ': 5 }, supp: { 'مورد الخليج': 39 }, wait: 5000 });
+  await page.waitForTimeout(3000);
+  const pPaid = await purchaseByNo(noPaid);
+  await op('26g. Reversing a purchase that has a payment voucher → refused (cancel the voucher first)', () => reversePurchase(pPaid.id, 'تجربة'), { g: {}, treasury: 0, wait: 2500 });
+  const qpv = await page.evaluate(id => getDB().receipts.find(v => v.linked_purchase_id === id), pPaid.id);
+  ok(!!qpv, 'quick-pay voucher is linked to its purchase (' + (qpv && qpv.voucher_no) + ')');
+  await page.waitForTimeout(3000);
+  await op('26h. Cancel the quick-pay voucher → reversing entry, purchase unpaid again', () => page.evaluate(id => deleteReceipt(id), qpv.id),
+    { g: { cash: 30, ap: 30 }, treasury: 30, supp: { 'مورد الخليج': 30 }, wait: 4000 });
+  await page.waitForTimeout(5000); // إلغاء السند وإرجاع المدفوع يوصلون للسيرفر قبل العكس
+  await op('26i. Now reverse that purchase', () => reversePurchase(pPaid.id, 'المورد غلط'),
+    { g: { inv: -60, vatIn: -9, ap: -69 }, qty: { 'صنف أ': -5 }, supp: { 'مورد الخليج': -69 }, treasury: 0, wait: 4500 });
+  const opex500 = await page.evaluate(() => getDB().purchases.find(p => p.purchase_type === 'opex' && Math.abs(p.amount - 500) < 0.01));
+  await op('26j. Reverse the admin expense (500 + VAT 75, cash)', () => reversePurchase(opex500.id, 'فاتورة كهرباء مكررة'),
+    { g: { exp: -500, vatIn: -75, cash: 575 }, treasury: 575, wait: 4500 });
+  const emp = await page.evaluate(() => getDB().employees.find(e => e.name === 'أحمد الكاشير'));
+  const salJ = await page.evaluate(n => getDB().journal.find(j => /^SAL-/.test(j.ref || '') && (j.description || '').includes(n)), emp.name);
+  ok(!!(salJ && salJ._serverId), 'salary journal entry synced (' + (salJ && salJ._serverId) + ')');
+  await op('26k. Reverse the 4000 salary payment', async () => {
+    await page.evaluate(({ jid, eid }) => { el('modal-container').innerHTML = ''; reverseSalaryPayment(jid, eid); }, { jid: salJ.id, eid: emp.id }); await page.waitForTimeout(300);
+    await page.evaluate(() => { el('corr-reason').value = 'المبلغ الصحيح 3500'; el('corr-ok').click(); });
+  }, { g: { exp: -4000, cash: 4000 }, treasury: 4000 });
+  await op('26l. Pay the correct salary 3500', async () => {
+    await page.evaluate(id => { el('modal-container').innerHTML = ''; showPaySalaryModal(id); }, emp.id); await page.waitForTimeout(400);
+    await page.evaluate(id => { el('ps-amount').value = '3500'; paySalary(id); }, emp.id);
+  }, { g: { exp: 3500, cash: -3500 }, treasury: -3500 });
+  ok(await page.evaluate(({ jid }) => { el('modal-container').innerHTML = ''; showSalaryHistory(getDB().employees.find(e => e.name === 'أحمد الكاشير').id); return /معكوسة|Reversed/.test(el('modal-container').innerText) && !!jeReversalOf(getDB(), getDB().journal.find(j => j.id === jid)); }, { jid: salJ.id }),
+    'salary history shows the original payment as reversed');
+  await op('26m. Manual journal (mistake): Dr 5200 30 / Cr 1100 30', () => manualJE('قيد خاطئ: ضيافة', [['5200', 'debit', 30], ['1100', 'credit', 30]]), { g: { exp: 30, cash: -30 }, treasury: -30 });
+  await page.waitForTimeout(3000);
+  const mj = await page.evaluate(() => getDB().journal.filter(j => j.ref === 'MANUAL' && j.description === 'قيد خاطئ: ضيافة')[0]);
+  await op('26n. "Reverse" button on that manual entry', async () => {
+    await page.evaluate(id => { el('modal-container').innerHTML = ''; reverseManualJournal(id); }, mj.id); await page.waitForTimeout(300);
+    await page.evaluate(() => { el('corr-reason').value = 'ما صار'; el('corr-ok').click(); });
+  }, { g: { exp: -30, cash: 30 }, treasury: 30 });
+  ok(await page.evaluate(id => getDB().journal.some(j => j.id === id), mj.id), 'manual entry kept in the journal after reversal');
+
 
   // ══ إقفال الشهر: أي قيد بتاريخه يُرفض بدون كلمة مرور التجاوز ══
   const month = new Date().toISOString().slice(0, 7), year = month.slice(0, 4);
@@ -485,6 +587,21 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const tot2 = Object.values(gl2).reduce((s, v) => s + v, 0); ok(Math.abs(tot2) < 0.01, 'trial balance still balanced after closing');
   const BS2 = await page.evaluate(async () => (await window._cloudApiFetch('GET', '/api/reports/balance-sheet')).data);
   ok(Math.abs(BS2.assets.total - (BS2.liabilities.total + BS2.equity)) < 0.01 && Math.abs(BS2.equity - appBS.equity) < 0.01, `balance sheet unchanged & balanced after closing: equity ${BS2.equity} (before ${appBS.equity})`);
+  console.log('\n▶ 25b. Reopen ' + year + ' → closing entry reversed, not deleted');
+  const cpId = (await q(`select id from closed_periods where company_id=$1 and period_type='year' and period_key=$2`, [cid, year]))[0]?.id;
+  // الشهر مقفل أيضًا — يُفتح أولًا (السنة ما تنفتح وشهر بداخلها مقفل؟ لا شرط) ثم السنة
+  await page.evaluate(async id => {
+    await window._cloudApiFetch('DELETE', '/api/closed-periods/' + id);
+    const d = getDB(); d.closed_periods = (d.closed_periods || []).filter(x => String(x.id) !== String(id)); saveDB(d); // نفس ما تسويه شاشة فتح الفترة
+  }, cpId);
+  await page.waitForTimeout(1500);
+  const ce = await q(`select source_type, count(*)::int n from journal_entries where company_id=$1 and source_type in ('period_close','period_close_reversal') group by 1 order by 1`);
+  ok(JSON.stringify(ce) === JSON.stringify([{ source_type: 'period_close', n: 1 }, { source_type: 'period_close_reversal', n: 1 }]), 'closing entry kept + one reversing entry → ' + JSON.stringify(ce));
+  const gl3 = Object.fromEntries((await q(`select ji.account_code c, sum(case when side='debit' then amount else -amount end)::float b from journal_items ji join journal_entries je on je.id=ji.entry_id where je.company_id=$1 group by 1`)).map(r => [r.c, r2(r.b)]));
+  ok(Object.keys(gl).every(c => Math.abs((gl3[c] || 0) - (gl[c] || 0)) < 0.01), 'after reopening, every account is back to its pre-closing balance');
+  await page.evaluate(y => closePeriod('year', y), year); await page.waitForTimeout(6000);
+  const gl4 = Object.fromEntries((await q(`select ji.account_code c, sum(case when side='debit' then amount else -amount end)::float b from journal_items ji join journal_entries je on je.id=ji.entry_id where je.company_id=$1 group by 1`)).map(r => [r.c, r2(r.b)]));
+  ok(Object.entries(gl4).filter(([c]) => c[0] === '4' || c[0] === '5').reduce((s, [, v]) => s + Math.abs(v), 0) < 0.01 && Math.abs((gl4['3100'] || 0) - (gl2['3100'] || 0)) < 0.01, 're-closing gives the same result (P&L zeroed, retained earnings ' + (gl4['3100'] || 0) + ')');
   console.log('\n▶ Ledger guard on this company');
   const { checkCompany } = require(path + 'src/services/ledgerGuard.service.js');
   const gf = await checkCompany(cid);
