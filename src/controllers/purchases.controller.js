@@ -22,7 +22,7 @@ exports.list = async (req, res, next) => {
     const { rows } = await db.query(`
       SELECT p.*, s.name AS supplier_name_db,
         COALESCE(
-          (SELECT json_agg(json_build_object('name', pi.product_name, 'qty', pi.qty::float, 'price', pi.unit_price::float, 'line_total', pi.line_total::float) ORDER BY pi.sort_order)
+          (SELECT json_agg(json_build_object('name', pi.product_name, 'qty', pi.qty::float, 'price', pi.unit_price::float, 'line_total', pi.line_total::float, 'product_id', pi.product_id) ORDER BY pi.sort_order)
            FROM purchase_items pi WHERE pi.purchase_id = p.id),
           '[]'::json
         ) AS items_json,

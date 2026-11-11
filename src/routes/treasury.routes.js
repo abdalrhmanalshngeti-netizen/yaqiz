@@ -13,7 +13,9 @@ router.post('/transfer',          can('treasury.manage'), ctrl.transfer);
 
 // Moves
 router.get ('/moves',             can('treasury.view'),   ctrl.listMoves);
-router.post('/move',              can('treasury.manage'), ctrl.addMove);
+// حركة ناتجة عن عملية (بيع نقدي، شراء نقدي، سند، راتب...) لازم توصل مهما كانت صلاحيات
+// الموظف؛ الإيداع/السحب اليدوي (manual) يحتاج treasury.manage — يُفحص بالمتحكم
+router.post('/move',              ctrl.addMove);
 
 // السندات فعليًا: /api/vouchers (vouchers.routes.js) فقط — ذاك المسار الوحيد
 // الذي تستدعيه الواجهة (VVIP.html) فعلًا. كان يوجد هنا ثلاثة مسارات مطابقة

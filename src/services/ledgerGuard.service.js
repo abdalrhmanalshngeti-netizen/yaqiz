@@ -62,7 +62,14 @@ async function checkCompany(cid) {
 
   // 7) ذمم العملاء بالدفاتر = أرصدة العملاء، و8) = الفواتير المفتوحة
   const [cust] = await q(`SELECT COALESCE(SUM(balance),0)::float AS s FROM customers WHERE company_id = $1`);
-  add('ar_vs_customers', '', 'ذمم العملاء (1200) ≠ مجموع أرصدة العملاء', g('1200'), cust.s);
+  // دفعات العملاء المقدمة غير المسوّاة رصيد دائن لهم (2160) — تنطرح من الذمم بالمقارنة
+  const [adv] = await q(`
+    SELECT COALESCE((SELECT SUM(advance_amount) FROM vouchers WHERE company_id = $1 AND type = 'receipt'),0)::float
+         - COALESCE((SELECT SUM(advance_applied) FROM invoices WHERE company_id = $1 AND COALESCE(status,'') <> 'cancelled'),0)::float AS s`);
+  add('ar_vs_customers', '', 'ذمم العملاء (1200) − الدفعات المقدمة ≠ مجموع أرصدة العملاء', g('1200') - adv.s, cust.s);
+  // حساب الدفعات المقدمة (دائن) = المقبوض مقدمًا غير المسوّى — دفعة قديمة قبل تتبع المقدم
+  // كانت تبقى بالحساب وما تنعكس على رصيد العميل ولا كشفه
+  add('advances_vs_vouchers', '', 'دفعات العملاء المقدمة (2160) ≠ المقبوض مقدمًا غير المسوّى', -g('2160'), adv.s);
   const [openInv] = await q(`
     SELECT COALESCE(SUM(grand_total - paid_amount - COALESCE(credited_amount,0)),0)::float AS s
     FROM invoices WHERE company_id = $1 AND status <> 'cancelled'`);

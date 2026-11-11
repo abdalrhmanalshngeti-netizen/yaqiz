@@ -109,6 +109,12 @@ exports.create = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'بيانات الفترة غير صحيحة' });
     }
+    // بدون كلمة تجاوز ما فيه طريق لفتح الفترة أو استثناء منها — تُضبط أولًا
+    const { rows: [pw] } = await client.query(`SELECT period_override_password_hash IS NOT NULL AS ok FROM companies WHERE id = $1`, [company_id]);
+    if (!pw?.ok) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, code: 'OVERRIDE_NOT_SET', message: 'عيّن كلمة مرور تجاوز الإقفال أولًا (من نفس الصفحة) — بدونها ما تقدر تفتح الفترة لاحقًا' });
+    }
     const { rows: [row] } = await client.query(`
       INSERT INTO closed_periods (company_id, period_type, period_key, closed_by, closed_by_name)
       VALUES ($1,$2,$3,$4,$5)

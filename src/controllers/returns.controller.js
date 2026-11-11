@@ -1,3 +1,4 @@
+const { partySector, stripReturnCost } = require('../utils/costVisibility');
 const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
@@ -99,7 +100,9 @@ exports.list = async (req, res, next) => {
       `SELECT * FROM returns WHERE company_id = $1 ORDER BY date DESC, id DESC LIMIT 2000`,
       [req.user.company_id]
     );
-    res.json({ success: true, data: rows });
+    const sec = partySector(req.user);
+    const vis = sec === 'all' ? rows : rows.filter(r => r.type === (sec === 'customers' ? 'sales' : 'purchases'));
+    res.json({ success: true, data: vis.map(r => stripReturnCost(req.user, r)) });
   } catch (err) { next(err); }
 };
 

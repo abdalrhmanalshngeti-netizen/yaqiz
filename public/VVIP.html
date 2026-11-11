@@ -873,7 +873,7 @@ const tr = {
     products:'المنتجات', productName:'اسم المنتج', code:'الكود',
     buyPrice:'سعر الشراء', sellPrice:'سعر البيع', minQty:'حد الأمان',
     role:'الدور', permissions:'الصلاحيات', fullName:'الاسم الكامل',
-    owner:'مالك', accountant:'محاسب', cashier:'كاشير', custom:'مخصص',
+    owner:'مالك', accountant:'محاسب', cashier:'كاشير', custom:'مخصص', manager:'مدير',
     vatReport:'تقرير ضريبة القيمة المضافة', incomeStatement:'قائمة الدخل',
     vatOutput:'ضريبة المخرجات', vatInput:'ضريبة المدخلات', vatNet:'الصافي المستحق',
     revenue:'الإيرادات', cogs:'تكلفة البضاعة المباعة', grossProfit:'الربح الإجمالي',
@@ -907,7 +907,7 @@ const tr = {
     products:'Products', productName:'Product Name', code:'Code',
     buyPrice:'Buy Price', sellPrice:'Sell Price', minQty:'Min Qty',
     role:'Role', permissions:'Permissions', fullName:'Full Name',
-    owner:'Owner', accountant:'Accountant', cashier:'Cashier', custom:'Custom',
+    owner:'Owner', accountant:'Accountant', cashier:'Cashier', custom:'Custom', manager:'Manager',
     vatReport:'VAT Report', incomeStatement:'Income Statement',
     vatOutput:'Output VAT', vatInput:'Input VAT', vatNet:'Net VAT Due',
     revenue:'Revenue', cogs:'Cost of Goods Sold', grossProfit:'Gross Profit',
@@ -961,6 +961,13 @@ function isPeriodClosed(dateStr) {
 window._periodOverrideTokens = window._periodOverrideTokens || {};
 
 // dateStr: تاريخ العملية المطلوب فحصها. onProceed: تُستدعى فقط لو التاريخ حر أو تم تجاوز الإقفال بنجاح بكلمة مرور التجاوز المخصصة (منفصلة عن كلمة مرور دخول المالك).
+// رفض مباشر لعمليات بتاريخ فترة مقفلة (المصروف، حركة الخزينة، سداد الالتزام، نقطة البيع) —
+// السيرفر يرفضها أصلًا، والرفض هنا يمنع حفظها محليًا وتعليقها
+function blockIfPeriodClosed(dateStr) {
+  if (!isPeriodClosed(dateStr)) return false;
+  showToast(lang==='ar'?'🔒 هذا التاريخ ضمن فترة محاسبية مقفلة — اطلب من المالك فتح الفترة':'🔒 This date is in a closed accounting period','error');
+  return true;
+}
 function guardClosedPeriod(dateStr, onProceed) {
   if (!isPeriodClosed(dateStr)) { onProceed(null); return; }
   // نبني هذا كطبقة (overlay) منفصلة فوق النموذج الأصلي بدل الكتابة فوق
@@ -1168,7 +1175,7 @@ const _DEVICE_KEY = (() => {
   const gen = () => String(1 + Math.floor(Math.random() * 0x1ffffffe));
   try {
     let d = localStorage.getItem('yaqiz_device_key');
-    if (!d || !/^d+$/.test(d) || Number(d) >= 0x20000000) { d = gen(); localStorage.setItem('yaqiz_device_key', d); }
+    if (!d || !/^\d+$/.test(d) || Number(d) >= 0x20000000) { d = gen(); localStorage.setItem('yaqiz_device_key', d); }
     return Number(d);
   } catch (e) { return Number(gen()); }
 })();
@@ -1370,7 +1377,7 @@ function fmtMoney(n) {
   return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtDate(s) {
-  try { return new Date(s).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); } catch { return s; }
+  try { return new Date(s).toLocaleDateString(lang==='ar'?'ar-SA-u-ca-gregory-nu-latn':'en-US',{year:'numeric',month:lang==='ar'?'long':'short',day:'numeric'}); } catch { return s; }
 }
 // يستخرج تاريخ اليوم المحلي (YYYY-MM-DD) بدل new Date().toISOString().slice(0,10)
 // اللي يرجّع تاريخ UTC — يختلف عن التاريخ السعودي الفعلي بين الساعة 00:00
@@ -1407,6 +1414,10 @@ function has(perm) {
   if (perm === 'branches.manage') {
     return currentUser.role === 'owner' && getPlanBranchLimit() !== 1;
   }
+  // "لوحتي": لوحة القسم لأي موظف ما عنده لوحة التحكم الكاملة (المالك والمحاسب عندهم الكاملة)
+  if (perm === 'mydash.view') {
+    return currentUser.role !== 'owner' && !(currentUser.permissions||[]).includes('dashboard.view');
+  }
   if (currentUser.role === 'owner') return true;
   return (currentUser.permissions||[]).includes(perm);
 }
@@ -1438,8 +1449,10 @@ function renderApp() {
   // الإدخال والتواريخ تظهر بأرقام لاتينية (0-9) دايمًا، مو أرقام عربية (٠-٩)
   document.documentElement.lang = 'en';
   document.documentElement.dir = lang==='ar'?'rtl':'ltr';
-  if (!currentUser) { renderLogin(); return; }
+  if (!currentUser) { renderLogin(); window._shiftCheckFor = null; return; }
   renderShell();
+  // أي طريقة رجعت فيها الجلسة (تحديث، توكن محفوظ): الكاشير لازم يكون عنده وردية — مرة لكل مستخدم
+  if (currentUser.shift_enabled && window._shiftCheckFor !== currentUser.id) { window._shiftCheckFor = currentUser.id; setTimeout(() => window._ensureShiftOpen?.(), 1200); }
   _yqIdentifyCurrent();
   yq('Page', currentPage);
   checkOpeningBalances();
@@ -1670,6 +1683,7 @@ function initDark() {
 const allNavItems = [
   // العمليات
   { id:'pos',              icon:'scan-barcode',     perm:'pos.access',       group:'ops'   },
+  { id:'mydash',           icon:'gauge',            perm:'mydash.view',      group:'ops'   },
   { id:'dashboard',        icon:'layout-dashboard', perm:'dashboard.view',   group:'ops'   },
   { id:'sales',            icon:'shopping-cart',    perm:'sales.view',       group:'ops'   },
   { id:'quotes',           icon:'file-plus',        perm:'quotes.view',     group:'ops'   },
@@ -1702,9 +1716,9 @@ const navGroupLabels = {
 // الفعلي بكل صفحة) كحماية دفاعية: لو أي كود مستقبلي استدعى goTo() لأحدها مباشرة
 // (رابط سريع، نتيجة بحث...)، ما ينحظر بصمت لعميل مستحِق فعليًا لها
 const PLAN_PAGES = {
-  basic:   ['pos','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings','users','returns'],
-  growth:  ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves'],
-  pro:     ['pos','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves','accounts'],
+  basic:   ['pos','mydash','dashboard','sales','purchases','inventory','suppliers','treasury','receipts','accountingReports','reports','settings','users','returns'],
+  growth:  ['pos','mydash','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves'],
+  pro:     ['pos','mydash','dashboard','sales','purchases','inventory','customers','suppliers','employees','treasury','receipts','quotes','obligations','accountingReports','reports','settings','users','branches','returns','activity','stock_moves','accounts'],
   expired: ['settings'],
 };
 
@@ -1777,6 +1791,7 @@ function hasPlanFeature(feat) {
 
 const navLabels = {
   pos:{ar:'نقاط البيع',en:'POS'},
+  mydash:{ar:'لوحتي',en:'My dashboard'},
   dashboard:{ar:'لوحة التحكم',en:'Dashboard'},
   sales:{ar:'المبيعات',en:'Sales'},
   purchases:{ar:'المشتريات',en:'Purchases'},
@@ -1879,7 +1894,7 @@ function renderShell() {
           <div class="topbar-title">${(()=>{const s=getDB().settings;return s?.company_name||t('appName');})()}</div>
           ${(()=>{
             const branches = (getDB().branches||[]).filter(b=>b.active!==false);
-            if (branches.length <= 1 || currentUser?.role!=='owner') return '';
+            if (branches.length <= 1 || !isMultiBranchUser()) return '';
             const current = getViewBranchId();
             const label = current==null ? (lang==='ar'?'كل الفروع':'All branches') : sanitize((branches.find(b=>b.id===current)||{}).name || '');
             return `<div class="notif-wrap topbar-hide-mobile">
@@ -1952,7 +1967,7 @@ function renderShell() {
   <div id="ai-chat-root"></div>
   <div class="user-corner" title="${sanitize(currentUser.full_name)} (@${currentUser.username})">
     <div class="user-corner-avatar">${(currentUser.full_name||'U')[0]}</div>
-  </div>\``;
+  </div>`;
   refreshIcons();
   renderPage();
   renderCSButton();
@@ -2995,6 +3010,10 @@ function renderPage() {
   if(!c) return;
   // منع الوصول لصفحات خارج الباقة
   if(!hasPlanPage(currentPage)) { currentPage = (getCurrentPlan()==='expired' && currentUser?.role==='owner') ? 'settings' : 'dashboard'; }
+  // ومنع الوصول لصفحة بدون صلاحيتها — الشريط الجانبي يخفيها، لكن الانتقال المباشر
+  // (رابط/goTo) كان يعرضها لأي مستخدم
+  const _navP = allNavItems.find(n=>n.id===currentPage);
+  if (_navP && !has(_navP.perm)) { currentPage = allNavItems.find(n=>has(n.perm) && hasPlanPage(n.id))?.id || 'pos'; }
   // شريط البحث (اسأل يقظ) والإشعارات غير موجودين بشاشة نقطة البيع — الكاشير
   // يحتاج تركيزًا كاملًا على البيع بدون عناصر إضافية بالشريط العلوي
   const _isPosPage = currentPage === 'pos';
@@ -3003,7 +3022,8 @@ function renderPage() {
   if (_notifBtn)   _notifBtn.style.display   = _isPosPage ? 'none' : '';
   switch(currentPage) {
     case 'pos': renderPOSPage(c); break;
-    case 'dashboard': renderDashboard(c); break;
+    case 'dashboard': renderDashboard(c); fillServerKpis(c); _startKpiRefresh(); break;
+    case 'mydash': renderMyDash(c); break;
     case 'sales': renderSales(c); break;
     case 'purchases': renderPurchases(c); break;
     case 'inventory': renderInventory(c); break;
@@ -3031,6 +3051,104 @@ function renderPage() {
 }
 
 // ============ DASHBOARD ============
+// ============ أرقام الأقسام من السيرفر (مصدر واحد للمنشأة) ============
+// كل رقم يُعرض لأي موظف يجي من سجلات السيرفر — الجهاز ما يحسب أرصدة من بياناته
+// المحلية (ناقصة لمن ما عنده صلاحية الدفاتر). نفس الرقم يطلع للمالك ولمسؤول القسم.
+let _mySum = null, _mySumAt = 0, _mySumTimer = null;
+async function fetchMySummary(force) {
+  if (!force && _mySum && Date.now() - _mySumAt < 5000) return _mySum;
+  if (typeof window._cloudApiFetch !== 'function') return _mySum;
+  try {
+    const bid = (typeof getViewBranchId === 'function' && isMultiBranchUser()) ? getViewBranchId() : null;
+    const r = await window._cloudApiFetch('GET', '/api/reports/my-summary' + (bid ? '?branch_id=' + bid : ''));
+    if (r?.data) { _mySum = r.data; _mySumAt = Date.now(); }
+  } catch (e) { /* بدون اتصال: تبقى آخر أرقام وصلت */ }
+  return _mySum;
+}
+const _sec = (sum, key) => (sum?.sections || []).find(x => x.key === key);
+// يعبّي أي عنصر عليه data-kpi="قسم.حقل" بالرقم من السيرفر
+async function fillServerKpis(root) {
+  const sum = await fetchMySummary(true);
+  if (!sum) return;
+  (root || document).querySelectorAll('[data-kpi]').forEach(e => {
+    const [k, field] = e.getAttribute('data-kpi').split('.');
+    const v = _sec(sum, k)?.[field] ?? (k === 'sales' ? _sec(sum, 'my_sales')?.[field] : undefined);
+    if (v != null) { e.textContent = fmtMoney(v); e.title = lang==='ar'?'من دفتر السيرفر':'From the server ledger'; }
+  });
+}
+// تحديث تلقائي كل 15 ثانية للصفحة المفتوحة (لوحتي / لوحة التحكم)
+function _startKpiRefresh() {
+  clearInterval(_mySumTimer);
+  _mySumTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (currentPage === 'mydash') { const c = el('page-content'); if (c && !document.querySelector('.modal-bg')) renderMyDash(c, true); }
+    else if (currentPage === 'dashboard') fillServerKpis(el('page-content'));
+    else clearInterval(_mySumTimer);
+  }, 15000);
+}
+
+function renderMyDash(c, quiet) {
+  const A = lang === 'ar';
+  const card = (label, value, sub, ico, color) => `<div class="stat-card"><div class="stat-icon ${color||''}">${icon(ico||'circle',22)}</div><div class="stat-label">${label}</div><div class="stat-value">${value}</div>${sub?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">${sub}</div>`:''}</div>`;
+  const draw = (sum) => {
+    const S = k => _sec(sum, k);
+    const parts = [];
+    const sales = S('sales') || S('my_sales');
+    if (sales) parts.push(`<h3 class="mydash-h">${S('my_sales')?(A?'🧾 مبيعاتي':'🧾 My sales'):(A?'🧾 المبيعات':'🧾 Sales')}</h3><div class="stats-grid">
+      ${card(A?'مبيعات اليوم':'Today', fmtMoney(sales.today_total), `${sales.today_count} ${A?'فاتورة':'invoices'}${sales.returns_today?` · ${A?'مرتجع':'returns'} ${fmtMoney(sales.returns_today)}`:''}`, 'trending-up', 'green')}
+      ${card(A?'مبيعات الشهر':'This month', fmtMoney(sales.month_total), `${sales.month_count} ${A?'فاتورة':'invoices'}`, 'calendar', '')}
+      ${card(A?'نقدي / شبكة اليوم':'Cash / card today', `${fmtMoney(sales.today_cash)} / ${fmtMoney(sales.today_card)}`, sales.today_credit?`${A?'آجل':'Credit'} ${fmtMoney(sales.today_credit)}`:'', 'wallet', '')}
+      ${sales.open_credit!=null?card(A?'فواتير آجلة غير محصّلة':'Unpaid credit invoices', fmtMoney(sales.open_credit), '', 'clock', 'amber'):''}
+    </div>`);
+    const sh = S('shift');
+    if (sh) parts.push(`<h3 class="mydash-h">${A?'⏱️ ورديتي الحالية':'⏱️ My open shift'}</h3><div class="stats-grid">
+      ${card(A?'المتوقع بالدرج':'Expected in drawer', fmtMoney(sh.expected_cash), `${A?'عهدة':'float'} ${fmtMoney(sh.opening_cash)} + ${A?'نقدي':'cash'} ${fmtMoney(sh.sales_cash)}${sh.returns_cash?` − ${A?'مرتجع':'returns'} ${fmtMoney(sh.returns_cash)}`:''}`, 'wallet', 'green')}
+      ${card(A?'شبكة':'Card', fmtMoney(sh.sales_card), '', 'credit-card', '')}
+      ${card(A?'فواتير الوردية':'Shift invoices', String(sh.invoices), `${A?'من':'since'} ${new Date(sh.start_time).toLocaleTimeString(A?'ar-SA-u-nu-latn':'en-GB',{hour:'2-digit',minute:'2-digit'})}`, 'receipt', '')}
+    </div>`);
+    const cu = S('customers');
+    if (cu) parts.push(`<h3 class="mydash-h">${A?'👥 العملاء':'👥 Customers'}</h3><div class="stats-grid">
+      ${card(A?'المستحق على العملاء':'Receivables', fmtMoney(cu.receivables), `${cu.owing_count} ${A?'عميل':'customers'}`, 'users', 'amber')}
+      ${card(A?'متأخر أكثر من 30 يوم':'Overdue 30+ days', fmtMoney(cu.overdue_30), '', 'alert-triangle', cu.overdue_30>0?'red':'')}
+    </div>${cu.top.length?`<div class="card" style="margin-top:10px;"><div class="tbl-wrap"><table class="tbl"><tbody>${cu.top.map(t=>`<tr><td><b>${sanitize(t.name)}</b></td><td style="color:var(--danger);font-weight:800;">${fmtMoney(t.balance)}</td></tr>`).join('')}</tbody></table></div></div>`:''}`);
+    const pu = S('purchases');
+    if (pu) parts.push(`<h3 class="mydash-h">${A?'📦 المشتريات':'📦 Purchases'}</h3><div class="stats-grid">
+      ${card(A?'مشتريات اليوم':'Today', fmtMoney(pu.today_total), `${pu.today_count} ${A?'فاتورة':'invoices'}`, 'package', 'amber')}
+      ${card(A?'مشتريات الشهر':'This month', fmtMoney(pu.month_total), `${pu.month_count} ${A?'فاتورة':'invoices'}`, 'calendar', '')}
+      ${card(A?'المستحق للموردين':'Owed to suppliers', fmtMoney(pu.payables), `${pu.unpaid_count} ${A?'فاتورة غير مسددة':'unpaid invoices'}`, 'truck', 'red')}
+    </div>`);
+    const iv = S('inventory');
+    if (iv) parts.push(`<h3 class="mydash-h">${A?'🏬 المخزون':'🏬 Inventory'}</h3><div class="stats-grid">
+      ${iv.stock_value==null?card(A?'الأصناف':'Items', String(iv.products), `${iv.out_of_stock?`${iv.out_of_stock} ${A?'نافد':'out of stock'}`:''}`, 'box', 'green'):card(A?'قيمة المخزون (بالتكلفة)':'Stock value (cost)', fmtMoney(iv.stock_value), `${iv.products} ${A?'صنف':'items'}${iv.out_of_stock?` · ${iv.out_of_stock} ${A?'نافد':'out of stock'}`:''}`, 'box', 'green')}
+      ${iv.by_warehouse.length>1?iv.by_warehouse.map(w=>card(sanitize(dl(w.name)), fmtMoney(w.value), '', 'map-pin', '')).join(''):''}
+    </div>${iv.low_stock.length?`<div class="card" style="margin-top:10px;"><div class="card-head"><h3>⚠️ ${A?'قربت تخلص':'Running low'}</h3></div><div class="tbl-wrap"><table class="tbl"><tbody>${iv.low_stock.map(l=>`<tr><td><b>${sanitize(l.name)}</b></td><td><span class="badge badge-red">${l.qty}</span> / ${l.min_qty}</td></tr>`).join('')}</tbody></table></div></div>`:''}`);
+    const tr = S('treasury');
+    if (tr) parts.push(`<h3 class="mydash-h">${A?'💰 الخزينة':'💰 Treasury'}</h3><div class="stats-grid">
+      ${card(A?'الإجمالي':'Total', fmtMoney(tr.total), '', 'wallet', 'green')}
+      ${tr.accounts.map(a=>card(sanitize(dl(a.name)), fmtMoney(a.balance), '', a.type==='bank'?'landmark':'wallet', '')).join('')}
+    </div>`);
+    const fi = S('finance');
+    if (fi) parts.push(`<h3 class="mydash-h">${A?'📊 الشهر الحالي':'📊 This month'}</h3><div class="stats-grid">
+      ${card(A?'الإيرادات':'Revenue', fmtMoney(fi.month_revenue), '', 'trending-up', 'green')}
+      ${card(A?'مجمل الربح':'Gross profit', fmtMoney(fi.month_gross), `${A?'التكلفة':'COGS'} ${fmtMoney(fi.month_cogs)}`, 'bar-chart-2', '')}
+      ${card(A?'صافي الربح':'Net profit', fmtMoney(fi.month_net), `${A?'المصاريف':'Expenses'} ${fmtMoney(fi.month_expenses)}`, 'activity', fi.month_net<0?'red':'green')}
+      ${card(A?'صافي الضريبة':'Net VAT', fmtMoney(fi.month_vat_net), fi.month_vat_net>0?(A?'مستحق للهيئة':'payable'):(A?'رصيد لك':'credit'), 'file-text', '')}
+    </div>`);
+    c.innerHTML = `<div>
+      <div class="page-header"><div>
+        <div class="page-title-lg">${A?'لوحتي':'My dashboard'}</div>
+        <div class="page-sub">${sum?(A?'أرقام قسمك من دفتر المنشأة — تتحدث تلقائيًا · آخر تحديث ':'Your section from the company ledger — updates automatically · last update ')+new Date(sum.at).toLocaleTimeString(A?'ar-SA-u-nu-latn':'en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):(A?'جاري التحميل…':'Loading…')}</div>
+      </div></div>
+      <style>.mydash-h{font-size:15px;font-weight:900;margin:18px 0 10px;}</style>
+      ${parts.join('') || (sum?`<div class="empty" style="padding:30px;">${A?'ما فيه أقسام مرتبطة بصلاحياتك':'No sections for your permissions'}</div>`:'')}
+    </div>`;
+    refreshIcons();
+  };
+  if (!quiet || !_mySum) draw(_mySum);
+  fetchMySummary(true).then(sum => { if (currentPage === 'mydash') draw(sum); });
+  _startKpiRefresh();
+}
+
 function renderDashboard(c) {
   const db = getDB();
   const today = new Date().toDateString();
@@ -3047,7 +3165,7 @@ function renderDashboard(c) {
   const dashPurchases = filterByViewBranch(db.purchases).filter(p=>p.status!=='معكوسة');
 
   const todaySales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
-  const monthSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
+  const monthSales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
   const lastMSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
   const monthPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
   const lastMPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
@@ -3102,15 +3220,15 @@ function renderDashboard(c) {
     <div class="page-header">
       <div>
         <div class="page-title-lg">${t('dashboard')}</div>
-        <div class="page-sub">${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}${viewBid?` · ${lang==='ar'?'بيانات فرع':'Branch data:'} ${sanitize((db.branches||[]).find(b=>b.id===viewBid)?.name||'')}`:''}</div>
+        <div class="page-sub">${new Date().toLocaleDateString(lang==='ar'?'ar-SA-u-ca-gregory-nu-latn':'en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}${viewBid?` · ${lang==='ar'?'بيانات فرع':'Branch data:'} ${sanitize((db.branches||[]).find(b=>b.id===viewBid)?.name||'')}`:''}</div>
       </div>
     </div>
     ${qsChecklistCard(db)}
     <div class="stats-grid">
-      <div id="dash-today-sales-card" class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value">${fmtMoney(todaySales)}</div></div>
-      <div class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon">${icon('shopping-cart',22)}</div><div class="stat-label">${t('monthSales')}</div><div class="stat-value">${fmtMoney(monthSales)}</div><div style="margin-top:6px;">${pctChange(monthSales,lastMSales)||''}</div></div>
-      <div class="stat-card" data-action="goTo" data-args='["purchases"]'><div class="stat-icon amber">${icon('package',22)}</div><div class="stat-label">${t('monthPurchases')}</div><div class="stat-value">${fmtMoney(monthPurch)}</div><div style="margin-top:6px;">${pctChange(monthPurch,lastMPurch)||''}</div></div>
-      <div class="stat-card" data-action="goTo" data-args='["treasury"]'><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value">${fmtMoney(dashTreasuryBalance)}</div></div>
+      <div id="dash-today-sales-card" class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${t('todaySales')}</div><div class="stat-value" data-kpi="sales.today_total">${fmtMoney(todaySales)}</div></div>
+      <div class="stat-card" data-action="goTo" data-args='["sales"]'><div class="stat-icon">${icon('shopping-cart',22)}</div><div class="stat-label">${t('monthSales')}</div><div class="stat-value" data-kpi="sales.month_total">${fmtMoney(monthSales)}</div><div style="margin-top:6px;">${pctChange(monthSales,lastMSales)||''}</div></div>
+      <div class="stat-card" data-action="goTo" data-args='["purchases"]'><div class="stat-icon amber">${icon('package',22)}</div><div class="stat-label">${t('monthPurchases')}</div><div class="stat-value" data-kpi="purchases.month_total">${fmtMoney(monthPurch)}</div><div style="margin-top:6px;">${pctChange(monthPurch,lastMPurch)||''}</div></div>
+      <div class="stat-card" data-action="goTo" data-args='["treasury"]'><div class="stat-icon green">${icon('wallet',22)}</div><div class="stat-label">${t('treasuryBalance')}</div><div class="stat-value" data-kpi="treasury.total">${fmtMoney(dashTreasuryBalance)}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
       <div id="dash-trend-card" class="card">
@@ -3178,9 +3296,22 @@ function renderDashboard(c) {
               <th></th>
             </tr></thead>
             <tbody>
-              ${db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').length===0
-                ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم مدينة':'No receivables'}</td></tr>`
-                : db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').map(i=>{
+              ${(()=>{
+                // رصيد سابق على العميل (افتتاحي) ما له فاتورة بالنظام — كان داخل بالإجمالي
+                // وما يظهر بالقائمة، فتطلع البطاقة بمبلغ والقائمة «لا توجد ذمم»
+                const _open = db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي');
+                const _prior = db.customers.map(c=>{
+                  const onInv = _open.filter(i=>_matchParty(i,'customer_id','customer_name',c)).reduce((s,i)=>s+invOutstanding(i),0);
+                  return { c, amt: Math.round(((c.balance||0) - onInv)*100)/100 };
+                }).filter(x=>x.amt>0.005);
+                if (!_open.length && !_prior.length) return `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">✅ ${lang==='ar'?'لا توجد ذمم مدينة':'No receivables'}</td></tr>`;
+                return _prior.map(x=>`<tr>
+                  <td><b>${sanitize(x.c.name)}</b></td>
+                  <td colspan="2" style="color:var(--text-muted);font-size:12px;">${lang==='ar'?'رصيد سابق (افتتاحي)':'Prior (opening) balance'}</td>
+                  <td style="color:var(--danger);font-weight:800;">${fmtMoney(x.amt)}</td>
+                  <td></td>
+                  <td><button class="btn btn-sm btn-primary" data-action="goTo" data-args='["receipts"]'>📥 ${lang==='ar'?'تحصيل':'Collect'}</button></td>
+                </tr>`).join('') + _open.map(i=>{
                   const remaining = invOutstanding(i);
                   const days = Math.floor((new Date()-new Date(i.created_at))/(1000*60*60*24));
                   return `
@@ -3191,9 +3322,10 @@ function renderDashboard(c) {
                   <td style="color:var(--danger);font-weight:800;">${fmtMoney(remaining)}</td>
                   <td><span class="badge ${i.status==='جزئي'?'badge-amber':'badge-red'}">${i.status}</span></td>
                   <td><button class="btn btn-sm btn-primary" data-action="quickReceipt" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'إنشاء سند قبض':'Create Receipt'}">📥 ${lang==='ar'?'تحصيل':'Collect'}</button></td>
-                </tr>`;}).join('')}
+                </tr>`;}).join('');
+              })()}
             </tbody>
-            ${db.invoices.filter(i=>i.status==='آجل').length>0?`
+            ${receivables>0?`
             <tfoot>
               <tr style="background:var(--primary-soft);">
                 <td colspan="3" style="padding:10px 14px;font-weight:800;text-align:end;">${lang==='ar'?'الإجمالي:':'Total:'}</td>
@@ -3407,7 +3539,7 @@ function renderPOS(sc) {
         </div>
         <div id="pos-totals">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('subtotal')}</span><span>${fmtMoney(afterDisc)}</span></div>
-          ${_vatRnd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>`:''}
+          ${_vatRnd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')}</span><span>${fmtMoney(vat)}</span></div>`:''}
           <div style="display:flex;justify-content:space-between;font-weight:900;font-size:20px;color:var(--primary);border-top:2px solid var(--border);margin-top:6px;padding-top:8px;">
             <span>${t('grandTotal')}</span><span>${fmtMoney(total)}</span>
           </div>
@@ -3603,7 +3735,13 @@ function removeCartItem(id) {
 }
 function setCartQty(id,qty) {
   if(qty<=0){removeCartItem(id);return;}
-  const i=cart.find(x=>x.id===id); if(i)i.qty=qty;
+  const i=cart.find(x=>x.id===id);
+  if(i && qty>i.qty){
+    const db=getDB(); const p=db.products.find(x=>x.id===id);
+    const avail=p?activeBranchStockQty(db,p):Infinity;
+    if(qty>avail){showToast(lang==='ar'?'لا يوجد مخزون كافٍ':'Insufficient stock','error');qty=Math.max(i.qty,avail);}
+  }
+  if(i)i.qty=qty;
   updateCartDisplay(); updatePOSTotals();
 }
 function clearCart() {
@@ -3630,7 +3768,7 @@ function updatePOSTotals() {
   const d=el('pos-totals'); if(!d)return;
   d.innerHTML=`
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('subtotal')}</span><span>${fmtMoney(afterDisc)}</span></div>
-    ${_vatOn?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')} 15%</span><span>${fmtMoney(vat)}</span></div>`:''}
+    ${_vatOn?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:3px 0;"><span>${t('vat')}</span><span>${fmtMoney(vat)}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;font-weight:900;font-size:20px;color:var(--primary);border-top:2px solid var(--border);margin-top:6px;padding-top:8px;">
       <span>${t('grandTotal')}</span><span>${fmtMoney(total)}</span>
     </div>`;
@@ -3653,6 +3791,13 @@ function updatePOSTotals() {
 // customerId (اختياري): نفس مبدأ postSupplierPayable — لو تحدَّد، الأولوية له
 // دائمًا على مطابقة الاسم (نص حر يتغيّر بأي تعديل بيانات عميل لاحق)
 // المتبقي الفعلي على فاتورة: الإجمالي − المدفوع − المسوّى بمرتجعات آجلة (إشعار دائن)
+// نفس قاعدة السيرفر (src/utils/costVisibility.js): التكلفة لمن له مشتريات/تقارير/حسابات/إدارة مخزون
+function canSeeCost() {
+  return currentUser?.role === 'owner' || ['purchases.view','reports.view','accounts.view','inventory.manage'].some(p => has(p));
+}
+// قيم مخزّنة بالعربي (حالة الفاتورة، طريقة الدفع) — عرضها بالإنجليزي في الوضع الإنجليزي
+const _VAL_EN = { 'مسددة':'Paid','مسدد':'Paid','آجل':'Credit','جزئي':'Partial','ملغاة':'Cancelled','معكوسة':'Reversed','نقدي':'Cash','شبكة':'Card','تحويل':'Transfer','تحويل بنكي':'Bank transfer' };
+function dv(v) { return lang==='ar' ? (v ?? '') : (_VAL_EN[v] || v || ''); }
 function invOutstanding(inv) {
   if (!inv) return 0;
   return Math.max(0, Math.round(((inv.grand_total||0) - (inv.paid_amount||0) - (inv.credited_amount||0)) * 100) / 100);
@@ -3661,6 +3806,24 @@ function purOutstanding(p) {
   if (!p) return 0;
   return Math.max(0, Math.round((p.remaining_amount != null ? p.remaining_amount : (p.total||0) - (p.paid_amount||0)) * 100) / 100);
 }
+// قيد سجّله السيرفر بنفسه (تسوية دفعة مقدمة وعكسها) — يدخل الدفتر المحلي فورًا برقمه
+// بالسيرفر، فالسحب ما يكرره والمزامنة ما ترفعه مرة ثانية
+function _addServerJournal(db, e) {
+  if (!e || !e.id) return;
+  db.journal = db.journal || [];
+  if (db.journal.some(j => j._serverId === e.id)) return;
+  db.journal.push({ id: 'srv-' + e.id, date: e.date || new Date().toISOString(), description: e.description || '',
+    ref: e.ref || '', entries: (e.entries || []).map(l => ({ ...l, amount: parseFloat(l.amount) || 0 })), _serverId: e.id });
+}
+// بعد إنشاء فاتورة آجلة: السيرفر سوّاها من دفعة العميل المقدمة (لو له) — نطابق محليًا
+function _applyServerAdvance(db, inv, srv) {
+  const adv = parseFloat(srv?.advance_applied) || 0;
+  if (adv <= 0) return;
+  inv.advance_applied = adv;
+  inv.paid_amount = Math.round((parseFloat(srv.paid_amount) || adv) * 100) / 100;
+  inv.status = inv.paid_amount >= (parseFloat(inv.grand_total) || 0) - 0.005 ? 'مسددة' : 'جزئي';
+  _addServerJournal(db, srv.advance_entry);
+}
 function postCustomerReceivable(db, jEntries, customerName, journalAmount, direction, balanceAmount, customerId) {
   if (balanceAmount === undefined) balanceAmount = journalAmount;
   if (balanceAmount) {
@@ -3668,8 +3831,9 @@ function postCustomerReceivable(db, jEntries, customerName, journalAmount, direc
     // تغيّر بعد مزامنة العميل، فكان الرصيد ما يتحدّث إطلاقًا بلا أي خطأ
     const cust = (customerId && db.customers.find(c => c.id === customerId)) || db.customers.find(c => c.name === customerName);
     if (cust) {
+      // بدون قص عند الصفر: الرصيد السالب = دفعة مقدمة له (رصيد دائن) — نفس حساب السيرفر بالضبط
       const next = (cust.balance || 0) + (direction === 'increase' ? balanceAmount : -balanceAmount);
-      cust.balance = direction === 'increase' ? Math.round(next * 100) / 100 : Math.max(0, Math.round(next * 100) / 100);
+      cust.balance = Math.round(next * 100) / 100;
     }
   }
   if (journalAmount) {
@@ -3699,15 +3863,16 @@ function postSupplierPayable(db, jEntries, supplierName, journalAmount, directio
 // أو طباعة. عند انقطاع الاتصال نوقف البيع بدل طباعة إيصال برقم لن يطابق
 // السجل الرسمي أبدًا (قرار صريح: لا مسار بديل بلا اتصال بهذي الشاشة)
 async function doCheckout() {
+  if (blockIfPeriodClosed(new Date().toISOString().slice(0,10))) return;
   if (blockedByExpiredSubscription()) return;
   if(cart.length===0){showToast(lang==='ar'?'السلة فارغة':'Cart empty','error');return;}
-  const db=getDB();
+  let db=getDB();
   const subtotal=cart.reduce((s,i)=>s+i.qty*i.price,0);
   const disc=Number(posDiscount||0);
   const afterDisc=Math.max(0,subtotal-disc);
   const _stPOS=db.settings;
   const _vatActivePOS=_stPOS?.vat_enabled!==false&&_stPOS?.vat_enabled!==0;
-  const vat=_vatActivePOS?afterDisc*0.15:0; const total=afterDisc+vat;
+  const vat=_vatActivePOS?Math.round(afterDisc*0.15*100)/100:0; const total=Math.round((afterDisc+vat)*100)/100;
   const activeWarehouseId=resolveActiveWarehouseId();
   const activeBranchId=(db.warehouses||[]).find(w=>w.id===activeWarehouseId)?.branch_id||null;
 
@@ -3746,6 +3911,9 @@ async function doCheckout() {
   // نجاح — الآن فقط، وببيانات السيرفر المؤكَّدة (رقم حقيقي، ورمز QR الموقَّع إن
   // وُجد)، نبني الفاتورة المحلية ونطبّق كل الأثر المحلي (خزينة، قيد يومية،
   // إحصاءات الوردية، نقاط الولاء)
+  // نسخة حديثة: أثناء انتظار السيرفر ممكن تكون المزامنة سحبت بيانات جديدة (فواتير
+  // زملاء، كميات) — الحفظ بالنسخة القديمة كان يمسحها
+  db=getDB();
   const srv=res.data;
   const inv={
     id: srv.id,
@@ -3815,8 +3983,9 @@ async function doCheckout() {
   if(btn){btn.disabled=false;btn.innerHTML=origBtnHtml;}
   showToast(`✅ ${inv.invoice_no} — ${fmtMoney(total)}`);
   showInvoiceModal(inv);
+  // البيع ينتظر رد السيرفر — لو المستخدم انتقل لصفحة ثانية خلالها، ما فيه نقطة بيع نرسمها
   if (currentPage === 'pos') renderPOSPage(el('page-content'));
-  else renderPOS(el('sales-content'));
+  else if (el('sales-content')) renderPOS(el('sales-content'));
 }
 
 // نافذة انقطاع الاتصال وقت البيع — بلا مسار بديل، السلة تبقى سليمة
@@ -3972,15 +4141,18 @@ function generateZATCAQR(s, inv) {
   const dt = new Date(inv.created_at).toISOString();
   const tlvStr =
     tlv(1, s.company_name||'يقظ') +
-    tlv(2, s.vat_number||'300000000000000') +
+    // بدون رقم ضريبي حقيقي يبقى الحقل فاضي — رقم وهمي برمز الفاتورة أسوأ من غيابه
+    tlv(2, s.vat_number||'') +
     tlv(3, dt) +
     tlv(4, inv.grand_total.toFixed(2)) +
     tlv(5, inv.vat_total.toFixed(2));
-  // base64
+  // base64 — tlvStr أصلًا بايتات (حرف لكل بايت، القيم مرمّزة UTF-8 داخل tlv())، فيُرمَّز
+  // مباشرة. كان يمر على encodeURIComponent فيُرمَّز UTF-8 مرة ثانية: أي اسم محل عربي
+  // يطلع QR تالف ترفضه قارئات الهيئة
   try {
-    return btoa(unescape(encodeURIComponent(tlvStr)));
-  } catch(e) {
     return btoa(tlvStr);
+  } catch(e) {
+    return btoa(unescape(encodeURIComponent(tlvStr)));
   }
 }
 
@@ -4176,7 +4348,7 @@ function renderInvoicesList(sc) {
             ?`<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">📄 ${lang==='ar'?'لا توجد فواتير':'No invoices'}</td></tr>`
             :filtered.map(i=>{
               const paid=i.paid_amount||0;
-              const remaining=Math.max(0,i.grand_total-paid);
+              const remaining=invOutstanding(i);
               return `<tr>
                 <td>
                   <div style="font-weight:800;color:var(--primary);">${i.invoice_no}</div>
@@ -4208,17 +4380,17 @@ function renderInvoicesList(sc) {
                   ${i.last_voucher_no?`<div style="font-size:10px;color:var(--text-muted);font-weight:400;">📎 ${i.last_voucher_no}</div>`:''}
                   ${i.last_payment_date?`<div style="font-size:10px;color:var(--text-muted);font-weight:400;">${fmtDate(i.last_payment_date)}</div>`:''}
                 </td>
-                <td style="color:${remaining>0?'var(--danger)':'var(--success)'};font-weight:700;">${remaining>0?fmtMoney(remaining):'✓ مسدد'}</td>
+                <td style="color:${remaining>0?'var(--danger)':'var(--success)'};font-weight:700;">${remaining>0?fmtMoney(remaining):(lang==='ar'?'✓ مسدد':'✓ Paid')}</td>
                 <td>
                   <span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':i.status==='ملغاة'?'badge-gray':'badge-red'}" style="gap:5px;">
-                    <span style="width:6px;height:6px;border-radius:99px;background:currentColor;flex-shrink:0;"></span>${i.status}
+                    <span style="width:6px;height:6px;border-radius:99px;background:currentColor;flex-shrink:0;"></span>${dv(i.status)}
                   </span>
                 </td>
                 <td>
                   <div style="display:flex;gap:4px;">
                     <button class="icon-btn" style="width:28px;height:28px;" data-action="printSalesInvoice" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'طباعة':'Print'}">${icon('printer',13)}</button>
                     ${i.status!=='ملغاة'&&(i.status==='آجل'||i.status==='جزئي')?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" data-action="quickReceipt" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'تحصيل':'Collect'}">${icon('dollar-sign',13)}</button>`:''}
-                    ${has('sales.create')&&i.status!=='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" data-action="cancelInvoice" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'إلغاء الفاتورة':'Cancel invoice'}">${icon('ban',13)}</button>`:''}
+                    ${has('sales.delete')&&i.status!=='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" data-action="cancelInvoice" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'إلغاء الفاتورة':'Cancel invoice'}">${icon('ban',13)}</button>`:''}
                     ${i.status==='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;" data-action="showEntityAuditLog" data-args='${JSON.stringify(['invoice',i.id,lang==='ar'?`سجل إلغاء ${i.invoice_no}`:`Cancellation log — ${i.invoice_no}`])}' title="${lang==='ar'?'من ألغاها ومتى؟':'Who cancelled it & when?'}">${icon('history',13)}</button>`:''}
                     ${i.status==='ملغاة'?`<button class="icon-btn" style="width:28px;height:28px;background:var(--primary-soft);color:var(--primary);" data-action="showCreditNoteByInvoice" data-args="${JSON.stringify([i.id])}" title="${lang==='ar'?'عرض إشعار الدائن':'View credit note'}">${icon('file-text',13)}</button>`:''}
                   </div>
@@ -4236,6 +4408,8 @@ function renderInvoicesList(sc) {
 // يمنع حذف الفواتير المُصدرة نهائياً؛ يبقى رقم الفاتورة والسجل والقيد الأصلي محفوظين
 // للأبد ويُضاف قيد عكسي جديد بدلاً من حذف القيد الأصلي — يحافظ على أثر التدقيق الكامل.
 function cancelInvoice(id) {
+  // نفس صلاحية السيرفر — بدونها كانت الشاشة تقول «تم الإلغاء» والسيرفر يرفض بصمت
+  if(!has('sales.delete')){showToast(lang==='ar'?'ليس لديك صلاحية إلغاء الفواتير':'You are not allowed to cancel invoices','error');return;}
   const db=getDB();
   const inv=db.invoices.find(i=>i.id===id);
   if(!inv){showToast(lang==='ar'?'الفاتورة غير موجودة':'Invoice not found','error');return;}
@@ -4283,7 +4457,10 @@ function cancelInvoice(id) {
   }
 
   // 3. عكس الخزينة — إرجاع المبلغ المسدد فعلاً بحركة عكسية موثّقة (لا حذف)
-  const paidAmt=parseFloat(inv.paid_amount||0);
+  // المسوّى من دفعة مقدمة ما يُسترد نقدًا — يرجع رصيدًا دائنًا للعميل (قيد عكسي من السيرفر)
+  const advAmt=parseFloat(inv.advance_applied||0);
+  const paidAll=parseFloat(inv.paid_amount||0);
+  const paidAmt=Math.max(0, Math.round((paidAll-advAmt)*100)/100);
   if(paidAmt>0){
     db.treasury.balance=Math.round((db.treasury.balance-paidAmt)*100)/100;
     db.treasury.moves.unshift({
@@ -4295,7 +4472,7 @@ function cancelInvoice(id) {
   }
 
   // 4. عكس رصيد العميل — خصم المبلغ المتبقي غير المسدد
-  const remaining=Math.max(0,(parseFloat(inv.grand_total||0))-(paidAmt));
+  const remaining=Math.max(0,(parseFloat(inv.grand_total||0))-paidAll) + advAmt;
   if(remaining>0 && inv.customer_name){
     postCustomerReceivable(db, [], inv.customer_name, 0, 'decrease', remaining, inv.customer_id);
   }
@@ -4440,6 +4617,7 @@ function showNewInvoiceModal() {
           <div style="display:flex;justify-content:space-between;font-weight:900;font-size:18px;color:var(--primary);border-top:2px solid var(--primary-soft);padding-top:10px;">
             <span>${lang==='ar'?'الإجمالي النهائي:':'Total:'}</span><span id="ni-sum-total">0.00</span>
           </div>
+          <div id="ni-adv-note" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px 10px;font-size:12px;margin-top:8px;"></div>
           <div id="ni-partial-field" style="display:none;">
             <label class="form-label">${lang==='ar'?'المبلغ المسدد الآن:':'Amount Paid Now:'}</label>
             <input class="input" type="number" id="ni-partial-amount" value="0" min="0" data-oninput="calcNewInvTotals" />
@@ -4492,6 +4670,7 @@ function onNiCustomerInput(val) {
   const name = val.trim();
   if(!name || name==='عميل نقدي' || name==='Cash Customer') { warn.style.display='none'; return; }
   const found = db.customers.find(c=>c.name===name);
+  calcNewInvTotals();
   if(found) {
     warn.style.display='none';
     if(found.vat_num && el('ni-customer-vat')) el('ni-customer-vat').value = found.vat_num;
@@ -4717,6 +4896,12 @@ function niRemove(idx){if(idx<0||idx>=newInvItems.length)return;newInvItems.spli
 function niSetQtyV(value, idx) { niSetQty(idx, Number(value)); }
 function niSetPriceV(value, idx) { niSetPrice(idx, Number(value)); }
 
+// دفعة العميل المقدمة (رصيده الدائن) — تُخصم أولًا من أي فاتورة له، والباقي حسب طريقة الدفع
+function niCustomerAdvance(){
+  const name=(el('ni-customer')?.value||'').trim();
+  const c=name && getDB().customers.find(x=>x.name===name);
+  return c ? Math.max(0, Math.round(-(c.balance||0)*100)/100) : 0;
+}
 function calcNewInvTotals(){
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
@@ -4738,6 +4923,14 @@ function calcNewInvTotals(){
     // تحذير لو المبلغ المدخل أكبر من الإجمالي
     partialEl.style.borderColor = paid > total ? 'var(--danger)' : '';
   }
+  const advEl=el('ni-adv-note'), adv=Math.min(niCustomerAdvance(), total);
+  if(advEl){
+    advEl.style.display = adv>0 ? '' : 'none';
+    if(adv>0) advEl.innerHTML = lang==='ar'
+      ? `💚 للعميل دفعة مقدمة — يُخصم منها <b>${fmtMoney(adv)}</b>، والباقي <b>${fmtMoney(Math.max(0,total-adv))}</b> حسب طريقة الدفع (نقدي / آجل على حسابه)`
+      : `💚 Customer advance — <b>${fmtMoney(adv)}</b> is deducted, the remaining <b>${fmtMoney(Math.max(0,total-adv))}</b> follows the payment method`;
+  }
+  if(remainEl && partialEl) remainEl.textContent = fmtMoney(Math.max(0, total - adv - Math.max(0, Number(partialEl.value||0))));
 }
 
 function saveNewInvoice(printAfter=false) {
@@ -4753,7 +4946,7 @@ function saveNewInvoice(printAfter=false) {
 // binary فقط: إما "آجل" أو "مدفوعة بالكامل") — فنُنشئها كآجلة ثم نسجّل التحصيل
 // الجزئي بطلب منفصل فورًا (نفس آلية تحصيل الدفعات الموجودة أصلًا لأي فاتورة).
 async function _saveNewInvoiceActual(printAfter, overrideToken) {
-  const db=getDB();
+  let db=getDB();
   const sub=newInvItems.reduce((s,i)=>s+i.qty*i.price,0);
   const discVal=newInvDiscount.type==='percent'?sub*(newInvDiscount.value/100):newInvDiscount.value;
   const afterDisc=Math.max(0,sub-discVal);
@@ -4767,7 +4960,7 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
   // التحقق من صحة المبلغ الجزئي
   if(payment==='جزئي'){
     if(partialPaid<=0){showToast(lang==='ar'?'❌ أدخل المبلغ المسدد':'❌ Enter paid amount','error');return;}
-    if(partialPaid>=total){showToast(lang==='ar'?'❌ المبلغ الجزئي يجب أن يكون أقل من الإجمالي — استخدم "نقدي" للسداد الكامل':'❌ Partial must be less than total','error');return;}
+    if(partialPaid>=total-niCustomerAdvance()){showToast(lang==='ar'?'❌ المبلغ الجزئي يجب أن يكون أقل من الإجمالي — استخدم "نقدي" للسداد الكامل':'❌ Partial must be less than total','error');return;}
   }
 
   const activeBranchId=readBranchField('ni-branch');
@@ -4799,6 +4992,7 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     // السيرفر يقرر "مدفوعة بالكامل" لأي payment_method غير "آجل"/"credit" — الدفع
     // الجزئي يُرسَل كآجل هنا، ثم يُسجَّل التحصيل الجزئي بطلب منفصل بالأسفل
     payment_method: payment==='جزئي' ? 'آجل' : payment,
+    use_advance: niCustomerAdvance()>0,
     invoice_type: invoiceType, branch_id: activeBranchId,
     created_at: new Date(dateVal).toISOString()
   };
@@ -4835,6 +5029,8 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     try { await window._cloudApiFetch('POST', `/api/invoices/${srv.id}/payment`, { amount: partialPaid, payment_method: 'نقدي' }); }
     catch(e) { /* ignore — سيُلتقط لاحقًا بمزامنة الدفعات العامة */ }
   }
+  // نسخة حديثة بعد انتظار السيرفر — الحفظ بالنسخة المقروءة قبل الانتظار كان يمسح ما سحبته المزامنة أثناءه
+  db=getDB();
 
   const inv={
     id: srv.id,
@@ -4854,6 +5050,17 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     icv: srv.icv||null,
     zatca_hash: srv.zatca_hash||null,
   };
+  // المقدم المخصوم (من السيرفر) — الكاش هو الباقي فقط، والآجل الباقي على حسابه
+  const advUsed = parseFloat(srv.advance_applied)||0;
+  if (advUsed > 0) {
+    inv.advance_applied = advUsed;
+    _addServerJournal(db, srv.advance_entry);
+    if (payment==='آجل' || payment==='جزئي') {
+      inv.paid_amount = Math.round((advUsed + (payment==='جزئي'?partialPaid:0))*100)/100;
+      inv.status = inv.paid_amount >= total - 0.005 ? 'مسددة' : 'جزئي';
+    }
+  }
+  const cashIn = (payment==='آجل'||payment==='جزئي') ? partialPaid : Math.max(0, Math.round((total-advUsed)*100)/100);
 
   // stock moves (تقدير فوري محلي للعرض فقط — الخصم الفعلي حصل بالسيرفر)
   if(!db.stock_moves)db.stock_moves=[];
@@ -4867,9 +5074,9 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
   });
 
   // treasury
-  if(partialPaid>0){
-    db.treasury.balance+=partialPaid;
-    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:partialPaid,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:payment,branch_id:activeBranchId});
+  if(cashIn>0){
+    db.treasury.balance+=cashIn;
+    db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'in',amount:cashIn,description:`فاتورة ${inv.invoice_no}`,reference:inv.invoice_no,date:new Date().toISOString(),method:payment,branch_id:activeBranchId});
   }
 
   // Journal entry
@@ -4882,7 +5089,9 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     if(partialPaid>0) invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:partialPaid});
     if(total-partialPaid>0) postCustomerReceivable(db, invJEntries, inv.customer_name, total-partialPaid, 'increase', undefined, inv.customer_id);
   } else {
-    invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:total});
+    // نقدي/شبكة لعميل له مقدم: الصندوق بالباقي، والمقدم يمر بالذمم ثم يُقفل بقيد التسوية (2160 → 1200)
+    if(cashIn>0) invJEntries.push({account:lang==='ar'?'النقدية':'Cash',account_code:'1100',side:'debit',amount:cashIn});
+    if(advUsed>0) postCustomerReceivable(db, invJEntries, inv.customer_name, advUsed, 'increase', undefined, inv.customer_id);
   }
   invJEntries.push({account:lang==='ar'?'إيرادات المبيعات':'Sales Revenue',account_code:'4100',side:'credit',amount:afterDisc});
   if(vat>0) invJEntries.push({account:lang==='ar'?'ضريبة المخرجات':'Output VAT',account_code:'2200',side:'credit',amount:vat});
@@ -4983,7 +5192,13 @@ function printSalesInvoice(id) {
     </div>
   </div>
   <div class="info-grid">
-    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${sanitize(inv.customer_name)}</div>${inv.customer_vat?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${inv.customer_vat}</div>`:''}</div>
+    <div class="info-box"><div class="info-label">العميل</div><div class="info-val">${sanitize(inv.customer_name)}</div>${inv.customer_vat?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(inv.customer_vat)}</div>`:''}${(()=>{
+      // الفاتورة الضريبية (B2B) تعرض عنوان المشتري من بطاقة العميل
+      if (inv.invoice_type!=='tax') return '';
+      const c = (getDB().customers||[]).find(x=>x.id===inv.customer_id) || (getDB().customers||[]).find(x=>x.name===inv.customer_name);
+      const addr = c ? [c.building_number&&('مبنى '+c.building_number), c.street_name, c.district, c.city, c.postal_code, c.additional_number&&('إضافي '+c.additional_number)].filter(Boolean).join('، ') : '';
+      return addr ? `<div style="font-size:11px;color:#64748b;">العنوان: ${sanitize(addr)}</div>` : '';
+    })()}</div>
     <div class="info-box">
       <div class="info-label">طريقة الدفع</div><div class="info-val">${inv.payment_method}</div>
       <div style="margin-top:6px;"><span class="badge ${inv.status==='مسددة'?'badge-paid':'badge-pending'}">${inv.status}</span></div>
@@ -5012,7 +5227,7 @@ function printSalesInvoice(id) {
     <div id="qr-div"></div>
     <div style="font-size:10px;color:#94a3b8;margin-top:4px;">امسح رمز QR للتحقق من الفاتورة</div>
   </div>
-  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${inv.invoice_no} • ${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':'فاتورة ضريبية مبسطة'}</div>
+  <div class="footer">${sanitize(s.company_name)||'يقظ'} • الرقم الضريبي: ${sanitize(s.vat_number)||'-'} • ${inv.invoice_no} • ${_hasRealSig?'متوافق مع متطلبات هيئة الزكاة والضريبة والجمارك':(inv.invoice_type==='tax'?'فاتورة ضريبية':'فاتورة ضريبية مبسطة')}</div>
   <script>
     window.onload = function() {
       try {
@@ -5516,6 +5731,7 @@ function showAddOpexPurchase() {
         <div>
           <label class="form-label">${lang==='ar'?'ضريبة 15%':'VAT 15%'}</label>
           <input class="input" id="p-vat" readonly value="0.00" style="background:var(--bg);" />
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:6px;cursor:pointer;"><input type="checkbox" id="p-novat" data-onchange="calcPurchVat" /> ${lang==='ar'?'بدون ضريبة (مصروف غير خاضع)':'No VAT (exempt expense)'}</label>
         </div>
       </div>
       <div style="background:var(--bg);padding:12px;border-radius:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -6086,19 +6302,21 @@ function saveMissingProducts() {
 function calcPurchVat() {
   const a = Number(el('p-amount')?.value||0);
   const _vatOnOpex = getDB().settings?.vat_enabled !== false && getDB().settings?.vat_enabled !== 0;
-  const vat = _vatOnOpex ? a*0.15 : 0;
+  // «بدون ضريبة»: مصاريف ما عليها ضريبة أصلًا (رواتب، رسوم حكومية، إيجار سكني)
+  const vat = (_vatOnOpex && !el('p-novat')?.checked) ? a*0.15 : 0;
   if(el('p-vat')) el('p-vat').value = fmtMoney(vat);
   if(el('opex-total')) el('opex-total').textContent = fmtMoney(a+vat);
 }
 
 function savePurchase(purchase_type) {
   if (blockedByExpiredSubscription()) return;
+  if (blockIfPeriodClosed(el('p-opex-date')?.value||new Date().toISOString().slice(0,10))) return;
   const db = getDB();
   const amount = Number(el('p-amount').value||0);
   if(!el('p-vendor').value){showToast(lang==='ar'?'أدخل اسم الجهة':'Enter payee name','error');return;}
   if(!amount){showToast(lang==='ar'?'أدخل المبلغ':'Enter amount','error');return;}
   const _vatOnOpex2 = db.settings?.vat_enabled !== false && db.settings?.vat_enabled !== 0;
-  const vat = _vatOnOpex2 ? amount*0.15 : 0;
+  const vat = (_vatOnOpex2 && !el('p-novat')?.checked) ? Math.round(amount*0.15*100)/100 : 0;
   const dateVal = el('p-opex-date')?.value||new Date().toISOString().slice(0,10);
   const p = {
     id: nextId(db,'purchase'),
@@ -6126,7 +6344,8 @@ function savePurchase(purchase_type) {
     description:`مصروف إداري: ${p.vendor} — ${p.category}`,
     entries:[
       {account:`${p.category}`, account_code:'5200', side:'debit', amount},
-      {account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:vat},
+      // مصروف بدون ضريبة: لا بند ضريبة بصفر بالقيد
+      ...(vat>0 ? [{account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:vat}] : []),
       {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:p.total},
     ],
     ref:`EXP-${p.id}`
@@ -6169,7 +6388,7 @@ function renderInventory(c) {
       <span style="font-size:20px;">🔴</span>
       <div style="flex:1;">
         <div style="font-weight:800;color:#dc2626;font-size:14px;margin-bottom:4px;">${lang==='ar'?`لديك ${_lowStockAlerts.length} تنبيه${_lowStockAlerts.length>1?'':''} نقص مخزون`:`You have ${_lowStockAlerts.length} low-stock alert(s)`}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStockAlerts.map(a=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(a.name)}${a.branchName?` — ${sanitize(a.branchName)}`:''} — ${a.qty} ${lang==='ar'?'قطعة':'units'} (الحد: ${a.min_qty})</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${_lowStockAlerts.map(a=>`<span style="background:#dc262618;color:#dc2626;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid #dc262630;">${sanitize(a.name)}${a.branchName?` — ${sanitize(a.branchName)}`:''} — ${a.qty} ${lang==='ar'?'قطعة':'units'} (${lang==='ar'?'الحد':'min'}: ${a.min_qty})</span>`).join('')}</div>
       </div>
     </div>` : '';
   c.innerHTML = `<div>
@@ -6203,7 +6422,7 @@ function setInvBranchFilter(val) {
 function renderInventoryInner(c) {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
-  const isOwner = currentUser?.role === 'owner';
+  const isOwner = isMultiBranchUser(); // المالك أو موظف «كل الفروع» — يختار الفرع المعروض
   const multiBranch = branches.length > 1;
 
   // نطاق العرض: null = التوتال (كل الفروع مع بعض). الأونر يقدر يختار (توتال أو
@@ -6233,10 +6452,10 @@ function renderInventoryInner(c) {
     </div>
     <div id="inv-table" class="card">
       <div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('buyPrice')}</th><th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
+        <thead><tr><th>${t('code')}</th><th>${t('productName')}</th><th>${t('category')}</th>${canSeeCost()?`<th>${t('buyPrice')}</th>`:''}<th>${t('sellPrice')}</th><th>${t('quantity')}</th><th>${t('minQty')}</th>${has('inventory.manage')?'<th></th>':''}</tr></thead>
         <tbody>${db.products.map(p=>{ const q=qtyFor(p); return `<tr>
           <td><code>${sanitize(p.code)}</code></td><td><b>${sanitize(p.name)}</b></td><td>${sanitize(dl(p.category))}</td>
-          <td>${fmtMoney(p.buy_price)}</td><td>${fmtMoney(p.sell_price)}</td>
+          ${canSeeCost()?`<td>${fmtMoney(p.buy_price)}</td>`:''}<td>${fmtMoney(p.sell_price)}</td>
           <td><span class="badge ${q<=p.min_qty?'badge-red':'badge-green'}">${q}</span></td>
           <td>${p.min_qty}</td>
           ${has('inventory.manage')?`<td style="white-space:nowrap;">
@@ -6653,6 +6872,8 @@ function renderCusContent() {
         <td>
           ${outstanding>0
             ?`<span style="font-weight:800;color:var(--danger);">${fmtMoney(outstanding)}</span>`
+            :(c.balance||0) < -0.005
+            ?`<span style="font-weight:800;color:#16a34a;" title="${lang==='ar'?'دفعة مقدمة — تُخصم تلقائيًا من فواتيره الآجلة القادمة':'Advance — deducted automatically from upcoming credit invoices'}">${lang==='ar'?'له':'Credit'} ${fmtMoney(-c.balance)}</span>`
             :`<span class="badge badge-green" style="font-size:11px;">✓ ${lang==='ar'?'مسدد':'Settled'}</span>`}
         </td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -6776,7 +6997,9 @@ function showAddEntity(type, id) {
         ${isEdit
           ? `<input class="input" type="number" value="${existing.balance||0}" disabled style="opacity:.6;" />
              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${lang==='ar'?'الرصيد يتغيّر تلقائيًا من الفواتير والسندات — لتعديله يدويًا استخدم سند قبض/صرف.':'Balance changes automatically from invoices/vouchers — use a receipt/payment voucher to adjust it manually.'}</div>`
-          : `<input class="input" type="number" id="ent-bal" value="0" />`}
+          // رصيد يُكتب هنا ما له قيد بالدفاتر (فتختلف أرصدة العملاء/الموردين عن حسابهم) —
+          // الرصيد السابق يُدخل من معالج الأرصدة الافتتاحية اللي يسجّل قيده
+          : `<div style="font-size:12px;color:var(--text-muted);line-height:1.7;padding:9px 11px;background:var(--bg);border-radius:10px;">${lang==='ar'?'يبدأ الرصيد من صفر ويتحرك تلقائيًا مع الفواتير والسندات. لو له رصيد سابق قبل استخدامك المنصة، أدخله من الإعدادات ← الأرصدة الافتتاحية (يُسجَّل بقيد صحيح).':'Starts at zero and moves with invoices and vouchers. A balance from before you started on the platform goes in Settings → Opening balances (posted with a proper entry).'}</div>`}
       </div>
       ${isCustomer ? `
       <div style="margin:14px 0 10px;padding-top:12px;border-top:1px solid var(--border);">
@@ -6828,6 +7051,12 @@ function saveEntity(type, id) {
     return;
   }
 
+  // الرقم الضريبي (لو انكتب) لازم يكون صحيح — تعتمد عليه الفاتورة الضريبية للشركات
+  const _vatIn = String(el('ent-vat')?.value || '').trim();
+  if (_vatIn && !/^3\d{13}3$/.test(_vatIn)) {
+    showToast(lang==='ar'?'⚠️ الرقم الضريبي لازم يكون 15 رقم يبدأ وينتهي بـ3 (أو اتركه فاضي)':'⚠️ VAT number must be 15 digits starting and ending with 3 (or leave it empty)','error');
+    el('ent-vat')?.focus(); return;
+  }
   const addressFields = isCustomer ? {
     street_name:     el('ent-street')?.value || '',
     building_number: el('ent-building')?.value || '',
@@ -6842,7 +7071,7 @@ function saveEntity(type, id) {
     if (!existing) return;
     Object.assign(existing, { name, phone: el('ent-phone').value, vat_num: el('ent-vat').value, ...addressFields });
   } else {
-    const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:Number(el('ent-bal').value||0), ...addressFields };
+    const data = { id:nextId(db,type), name, phone:el('ent-phone').value, vat_num:el('ent-vat').value, balance:0, ...addressFields };
     list.push(data);
   }
   saveDB(db); showToast(`✅ ${t('save')}`); closeModal();
@@ -6923,7 +7152,7 @@ function setTrBranchFilter(val) { setViewBranch(val==='total' ? 'all' : Number(v
 function renderTreasury(c) {
   const db = getDB();
   const branches = (db.branches||[]).filter(b=>b.active!==false);
-  const isOwner = currentUser?.role === 'owner';
+  const isOwner = isMultiBranchUser(); // المالك أو موظف «كل الفروع» — يختار الفرع المعروض
   const multiBranch = branches.length > 1;
 
   // نطاق العرض: null = التوتال (كل الفروع مع بعض). الأونر يقدر يختار (توتال
@@ -7020,6 +7249,7 @@ function showTreasuryMove(type) {
 }
 
 function saveTreasuryMove(type) {
+  if (blockIfPeriodClosed(new Date().toISOString().slice(0,10))) return;
   if (blockedByExpiredSubscription()) return;
   const db = getDB();
   const amount = Number(el('tr-amount').value||0);
@@ -7270,6 +7500,11 @@ async function closePeriod(type, key) {
     ? (lang==='ar'?`تأكيد إقفال سنة ${key}؟ سيُنشر قيد تصفير محاسبي حقيقي يصفّر كل حسابات الإيرادات/المصروفات وينقل صافي الربح/الخسارة لحساب الأرباح المرحّلة — بالإضافة لمنع أي عملية بتاريخ ضمن هذه السنة إلا بكلمة مرور التجاوز.`:`Confirm closing year ${key}? A real closing journal entry will be posted, zeroing every revenue/expense account and moving net profit/loss to Retained Earnings — plus blocking any transaction dated in this year without the override password.`)
     : (lang==='ar'?`تأكيد إقفال شهر ${key}؟ لن يقدر أي أحد يسجّل أو يعدّل عملية بتاريخ ضمن هذه الفترة إلا بكلمة مرور التجاوز المخصصة.`:`Confirm closing ${key}? No one will be able to record/edit a transaction dated in this period without the override password.`)
   )) return;
+  // بدون كلمة تجاوز يتحبس المالك (ما يقدر يفتح الفترة) — نطلب ضبطها أولًا
+  try {
+    const st = await window._cloudApiFetch('GET', '/api/closed-periods/override-password/status');
+    if (st && st.is_set === false) { showToast(lang==='ar'?'عيّن «كلمة مرور تجاوز الإقفال» أولًا من نفس الصفحة — بدونها ما تقدر تفتح الفترة لاحقًا':'Set the period override password first','error'); return; }
+  } catch (e) {}
   const db=getDB();
   if(!db.closed_periods) db.closed_periods=[];
   if(db.closed_periods.some(cp=>cp.period_type===type && cp.period_key===key)){
@@ -7359,7 +7594,7 @@ function reopenPeriod(id) {
         // سنة: حذف مباشر من السيرفر بالانتظار (يعكس قيد التصفير المرتبط أيضًا)
         // — لا تفاؤلي محلي هنا، بعكس فتح شهر
         btn.textContent=lang==='ar'?'جارٍ الفتح...':'Reopening...';
-        await window._cloudApiFetch('DELETE', `/api/closed-periods/${cp.id}`);
+        await window._cloudApiFetch('DELETE', `/api/closed-periods/${String(cp._serverId||cp.id).replace(/^srv-/,'')}`);
       }
 
       ov.remove();
@@ -7712,7 +7947,7 @@ function renderTrialBalance(c) {
   // لدفتر اليومية نفسه ولميزان المراجعة عمليًا، بنفس أسلوب الميزانية العمومية.
   const bal = journalAccountBalances(db, asOf);
   // نوع الحساب يُستدل عليه من بادئة الرمز المحاسبي (١=أصول، ٢=التزامات، ٣=حقوق ملكية، ٤=إيرادات، ٥=مصروفات)
-  const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
+  const typeFromCode = code => String(code)==='2210' ? 'أصول' : ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
 
   const rows = Object.keys(bal).sort().map(code=>{
     const entry = bal[code];
@@ -7822,7 +8057,7 @@ function exportTrialBalancePDF() {
   const canPickDate = hasPlanFeature('custom_period');
   const asOf = canPickDate ? tbAsOfDate : new Date().toISOString().slice(0,10);
   const bal = journalAccountBalances(db, asOf);
-  const typeFromCode = code => ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
+  const typeFromCode = code => String(code)==='2210' ? 'أصول' : ({'1':'أصول','2':'التزامات','3':'حقوق ملكية','4':'إيرادات','5':'مصروفات'}[code?.[0]] || 'أخرى');
   const rows = Object.keys(bal).sort().map(code=>{
     const entry = bal[code];
     const net = (entry.debit||0) - (entry.credit||0);
@@ -7992,22 +8227,15 @@ function _matchParty(rec, idField, nameField, party) {
 }
 
 function zakatFigures(db, asOf) {
-  const cashMovesAfter = (db.treasury?.moves||[]).filter(m=>(m.date||'').slice(0,10) > asOf);
-  const cash = (db.treasury?.balance||0) - cashMovesAfter.reduce((s,m)=>s+(m.type==='in'?m.amount:-m.amount),0);
-  const receivables = db.customers.reduce((s,cu)=>{
-    const inv = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',cu) && (i.created_at||i.date||'').slice(0,10)<=asOf).reduce((t,i)=>t+(i.grand_total||0),0);
-    const rcv = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',cu)&&r.type==='receipt'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
-    return s+Math.max(0,inv-rcv);
-  },0);
-  // p.cost_price غير مُعرَّف على أي منتج إطلاقًا (لا مكان يضبطه)، فكان
-  // يسقط دائمًا لـp.sell_price — يقيّم المخزون بسعر البيع لا التكلفة،
-  // ويُضخّم وعاء الزكاة فعليًا
-  const inventoryVal = db.products.reduce((s,p)=>s+(p.qty||0)*(p.buy_price||0),0);
-  const payables = db.suppliers.reduce((s,su)=>{
-    const pur = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',su) && (p.created_at||p.date||'').slice(0,10)<=asOf).reduce((t,p)=>t+(p.total||0),0);
-    const pay = (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',su)&&r.type==='payment'&&(r.date||r.created_at||'').slice(0,10)<=asOf).reduce((t,r)=>t+r.amount,0);
-    return s+Math.max(0,pur-pay);
-  },0);
+  // من دفتر اليومية كما كان بالتاريخ — نفس أرقام الميزانية بالضبط. كان يحسب الذمم
+  // والموردين من الفواتير والسندات (يتجاهل الأرصدة الافتتاحية والمدفوع نقدًا)
+  // والمخزون بسعر الشراء الحالي بدل تكلفة FIFO المقيّدة
+  const b = journalAccountBalances(db, asOf);
+  const dr = c => (b[c]?.debit||0) - (b[c]?.credit||0);
+  const cash = Math.round(dr('1100')*100)/100;
+  const receivables = Math.max(0, Math.round(dr('1200')*100)/100);
+  const inventoryVal = Math.round((dr('1300') + dr('1350'))*100)/100;
+  const payables = Math.max(0, Math.round(-dr('2100')*100)/100);
   const zakatBase = Math.max(0, cash+receivables+inventoryVal-payables);
   const zakatDue  = Math.round(zakatBase*0.025*100)/100;
   return { cash, receivables, inventoryVal, payables, zakatBase, zakatDue };
@@ -8177,7 +8405,7 @@ function printARAPReport(section='all') {
       <td style="text-align:center;">${fmt(r.totalInv)}</td>
       <td style="text-align:center;">${fmt(r.totalRcv)}</td>
       <td style="text-align:center;font-weight:700;color:${r.outstanding>0?'#dc2626':'#16a34a'};">
-        ${r.outstanding>0?fmt(r.outstanding):'✓ مسدد'}
+        ${r.outstanding>0?fmt(r.outstanding):(lang==='ar'?'✓ مسدد':'✓ Paid')}
       </td>
     </tr>`).join('');
 
@@ -8188,7 +8416,7 @@ function printARAPReport(section='all') {
       <td style="text-align:center;">${fmt(r.totalPur)}</td>
       <td style="text-align:center;">${fmt(r.totalPaid)}</td>
       <td style="text-align:center;font-weight:700;color:${r.outstanding>0?'#dc2626':'#16a34a'};">
-        ${r.outstanding>0?fmt(r.outstanding):'✓ مسدد'}
+        ${r.outstanding>0?fmt(r.outstanding):(lang==='ar'?'✓ مسدد':'✓ Paid')}
       </td>
     </tr>`).join('');
 
@@ -8303,6 +8531,8 @@ ${section==='all'?`
   window.open(url, '_blank');
 }
 
+// صافي الفاتورة الخاضع = الإجمالي − الضريبة (بعد الخصم) — subtotal قبل الخصم
+function invNet(i) { return Math.round(((Number(i.grand_total)||0) - (Number(i.vat_total)||0)) * 100) / 100; }
 function calcReportData(db, filterFn) {
   // filterFn(item) returns true if item is in selected period
   // الفواتير الملغاة تُستبعد دائماً — عُكس أثرها بالكامل بقيد ومخزون عكسي عند الإلغاء
@@ -8318,11 +8548,12 @@ function calcReportData(db, filterFn) {
 
   const returnedSalesVat = rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.vat_amount||0),0);
   const returnedPurchVat = rets.filter(r=>r.type==='purchases').reduce((s,r)=>s+(r.vat_amount||0),0);
-  const vatOutput = invs.reduce((s,i)=>s+i.vat_total,0) - returnedSalesVat;
-  const vatInput = purchs.reduce((s,p)=>s+(p.deductible!==false?p.vat:0),0) - returnedPurchVat;
-  const vatNet = vatOutput - vatInput;
+  let vatOutput = invs.reduce((s,i)=>s+i.vat_total,0) - returnedSalesVat;
+  let vatInput = purchs.reduce((s,p)=>s+(p.deductible!==false?p.vat:0),0) - returnedPurchVat;
   const salesReturnsAmt = rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||r.amount/1.15),0);
-  const revenue = invs.reduce((s,i)=>s+i.subtotal,0) - salesReturnsAmt;
+  // الإيراد = الخاضع بعد خصم الفاتورة (الإجمالي − الضريبة) — نفس قيد 4100 بالدفتر؛ كان
+  // يأخذ المجموع قبل الخصم فيطلع صافي الربح برقمين مختلفين بين قائمة الدخل والميزانية
+  let revenue = invs.reduce((s,i)=>s+((Number(i.grand_total)||0)-(Number(i.vat_total)||0)),0) - salesReturnsAmt;
   const journalInPeriod = filterFn ? (db.journal||[]).filter(filterFn) : (db.journal||[]);
   // مرتجعات المشتريات (5300) حساب مقابل لتكلفة البضاعة المباعة، لا مصروف
   // تشغيلي عادي — تُخصَم من COGS هنا (بدل احتسابها ضمن المصاريف التشغيلية
@@ -8338,10 +8569,9 @@ function calcReportData(db, filterFn) {
     }, 0)
   , 0);
   // تكلفة البضاعة المباعة الحقيقية (FIFO وقت البيع) — مو إجمالي المشتريات بالفترة
-  const cogs = invs.reduce((s,i)=>s+(i.cogs_total||0),0)
+  let cogs = invs.reduce((s,i)=>s+(i.cogs_total||0),0)
     - rets.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.cogs_reversal||0),0)
     + purchaseReturnsNet;
-  const grossProfit = revenue - cogs;
   // كل حسابات المصروفات (5xxx) عدا تكلفة البضاعة المباعة (5100، محسوبة أعلاه
   // من الفواتير مباشرة) ومرتجعات المشتريات (5300، خُصمت من COGS أعلاه) —
   // مصدرها دفتر اليومية مباشرة لا مصفوفة المشتريات فقط، عشان تشمل الرواتب
@@ -8349,7 +8579,7 @@ function calcReportData(db, filterFn) {
   // تُنشئ سطر "مشتريات")، بدل ما تفوتها كما كان يحصل — فيتعارض صافي الربح هنا
   // مع صافي الربح المحسوب بالميزانية العمومية (نفس البيانات بالضبط، من
   // مصدرين مختلفين)
-  const expenses = journalInPeriod.reduce((s,entry)=>
+  let expenses = journalInPeriod.reduce((s,entry)=>
     s + (entry.entries||[]).reduce((es,line)=>{
       if (line.account_code && line.account_code[0]==='5' && line.account_code!=='5100' && line.account_code!=='5300') {
         return es + (line.side==='debit' ? (line.amount||0) : -(line.amount||0));
@@ -8357,6 +8587,21 @@ function calcReportData(db, filterFn) {
       return es;
     }, 0)
   , 0);
+  // الدفتر هو المصدر الوحيد للأرقام (نفس الميزانية ولوحتي والسيرفر) — متى ما كان عند الجهاز
+  // دفتر اليومية (المالك والمحاسب). الحساب من المستندات كان يفوّت ما له قيد بدون مستند
+  // بالجهاز: إيرادات أخرى (4900)، ضريبة مصروف سجّله موظف ثاني، تسويات...
+  if ((db.journal||[]).length) {
+    const isClose = j => /^(قيد إقفال السنة المالية|عكس قيد إقفال)/.test(j.description||'');
+    const sumAcc = pred => Math.round(journalInPeriod.filter(j=>!isClose(j)).reduce((s,j)=>s+(j.entries||[]).reduce((es,l)=>{
+      const c = String(l.account_code||''); return pred(c) ? es + (l.side==='debit'?1:-1)*(Number(l.amount)||0) : es; },0),0)*100)/100;
+    revenue  = -sumAcc(c=>c[0]==='4');
+    cogs     = sumAcc(c=>c==='5100'||c==='5300');
+    expenses = sumAcc(c=>c[0]==='5'&&c!=='5100'&&c!=='5300');
+    vatOutput = -sumAcc(c=>c==='2200');
+    vatInput  = sumAcc(c=>c==='2210');
+  }
+  const vatNet = Math.round((vatOutput - vatInput)*100)/100;
+  const grossProfit = revenue - cogs;
   const netProfit = grossProfit - expenses;
   return {vatOutput,vatInput,vatNet,revenue,cogs,grossProfit,expenses,netProfit,invs,purchs,rets};
 }
@@ -8414,7 +8659,7 @@ function showReportDrillDownModal(title, subtitle, columns, rows) {
 function drillIncome(kind) {
   const { d } = currentReportData();
   if (kind==='revenue') {
-    const rows = d.invs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(i.subtotal)]);
+    const rows = d.invs.map(i=>[sanitize(i.invoice_no), fmtDate(i.created_at), sanitize(i.customer_name), fmtMoney(invNet(i))]);
     showReportDrillDownModal(
       lang==='ar'?'💰 تفاصيل الإيرادات':'Revenue Details',
       lang==='ar'?`${d.invs.length} فاتورة`:`${d.invs.length} invoices`,
@@ -8587,7 +8832,7 @@ function renderReportsInner(c) {
               <th style="text-align:end;">${lang==='ar'?'بعد الضريبة':'After VAT'}</th>
             </tr></thead>
             <tbody>${(()=>{
-              const salesRows = d.invs.map(i=>({kind:'sale',ref:i.invoice_no,party:i.customer_name,date:(i.created_at||i.date||'').slice(0,10),base:i.subtotal,vat:i.vat_total,total:i.grand_total}));
+              const salesRows = d.invs.map(i=>({kind:'sale',ref:i.invoice_no,party:i.customer_name,date:(i.created_at||i.date||'').slice(0,10),base:invNet(i),vat:i.vat_total,total:i.grand_total}));
               const purchRows = d.purchs.filter(p=>p.deductible!==false).map(p=>({kind:'purchase',ref:p.vendor||'',party:p.description||p.category||'',date:(p.created_at||p.date||'').slice(0,10),base:p.amount,vat:p.vat,total:p.total}));
               // المرتجعات تنقص الضريبة (بالسالب) — بدونها مجموع السطور ما يطابق الإجمالي أعلاه
               const retRows = (d.rets||[]).map(r=>({kind:r.type==='sales'?'sret':'pret',ref:r.return_no,party:r.party||'',date:(r.date||r.created_at||'').slice(0,10),
@@ -8850,7 +9095,7 @@ function renderBranchPerformanceReport(db, periodFilter, period) {
   const invs = (db.invoices||[]).filter(i=>i.status!=='ملغاة' && (period==='all' || periodFilter(i)));
   const rows = branches.map(b=>{
     const branchInvs = invs.filter(i=>i.branch_id===b.id);
-    const revenue = branchInvs.reduce((s,i)=>s+(i.subtotal||0),0);
+    const revenue = branchInvs.reduce((s,i)=>s+invNet(i),0);
     const cogs    = branchInvs.reduce((s,i)=>s+(i.cogs_total||0),0);
     const gross   = revenue-cogs;
     return { branch_id:b.id, name:b.name, is_main:b.is_main, revenue, cogs, gross_profit:gross,
@@ -9494,7 +9739,7 @@ function renderUsers(c) {
       <tbody>${db.users.map(u=>`<tr>
         <td><code>${u.username}</code></td><td>${sanitize(u.full_name)}</td>
         <td><span class="badge ${u.role==='owner'?'badge-blue':u.role==='accountant'?'badge-amber':'badge-gray'}">${t(u.role)}</span></td>
-        <td><span style="font-size:11px;color:var(--text-muted);">${(u.permissions||[]).length} ${lang==='ar'?'صلاحية':'perms'}</span></td>
+        <td><span style="font-size:11px;color:var(--text-muted);">${u.role==='owner'?(lang==='ar'?'كل الصلاحيات':'All permissions'):`${(u.permissions||[]).length} ${lang==='ar'?'صلاحية':'perms'}`}</span></td>
         <td><span class="badge ${u.active!==false?'badge-green':'badge-red'}">${u.active!==false?t('active'):t('inactive')}</span></td>
         ${has('users.manage')?`<td>
           <button class="icon-btn" style="width:28px;height:28px;" data-action="showUserModal" data-args="${JSON.stringify([u.id])}">${icon('edit',13)}</button>
@@ -9579,7 +9824,7 @@ function showUserModal(id) {
     'مشرف مخزون':            { role:'cashier',    pos:false, perms: ['inventory.view','inventory.manage','reports.view'] },
     'مدير الموارد البشرية':  { role:'accountant', pos:false, perms: ['employees.view','employees.manage','reports.view','dashboard.view','activity.view'] },
     'موظف إدارة':            { role:'cashier',    pos:false, perms: ['dashboard.view','activity.view'] },
-    'كاشير / نقطة البيع':    { role:'cashier',    pos:true,  perms: ['sales.view','sales.create','customers.view'] },
+    'كاشير / نقطة البيع':    { role:'cashier',    pos:true,  perms: ['sales.create'] },
     'مخصص':                  { role:'cashier',    pos:false, perms: [] },
   };
   window._jobTitles = jobTitles;
@@ -10516,7 +10761,7 @@ function renderGeneralExpenses(c) {
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'مصاريف عامة':'General Expenses'}</div>
       <div style="display:flex;gap:8px;">
-        ${has('purchases.create')?`<button class="btn btn-primary" data-action="showAddOpexPurchase">${icon('plus',16)} ${lang==='ar'?'إضافة مصروف':'Add Expense'}</button>`:''}
+        ${(has('purchases.create')||has('accounts.manage'))?`<button class="btn btn-primary" data-action="showAddOpexPurchase">${icon('plus',16)} ${lang==='ar'?'إضافة مصروف':'Add Expense'}</button>`:''}
       </div>
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px;">
@@ -10694,6 +10939,7 @@ function payObligation(id) {
 function payObligationFull(id, amount) { confirmObligationPayment(id, 'full', amount, el('ob-pay-method').value); }
 function payObligationPartial(id) { confirmObligationPayment(id, 'partial', Number(el('ob-partial-amt').value||0), el('ob-pay-method').value); }
 function confirmObligationPayment(id, type, amount, method) {
+  if (blockIfPeriodClosed(new Date().toISOString().slice(0,10))) return;
   amount = Math.round(parseFloat(amount)*100)/100;
   method = method || 'نقدي';
   if(!amount||amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter valid amount','error');return;}
@@ -10958,7 +11204,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بفاتورة آجلة (اختياري):':'Link to pending invoice (optional):'}</div>
         <select class="select" id="v-invoice-link" data-onchange="onInvoiceLinkChange">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${invOutstanding(i)}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(i.grand_total-(i.paid_amount||0))}</option>`).join('')}
+          ${pendingInvoices.map(i=>`<option value="${i.id}" data-amount="${invOutstanding(i)}" data-party="${sanitize(i.customer_name)}" data-party-id="${i.customer_id||''}" data-no="${i.invoice_no}">${i.invoice_no} — ${sanitize(i.customer_name)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(invOutstanding(i))}</option>`).join('')}
         </select>
         <div id="v-invoice-info" style="margin-top:8px;display:none;background:white;border-radius:8px;padding:10px;font-size:12px;"></div>
       </div>` : ''}
@@ -11079,9 +11325,12 @@ function saveVoucher(type, printAfter=true) {
       let left=amount;
       const lines=[];
       for(const inv of preview){ if(left<=0) break; const rem=invOutstanding(inv); const applying=Math.min(left,rem); if(applying>0) lines.push(`• ${inv.invoice_no}: ${fmtMoney(applying)}`); left=Math.round((left-applying)*100)/100; }
+      // نفس توزيع الحفظ: بعد الفواتير يسدد الرصيد السابق (الافتتاحي)، والباقي فقط دفعة مقدمة
+      const _prv=Math.max(0,Math.round(((partyObj?.balance||0)-preview.reduce((x,i)=>x+invOutstanding(i),0))*100)/100); const _toPrv=Math.min(left,_prv);
+      if(_toPrv>0){ lines.push(lang==='ar'?`• رصيد سابق (افتتاحي): ${fmtMoney(_toPrv)}`:`• Prior (opening) balance: ${fmtMoney(_toPrv)}`); left=Math.round((left-_toPrv)*100)/100; }
       const msg=(lang==='ar'
-        ?`لم تحدد فاتورة معينة — سيُطبَّق المبلغ تلقائيًا على أقدم فاتورة/فواتير غير مسددة لهذا العميل بالترتيب التالي:\n\n${lines.join('\n')}${left>0?`\n\n(متبقٍ بلا تخصيص: ${fmtMoney(left)})`:''}\n\nإذا كنت تقصد فاتورة محددة، ألغِ واخترها من قائمة «ربط بفاتورة» أولاً.`
-        :`No specific invoice selected — this amount will auto-apply to the oldest unpaid invoice(s) for this customer, in this order:\n\n${lines.join('\n')}${left>0?`\n\n(Left unapplied: ${fmtMoney(left)})`:''}\n\nIf you meant a specific invoice, cancel and pick it from "Link to invoice" first.`);
+        ?`لم تحدد فاتورة معينة — سيُطبَّق المبلغ تلقائيًا على أقدم فاتورة/فواتير غير مسددة لهذا العميل بالترتيب التالي:\n\n${lines.join('\n')}${left>0?`\n\n(الباقي دفعة مقدمة للعميل: ${fmtMoney(left)})`:''}\n\nإذا كنت تقصد فاتورة محددة، ألغِ واخترها من قائمة «ربط بفاتورة» أولاً.`
+        :`No specific invoice selected — this amount will auto-apply to the oldest unpaid invoice(s) for this customer, in this order:\n\n${lines.join('\n')}${left>0?`\n\n(Remainder as customer advance: ${fmtMoney(left)})`:''}\n\nIf you meant a specific invoice, cancel and pick it from "Link to invoice" first.`);
       if(!confirm(msg)) return;
     }
   }
@@ -11175,7 +11424,17 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
       left = Math.round((left-applying)*100)/100;
       logActivity('مبيعات', `تحديث فاتورة ${inv.invoice_no} من "${prevStatus}" إلى "${inv.status}" — سند ${voucher.voucher_no}`);
     }
-    // المبلغ الفعلي المطبَّق على فواتير حقيقية (قد يقل عن amount لو تجاوز ما هو مستحق)
+    // سند بدون ربط: الباقي يسدد أولًا رصيد العميل السابق (افتتاحي) اللي ما له فاتورة،
+    // وبعده فقط يصير دفعة مقدمة — كان كل الباقي يروح 2160 والعميل لسه مدين
+    if (!linkedInvoiceId && left > 0) {
+      const _c = db.customers.find(c=>c.id===voucher.party_id) || db.customers.find(c=>c.name===voucher.party);
+      const _invDue = db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party) && (i.status==='آجل'||i.status==='جزئي')).reduce((x,i)=>x+invOutstanding(i),0);
+      // الرصيد ما نزل بعد بالمطبَّق على الفواتير أعلاه (ينزل مع القيد تحت) — نطرحه هنا
+      const _prior = Math.max(0, Math.round(((_c?.balance||0) - _invDue - (amount - left))*100)/100);
+      const toPrior = Math.min(left, _prior);
+      if (toPrior > 0) { voucher.prior_applied = toPrior; left = Math.round((left-toPrior)*100)/100; }
+    }
+    // المبلغ الفعلي المطبَّق (فواتير + رصيد سابق) — الباقي فقط دفعة مقدمة
     voucher.applied_amount = amount - left;
     voucher.applied_invoices = appliedInvoices;
   }
@@ -11203,7 +11462,15 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
       left = Math.round((left-applying)*100)/100;
       logActivity('مشتريات', `تحديث مشتريات ${pur.vendor} — المتبقي: ${fmtMoney(pur.remaining_amount)}`);
     }
-    // المبلغ الفعلي المطبَّق على مشتريات حقيقية (قد يقل عن amount لو تجاوز ما هو مستحق)
+    // سند بدون ربط: الباقي يسدد أولًا رصيد المورد السابق (افتتاحي) قبل ما يصير دفعة مقدمة
+    if (!linkedPurchaseId && left > 0) {
+      const _sp = db.suppliers.find(x=>x.id===voucher.party_id) || db.suppliers.find(x=>x.name===voucher.party);
+      const _purDue = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status!=='معكوسة' && p.status!=='ملغاة')
+        .reduce((x,p)=>x+Math.max(0, p.remaining_amount!=null ? p.remaining_amount : p.total-(p.paid_amount||0)),0);
+      const _prior = Math.max(0, Math.round(((_sp?.balance||0) - _purDue - (amount - left))*100)/100);
+      const toPrior = Math.min(left, _prior);
+      if (toPrior > 0) { voucher.prior_applied = toPrior; left = Math.round((left-toPrior)*100)/100; }
+    }
     voucher.applied_amount = amount - left;
     voucher.applied_purchases = appliedPurchases;
   }
@@ -11222,6 +11489,9 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     postCustomerReceivable(db, rcvEntries, voucher.party, voucher.applied_amount, 'decrease', voucher.applied_amount, voucher.party_id);
     if (_rcvOverpaid > 0) {
       rcvEntries.push({ account: lang==='ar'?'دفعات عملاء مقدمة':'Customer Advances', account_code:'2160', side:'credit', amount:_rcvOverpaid });
+      // الدفعة المقدمة رصيد دائن للعميل (التزام علينا) — تُسوّى تلقائيًا من فواتيره الآجلة اللاحقة
+      const _ac = db.customers.find(c=>c.id===voucher.party_id) || db.customers.find(c=>c.name===voucher.party);
+      if (_ac) { voucher.advance_amount = _rcvOverpaid; _ac.balance = Math.round(((_ac.balance||0) - _rcvOverpaid)*100)/100; }
     }
     const _vJournalEntry = {
       id: (db.nextId.journal||1), date: new Date().toISOString(),
@@ -11348,6 +11618,15 @@ function deleteReceipt(id) {
 
   const amount = parseFloat(v.amount||0);
   const isReceipt = v.type==='receipt';
+  // دفعة مقدمة سُوّيت على فاتورة لاحقة: إلغاء سندها يخلّي الفاتورة مسددة بفلوس ما وصلت
+  const _vAdv = parseFloat(v.advance_amount)||0;
+  if (isReceipt && _vAdv > 0) {
+    const _vc = db.customers.find(c=>c.id===v.party_id) || db.customers.find(c=>c.name===v.party);
+    if (_vc && -(_vc.balance||0) + 0.005 < _vAdv) {
+      showToast(lang==='ar'?'الدفعة المقدمة في هذا السند خُصمت من فاتورة لاحقة — ألغِ الفاتورة أولًا ثم ألغِ السند':'This advance was applied to a later invoice — cancel that invoice first','error');
+      return;
+    }
+  }
 
   // 1. عكس الخزينة بحركة عكسية (لا بحذف الحركة الأصلية): حذف الحركة كان يبقى
   //    محليًا فقط (لا مزامنة للحذف)، فيرجع رصيد السيرفر القديم بأول تحديث.
@@ -11362,7 +11641,16 @@ function deleteReceipt(id) {
   // نفس القيد ممكن يكون موجود مرتين محليًا (نسخته + نسخة مسحوبة من السيرفر قبل
   // ما يرجع رقمه) — يُعكس مرة وحدة فقط لكل قيد فعلي
   const _revKeys = new Set();
-  for (const j of (db.journal||[]).filter(j=>_vRefs.includes(j.ref) && !jeReversalOf(db, j))) {
+  // الرقم المؤقت (RCV-0001...) يتكرر بين الأجهزة، وقيود قديمة وصلت السيرفر به — فما
+  // نعتمده إلا لقيد هذا السند فعلًا: لسه محلي، أو نفس الطرف ونفس مبلغ الصندوق
+  const _isThisVoucher = j => {
+    if (j.ref === v.voucher_no) return true;
+    if (!v.local_no || j.ref !== v.local_no) return false;
+    if (!j._serverId) return true;
+    const cashLine = (j.entries||[]).find(e => e.account_code === '1100');
+    return !!v.party && String(j.description||'').includes(v.party) && cashLine && Math.abs((Number(cashLine.amount)||0) - amount) < 0.005;
+  };
+  for (const j of (db.journal||[]).filter(j=>_isThisVoucher(j) && !jeReversalOf(db, j))) {
     const _k = jeKey(j) || ('L'+j.id);
     if (_revKeys.has(_k)) continue; _revKeys.add(_k);
     if (!db.nextId.journal) db.nextId.journal = 1;
@@ -11395,7 +11683,7 @@ function deleteReceipt(id) {
       }
     }
     // عكس رصيد العميل — بنفس المبلغ اللي فعلياً اتخصم منه وقت إنشاء السند
-    const reversedAmt = v.applied_amount!=null ? v.applied_amount : amount;
+    const reversedAmt = v.applied_amount!=null ? v.applied_amount + (parseFloat(v.advance_amount)||0) : amount;
     postCustomerReceivable(db, [], v.party, 0, 'increase', reversedAmt, v.party_id);
   }
 
@@ -11535,7 +11823,29 @@ function showReturnTypePicker() {
   refreshIcons();
 }
 
+let _rtType = 'sales';
+// مبلغ المرتجع = الكمية × سعر الصنف بالفاتورة المربوطة (شامل ضريبتها) — كان يبقى إجمالي
+// الفاتورة كاملًا بعد اختيار صنف وكمية، فيُرد من الدرج أكثر من قيمة المرتجع
+function rtAutoAmount() {
+  const db = getDB(); const linkId = Number(el('rt-link')?.value) || null; if (!linkId) return;
+  const isSales = _rtType === 'sales';
+  const doc = isSales ? db.invoices.find(i => i.id === linkId) : db.purchases.find(p => p.id === linkId);
+  const pid = Number(el('rt-product')?.value) || null; if (!doc || !pid) return;
+  const prod = db.products.find(p => p.id === pid);
+  const it = (doc.items || []).find(i => i.id === pid || i.product_id === pid || (prod && (i.name||'').trim() === (prod.name||'').trim()));
+  if (!it) return;
+  const qty = Number(el('rt-qty')?.value) || 0;
+  const net = isSales ? (Number(doc.subtotal) || 0) : (Number(doc.amount) || 0);
+  const vat = isSales ? (Number(doc.vat_total) || 0) : (Number(doc.vat) || 0);
+  const ratio = net > 0 ? vat / net : 0;
+  // خصم الفاتورة (إن وُجد) يتوزّع بنسبة السطر
+  const gross = (doc.items || []).reduce((t, x) => t + (Number(x.qty)||0) * (Number(x.price)||0), 0);
+  const discF = isSales && gross > 0 ? net / gross : 1;
+  el('rt-amount').value = (Math.round(qty * (Number(it.price)||0) * discF * (1 + ratio) * 100) / 100).toFixed(2);
+  calcReturnVat();
+}
 function showReturnModal(type) {
+  _rtType = type;
   const db=getDB(); const isSales=type==='sales';
   // get invoices/purchases for linking
   const linkItems = isSales
@@ -11585,14 +11895,14 @@ function showReturnModal(type) {
       </div>
 
       <div style="margin-bottom:12px;"><label class="form-label">${lang==='ar'?'المنتج (للربط بالمخزون)':'Product (for inventory link)'}</label>
-        <select class="select" id="rt-product">
+        <select class="select" id="rt-product" data-onchange="rtAutoAmount">
           <option value="">${lang==='ar'?'— بدون ربط بمنتج —':'— No product link —'}</option>
           ${db.products.map(p=>`<option value="${p.id}" data-name="${sanitize(p.name)}" data-code="${sanitize(p.code)}">${sanitize(p.name)} (${lang==='ar'?'مخزون:':'Stock:'} ${p.qty})</option>`).join('')}
         </select>
       </div>
       <div class="form-row">
         <div><label class="form-label">${lang==='ar'?'الكمية المرتجعة':'Returned Qty'}</label>
-          <input class="input" type="number" id="rt-qty" value="1" min="0" />
+          <input class="input" type="number" id="rt-qty" value="1" min="0" data-oninput="rtAutoAmount" />
         </div>
         <div><label class="form-label">${lang==='ar'?'السبب':'Reason'}</label>
           <select class="select" id="rt-reason">
@@ -11675,6 +11985,20 @@ function saveReturn(type) {
     if(!confirm(confirmMsg)) return;
   }
 
+  // نفس فحص السيرفر قبل أي أثر: الكمية ما تتجاوز المباع بالفاتورة ناقص ما رجع منها قبل
+  // (كان يُحفظ محليًا ويرحَّل قيده وخزينته والسيرفر يرفض المرتجع نفسه)
+  if (linkedId && type==='sales') {
+    const _db=getDB(), _inv=_db.invoices.find(i=>i.id===linkedId);
+    const _pid=Number(el('rt-product')?.value)||null, _q=Number(el('rt-qty')?.value||0);
+    if (_inv && _pid && _q>0) {
+      const _sold=(_inv.items||[]).filter(it=>(it.id??it.product_id)===_pid).reduce((t,it)=>t+(Number(it.qty)||0),0);
+      const _prior=(_db.returns||[]).filter(r=>r.type==='sales' && r.linked_id===linkedId && r.product_id===_pid).reduce((t,r)=>t+(Number(r.qty)||0),0);
+      if (_q > _sold - _prior + 0.001) {
+        showToast(lang==='ar'?`❌ الكمية أكبر من المتبقي القابل للإرجاع بهذه الفاتورة (المتبقي: ${Math.max(0,_sold-_prior)})`:`❌ Quantity exceeds what can still be returned (${Math.max(0,_sold-_prior)})`,'error');
+        return;
+      }
+    }
+  }
   const partyIdVal = Number(el('rt-party-id')?.value)||null;
   guardClosedPeriod(el('rt-date')?.value||new Date().toISOString().slice(0,10), (overrideToken) => _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken));
 }
@@ -11744,7 +12068,7 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
       reference:ret.return_no, date:new Date().toISOString(), method:retMethod,
       branch_id: linkedRec?.branch_id || resolveActiveBranchId()
     });
-    if (isSales) updateShiftOnReturn(cashPortion, retMethod);
+    if (isSales) updateShiftOnReturn(cashPortion, retMethod, db);
   }
 
   // 2. Stock effect: sales return → stock IN (تُعاد للمخزون بتكلفتها الحالية)
@@ -12322,7 +12646,7 @@ function printQuote(id){
 // كانا يقدران ينشئان فاتورتين كاملتين لنفس العرض (مخزون وقيد مضاعفين)
 async function convertQuoteToInvoice(id) {
   if (blockedByExpiredSubscription()) return;
-  const db=getDB(); const q=(db.quotes||[]).find(x=>x.id===id); if(!q)return;
+  let db=getDB(); let q=(db.quotes||[]).find(x=>x.id===id); if(!q)return;
   if (q.status==='مقبول' || q.converted_to) { showToast(lang==='ar'?'العرض محوَّل بالفعل':'Quote already converted','error'); return; }
   if(q.valid_until && new Date(q.valid_until) < new Date(new Date().toISOString().slice(0,10))){
     const expMsg=lang==='ar'
@@ -12346,6 +12670,8 @@ async function convertQuoteToInvoice(id) {
     showQuoteConvertFailedOverlay(id);
     return;
   }
+  // نسخة حديثة بعد انتظار السيرفر (نفس سبب doCheckout)
+  db=getDB(); q=(db.quotes||[]).find(x=>x.id===id) || q;
 
   // نجاح — الآن فقط، وببيانات السيرفر المؤكَّدة (رقم حقيقي، تكلفة FIFO حقيقية،
   // ورمز QR الموقَّع إن وُجد)، نبني الفاتورة المحلية ونطبّق الأثر المحلي
@@ -12372,6 +12698,7 @@ async function convertQuoteToInvoice(id) {
     icv: srv.icv||null,
     zatca_hash: srv.zatca_hash||null,
   };
+  _applyServerAdvance(db, inv, srv);
 
   // مخزون (تقدير فوري محلي للعرض فقط — الخصم الفعلي FIFO حصل بالسيرفر)
   if(!db.stock_moves) db.stock_moves=[];
@@ -12472,7 +12799,7 @@ function renderStockMoves(c){
     <div class="page-header">
       <div class="page-title-lg">${lang==='ar'?'حركة المخزون':'Stock Movements'}</div>
       <div style="display:flex;gap:8px;">
-        ${(currentUser?.role==='owner' && (db.warehouses||[]).filter(w=>w.active!==false).length>1)?`<button class="btn btn-outline" data-action="showStockTransferModal">${icon('shuffle',16)} ${lang==='ar'?'نقل بضاعة بين الفروع':'Transfer Between Branches'}</button>`:''}
+        ${((currentUser?.role==='owner' || (currentUser?.all_branches && has('inventory.manage'))) && (db.warehouses||[]).filter(w=>w.active!==false).length>1)?`<button class="btn btn-outline" data-action="showStockTransferModal">${icon('shuffle',16)} ${lang==='ar'?'نقل بضاعة بين الفروع':'Transfer Between Branches'}</button>`:''}
         ${has('inventory.manage')?`<button class="btn btn-primary" data-action="showStockMoveModal">${icon('plus',16)} ${lang==='ar'?'حركة يدوية':'Manual Move'}</button>`:''}
       </div>
     </div>
@@ -12673,7 +13000,9 @@ function applyStockAdjustment(db, prod, warehouseId, type, qty, reason, note, re
         {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount:adjValue},
         {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount:adjValue},
       ],
-      ref: move.reference
+      // مرجع خاص بالتسوية — "MANUAL" محجوز للقيد اليدوي (للمالك والمحاسب فقط بالسيرفر)،
+      // فقيد تسوية أمين المخزون كان يُرفض بصمت ويتغيّر المخزون بلا قيد
+      ref: (!move.reference || move.reference === 'MANUAL') ? `ADJ-${move.id}` : move.reference
     });
   }
   return move;
@@ -12845,24 +13174,14 @@ function showPartyStatement(partyId, partyType) {
   const party = (partyType==='customer' ? db.customers : db.suppliers).find(p=>p.id===partyId);
   if (!party) return;
   const partyName = party.name;
-  // collect all transactions for this party — بالمعرّف أولًا، والاسم كخيار
-  // احتياطي فقط (نفس _matchParty المستخدمة بوعاء الزكاة وكشف الحساب الرسمي)
-  const rows=[];
-  db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party)).forEach(i=>{
-    rows.push({date:i.created_at,type:'فاتورة مبيعات',ref:i.invoice_no,debit:i.grand_total,credit:0,status:i.status});
-  });
-  (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party)&&r.type==='receipt').forEach(r=>{
-    rows.push({date:r.created_at,type:'سند قبض',ref:r.voucher_no,debit:0,credit:r.amount,status:'—'});
-  });
-  (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party)&&r.type==='payment').forEach(r=>{
-    rows.push({date:r.created_at,type:'سند صرف',ref:r.voucher_no,debit:r.amount,credit:0,status:'—'});
-  });
-  db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party)).forEach(p=>{
-    rows.push({date:p.created_at,type:'فاتورة مشتريات',ref:`PO-${p.id}`,debit:0,credit:p.total,status:'—'});
-  });
-  rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
-  let running=0;
-  const rowsWithBalance=rows.map(r=>{running+=r.debit-r.credit; return {...r,balance:running};});
+  // نفس حساب الكشف الرسمي (computePartyStatement): الرصيد الافتتاحي، السداد عند
+  // الشراء/البيع، السندات، المرتجعات، واستبعاد الملغى — كان هنا حساب مستقل يعتبر
+  // فاتورة الشراء النقدية المسددة دَينًا قائمًا ويتجاهل الرصيد الافتتاحي
+  const isCustSt = partyType==='customer';
+  const st = computePartyStatement(party, isCustSt?'customer':'supplier');
+  const rows = st.events.map(e=>({date:e.date,type:e.desc,ref:e.ref||'',debit:e.debit||0,credit:e.credit||0,status:'—',balance:e.balance}));
+  const running = st.finalBalance;
+  const rowsWithBalance=rows;
   mc.innerHTML=`<div class="modal-bg" data-action="closeModal"><div class="modal modal-lg" data-action="">
     <div class="modal-head">
       <h3>📊 ${lang==='ar'?'كشف حساب':'Statement'}: ${sanitize(partyName)}</h3>
@@ -12886,7 +13205,7 @@ function showPartyStatement(partyId, partyType) {
           <td><code>${r.ref}</code></td>
           <td style="color:var(--danger);font-weight:700;">${r.debit>0?fmtMoney(r.debit):'-'}</td>
           <td style="color:var(--success);font-weight:700;">${r.credit>0?fmtMoney(r.credit):'-'}</td>
-          <td style="font-weight:900;color:${r.balance>0?'var(--danger)':r.balance<0?'var(--success)':'inherit'};">${fmtMoney(Math.abs(r.balance))} ${r.balance>0?(lang==='ar'?'له':'Dr'):r.balance<0?(lang==='ar'?'عليه':'Cr'):''}</td>
+          <td style="font-weight:900;color:${r.balance>0?'var(--danger)':r.balance<0?'var(--success)':'inherit'};">${fmtMoney(Math.abs(r.balance))} ${r.balance===0?'':((r.balance>0)===isCustSt?(lang==='ar'?'عليه':'owes you'):(lang==='ar'?'له':'you owe'))}</td>
           <td>${r.status!=='—'?`<span class="badge ${r.status==='مسددة'?'badge-green':r.status==='جزئي'?'badge-amber':'badge-red'}">${r.status}</span>`:'-'}</td>
         </tr>`).join('')}
       </tbody>
@@ -12894,7 +13213,7 @@ function showPartyStatement(partyId, partyType) {
         <td colspan="3" style="padding:12px 14px;text-align:end;">${lang==='ar'?'صافي الرصيد:':'Net Balance:'}</td>
         <td style="padding:12px 14px;color:var(--danger);">${fmtMoney(rowsWithBalance.reduce((s,r)=>s+r.debit,0))}</td>
         <td style="padding:12px 14px;color:var(--success);">${fmtMoney(rowsWithBalance.reduce((s,r)=>s+r.credit,0))}</td>
-        <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(Math.abs(running))} ${running>0?(lang==='ar'?'مستحق لك':'You owe him'):running<0?(lang==='ar'?'مستحق عليك':'He owes you'):lang==='ar'?'مسوى':'Settled'}</td>
+        <td style="padding:12px 14px;color:var(--primary);">${fmtMoney(Math.abs(running))} ${Math.abs(running)<0.005?(lang==='ar'?'مسوى':'Settled'):((running>0)===isCustSt?(lang==='ar'?'مستحق لك':'Receivable'):(lang==='ar'?'مستحق عليك':'Payable'))}</td>
         <td></td>
       </tr></tfoot>
     </table></div>
@@ -13201,8 +13520,8 @@ function startShift(user, openingCash, branchId) {
 
 function endShift(user, closingCash, closingCard, closingTransfer) {
   const db = getDB();
-  const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
-  const shift = (db.shifts||[]).find(s=>s.id===shiftId||(!s.end_time&&s.username===user.username));
+  const shiftId = localStorage.getItem('yaqiz_shift_id');
+  const shift = (db.shifts||[]).find(s=>String(s.id)===shiftId||(!s.end_time&&s.username===user.username));
   if(shift) {
     shift.end_time = new Date().toISOString();
     shift.closing_cash = Number(closingCash)||0;
@@ -13226,7 +13545,7 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
       db.treasury.moves.unshift({
         id: nextId(db,'treasury'), type: cashVariance>0?'in':'out', amount: Math.abs(cashVariance),
         description: `${cashVariance>0?(lang==='ar'?'زيادة':'Overage'):(lang==='ar'?'عجز':'Shortage')} صندوق وردية — ${user.username}`,
-        reference: `SHIFT-${shift.id}`, date: new Date().toISOString(), method:'نقدي',
+        reference: `SHIFT-${shift._serverId||("L"+shift.id)}`, date: new Date().toISOString(), method:'نقدي',
         branch_id: shift.branch_id || resolveActiveBranchId()
       });
       if (!db.journal) db.journal = [];
@@ -13241,7 +13560,7 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
           {account:lang==='ar'?'مصاريف أخرى':'Other Expenses', account_code:'5900', side:'debit', amount:Math.abs(cashVariance)},
           {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:Math.abs(cashVariance)},
         ],
-        ref: `SHIFT-${shift.id}`
+        ref: `SHIFT-${shift._serverId||("L"+shift.id)}`
       });
     }
     saveDB(db);
@@ -13256,14 +13575,14 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
 
 function getCurrentShift() {
   const db = getDB();
-  const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
-  return (db.shifts||[]).find(s=>s.id===shiftId) || null;
+  const shiftId = localStorage.getItem('yaqiz_shift_id');
+  return (db.shifts||[]).find(s=>String(s.id)===shiftId) || null;
 }
 
 function updateShiftOnSale(inv) {
   const db = getDB();
-  const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
-  const shift = (db.shifts||[]).find(s=>s.id===shiftId);
+  const shiftId = localStorage.getItem('yaqiz_shift_id');
+  const shift = (db.shifts||[]).find(s=>String(s.id)===shiftId);
   if(!shift) return;
   shift.invoices_count = (shift.invoices_count||0)+1;
   shift.invoice_ids = [...(shift.invoice_ids||[]), inv.id];
@@ -13280,22 +13599,25 @@ function updateShiftOnSale(inv) {
 // مرتجع مبيعات نقدي أثناء وردية مفتوحة يُنقِص الدرج فعليًا — بدون هذا، "المتوقع
 // بالدرج" وقت إغلاق الوردية يبقى محسوبًا وكأن المرتجع ما صار، فيظهر عجز وهمي
 // (الدرج فعليًا أخف من رقم الوردية المسجَّل، لكن الوردية ما تعرف ليش)
-function updateShiftOnReturn(refundAmount, method) {
+// dbIn: نسخة البيانات اللي يحفظها المستدعي — تعديل نسخة ثانية وحفظها كان يضيع لأن
+// المستدعي (حفظ المرتجع) يحفظ نسخته القديمة بعدها، فيبقى المرتجع النقدي داخل
+// "المتوقع بالدرج" ويطلع عجز وهمي عند الإقفال يُسجَّل بالدفاتر
+function updateShiftOnReturn(refundAmount, method, dbIn) {
   if (!refundAmount) return;
-  const db = getDB();
-  const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
-  const shift = (db.shifts||[]).find(s=>s.id===shiftId);
+  const db = dbIn || getDB();
+  const shiftId = localStorage.getItem('yaqiz_shift_id');
+  const shift = (db.shifts||[]).find(s=>String(s.id)===shiftId);
   if(!shift) return;
   if(!method || method==='نقدي') shift.sales_cash=(shift.sales_cash||0)-refundAmount;
   else if(method==='شبكة') shift.sales_card=(shift.sales_card||0)-refundAmount;
   else if(method==='تحويل') shift.sales_transfer=(shift.sales_transfer||0)-refundAmount;
-  saveDB(db);
+  if (!dbIn) saveDB(db);
 }
 
 function showShiftSummary(onConfirm) {
   const db = getDB();
-  const shiftId = Number(localStorage.getItem('yaqiz_shift_id'));
-  const shift = (db.shifts||[]).find(s=>s.id===shiftId);
+  const shiftId = localStorage.getItem('yaqiz_shift_id');
+  const shift = (db.shifts||[]).find(s=>String(s.id)===shiftId);
   if(!shift) { onConfirm(); return; }
 
   const start = new Date(shift.start_time);
@@ -13335,7 +13657,7 @@ function showShiftSummary(onConfirm) {
       <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:16px;">
         <div style="font-weight:800;font-size:13px;margin-bottom:10px;">💰 ${lang==='ar'?'تفصيل طرق الدفع:':'Payment Breakdown:'}</div>
         ${[
-          {label:lang==='ar'?'نقدي (الكاش المتوقع في الدرج)':'Cash (expected in drawer)', val:shift.sales_cash||0, color:'var(--success)', icon:'💵'},
+          {label:lang==='ar'?'الكاش المتوقع في الدرج (العهدة + النقدي)':'Expected cash in drawer (float + cash)', val:Math.round(((shift.opening_cash||0)+(shift.sales_cash||0))*100)/100, color:'var(--success)', icon:'💵'},
           {label:lang==='ar'?'شبكة / بطاقة':'Card / Network', val:shift.sales_card||0, color:'var(--primary)', icon:'💳'},
           {label:lang==='ar'?'تحويل بنكي':'Bank Transfer', val:shift.sales_transfer||0, color:'var(--accent)', icon:'🏦'},
           {label:lang==='ar'?'آجل (ذمم مدينة)':'Credit (Receivables)', val:shift.sales_credit||0, color:'var(--danger)', icon:'📋'},
@@ -13715,7 +14037,7 @@ function renderBalanceSheet(c) {
       <div class="stat-card" style="border:2px solid ${isProfit?'#16a34a':'#dc2626'};">
         <div class="stat-icon ${isProfit?'green':'red'}">${icon(isProfit?'trending-up':'trending-down',22)}</div>
         <div class="stat-label" style="font-weight:800;color:${isProfit?'#16a34a':'#dc2626'};">
-          ${isProfit?(lang==='ar'?'✅ الشركة رابحة':'✅ Profitable'):(lang==='ar'?'❌ الشركة خاسرة':'❌ Loss')}
+          ${Math.abs(netProfit)<0.005?(lang==='ar'?'لا ربح ولا خسارة':'Break-even'):isProfit?(lang==='ar'?'✅ الشركة رابحة':'✅ Profitable'):(lang==='ar'?'❌ الشركة خاسرة':'❌ Loss')}
         </div>
         <div class="stat-value" style="color:${isProfit?'var(--success)':'var(--danger)'};">${fmtMoney(Math.abs(netProfit))}</div>
       </div>
@@ -14180,7 +14502,7 @@ function redeemPoints(customerName, customerId) {
 // ============ SHIFT REPORT PDF ============
 function printShiftReport(shiftId) {
   const db=getDB();
-  const shift=(db.shifts||[]).find(s=>s.id===shiftId);
+  const shift=(db.shifts||[]).find(s=>String(s.id)===shiftId);
   if(!shift) return;
   const s=db.settings||{};
   const invs=db.invoices.filter(i=>(shift.invoice_ids||[]).includes(i.id));
@@ -14215,13 +14537,13 @@ function printShiftReport(shiftId) {
     <div class="row total"><span>الإجمالي:</span><span>${Number(total).toFixed(2)}</span></div>
   </div>
   <div style="margin-top:12px;background:#dcfce7;padding:12px;border-radius:8px;font-weight:800;">
-    💡 الكاش المتوقع في الدرج: <span style="color:#15803d;font-size:18px;">${Number(shift.sales_cash||0).toFixed(2)}</span>
+    💡 الكاش المتوقع في الدرج (العهدة + النقدي): <span style="color:#15803d;font-size:18px;">${Number((shift.opening_cash||0)+(shift.sales_cash||0)).toFixed(2)}</span>
   </div>
   ${invs.length>0?`<table><thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>الوقت</th><th>الإجمالي</th><th>الدفع</th></tr></thead>
   <tbody>${invs.map(i=>`<tr><td>${i.invoice_no}</td><td>${sanitize(i.customer_name)}</td>
     <td>${new Date(i.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
     <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
-    <td>${i.payment_method}</td></tr>`).join('')}</tbody></table>`:''}
+    <td>${dv(i.payment_method)}</td></tr>`).join('')}</tbody></table>`:''}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
 }
@@ -15073,7 +15395,7 @@ function renderActivity(c) {
                   <td>${sanitize(i.customer_name)}</td>
                   <td>${new Date(i.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
                   <td style="font-weight:800;color:var(--primary);">${fmtMoney(i.grand_total)}</td>
-                  <td><span class="badge badge-blue">${i.payment_method}</span></td>
+                  <td><span class="badge badge-blue">${dv(i.payment_method)}</span></td>
                   <td><span class="badge ${i.status==='مسددة'?'badge-green':i.status==='جزئي'?'badge-amber':'badge-red'}">${i.status}</span></td>
                   <td><button class="btn btn-sm btn-outline" data-action="showInvoiceModalById" data-args="${JSON.stringify([i.id])}">${icon('eye',13)} ${lang==='ar'?'عرض':'View'}</button></td>
                 </tr>`).join('')}</tbody>
@@ -15706,18 +16028,50 @@ function _validateCompanyInfo(info) {
 
 function _persistCompanyInfo(info) {
   const db = getDB();
+  // القيم السابقة — ترجع لو رفض السيرفر (مثلًا رقم ضريبي مسجّل لمنشأة ثانية)، عشان ما
+  // يبقى بجهاز المالك رقم غير موجود بالسيرفر (فواتير ضريبية من جهاز واحد فقط)
+  const _prev = {}; Object.keys(info).forEach(k => { _prev[k] = db.settings?.[k] ?? ''; });
+  try { localStorage.setItem(_getDbKey() + '_companyPrev', JSON.stringify(_prev)); } catch (e) {}
   db.settings = { ...db.settings, ...info };
   saveDB(db);
-  // مزامنة مع API (للمالك فقط)
-  if (window._apiReachable && window._cloudApiFetch && currentUser?.role === 'owner') {
-    window._cloudApiFetch('PUT', '/api/auth/company', {
+  // بيانات المنشأة (والرقم الضريبي) لازم توصل السيرفر — كل الأجهزة تقرأها منه.
+  // كانت تُرسَل مرة وحدة بشرط "السيرفر متاح" والفشل يُبلع بصمت: شاشة البداية تحفظ
+  // أحيانًا قبل ما يتأكد الاتصال، فيبقى الرقم الضريبي بجهاز المالك فقط والموظفين
+  // يصدرون فواتير بلا ضريبة. الحين تبقى معلّقة بالجهاز وتُعاد مع كل مزامنة لين توصل
+  if (currentUser?.role === 'owner') {
+    try { localStorage.setItem(_getDbKey() + '_companyPending', JSON.stringify(info)); } catch (e) {}
+    _pushCompanyInfo();
+  }
+}
+async function _pushCompanyInfo() {
+  let info = null;
+  try { info = JSON.parse(localStorage.getItem(_getDbKey() + '_companyPending') || 'null'); } catch (e) {}
+  if (!info || currentUser?.role !== 'owner' || typeof window._cloudApiFetch !== 'function') return;
+  try {
+    await window._cloudApiFetch('PUT', '/api/auth/company', {
       company_name: info.company_name, vat_number: info.vat_number, cr_number: info.cr_number,
       address: info.address, contact_phone: info.phone,
       street_name: info.street_name, building_number: info.building_number, district: info.district,
       city: info.city, postal_code: info.postal_code, additional_number: info.additional_number
-    }).catch(e => console.warn('Company sync:', e.message));
+    });
+    localStorage.removeItem(_getDbKey() + '_companyPending');
+    localStorage.removeItem(_getDbKey() + '_companyPrev');
+  } catch (e) {
+    // رفض حقيقي من السيرفر (بيانات غير صحيحة) — يبلَّغ المالك وترجع القيم السابقة بالجهاز
+    // (ما تنعاد المحاولة لأن نفس البيانات بتنرفض)؛ انقطاع الشبكة يُعاد لاحقًا
+    if (e && e.message && !/fetch|network|timeout|API error/i.test(e.message)) {
+      try {
+        const prev = JSON.parse(localStorage.getItem(_getDbKey() + '_companyPrev') || 'null');
+        if (prev) { const d = getDB(); d.settings = { ...d.settings, ...prev }; (window._origSaveDB || saveDB)(d); }
+      } catch (er) {}
+      localStorage.removeItem(_getDbKey() + '_companyPending');
+      localStorage.removeItem(_getDbKey() + '_companyPrev');
+      showToast('⚠️ ' + (lang==='ar'?'ما انحفظت بيانات المنشأة: ':'Business details not saved: ') + e.message, 'error');
+      if (currentPage === 'settings') renderPage();
+    }
   }
 }
+window._pushCompanyInfo = _pushCompanyInfo;
 
 function saveSettings() {
   if (blockedByExpiredSubscription()) return;
@@ -16472,7 +16826,7 @@ function exportVATReportPDF() {
 
   const invRows = d.invs.map(i=>`<tr>
     <td>${i.invoice_no}</td><td>${fmtDate(i.created_at)}</td><td>${sanitize(i.customer_name)}</td>
-    <td>${Number(i.subtotal).toFixed(2)}</td><td style="color:#16a34a;">${Number(i.vat_total).toFixed(2)}</td>
+    <td>${invNet(i).toFixed(2)}</td><td style="color:#16a34a;">${Number(i.vat_total).toFixed(2)}</td>
     <td style="font-weight:700;">${Number(i.grand_total).toFixed(2)}</td>
   </tr>`).join('');
   const purRows = d.purchs.filter(p=>p.deductible!==false).map(p=>`<tr>
@@ -16497,7 +16851,7 @@ function exportVATReportPDF() {
     <div class="section-title">${A?`المبيعات وضريبة المخرجات (${d.invs.length} فاتورة)`:`Sales and output VAT (${d.invs.length} invoices)`}</div>
     <table><thead><tr><th>${X('رقم الفاتورة','Invoice no.')}</th><th>${X('التاريخ','Date')}</th><th>${X('العميل','Customer')}</th><th>${X('الوعاء','Taxable amount')} ${SAR}</th><th>${X('الضريبة','VAT')} ${SAR}</th><th>${X('الإجمالي','Total')} ${SAR}</th></tr></thead>
     <tbody>${invRows}</tbody>
-    <tfoot><tr class="total-row"><td colspan="3">${X('الإجمالي','Total')}</td><td>${Number(d.invs.reduce((s,i)=>s+i.subtotal,0)).toFixed(2)}</td><td class="green">${Number(d.vatOutput).toFixed(2)}</td><td>${Number(d.invs.reduce((s,i)=>s+i.grand_total,0)).toFixed(2)}</td></tr></tfoot>
+    <tfoot><tr class="total-row"><td colspan="3">${X('الإجمالي','Total')}</td><td>${Number(d.invs.reduce((s,i)=>s+invNet(i),0)).toFixed(2)}</td><td class="green">${Number(d.invs.reduce((s,i)=>s+(Number(i.vat_total)||0),0)).toFixed(2)}</td><td>${Number(d.invs.reduce((s,i)=>s+i.grand_total,0)).toFixed(2)}</td></tr></tfoot>
     </table>
   </div>
   ${purRows?`<div class="section">
@@ -16601,10 +16955,19 @@ function computePartyStatement(party, kind) {
   const obList = (isCust ? db.settings?.opening_balances_data?.customers : db.settings?.opening_balances_data?.suppliers) || [];
   // نفضّل معرّف الطرف المخزَّن على بند الرصيد الافتتاحي (obSaveAll يلتقطه وقت
   // الحفظ) — بدونه، طرفان بنفس الاسم يتشاركان نفس بند الرصيد الافتتاحي بكشوفهما
-  const obEntry = obList.find(x=>x.id!=null ? x.id===party.id : x.name===partyName);
+  const obEntry = obList.find(x=>x.id!=null && x.id===party.id)
+    // المعرّف المخزَّن مع البند ممكن يكون المحلي قبل المزامنة (تبدّل بعدها) — نرجع للاسم
+    || obList.find(x=>(x.id==null || !(isCust?db.customers:db.suppliers).some(p=>p.id===x.id)) && x.name===partyName);
   const openingBal = obEntry?.balance || 0;
   const openingDate = db.settings?.opening_balances_date || null;
 
+  // المبلغ اللي طبّقته السندات على مستند معيّن — يُطرح من "المدفوع" حتى ما يتكرر بالكشف
+  const _vouchApplied = (docId, kind) => (db.receipts||[]).filter(r=>r.type===kind).reduce((sum,r)=>{
+    const list = kind==='receipt' ? r.applied_invoices : r.applied_purchases;
+    if (Array.isArray(list) && list.length) return sum + list.filter(a=>a.id===docId).reduce((x,a)=>x+(Number(a.applying)||0),0);
+    const linked = kind==='receipt' ? r.linked_invoice_id : r.linked_purchase_id;
+    return sum + (linked===docId ? (Number(r.applied_amount ?? r.amount)||0) : 0);
+  }, 0);
   const events = [];
   if (openingBal !== 0) {
     events.push({ date: openingDate || new Date(0).toISOString(), desc: lang==='ar'?'رصيد افتتاحي':'Opening Balance', type: lang==='ar'?'افتتاحي':'Opening', debit: openingBal>0?openingBal:0, credit: openingBal<0?-openingBal:0, ref:'', method:'', isOpening:true });
@@ -16618,30 +16981,46 @@ function computePartyStatement(party, kind) {
     const cancelledInvNos = new Set(db.invoices.filter(i=>_matchParty(i,'customer_id','customer_name',party) && i.status==='ملغاة').map(i=>i.invoice_no));
     custInvoices.forEach(inv=>{
       events.push({ date: inv.created_at, desc: `${lang==='ar'?'فاتورة مبيعات':'Sales Invoice'} ${inv.invoice_no}`, type: lang==='ar'?'فاتورة':'Invoice', debit: inv.grand_total, credit: 0, ref: inv.invoice_no, method: inv.payment_method||'' });
-      if ((inv.paid_amount||0) > 0) {
-        events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: inv.paid_amount, ref: inv.invoice_no, method: inv.payment_method||'' });
+      // المحصَّل وقت البيع حسب طريقة الدفع (ثابت على كل الأجهزة): آجل = صفر، نقدي/شبكة =
+      // كامل الفاتورة، جزئي = المدفوع ناقص السندات. السندات المسحوبة من السيرفر ما تحمل
+      // تفاصيل توزيعها، فالطرح وحده كان يحسب التحصيل مرتين بأي جهاز غير اللي أنشأ السند
+      const _pmS = inv.payment_method || '';
+      const _atSale = _pmS === 'آجل' ? 0
+        : _pmS === 'جزئي' ? Math.round(Math.max(0, (inv.paid_amount||0) - _vouchApplied(inv.id,'receipt') - (inv.advance_applied||0))*100)/100
+        : Math.round(Math.max(0, Math.min(inv.paid_amount||inv.grand_total||0, inv.grand_total||0) - (inv.advance_applied||0))*100)/100;
+      if (_atSale > 0) {
+        events.push({ date: inv.created_at, desc: `${lang==='ar'?'تحصيل عند البيع':'Collected at sale'} — ${inv.invoice_no}`, type: lang==='ar'?'تحصيل':'Collection', debit: 0, credit: _atSale, ref: inv.invoice_no, method: inv.payment_method||'' });
       }
     });
     (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party) && r.type==='receipt' && !cancelledInvNos.has(r.ref)).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
+      events.push({ date: r.created_at||r.date, desc: `${lang==='ar'?'سند قبض':'Receipt'} ${r.voucher_no}`, type: lang==='ar'?'سند قبض':'Receipt', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
     (db.returns||[]).filter(r=>r.type==='sales' && _matchParty(r,'party_id','party',party)).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
+      events.push({ date: r.created_at||r.date, desc: `${lang==='ar'?'مرتجع مبيعات':'Sales Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   } else {
     const suppPurchases = db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status!=='ملغاة');
     const cancelledPurRefs = new Set(db.purchases.filter(p=>_matchParty(p,'supplier_id','vendor',party) && p.status==='ملغاة').map(p=>p.supplier_ref));
     suppPurchases.forEach(p=>{
+      if (p.status==='معكوسة' && p.reversed_at) {
+        // العكس يلغي الفاتورة (الدَين) ويرجّع المدفوع عند الشراء للخزينة
+        events.push({ date: p.reversed_at, desc: (lang==='ar'?'عكس فاتورة مشتريات':'Purchase invoice reversed')+(p.purchase_no?' '+p.purchase_no:''), type: lang==='ar'?'عكس':'Reversal', debit: 0, credit: p.total, ref: p.supplier_ref||p.purchase_no||'' });
+        if ((p.paid_amount||0) > 0) events.push({ date: p.reversed_at, desc: lang==='ar'?'استرجاع المدفوع عند الشراء':'Refund of amount paid at purchase', type: lang==='ar'?'عكس':'Reversal', debit: p.paid_amount, credit: 0, ref: p.supplier_ref||p.purchase_no||'' });
+      }
       events.push({ date: p.created_at, desc: p.description || (lang==='ar'?'فاتورة مشتريات':'Purchase Invoice'), type: lang==='ar'?'فاتورة':'Invoice', debit: p.total, credit: 0, ref: p.supplier_ref||'', method: p.payment_method||'' });
-      if ((p.paid_amount||0) > 0) {
-        events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: p.paid_amount, ref: p.supplier_ref||'', method: p.payment_method||'' });
+      const _pmB = p.payment_method || '';
+      const _atBuy = _pmB === 'آجل' ? 0
+        : _pmB === 'جزئي' ? Math.round(Math.max(0, (p.paid_amount||0) - _vouchApplied(p.id,'payment'))*100)/100
+        : Math.round((p.total||0)*100)/100;
+      if (_atBuy > 0) {
+        events.push({ date: p.created_at, desc: lang==='ar'?'سداد عند الشراء':'Paid at purchase', type: lang==='ar'?'سداد':'Payment', debit: 0, credit: _atBuy, ref: p.supplier_ref||'', method: p.payment_method||'' });
       }
     });
     (db.receipts||[]).filter(r=>_matchParty(r,'party_id','party',party) && r.type==='payment' && !cancelledPurRefs.has(r.ref)).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
+      events.push({ date: r.created_at||r.date, desc: `${lang==='ar'?'سند صرف':'Payment Voucher'} ${r.voucher_no}`, type: lang==='ar'?'سند صرف':'Payment', debit: 0, credit: r.amount, ref: r.voucher_no, method: r.method||'' });
     });
     (db.returns||[]).filter(r=>r.type==='purchases' && _matchParty(r,'party_id','party',party)).forEach(r=>{
-      events.push({ date: r.date||r.created_at, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
+      events.push({ date: r.created_at||r.date, desc: `${lang==='ar'?'مرتجع مشتريات':'Purchase Return'} ${r.return_no}`, type: lang==='ar'?'مرتجع':'Return', debit: 0, credit: r.amount, ref: r.return_no, method: r.payment_method||'' });
     });
   }
 
@@ -16750,9 +17129,12 @@ function renderPartyStatementDetail(c, partyId, kind) {
   if (!party) { stmtSelectedParty=null; renderStmtContent(); return; }
   const st = computePartyStatement(party, kind);
   const label = isCust ? (lang==='ar'?'العميل':'Customer') : (lang==='ar'?'المورد':'Supplier');
-  const balLabel = isCust
-    ? (lang==='ar'?'الرصيد المستحق (لكم)':'Owed to you')
-    : (lang==='ar'?'الرصيد المستحق (عليكم)':'You owe');
+  // الاتجاه حسب إشارة الرصيد: رصيد سالب للعميل = دفعة مقدمة له (مو مستحق لكم)، وللمورد = دفعة مقدمة منكم
+  const _fb = st.finalBalance;
+  const balLabel = Math.abs(_fb) < 0.005 ? (lang==='ar'?'الرصيد (مسوى)':'Balance (settled)')
+    : isCust
+      ? (_fb > 0 ? (lang==='ar'?'الرصيد المستحق (لكم)':'Owed to you') : (lang==='ar'?'دفعة مقدمة من العميل (له)':'Customer advance (owed to customer)'))
+      : (_fb > 0 ? (lang==='ar'?'الرصيد المستحق (عليكم)':'You owe') : (lang==='ar'?'دفعة مقدمة للمورد (لكم)':'Supplier advance (owed to you)'));
 
   c.innerHTML = `<div>
     <button class="btn btn-outline btn-sm" style="margin-bottom:12px;" data-action="setStmtSelectedParty" data-args="[null]">${lang==='ar'?'← رجوع للقائمة':'← Back to list'}</button>
@@ -17702,7 +18084,23 @@ function checkOpeningBalances() {
     // أول دخول: شاشة قصيرة لصاحب المحل (بيانات المحل، البضاعة، الدرج، أول بيعة)
     // بدل معالج الأرصدة الافتتاحية الكامل بخطواته التسع — المعالج الكامل يبقى
     // متاحًا منها (qsOpenFullWizard) ومن الإعدادات للمحاسب
-    setTimeout(() => showQuickStart(), 700);
+    setTimeout(async () => {
+      // جهاز جديد: إعدادات الشركة ممكن لسه ما وصلت (أو فشل جلبها)، فتطلع الشاشة لمحل
+      // مجهّز أصلًا — وإكمالها يضيف الأرصدة الافتتاحية مرة ثانية. نسأل السيرفر مباشرة
+      // قبل العرض، ولو تعذّر التحقق ما نعرضها
+      if (typeof window._cloudApiFetch === 'function') {
+        try {
+          const r = await window._cloudApiFetch('GET', '/api/settings');
+          if (!r?.data) return;
+          if (r.data.opening_balances_done) {
+            const d = getDB(); d.settings = { ...(d.settings||{}), opening_balances_done: true };
+            (window._origSaveDB || saveDB)(d);
+            return;
+          }
+        } catch (e) { return; }
+      }
+      if (!getDB().settings?.opening_balances_done) showQuickStart();
+    }, 700);
   }
 }
 
@@ -18255,6 +18653,12 @@ function obSaveAll() {
   // ويُنشئ قيد يومية جديد بكل مرة، حتى لو المستخدم ما غيّر شيء فعليًا)
   const isEdit  = _obEditMode && !!db.settings?.opening_balances_data;
   const oldData = isEdit ? db.settings.opening_balances_data : null;
+  // تعبئة "أولى" بينما فيه قيد افتتاحي قائم (مثلًا شاشة البداية طلعت بالغلط على جهاز
+  // جديد) = تضاعف النقدية ورأس المال. التعديل الصحيح من الإعدادات ← الأرصدة الافتتاحية
+  if (!isEdit && (db.journal||[]).some(j => j.ref === 'OPENING' && !jeReversalOf(db, j))) {
+    showToast(lang==='ar'?'⚠️ الأرصدة الافتتاحية مسجّلة مسبقًا — عدّلها من الإعدادات ← الأرصدة الافتتاحية':'⚠️ Opening balances already recorded — edit them from Settings → Opening balances','error');
+    return;
+  }
 
   const totalCash    = (_obData.cash_box||0)+(_obData.cash_bank||0);
   const inventoryVal = _obData.products.reduce((s,p)=>s+(p.qty*p.buy_price),0);
@@ -18511,6 +18915,42 @@ function init() {
     localStorage.removeItem('yaqiz_refresh_token');
   }
   renderApp();
+  // جلسة مستعادة (تحديث الصفحة أو فتح التطبيق بجلسة محفوظة): التحقق من الوردية كان
+  // بتسجيل الدخول فقط، فتحديث الصفحة على شاشة "بدء الوردية" يفتح نقطة البيع بلا وردية
+  // فحص الوردية يتم من renderApp (يغطي كل طرق استعادة الجلسة)
+}
+
+// الكاشير لازم يكون عنده وردية مفتوحة قبل البيع. لو ما فيه محليًا: وردية مفتوحة له
+// بالسيرفر (جهاز ثاني/بيانات ممسوحة) تُتبنّى بدل فتح ثانية، وإلا تطلع شاشة بدء الوردية
+async function _ensureShiftOpen() {
+  const u = currentUser; if (!u?.shift_enabled) return;
+  // وردية مفتوحة موجودة (ولو مسحوبة من السيرفر بجهاز جديد): نعتمدها كوردية هذا الجهاز —
+  // بدونها الخروج كان يقفلها صامتًا بصفر بدون شاشة العد، ومبيعات الجهاز ما تنحسب عليها
+  const _open = (getDB().shifts||[]).find(x=>x.username===u.username && !x.end_time);
+  if (_open) {
+    const _cur = localStorage.getItem('yaqiz_shift_id');
+    if (!_cur || !(getDB().shifts||[]).some(x=>String(x.id)===_cur && !x.end_time)) localStorage.setItem('yaqiz_shift_id', _open.id);
+    return;
+  }
+  try {
+    const r = await window._cloudApiFetch?.('GET', '/api/employees/shifts/list');
+    const open = (r?.data||[]).find(x => (x.user_id===u.id || x.username===u.username) && (x.status==='open' || !x.end_time));
+    if (open) {
+      const d = getDB(); d.shifts = d.shifts || [];
+      let sh = d.shifts.find(x => x._serverId === open.id);
+      if (!sh) {
+        sh = { id: d.nextId.shift||1, _serverId: open.id, username: u.username, full_name: u.full_name,
+          start_time: open.start_time, end_time: null, date: String(open.start_time||'').slice(0,10),
+          opening_cash: parseFloat(open.opening_cash)||0, closing_cash:0, closing_card:0, closing_transfer:0,
+          sales_cash:0, sales_card:0, sales_transfer:0, sales_credit:0, invoices_count:0, invoice_ids:[], branch_id: open.branch_id||null };
+        d.nextId.shift = (d.nextId.shift||1) + 1; d.shifts.push(sh);
+      }
+      saveDB(d); localStorage.setItem('yaqiz_shift_id', sh.id);
+      return;
+    }
+  } catch (e) { /* السيرفر غير متاح — نعرض شاشة البدء */ }
+  if (!currentUser || (getDB().shifts||[]).some(x=>x.username===u.username && !x.end_time)) return;
+  showShiftOpenScreen(u, (openingCash, branchId) => { startShift(u, openingCash, branchId); renderApp(); });
 }
 
 // ============ تشديد CSP، المرحلة 2: تفويض النقر (event delegation) ============
@@ -19208,7 +19648,7 @@ async function runAIAnalysis() {
   const monthReturns   = (db.returns||[]).filter(r=>(r.date||r.created_at||'').startsWith(thisMonth));
 
   // الإيراد بدون ضريبة (subtotal)، وتكلفة البضاعة الحقيقية (FIFO) لا إجمالي المشتريات
-  const revenue = monthInvoices.reduce((s,i)=>s+(i.subtotal||0),0)
+  const revenue = monthInvoices.reduce((s,i)=>s+invNet(i),0)
     - monthReturns.filter(r=>r.type==='sales').reduce((s,r)=>s+(r.base_amount||0),0);
   const collected = monthInvoices.reduce((s,i)=>s+(i.paid_amount||0),0);
   const cogs = monthInvoices.reduce((s,i)=>s+(i.cogs_total||0),0)
@@ -19388,7 +19828,15 @@ async function runAISearchQuery(q) {
   // (نفس نمط yaqiz_user/التوكنات) بدل البدء من null دائمًا كل إقلاع
   let _snap = null;
   try { _snap = JSON.parse(localStorage.getItem(_getSnapKey()) || 'null'); } catch(e) { _snap = null; }
+  // بعد خروج ودخول بنفس التبويب: نرجّع لقطة الشركة المحفوظة قبل أي رفع/سحب. لو ما فيه
+  // لقطة وبيانات الشركة موجودة، نعتبر الموجود هو المتزامن (أسلم من إعادة رفع كل شيء)
+  function _ensureSnap() {
+    if (_snap) return;
+    try { _snap = JSON.parse(localStorage.getItem(_getSnapKey()) || 'null'); } catch(e) { _snap = null; }
+    if (!_snap) { try { const d = JSON.parse(localStorage.getItem(_getDbKey()) || 'null'); if (d && (d.invoices?.length || d.products?.length || d.customers?.length)) { _snap = d; _persistSnap(); } } catch(e) {} }
+  }
   function _persistSnap() {
+    if (!_snap) return;
     try { localStorage.setItem(_getSnapKey(), JSON.stringify(_snap)); } catch(e) {}
   }
   // خزينة/يومية/مرتجعات/سندات/أوامر شراء/ورديات/حركات مخزون كانت تُدمَج إضافةً
@@ -19524,7 +19972,10 @@ async function runAISearchQuery(q) {
     window._retryLoyaltySettingsIfDirty?.();
     window._retryBankReconIfDirty?.();
   }
-  setInterval(_periodicDataPull, 60 * 1000);
+  // كل 30 ثانية (كانت دقيقة)، وفور الرجوع للتبويب — أرقام اللوحات نفسها تتحدث كل 15
+  // ثانية من ملخص السيرفر الخفيف، فهذا للبيانات الكاملة (قوائم، فواتير، كميات)
+  setInterval(_periodicDataPull, 30 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - _lastPullAt > 10000) _periodicDataPull(); });
   // فتح نقطة البيع أو المخزون يجيب آخر نسخة فورًا (تعديل من جهاز آخر كان
   // ينتظر لين دقيقة كاملة) — بحد أدنى 10 ثواني بين السحبين
   window._pullIfStale = function () {
@@ -19564,7 +20015,7 @@ async function runAISearchQuery(q) {
         return null;
       }
     }
-    if (!res.ok) { const e = await res.json().catch(()=>({})); const err = new Error(e.message||'API error'); err.code = e.code; throw err; }
+    if (!res.ok) { const e = await res.json().catch(()=>({})); const err = new Error(e.message||'API error'); err.code = e.code; err.status = res.status; throw err; }
     return res.json();
   }
 
@@ -19623,6 +20074,7 @@ async function runAISearchQuery(q) {
       invoice_type:  inv.invoice_type||'simplified',
       date: (inv.created_at||new Date().toISOString()).slice(0,10),
       payment_method: inv.payment_method||'نقدي',
+      use_advance: !!inv.use_advance,
       discount_type:  inv.discount>0 ? 'value' : null,
       discount_value: parseFloat(inv.discount)||0,
       cogs_total: parseFloat(inv.cogs_total)||0,
@@ -19662,6 +20114,7 @@ async function runAISearchQuery(q) {
       vat_total:      parseFloat(inv.vat_amount)||0,
       grand_total:    parseFloat(inv.grand_total)||0,
       paid_amount:    parseFloat(inv.paid_amount)||0,
+      advance_applied: parseFloat(inv.advance_applied)||0,
       credited_amount: parseFloat(inv.credited_amount)||0,
       cogs_total:     parseFloat(inv.cogs_total)||0,
       remaining_amount: parseFloat(inv.grand_total||0) - parseFloat(inv.paid_amount||0) - parseFloat(inv.credited_amount||0),
@@ -19705,6 +20158,7 @@ async function runAISearchQuery(q) {
       sell_price: parseFloat(p.sell_price)||0,
       qty: parseFloat(p.qty)||0, min_qty: parseFloat(p.min_qty)||0,
       tax_rate: parseFloat(p.tax_rate)||15, notes: p.notes||'',
+      ...(p.auto_price_update ? { auto_price_update: true, profit_policy_type: p.profit_policy_type || 'percentage_on_cost', profit_policy_value: parseFloat(p.profit_policy_value) || 0 } : {}),
       ...(p.branch_id ? { branch_id: p.branch_id } : {})
     };
   }
@@ -19734,8 +20188,14 @@ async function runAISearchQuery(q) {
     };
   }
 
-  function purchaseToFE(p) {
+  // حالات السيرفر بالإنجليزي → نفس الحالات العربية المستخدمة بكل الشاشات
+  const PURCHASE_STATUS_FE = { paid:'مسدد', unpaid:'آجل', partial:'جزئي', reversed:'معكوسة', cancelled:'ملغاة' };
+  function purchaseToFE(p, products) {
     const cat = p.category||'';
+    // صنف مُدرج بالمخزون: السيرفر أدرجه وقت الحفظ (له product_id)، أو أُنشئ منتجه لاحقًا
+    // بنفس الاسم (إدراج الأصناف الجديدة يضيف كميته وقتها). كانت كل الأصناف تُعتبر غير
+    // مُدرجة بعد السحب، فيظهر زر «استكمال الإدراج» ويكرر الكمية لو انضغط
+    const _names = new Set((products||[]).map(x=>String(x.name||'').trim().toLowerCase()));
     return {
       id: p.id, vendor: p.supplier_name||p.vendor||'',
       supplier_id: p.supplier_id||null,
@@ -19744,14 +20204,15 @@ async function runAISearchQuery(q) {
       amount: parseFloat(p.amount)||0,
       vat: parseFloat(p.vat_amount)||0,
       total: parseFloat(p.total)||0,
-      items: (p.items_json||[]).map(it=>({name:it.name||'',qty:parseFloat(it.qty)||1,price:parseFloat(it.price)||0,line_total:parseFloat(it.line_total)||0})),
+      items: (p.items_json||[]).map(it=>({name:it.name||'',qty:parseFloat(it.qty)||1,price:parseFloat(it.price)||0,line_total:parseFloat(it.line_total)||0,
+        product_id:it.product_id||null, stocked: !!it.product_id || _names.has(String(it.name||'').trim().toLowerCase())})),
       paid_amount: parseFloat(p.paid_amount)||0,
       remaining_amount: parseFloat(p.remaining)||0,
       payment_method: p.payment_method||'نقدي',
       supplier_ref: p.supplier_ref||'',
       notes: p.notes||'',
       deductible: p.deductible!==false,
-      status: p.status==='reversed' ? 'معكوسة' : (p.status||'unpaid'),
+      status: PURCHASE_STATUS_FE[p.status] || p.status || 'آجل',
       reversed_at: p.reversed_at||null, reversal_reason: p.reversal_reason||'',
       purchase_no: p.purchase_no||'',
       branch_id: p.branch_id||null,
@@ -19831,6 +20292,8 @@ async function runAISearchQuery(q) {
       payment_method: v.method || null, description: v.description || '',
       reference: v.ref || '', linked_invoice_id: v.linked_invoice_id || null,
       linked_purchase_id: v.linked_purchase_id || null,
+      party_id: v.party_id || null, prior_applied: parseFloat(v.prior_applied) || 0,
+      advance_amount: parseFloat(v.advance_amount) || 0,
       date: (v.date || v.created_at || new Date().toISOString()).slice(0, 10)
     };
   }
@@ -19838,6 +20301,7 @@ async function runAISearchQuery(q) {
   // 3. LOAD ALL DATA FROM API
   // ═══════════════════════════════════════════════════════
   async function loadAllFromAPI() {
+    _ensureSnap();
     const _epochAtStart = _syncEpoch;
     try {
       const [prods, custs, supps, invRes, purRes, empRes, treas, quotesRes, usersRes, meRes, oblRes, moveRes, paymentStatusRes, journalRes, returnsRes, poRes, shiftsRes, stockMovesRes, vouchersRes, closedPeriodsRes, settingsRes, branchesRes, warehousesRes, stockByWhRes, loyaltyRes, bankReconRes] = await Promise.all([
@@ -19880,6 +20344,21 @@ async function runAISearchQuery(q) {
       const db = getDB();
       const _snapBefore = _snap;
       _pullSkipped = new Set();
+      // إنشاءات وحذوفات محلية ما انرفعت بعد (قيد إلغاء فاتورة، حذف سند...) — السحب ممكن
+      // ينزل بين تمريرتي رفع، ونهايته تعتبر حالة الجهاز "واصلة للسيرفر" فتضيع للأبد
+      // (القيد ما يُرسل، السند المحذوف يرجع). نحفظها هنا ونبقيها معلّقة باللقطة
+      const _pendingCD = [];
+      if (_snapBefore) {
+        const _lists = d => Object.keys(d || {}).filter(k => Array.isArray(d[k])).map(k => [k, d[k]]).concat(d?.treasury?.moves ? [['treasury.moves', d.treasury.moves]] : []);
+        const _get = (d, k) => k === 'treasury.moves' ? d?.treasury?.moves : d?.[k];
+        for (const [k, arr] of _lists(db)) {
+          const before = _get(_snapBefore, k); if (!Array.isArray(before)) continue;
+          const bIds = new Set(before.map(x => x && x.id)), nIds = new Set(arr.map(x => x && x.id));
+          const created = arr.filter(x => x && x.id != null && !x._serverId && !bIds.has(x.id)).map(x => x.id);
+          const deleted = before.filter(x => x && x.id != null && !nIds.has(x.id));
+          if (created.length || deleted.length) _pendingCD.push({ k, get: d => _get(d, k), created: new Set(created), deleted });
+        }
+      }
       // فيه بيع/منتج/حركة مخزون محلية ما وصلت السيرفر؟ — يُحسب قبل أي دمج
       const _stockPending = !!_snapBefore && ['products','invoices','purchases','returns','stock_moves'].some(k => JSON.stringify(db[k]) !== JSON.stringify(_snapBefore[k]));
 
@@ -19887,14 +20366,17 @@ async function runAISearchQuery(q) {
       // (راجع تعليق _hasPendingLocalChanges) — وإلا نتجاوز الاستبدال هذي
       // الدورة فقط، وتُعاد المحاولة تلقائيًا بالدورة القادمة (لا يعني توقف
       // التحديث نهائيًا، فقط تأجيله لحين تأكيد وصول التعديل المحلي للسيرفر)
-      if (prods?.data && !_hasPendingLocalChanges(db,'products'))    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE);
+      // _srv: السجل جاي من السيرفر أصلًا — حلقة الرفع ما ترسله أبدًا كإنشاء جديد (حماية من
+      // التكرار لو سجل مسحوب ما انعكس بلقطة المزامنة لأي سبب، مثل حفظ نسخة قديمة بعد انتظار)
+      const _S = o => (o && (o._srv = true), o);
+      if (prods?.data && !_hasPendingLocalChanges(db,'products'))    db.products   = prods.data.filter(p=>p.is_active!==false).map(productToFE).map(_S);
       // العملاء/الموردون غير النشطين (معطّلون، مو محذوفون فعليًا) يبقون
       // محمَّلين محليًا عمدًا — عشان تقدر تشوفهم وتعيد تفعيلهم من الواجهة
-      if (custs?.data && !_hasPendingLocalChanges(db,'customers'))   db.customers  = custs.data.map(customerToFE);
-      if (supps?.data && !_hasPendingLocalChanges(db,'suppliers'))   db.suppliers  = supps.data.map(supplierToFE);
-      if (invRes?.data && !_hasPendingLocalChanges(db,'invoices'))   db.invoices   = invRes.data.map(invToFE);
-      if (purRes?.data && !_hasPendingLocalChanges(db,'purchases'))  db.purchases  = purRes.data.map(purchaseToFE);
-      if (empRes?.data && !_hasPendingLocalChanges(db,'employees'))  db.employees  = empRes.data.map(employeeToFE);
+      if (custs?.data && !_hasPendingLocalChanges(db,'customers'))   db.customers  = custs.data.map(customerToFE).map(_S);
+      if (supps?.data && !_hasPendingLocalChanges(db,'suppliers'))   db.suppliers  = supps.data.map(supplierToFE).map(_S);
+      if (invRes?.data && !_hasPendingLocalChanges(db,'invoices'))   db.invoices   = invRes.data.map(invToFE).map(_S);
+      if (purRes?.data && !_hasPendingLocalChanges(db,'purchases'))  db.purchases  = purRes.data.map(p => _S(purchaseToFE(p, db.products)));
+      if (empRes?.data && !_hasPendingLocalChanges(db,'employees'))  db.employees  = empRes.data.map(employeeToFE).map(_S);
 
       if (treas?.data?.length) {
         const defaultAcc = treas.data.find(a => a.is_default) || treas.data[0];
@@ -20013,7 +20495,9 @@ async function runAISearchQuery(q) {
       }
 
       // ── سندات القبض والصرف: اسحب أي سند سجّله جهاز ثاني ولم يصل لهذا الجهاز بعد ──
-      if (vouchersRes?.data?.length) {
+      // سند محذوف محليًا ولسه حذفه ما وصل السيرفر: السحب كان يرجّعه (السيرفر لسه عنده)
+      // فيضيع الحذف وقيده العكسي للأبد — نفس حماية الفواتير والمنتجات: نتجاوز الدمج هذي الدورة
+      if (vouchersRes?.data?.length && !_hasPendingLocalChanges(db,'receipts')) {
         db.receipts = db.receipts || [];
         // علاج بيانات قديمة: سند وصل السيرفر بدون علامة _serverId (صار له نسخة
         // "srv-…" مكررة) — نعلّمه ونحذف النسخة المكررة
@@ -20034,6 +20518,8 @@ async function runAISearchQuery(q) {
             method: row.payment_method || '', ref: row.reference || '',
             linked_invoice_id: row.linked_invoice_id || null,
             linked_purchase_id: row.linked_purchase_id || null,
+            party_id: row.party_id || null, prior_applied: parseFloat(row.prior_applied) || 0,
+            advance_amount: parseFloat(row.advance_amount) || 0,
             date: row.date, created_at: row.created_at,
             _serverId: row.id,
           }));
@@ -20071,7 +20557,11 @@ async function runAISearchQuery(q) {
         const _knownShiftServerIds = new Set(db.shifts.map(s => s._serverId).filter(Boolean));
         shiftsRes.data.forEach(row => {
           const local = db.shifts.find(s => s._serverId === row.id);
-          if (local) {
+          // وردية مفتوحة: عداداتها بالسيرفر أصفار لين تنقفل (السيرفر يحسبها عند الإقفال)،
+          // فدمجها كان يصفّر مبيعات الوردية الجارية بالجهاز ← ملخص إقفال غلط وفائض وهمي
+          if (local && !row.end_time && !local.end_time) {
+            local.branch_id = row.branch_id||local.branch_id||null; local.branch_name = row.branch_name||local.branch_name;
+          } else if (local) {
             local.end_time = row.end_time; local.sales_cash = parseFloat(row.sales_cash)||0;
             local.sales_card = parseFloat(row.sales_card)||0; local.sales_transfer = parseFloat(row.sales_transfer)||0;
             local.sales_credit = parseFloat(row.sales_credit)||0; local.invoices_count = row.invoices_count||0;
@@ -20144,7 +20634,7 @@ async function runAISearchQuery(q) {
         );
         db.obligations = [..._srvObls, ..._localPending];
       }
-      if (quotesRes?.data && !_hasPendingLocalChanges(db,'quotes')) db.quotes = quotesRes.data.map(quoteToFE);
+      if (quotesRes?.data && !_hasPendingLocalChanges(db,'quotes')) db.quotes = quotesRes.data.map(quoteToFE).map(_S);
 
       // مزامنة بيانات الشركة في الإعدادات
       if (meRes?.data) {
@@ -20227,9 +20717,16 @@ async function runAISearchQuery(q) {
       }
 
       _origSaveDB(db); // لا تستخدم saveDB الـ hooked حتى لا تُطلق _diffAndPush بناءً على بيانات API
+      try { window._pushCompanyInfo?.(); } catch (e) {}
       _snap = JSON.parse(JSON.stringify(db));
       if (_snapBefore) for (const k of _pullSkipped) _snap[k] = JSON.parse(JSON.stringify(_snapBefore[k] ?? []));
       _pullSkipped = null;
+      for (const p of _pendingCD) {
+        const arr = p.get(_snap); if (!Array.isArray(arr)) continue;
+        const kept = arr.filter(x => !(x && p.created.has(x.id)));
+        for (const d of p.deleted) if (!kept.some(x => x && x.id === d.id)) kept.push(JSON.parse(JSON.stringify(d)));
+        if (p.k === 'treasury.moves') _snap.treasury.moves = kept; else _snap[p.k] = kept;
+      }
       _persistSnap();
       // تعديلات معلّقة ما وصلت السيرفر (فشل رفع سابق) — نعيد محاولة رفعها الآن
       if (_snapBefore && _snap) {
@@ -20253,6 +20750,9 @@ async function runAISearchQuery(q) {
   // المزامنة القادمة من إعادة إرسالها كـ"جديدة" وتكرارها بالسيرفر
   window._cloudInvToAPI = invToAPI;
   window._cloudRegisterSyncedInvoice = function(inv) {
+    // الفاتورة انشأت بالسيرفر فعلًا: علامة _srv تمنع أي تبويب ثاني للتطبيق (لقطته بالذاكرة ما
+    // فيها الفاتورة) من إرسالها كفاتورة جديدة — كانت تتكرر وتخصم المخزون مرتين بلا قيد
+    if (inv) inv._srv = true;
     try {
       if (!_snap) return;
       if (!_snap.invoices) _snap.invoices = [];
@@ -20358,6 +20858,7 @@ async function runAISearchQuery(q) {
   }
 
   function _schedulSync(newDB) {
+    _ensureSnap();
     if (!_snap) { _snap = JSON.parse(JSON.stringify(newDB)); _persistSnap(); return; }
     _syncEpoch++;
     setTimeout(() => _attemptSync(), 100);
@@ -20376,6 +20877,20 @@ async function runAISearchQuery(q) {
     _diffAndPush(latestDB, prev);
   }
 
+  // توقيع المنتج للمقارنة بدون الكمية وطبقات التكلفة — تتغيّر مع كل بيع/شراء والسيرفر
+  // يحسبها بنفسه؛ مقارنتها كانت ترسل "تحديث منتج" بعد كل بيعة (403 للكاشير والمبيعات)
+  const _prodSig = p => { if (!p) return ''; const { qty, lots, _srv, ...rest } = p; return JSON.stringify(rest); };
+  function _renameUnsyncedRef(oldRef, newRef) {
+    try {
+      const fix = (db) => {
+        if (!db) return;
+        for (const j of db.journal || []) if (!j._serverId && j.ref === oldRef) { j.ref = newRef; j.description = String(j.description||'').split(oldRef).join(newRef); }
+        for (const m of db.treasury?.moves || []) if (!m._serverId && m.reference === oldRef) { m.reference = newRef; m.description = String(m.description||'').split(oldRef).join(newRef); }
+      };
+      const d = getDB(); fix(d); _origSaveDB(d);
+      fix(_snap); fix(_currentPassDB);
+    } catch (e) { /* ignore */ }
+  }
   async function _diffAndPush(newDB, prev) {
     if (_syncBusy) return;
     _syncBusy = true;
@@ -20386,12 +20901,16 @@ async function runAISearchQuery(q) {
       // ── Products: create / update / deactivate ──────────
       for (const p of newDB.products || []) {
         const old = (prev.products || []).find(o => o.id === p.id);
-        if (!old) {
+        if (!old && p._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create product', p.name);
           const res = await apiFetch('POST', '/api/products', productToAPI(p)).catch(e => { console.warn('product create:', e.message); return null; });
           if (res?.data?.id) { if (res.data.id !== p.id) _replaceLocalId('products', p.id, res.data.id); }
           else _revertSnapEntity('products', p.id, null);
-        } else if (JSON.stringify(p) !== JSON.stringify(old)) {
+        } else if (_prodSig(p) !== _prodSig(old) && has('inventory.manage')) {
+          // (من ما عنده إدارة المخزون ما يعدّل منتجات أصلًا — تغيّر السعر عنده جاي من فاتورة
+          // شراء والسيرفر حدّثه بنفسه؛ إرسال "تحديث" منه كان يرجع 403 بعد كل شراء)
           if (SYNC_LOG) console.log('→ API: update product', p.name);
           const ok = await apiFetch('PUT', `/api/products/${p.id}`, productToAPI(p)).then(()=>true).catch(e => { console.warn('product update:', e.message); return false; });
           if (!ok) _revertSnapEntity('products', p.id, old);
@@ -20420,7 +20939,9 @@ async function runAISearchQuery(q) {
         // رصيد حقيقي غيّره جهاز آخر) — إلا لو معالج الأرصدة الافتتاحية علّم هذا
         // السجل صراحة، عندها نرسل العلامة ونحذفها بعد نجاح المزامنة فقط
         if (c._obBalanceWrite) body.opening_balance_write = true;
-        if (!old) {
+        if (!old && c._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create customer', c.name);
           const res = await apiFetch('POST', '/api/customers', body).catch(e => { console.warn('customer create:', e.message); return null; });
           if (res?.data?.id) { if (res.data.id !== c.id) _replaceLocalId('customers', c.id, res.data.id); delete c._obBalanceWrite; }
@@ -20448,12 +20969,16 @@ async function runAISearchQuery(q) {
         // نفس منطق العملاء: السيرفر يتجاهل balance بالتحديث افتراضيًا، إلا بعلامة
         // معالج الأرصدة الافتتاحية صراحة (راجع suppliers.controller.js exports.update)
         if (s._obBalanceWrite) body.opening_balance_write = true;
-        if (!old) {
+        if (!old && s._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create supplier', s.name);
           const res = await apiFetch('POST', '/api/suppliers', body).catch(e => { console.warn('supplier create:', e.message); return null; });
           if (res?.data?.id) { if (res.data.id !== s.id) _replaceLocalId('suppliers', s.id, res.data.id); delete s._obBalanceWrite; }
           else _revertSnapEntity('suppliers', s.id, null);
-        } else if (JSON.stringify(s) !== JSON.stringify(old)) {
+        } else if (JSON.stringify(s) !== JSON.stringify(old) && has('suppliers.manage')) {
+          // بدون صلاحية إدارة الموردين: التغيّر المحلي (رصيد بعد سند/شراء) يحسبه السيرفر بنفسه —
+          // كان يُرسل تعديلًا يرجع 403 ويُعاد كل تمريرة
           if (SYNC_LOG) console.log('→ API: update supplier', s.name);
           const ok = await apiFetch('PUT', `/api/suppliers/${s.id}`, body).then(()=>true).catch(e => { console.warn('supplier update:', e.message); return false; });
           if (!ok) _revertSnapEntity('suppliers', s.id, old); else delete s._obBalanceWrite;
@@ -20473,7 +20998,9 @@ async function runAISearchQuery(q) {
         const body = { client_local_id: clientKey(e.id), name: e.name, position: e.position, department: e.department,
                        phone: e.phone, email: e.email, salary: e.salary || 0,
                        allowances: e.allowances || 0, status: e.status || 'active' };
-        if (!old) {
+        if (!old && e._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create employee', e.name);
           const res = await apiFetch('POST', '/api/employees', body).catch(err => { console.warn('employee create:', err.message); return null; });
           if (res?.data?.id) { if (res.data.id !== e.id) _replaceLocalId('employees', e.id, res.data.id); }
@@ -20495,7 +21022,9 @@ async function runAISearchQuery(q) {
       // ── Purchases: create / update ───────────────────────
       for (const p of newDB.purchases || []) {
         const old = (prev.purchases || []).find(o => o.id === p.id);
-        if (!old) {
+        if (!old && p._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create purchase', p.vendor);
           const _ldb2 = getDB();
           // نحل supplier_id بالاسم دائمًا وقت الدفع فعليًا (لا نثق بـp.supplier_id
@@ -20560,7 +21089,7 @@ async function runAISearchQuery(q) {
             const ok = await apiFetch('POST', `/api/purchases/${p.id}/payment`, { amount: _payAmt })
               .then(()=>true).catch(e => { console.warn('purchase payment:', e.message); return false; });
             if (!ok) _revertSnapEntity('purchases', p.id, old);
-          } else {
+          } else if (has('purchases.edit')) {
             if (SYNC_LOG) console.log('→ API: update purchase', p.vendor);
             const ok = await apiFetch('PUT', `/api/purchases/${p.id}`, {
               supplier_name: p.vendor, description: p.description,
@@ -20574,7 +21103,9 @@ async function runAISearchQuery(q) {
       // ── Invoices: create جديدة / payment / cancel ملغاة ────────────
       for (const inv of newDB.invoices || []) {
         const old = (prev.invoices || []).find(o => o.id === inv.id);
-        if (!old) {
+        if (!old && inv._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create invoice', inv.invoice_no);
           const res = await apiFetch('POST', '/api/invoices', invToAPI(inv)).catch(e => { console.warn('invoice sync:', e.message); return null; });
           if (res?.data?.id) {
@@ -20646,7 +21177,7 @@ async function runAISearchQuery(q) {
           else _revertSnapEntity('invoices', inv.id, null);
         } else if (old.status !== 'ملغاة' && inv.status === 'ملغاة') {
           if (SYNC_LOG) console.log('→ API: cancel invoice', inv.invoice_no);
-          const ok = await apiFetch('POST', `/api/invoices/${inv.id}/cancel`, { reason: 'إلغاء من الواجهة' }).then(()=>true).catch(e => { console.warn('invoice cancel:', e.message); return false; });
+          const ok = await apiFetch('POST', `/api/invoices/${inv.id}/cancel`, { reason: 'إلغاء من الواجهة' }).then(r=>{ if (r?.advance_reversal) { try { const _d=getDB(); _addServerJournal(_d, r.advance_reversal); _origSaveDB(_d); } catch {} } return true; }).catch(e => { console.warn('invoice cancel:', e.message); return false; });
           if (!ok) _revertSnapEntity('invoices', inv.id, old);
         } else {
           // مزامنة تحصيل الدفعات — إذا زاد paid_amount
@@ -20684,7 +21215,9 @@ async function runAISearchQuery(q) {
       // ── Quotes: create / update status / delete ───────────
       for (const q of newDB.quotes || []) {
         const old = (prev.quotes || []).find(o => o.id === q.id);
-        if (!old) {
+        if (!old && q._srv) {
+          // سجل مسحوب من السيرفر أصلًا — مو جديد، ما يُرسل (يمنع التكرار)
+        } else if (!old) {
           if (SYNC_LOG) console.log('→ API: create quote', q.quote_no);
           const res = await apiFetch('POST', '/api/quotes', quoteToAPI(q)).catch(e => { console.warn('quote create:', e.message); return null; });
           if (res?.data?.id) { if (res.data.id !== q.id) _replaceLocalId('quotes', q.id, res.data.id); }
@@ -20716,7 +21249,7 @@ async function runAISearchQuery(q) {
       for (const old of prev.closed_periods || []) {
         if (!(newDB.closed_periods || []).find(cp => cp.id === old.id)) {
           if (SYNC_LOG) console.log('→ API: reopen period', old.period_key);
-          const ok = await apiFetch('DELETE', `/api/closed-periods/${old.id}`).then(()=>true).catch(e => { console.warn('closed period delete sync:', e.message); return false; });
+          const ok = await apiFetch('DELETE', `/api/closed-periods/${String(old._serverId||old.id).replace(/^srv-/,'')}`).then(()=>true).catch(e => { console.warn('closed period delete sync:', e.message); return e.status === 404; });
           if (!ok) _keepInSnap('closed_periods', old);
         }
       }
@@ -20749,6 +21282,10 @@ async function runAISearchQuery(q) {
                 // الرقم المحلي يبقى محفوظًا: حركة الخزينة والقيد مرجعهما هو، وحذف السند
                 // لاحقًا يبحث بهما (كان يبحث بالرقم الجديد فقط فيترك القيد بلا عكس)
                 if (_rv) { if (!_rv.local_no && _rv.voucher_no !== res.data.voucher_no) _rv.local_no = _rv.voucher_no; _rv.voucher_no = res.data.voucher_no; _origSaveDB(_db); }
+                // القيد وحركة الخزينة (لو لسه ما انرسلوا — يُرسلون بعد السندات بنفس التمريرة)
+                // يحملون الرقم الرسمي بدل المؤقت: كان كل جهاز يبدأ من RCV-0001 فتتكرر المراجع
+                // ويعجز المراجع عن ربط القيد بسنده
+                if (_rv?.local_no && _rv.local_no !== res.data.voucher_no) _renameUnsyncedRef(_rv.local_no, res.data.voucher_no);
               } catch {}
             }
           }
@@ -20800,11 +21337,83 @@ async function runAISearchQuery(q) {
         }
       }
 
+      // ── المرتجعات (قبل الخزينة والقيود: رقمها الرسمي يرجع من السيرفر فيُنقل لمراجعهم) ──
+      const _prevReturns = prev.returns || [];
+      const _newReturns  = newDB.returns || [];
+      for (const r of _newReturns) {
+        if (typeof r.id === 'string' || r._serverId) continue;
+        if (_prevReturns.find(x => x.id === r.id)) continue;
+
+        if (SYNC_LOG) console.log('→ API: return', r.return_no);
+        const _rTok = window._periodOverrideTokens[`returns:${r.id}`];
+        delete window._periodOverrideTokens[`returns:${r.id}`];
+        const res = await apiFetch('POST', '/api/returns', {
+          client_local_id: clientKey(r.id),
+          type: r.type === 'sales' ? 'sales' : 'purchases',
+          party_name: r.party || '', product_id: r.product_id || null, product_name: r.product_name || '',
+          qty: r.qty || 0, base_amount: r.base_amount || 0, vat_amount: r.vat_amount || 0, amount: r.amount,
+          reason: r.reason || '',
+          linked_invoice_id: r.type === 'sales' ? (r.linked_id || null) : null,
+          linked_purchase_id: r.type === 'purchases' ? (r.linked_id || null) : null,
+          date: r.date || new Date().toISOString().slice(0, 10),
+          payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0,
+          credit_portion: r.credit_portion != null ? r.credit_portion : null
+        }, _rTok ? { 'X-Period-Override-Token': _rTok } : undefined).catch(e => { console.warn('return sync:', e.message); return e.status >= 400 && e.status < 500 ? { _rejected: e.message } : null; });
+
+        if (res?.data?.id) {
+          try {
+            const _db = getDB();
+            const _re = (_db.returns || []).find(x => x.id === r.id);
+            if (_re) { _re._serverId = res.data.id; _origSaveDB(_db); }
+            const _sre = (_snap?.returns || []).find(x => x.id === r.id);
+            if (_sre) _sre._serverId = res.data.id;
+            // الرقم الرسمي من السيرفر: قيد المرتجع وحركة خزينته (تُرسل بعده بنفس التمريرة)
+            // يحملونه بدل العدّاد المحلي — كانت كل الأجهزة تبدأ من RET-0001 فتتكرر المراجع
+            const _srvNo = res.data.return_no;
+            if (_srvNo && r.return_no && _srvNo !== r.return_no) {
+              for (const _x of [_re, _sre, (_currentPassDB?.returns || []).find(x => x.id === r.id)]) if (_x) { _x.local_no = _x.local_no || r.return_no; _x.return_no = _srvNo; }
+              _origSaveDB(_db);
+              _renameUnsyncedRef(r.return_no, _srvNo);
+            }
+          } catch (e) { /* ignore */ }
+        } else if (res?._rejected) {
+          // السيرفر رفض المرتجع نهائيًا (كمية/مبلغ أكبر من المسموح، فترة مقفلة...): قيده وحركة
+          // خزينته لسه ما انرسلوا (المرتجعات قبلهم بالتمريرة) — نشيلهم من كل النسخ، والمخزون
+          // والأرصدة يرجعون من السيرفر بالسحب القادم
+          const _ref = r.return_no;
+          const _undo = d => {
+            if (!d) return;
+            d.returns = (d.returns || []).filter(x => x.id !== r.id);
+            d.journal = (d.journal || []).filter(j => j._serverId || j.ref !== _ref);
+            if (d.treasury?.moves) {
+              for (const m of d.treasury.moves.filter(m => !m._serverId && m.reference === _ref))
+                d.treasury.balance = Math.round(((d.treasury.balance || 0) + (m.type === 'in' ? -1 : 1) * (Number(m.amount) || 0)) * 100) / 100;
+              d.treasury.moves = d.treasury.moves.filter(m => m._serverId || m.reference !== _ref);
+            }
+          };
+          try { const _db = getDB(); _undo(_db); _origSaveDB(_db); } catch (e) {}
+          _undo(_currentPassDB); _undo(_snap); _persistSnap();
+          try { showToast((lang==='ar' ? '❌ رفض السيرفر المرتجع ' + _ref + ': ' : '❌ Return rejected ' + _ref + ': ') + res._rejected + (lang==='ar' ? ' — أُلغي أثره' : ' — undone'), 'error'); } catch (e) {}
+        } else {
+          _revertSnapEntity('returns', r.id, null);
+        }
+      }
+      for (const old of _prevReturns) {
+        const stillExists = _newReturns.find(r => r.id === old.id);
+        if (!stillExists && old._serverId) {
+          if (SYNC_LOG) console.log('→ API: delete return', old.return_no);
+          const ok = await apiFetch('DELETE', `/api/returns/${old._serverId}`).then(()=>true).catch(e => { console.warn('return delete sync:', e.message); return false; });
+          if (!ok) _keepInSnap('returns', old);
+        }
+      }
+
       // ── Treasury: كل حركة جديدة (POS، فواتير، مشتريات، سندات، يدوية...) ────
       const _prevMoves = prev.treasury?.moves || [];
       const _newMoves  = newDB.treasury?.moves || [];
-      const _accId     = newDB.treasury?._defaultAccountId;
-      if (_accId) {
+      // السيرفر يحدد حساب الخزينة بنفسه (طريقة الدفع + الفرع) — كان الإرسال مشروطًا
+      // بمعرّف الحساب الافتراضي اللي يُقرأ من قائمة الحسابات، وهذي تحتاج صلاحية عرض
+      // الخزينة، فتضيع حركات الكاشير والمشتريات النقدية بصمت
+      {
         for (const m of _newMoves) {
           // نتجاهل: حركات وصلت أصلاً من السيرفر (id نصي srv-...)، أو حركات
           // اتزامنت قبل كذا (عندها _serverId)، أو حركات موجودة بالنسخة السابقة
@@ -20816,7 +21425,7 @@ async function runAISearchQuery(q) {
             type: m.type, amount: m.amount,
             description: m.description || '', reference: m.reference || '',
             payment_method: m.method || null, branch_id: m.branch_id || null,
-            client_local_id: clientKey(m.id)
+            manual: !!m._manual, client_local_id: clientKey(m.id)
           }).catch(e => { console.warn('treasury move sync:', e.message); return null; });
 
           if (res?.data?.id) {
@@ -20930,50 +21539,6 @@ async function runAISearchQuery(q) {
           if (SYNC_LOG) console.log('→ API: delete journal entry', old.description);
           const ok = await apiFetch('DELETE', `/api/journal/${old._serverId}`).then(()=>true).catch(e => { console.warn('journal delete sync:', e.message); return false; });
           if (!ok) _keepInSnap('journal', old);
-        }
-      }
-
-      // ── المرتجعات: مرتجعات جديدة → إنشاء، محذوفة محلياً → حذف من السيرفر ──
-      const _prevReturns = prev.returns || [];
-      const _newReturns  = newDB.returns || [];
-      for (const r of _newReturns) {
-        if (typeof r.id === 'string' || r._serverId) continue;
-        if (_prevReturns.find(x => x.id === r.id)) continue;
-
-        if (SYNC_LOG) console.log('→ API: return', r.return_no);
-        const _rTok = window._periodOverrideTokens[`returns:${r.id}`];
-        delete window._periodOverrideTokens[`returns:${r.id}`];
-        const res = await apiFetch('POST', '/api/returns', {
-          client_local_id: clientKey(r.id),
-          type: r.type === 'sales' ? 'sales' : 'purchases',
-          party_name: r.party || '', product_id: r.product_id || null, product_name: r.product_name || '',
-          qty: r.qty || 0, base_amount: r.base_amount || 0, vat_amount: r.vat_amount || 0, amount: r.amount,
-          reason: r.reason || '',
-          linked_invoice_id: r.type === 'sales' ? (r.linked_id || null) : null,
-          linked_purchase_id: r.type === 'purchases' ? (r.linked_id || null) : null,
-          date: r.date || new Date().toISOString().slice(0, 10),
-          payment_method: r.payment_method || null, cogs_reversal: r.cogs_reversal || 0,
-          credit_portion: r.credit_portion != null ? r.credit_portion : null
-        }, _rTok ? { 'X-Period-Override-Token': _rTok } : undefined).catch(e => { console.warn('return sync:', e.message); return null; });
-
-        if (res?.data?.id) {
-          try {
-            const _db = getDB();
-            const _re = (_db.returns || []).find(x => x.id === r.id);
-            if (_re) { _re._serverId = res.data.id; _origSaveDB(_db); }
-            const _sre = (_snap?.returns || []).find(x => x.id === r.id);
-            if (_sre) _sre._serverId = res.data.id;
-          } catch (e) { /* ignore */ }
-        } else {
-          _revertSnapEntity('returns', r.id, null);
-        }
-      }
-      for (const old of _prevReturns) {
-        const stillExists = _newReturns.find(r => r.id === old.id);
-        if (!stillExists && old._serverId) {
-          if (SYNC_LOG) console.log('→ API: delete return', old.return_no);
-          const ok = await apiFetch('DELETE', `/api/returns/${old._serverId}`).then(()=>true).catch(e => { console.warn('return delete sync:', e.message); return false; });
-          if (!ok) _keepInSnap('returns', old);
         }
       }
 
@@ -21114,7 +21679,15 @@ async function runAISearchQuery(q) {
   // (بما فيه شاشة إقفال الوردية وحفظها بالسيرفر) لا قبله — getDB() تعتمد على
   // التوكن الحالي لتحديد مفتاح تخزين بيانات الشركة الصحيح؛ حذفه مبكرًا كان
   // يخلي شاشة إقفال الوردية تقرأ بيانات فارغة وتتخطى نفسها بصمت
-  window._finalizeLogoutCleanup = function() {
+  window._finalizeLogoutCleanup = async function() {
+    // ارفع أي تغيير معلّق قبل حذف الجلسة — قيد عجز/زيادة الوردية يُحفظ لحظة الإقفال،
+    // وحذف التوكن مباشرة بعدها كان يمنع وصوله للسيرفر أبدًا
+    try {
+      if (_snap && Object.keys(getDB()).some(k => JSON.stringify(getDB()[k]) !== JSON.stringify(_snap[k]))) _attemptSync();
+      const t0 = Date.now();
+      await new Promise(r => setTimeout(r, 300));
+      while (_syncBusy && Date.now() - t0 < 8000) await new Promise(r => setTimeout(r, 200));
+    } catch (e) { /* ignore */ }
     const rt = localStorage.getItem(REFRESH_KEY);
     if (rt) {
       fetch(`${API_BASE}/api/auth/logout`, {
@@ -21122,9 +21695,10 @@ async function runAISearchQuery(q) {
         body: JSON.stringify({ refreshToken: rt })
       }).catch(() => {});
     }
-    // لازم نحذف لقطة _snap المحفوظة *قبل* حذف التوكن — _getSnapKey() يعتمد
-    // عليه لتحديد مفتاح الشركة الصحيح؛ وإلا تبقى لقطة قديمة بلا داعٍ بالتخزين
-    try { localStorage.removeItem(_getSnapKey()); } catch(e) {}
+    // لقطة المزامنة تبقى محفوظة مع بيانات الشركة (الاثنين زوج واحد): حذفها والإبقاء على
+    // البيانات كان يخلي أول دخول بعدها يبني لقطة جديدة شبه فاضية، فيعتبر كل شيء بالجهاز
+    // "جديد" ويعيد رفعه — فواتير/منتجات/عملاء مكررة بالسيرفر ومخزون مخصوم مرتين
+    try { _persistSnap(); } catch(e) {}
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     _snap = null;

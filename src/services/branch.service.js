@@ -55,7 +55,15 @@ exports.assertBranchAuthorized = async (client, company_id, user_id, role, expli
     if (!b) throw Object.assign(new Error('الفرع غير موجود'), { status: 404 });
     return;
   }
-  if (String(u?.branch_id) !== String(explicitBranchId)) {
+  // موظف بلا فرع مخصَّص (الخيار الافتراضي بنموذج المستخدم) = يشتغل على الفرع الرئيسي —
+  // نفس ما تفترضه الواجهة؛ كان يُرفض كل بيع وكل فتح وردية له
+  let ownBranch = u?.branch_id;
+  if (!ownBranch) {
+    const { rows: [main] } = await client.query(
+      `SELECT id FROM branches WHERE company_id = $1 AND is_main = true LIMIT 1`, [company_id]);
+    ownBranch = main?.id;
+  }
+  if (String(ownBranch) !== String(explicitBranchId)) {
     throw Object.assign(new Error('لا يمكنك تسجيل عملية على فرع آخر غير فرعك المخصَّص'), { status: 403 });
   }
 };

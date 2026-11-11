@@ -42,8 +42,12 @@ exports.getOne = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
+    // المالك، أو أمين مخزون صلاحيته "كل الفروع" ومعه إدارة المخزون — النقل شغله الأساسي
     if (req.user.role !== 'owner') {
-      return res.status(403).json({ success: false, message: 'نقل البضاعة بين الفروع للمالك فقط' });
+      const { rows: [u] } = await client.query(`SELECT all_branches FROM users WHERE id = $1 AND company_id = $2`, [req.user.sub, req.user.company_id]);
+      if (!(u?.all_branches && (req.user.perms || []).includes('inventory.manage'))) {
+        return res.status(403).json({ success: false, message: 'نقل البضاعة بين الفروع للمالك أو أمين المخزون (كل الفروع) فقط' });
+      }
     }
     const { from_warehouse_id, to_warehouse_id, notes, items = [], client_local_id } = req.body;
     if (!from_warehouse_id || !to_warehouse_id) {

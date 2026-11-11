@@ -19,7 +19,7 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const ctx = await b.newContext({ viewport: { width: 1366, height: 860 } });
   const page = await ctx.newPage();
   const errs = [], toastErr = [], popups = [];
-  page.on('pageerror', e => errs.push('PAGEERR ' + e.message));
+  page.on('pageerror', e => errs.push('PAGEERR ' + e.message + ' @ ' + String(e.stack).split(String.fromCharCode(10)).slice(1,3).join(' / ')));
   page.on('dialog', d => d.accept());
   ctx.on('page', p => popups.push(p));
   page.on('response', async r => { if (r.url().includes('/api/') && r.status() >= 400 && !/quotes\?|loyalty$|bank-recon$|trial-balance/.test(r.url())) { let t = ''; try { t = (await r.text()).slice(0, 200); } catch (e) {} errs.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().replace('http://localhost:3000', '')} ${t}`); } });
@@ -105,6 +105,7 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
     const db = getDB();
     db.customers.push({ id: nextId(db, 'customer'), name: 'شركة الأفق', phone: '0500000001', vat_num: '300000000000003', street_name: 'العليا', building_number: '2222', district: 'الورود', city: 'الرياض', postal_code: '11111', additional_number: '3333', balance: 0, credit_limit: 0, is_active: true });
     db.customers.push({ id: nextId(db, 'customer'), name: 'خالد', phone: '0500000002', balance: 0, credit_limit: 0, is_active: true });
+    db.customers.push({ id: nextId(db, 'customer'), name: 'نادر', phone: '0500000009', balance: 0, credit_limit: 0, is_active: true });
     db.suppliers.push({ id: nextId(db, 'supplier'), name: 'مورد الخليج', phone: '0500000003', balance: 0, is_active: true });
     db.suppliers.push({ id: nextId(db, 'supplier'), name: 'مورد النخبة', phone: '0500000004', balance: 0, is_active: true });
     saveDB(db);
@@ -151,7 +152,7 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   await op('5. Receipt 300 from شركة الأفق linked to the B2B invoice', () => voucher('receipt', 'شركة الأفق', 300, inv3.id),
     { g: { cash: 300, ar: -300 }, treasury: 300, cust: { 'شركة الأفق': -300 } });
   await op('6. Receipt 100 from خالد, unlinked (74.20 settles invoice, 25.80 advance)', () => voucher('receipt', 'خالد', 100),
-    { g: { cash: 100, ar: -74.2, otherL: 25.8 }, treasury: 100, cust: { 'خالد': -74.2 } });
+    { g: { cash: 100, ar: -74.2, otherL: 25.8 }, treasury: 100, cust: { 'خالد': -100 } });
 
   // ══ المشتريات ══
   const purchase = async (vendor, items, payment) => {
@@ -216,6 +217,34 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const inv13 = await lastInv();
   await op('13b. Cancel that invoice (full reversal)', () => page.evaluate(id => cancelInvoice(id), inv13.id),
     { g: { ar: -92, rev: -80, vatOut: -12, cogs: -40, inv: 40 }, qty: { 'صنف أ': 4 }, cust: { 'شركة الأفق': -92 } });
+
+  // ══ دفعة عميل مقدمة: رصيد دائن (2160) يُسوّى تلقائيًا من فواتيره الآجلة بقيد مستقل ══
+  await op('13c. Advance 200 from نادر (no invoices) → credit balance 200 (2160)', () => voucher('receipt', 'نادر', 200),
+    { g: { cash: 200, otherL: 200 }, treasury: 200, cust: { 'نادر': -200 } });
+  await op('13d. Credit invoice to نادر A×4 = 92 → fully settled from the advance', () => newInvoice({ customer: 'نادر', items: [[A, 4]], payment: 'آجل' }),
+    { g: { ar: 0, otherL: -92, rev: 80, vatOut: 12, cogs: 40, inv: -40 }, qty: { 'صنف أ': -4 }, cust: { 'نادر': 92 } });
+  const inv13d = await lastInv();
+  ok(inv13d.status === 'مسددة' && Math.abs(inv13d.paid_amount - 92) < 0.01 && Math.abs((inv13d.advance_applied || 0) - 92) < 0.01, 'invoice paid from the advance → ' + inv13d.status + ' ' + inv13d.paid_amount);
+  await op('13e. Credit invoice to نادر A×10 = 230 → 108 from the advance, 122 owed', () => newInvoice({ customer: 'نادر', items: [[A, 10]], payment: 'آجل' }),
+    { g: { ar: 122, otherL: -108, rev: 200, vatOut: 30, cogs: 100, inv: -100 }, qty: { 'صنف أ': -10 }, cust: { 'نادر': 230 } });
+  const inv13e = await lastInv();
+  ok(inv13e.status === 'جزئي' && Math.abs(inv13e.paid_amount - 108) < 0.01, 'invoice partly settled from the advance → ' + inv13e.status + ' ' + inv13e.paid_amount);
+  {
+    const adv = await page.evaluate(() => getDB().journal.filter(j => /^ADV-/.test(j.ref || '')).map(j => ({ ref: j.ref, s: j._serverId, d: j.entries.find(e => e.account_code === '2160' && e.side === 'debit')?.amount })));
+    ok(adv.length === 2 && adv.every(a => a.s), 'settlement entries (Dr 2160 / Cr 1200) posted by the server, visible in the journal → ' + JSON.stringify(adv));
+  }
+  const v13c = await page.evaluate(() => getDB().receipts.find(r => r.party === 'نادر').id);
+  await op('13f. Cancel the advance voucher after it was used → refused', () => page.evaluate(id => deleteReceipt(id), v13c),
+    { g: { cash: 0, otherL: 0 }, treasury: 0, cust: { 'نادر': 0 } });
+  await op('13g. Cancel invoice 13e → its settled 108 goes back to the customer credit, no cash refund', () => page.evaluate(id => cancelInvoice(id), inv13e.id),
+    { g: { ar: -122, otherL: 108, rev: -200, vatOut: -30, cogs: -100, inv: 100 }, treasury: 0, qty: { 'صنف أ': 10 }, cust: { 'نادر': -230 }, wait: 5000 });
+
+  await op('13h. Cash invoice to نادر A×10 = 230 → 108 from the advance + 122 cash (compound)', () => newInvoice({ customer: 'نادر', items: [[A, 10]], payment: 'نقدي' }),
+    { g: { cash: 122, ar: 0, otherL: -108, rev: 200, vatOut: 30, cogs: 100, inv: -100 }, treasury: 122, qty: { 'صنف أ': -10 }, cust: { 'نادر': 108 } });
+  {
+    const i = await lastInv();
+    ok(i.status === 'مسددة' && Math.abs((i.advance_applied || 0) - 108) < 0.01, 'cash invoice: advance 108 deducted first, the rest in cash → ' + i.status + ' adv ' + i.advance_applied);
+  }
 
   // ══ المخزون: تسويات وتحويل بين الفروع ══
   // ج: بعد البيع (10 من طبقة 5) والشراء (30 بـ6): سعر الشراء الحالي 6
@@ -515,6 +544,13 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
 
   // ══ إقفال الشهر: أي قيد بتاريخه يُرفض بدون كلمة مرور التجاوز ══
   const month = new Date().toISOString().slice(0, 7), year = month.slice(0, 4);
+  // الإقفال يتطلب كلمة تجاوز مضبوطة أولًا (بدونها المالك ما يقدر يفتح الفترة) — مثل المالك الحقيقي
+  {
+    const closeNoPw = await page.evaluate(async m => { const before = (getDB().closed_periods || []).length; await closePeriod('month', m); return (getDB().closed_periods || []).length - before; }, month);
+    ok(closeNoPw === 0, 'closing a period without an override password is refused (owner would be locked out)');
+    const setPw = await page.evaluate(() => window._cloudApiFetch('PUT', '/api/closed-periods/override-password', { current_login_password: 'Cycle@1234', new_override_password: 'Override@1' }).then(r => !!r?.success).catch(e => e.message));
+    ok(setPw === true, 'owner sets the period override password → ' + setPw);
+  }
   await page.evaluate(m => closePeriod('month', m), month); await settle(3000);
   await op('24. After closing ' + month + ': manual journal dated inside it is blocked', () => manualJE('قيد بعد الإقفال', [['5200', 'debit', 77], ['1100', 'credit', 77]]), { g: {}, treasury: 0, wait: 3000 });
   await page.evaluate(() => { const ov = [...document.querySelectorAll('.modal-bg')].pop(); if (ov && ov.parentElement === document.body) ov.remove(); });
@@ -541,9 +577,10 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   const pq = await q(`select p.name, p.qty::float q, coalesce((select sum(qty_remaining) from stock_lots l where l.product_id=p.id),0)::float lq, coalesce((select sum(qty) from product_stock w where w.product_id=p.id),0)::float wq from products p where p.company_id=$1 and p.is_active`);
   for (const r of pq) ok(Math.abs(r.q - r.lq) < 0.001 && Math.abs(r.q - r.wq) < 0.001 && Math.abs(r.q - fin.qty[r.name]) < 0.001, `${r.name}: qty ${r.q} = FIFO lots ${r.lq} = warehouses ${r.wq} = app ${fin.qty[r.name]}`);
   const custSum = (await q(`select coalesce(sum(balance),0)::float s from customers where company_id=$1`))[0].s;
-  ok(Math.abs(r2(custSum) - srvGroups.ar) < 0.01, `customer balances ${r2(custSum)} = AR ${srvGroups.ar}`);
+  // أرصدة العملاء = الذمم − دفعاتهم المقدمة غير المسوّاة (رصيد دائن لهم): خالد 25.80 (نادر استُهلك)
+  ok(Math.abs(r2(custSum) - r2(srvGroups.ar - 25.8)) < 0.01, `customer balances ${r2(custSum)} = AR ${srvGroups.ar} − advances 25.80`);
   const advGL = -Object.entries(gl).filter(([c]) => c[0] === '2' && !['2100', '2200', '2210'].includes(c)).reduce((s, [, v]) => s + v, 0);
-  ok(Math.abs(advGL - 25.8) < 0.01, 'customer advance (prepayment) liability = 25.80 → ' + r2(advGL));
+  ok(Math.abs(advGL - 25.8) < 0.01, 'customer advance (prepayment) liability = 25.80 (نادر fully used) → ' + r2(advGL));
   const invState = await q(`select invoice_no, grand_total::float g, paid_amount::float p, credited_amount::float cr, status from invoices where company_id=$1 order by id`);
   const arFromInv = invState.filter(i => i.status !== 'cancelled').reduce((s, i) => s + i.g - i.p - i.cr, 0);
   ok(Math.abs(r2(arFromInv) - srvGroups.ar) < 0.01, `open invoice balances (total − paid − credit notes) ${r2(arFromInv)} = AR ${srvGroups.ar}`);
@@ -553,7 +590,7 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   ok(Math.abs(r2(supSum) - srvGroups.ap) < 0.01, `supplier balances ${r2(supSum)} = AP ${srvGroups.ap}`);
   const vchCount = await q(`select type, count(*)::int n, sum(amount)::float s from vouchers where company_id=$1 group by 1 order by 1`);
   console.log('    server vouchers:', JSON.stringify(vchCount));
-  ok(JSON.stringify(vchCount) === JSON.stringify([{ type: 'payment', n: 1, s: 400 }, { type: 'receipt', n: 2, s: 400 }]), 'server vouchers: 2 receipts (300+100) + 1 payment (400); deleted voucher gone');
+  ok(JSON.stringify(vchCount) === JSON.stringify([{ type: 'payment', n: 1, s: 400 }, { type: 'receipt', n: 3, s: 600 }]), 'server vouchers: 3 receipts (300+100+200 advance) + 1 payment (400); deleted voucher gone');
   const invs = await q(`select invoice_no, invoice_type, status, grand_total::float g, paid_amount::float p, vat_amount::float v, cogs_total::float c, zatca_qr_phase2 is not null qr from invoices where company_id=$1 order by id`);
   console.log('    server invoices:'); invs.forEach(i => console.log('      ', JSON.stringify(i)));
   const appBS = await page.evaluate(async () => (await window._cloudApiFetch('GET', '/api/reports/balance-sheet')).data);

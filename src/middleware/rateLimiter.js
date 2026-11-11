@@ -1,8 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
+// الحدود قابلة للرفع بمتغير بيئة لاختبارات الفريق المحلية (كل المختبرين من نفس الـIP)؛
+// الإنتاج يبقى على الافتراضي
 exports.loginLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 10,
+  max: Number(process.env.LOGIN_RATE_MAX) || 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'محاولات كثيرة جداً، حاول بعد 10 دقائق' }
@@ -10,7 +12,7 @@ exports.loginLimiter = rateLimit({
 
 exports.apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: Number(process.env.API_RATE_MAX) || 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'عدد كبير من الطلبات، حاول لاحقاً' }

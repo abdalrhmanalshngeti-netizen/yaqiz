@@ -59,6 +59,11 @@ exports.create = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { description, ref, date, entries = [], client_local_id } = req.body;
+    // قيد يدوي/افتتاحي (أو عكسه) = قرار محاسبي حر، مو أثر لمستند → للمالك أو إدارة الحسابات فقط
+    if (/^(MANUAL|OPENING)$|^REV-(MANUAL|OPENING)#/.test(String(ref || ''))
+        && req.user.role !== 'owner' && !(req.user.perms || []).includes('accounts.manage')) {
+      return res.status(403).json({ success: false, message: 'القيد اليدوي للمالك أو المحاسب فقط' });
+    }
     if (!entries.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'يجب إضافة سطر واحد على الأقل' });

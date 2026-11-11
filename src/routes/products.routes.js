@@ -7,11 +7,17 @@ const ctrl         = require('../controllers/products.controller');
 
 router.use(auth);
 
-router.get ('/',             can('inventory.view'),   ctrl.list);
+// نقطة البيع تحتاج الأصناف وكمياتها فقط (بدون التكلفة — تُحذف بالكنترولر)
+const canViewOrPos = (req, res, next) => {
+  const perms = req.user.perms || [];
+  if (req.user.role === 'owner' || perms.includes('inventory.view') || perms.includes('pos.access')) return next();
+  return res.status(403).json({ success: false, message: 'ليس لديك صلاحية لهذه العملية' });
+};
+router.get ('/',             canViewOrPos,   ctrl.list);
 router.post('/',             can('inventory.manage'),   ctrl.create);
 router.get ('/stock-moves/list', can('inventory.view'), ctrl.listAllMoves);
-router.get ('/stock-by-warehouse', can('inventory.view'), ctrl.stockByWarehouse);
-router.get ('/:id',          can('inventory.view'),   ctrl.getOne);
+router.get ('/stock-by-warehouse', canViewOrPos, ctrl.stockByWarehouse);
+router.get ('/:id',          canViewOrPos,   ctrl.getOne);
 router.put ('/:id',          can('inventory.manage'),   ctrl.update);
 router.delete('/:id',        can('inventory.manage'),   ctrl.remove);
 router.get ('/:id/moves',          can('inventory.view'),   ctrl.stockMoves);

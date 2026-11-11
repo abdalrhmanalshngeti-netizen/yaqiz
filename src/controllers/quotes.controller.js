@@ -2,6 +2,7 @@ const db     = require('../config/db');
 const crypto = require('crypto');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { todayLocalDateStr } = require('../utils/date.util');
+const customerAdvance = require('../services/customerAdvance.service');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
 const { buildInvoiceXML, notifyIncompleteSellerData, resolveCustomerForXml, warnIfQrTotalsMismatch } = require('../services/zatca.service');
@@ -242,11 +243,12 @@ exports.convert = async (req, res, next) => {
     // تلقائيًا من بيانات العميل (نفس القيمة 'tax' المستخدَمة أصلًا بشاشة الفاتورة
     // اليدوية لهذا النوع بالضبط — راجع VVIP.html #ni-type)
     let invoiceType = 'simplified';
+    let custForType = null;
     if (quote.customer_id) {
-      const { rows: [custForType] } = await client.query(
+      ({ rows: [custForType] } = await client.query(
         `SELECT vat_number, cr_number FROM customers WHERE id = $1 AND company_id = $2`,
         [quote.customer_id, company_id]
-      );
+      ));
       if (custForType?.vat_number || custForType?.cr_number) invoiceType = 'tax';
     }
 
@@ -279,14 +281,18 @@ exports.convert = async (req, res, next) => {
         (company_id, invoice_no, invoice_type, customer_id, customer_name, date, status,
          subtotal, discount_amount, vat_amount, grand_total, paid_amount,
          payment_method, notes, zatca_status, created_by,
-         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id)
-      VALUES ($1,$2,$15,$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13,$14)
+         zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id,
+         taxable_amount, customer_vat)
+      VALUES ($1,$2,$15,$3,$4,NOW(),'issued',$5,0,$6,$7,0,'آجل',$8,'pending',$9,$10,$11,$12,$13,$14,$16,$17)
       RETURNING *
     `, [company_id, invoice_no,
         quote.customer_id || null, quote.customer_name,
         quote.subtotal, insertVatAmount, insertGrandTotal,
         `محوّل من ${quote.quote_no}`, user_id,
-        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId, invoiceType]);
+        zatcaUuid, icv, previousInvoiceHash, issueTimeStr, resolvedBranchId, invoiceType,
+        // المبلغ الخاضع والرقم الضريبي للمشتري — كانا يُتركان فاضيين للفاتورة المحوّلة
+        // (فاتورة ضريبية B2B بلا رقم المشتري، وتقرير الضريبة يسقط مبيعاتها)
+        parseFloat(quote.subtotal) || 0, custForType?.vat_number || null]);
 
     // النسبة الفعلية للعرض (قد تكون 0 لو الضريبة معطَّلة أو العرض بدون ضريبة
     // أصلاً) — quote_items لا تخزّن نسبة لكل بند، فنشتقها من إجمالي العرض
@@ -335,7 +341,10 @@ exports.convert = async (req, res, next) => {
     await client.query(`UPDATE invoices SET cogs_total = $1 WHERE id = $2`, [cogsTotal, invoice.id]);
     invoice.cogs_total = cogsTotal;
 
+    // تحويل عرض السعر آجل دائمًا — دفعة العميل المقدمة تُسوّى منه بقيد مستقل
+    let advanceEntry = null;
     if (quote.customer_id) {
+      advanceEntry = await customerAdvance.applyToInvoice(client, { companyId: company_id, userId: user_id, invoice });
       await client.query(
         `UPDATE customers SET balance = balance + $1 WHERE id = $2 AND company_id = $3`,
         [insertGrandTotal, quote.customer_id, company_id]
@@ -425,7 +434,7 @@ exports.convert = async (req, res, next) => {
     );
 
     await client.query('COMMIT');
-    res.json({ success: true, data: { ...invoice, items: processedItems } });
+    res.json({ success: true, data: { ...invoice, items: processedItems, advance_entry: advanceEntry } });
 
     // تصديق فوري "أفضل جهد" للفواتير القياسية الناتجة عن تحويل عرض سعر — فقط
     // لو ما انصدّقت فعليًا أعلاه (بلا credential وقت التحويل)، وإلا تُرسَل مرتين

@@ -36,4 +36,7 @@ SELECT ps.company_id, ps.product_id, ps.warehouse_id, ps.qty, COALESCE(p.buy_pri
 FROM product_stock ps
 JOIN products p ON p.id = ps.product_id
 WHERE ps.qty > 0
+  -- مرة وحدة فقط لمنتج ما له أي طبقة: migrate.js كان يعيد تشغيل الملفات كلها مع كل
+  -- تشغيل للسيرفر، فكل منتج أُنشئ بعد هذا الملف ينضاف له رصيد افتتاحي ثاني = كميته
+  AND NOT EXISTS (SELECT 1 FROM stock_lots l WHERE l.product_id = ps.product_id AND l.warehouse_id = ps.warehouse_id)
 ON CONFLICT (product_id, warehouse_id) WHERE source_type = 'opening_backfill' DO NOTHING;

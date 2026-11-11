@@ -215,7 +215,11 @@ exports.addMove = async (req, res, next) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    const { type, amount, description, reference, payment_method, source_type, client_local_id } = req.body;
+    const { type, amount, description, reference, payment_method, source_type, client_local_id, manual } = req.body;
+    if (manual && req.user.role !== 'owner' && !(req.user.perms || []).includes('treasury.manage')) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ success: false, message: 'ليس لديك صلاحية لهذه العملية' });
+    }
     if (!['in', 'out'].includes(type) || !amount) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'نوع الحركة والمبلغ مطلوبان' });

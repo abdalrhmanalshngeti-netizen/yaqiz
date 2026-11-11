@@ -415,8 +415,18 @@ exports.closeShift = async (req, res, next) => {
         COUNT(*) AS cnt
       FROM invoices
       WHERE created_by = $1 AND created_at >= $2 AND company_id = $3
-        AND branch_id IS NOT DISTINCT FROM $4
+        AND branch_id IS NOT DISTINCT FROM $4 AND COALESCE(status,'') <> 'cancelled'
     `, [shift.user_id, shift.start_time, req.user.company_id, shift.branch_id]);
+    // المرتجعات اللي ردّ فيها الموظف فلوس نقدًا خلال الوردية تطلع من الدرج — كانت ما
+    // تنخصم، فيطلع عجز وهمي بقيمتها عند المطابقة
+    const { rows: [ret] } = await db.query(`
+      SELECT COALESCE(SUM(CASE WHEN COALESCE(payment_method,'نقدي') IN ('نقدي','cash') THEN COALESCE(cash_portion, amount) ELSE 0 END),0) AS cash,
+             COALESCE(SUM(CASE WHEN payment_method IN ('شبكة','card') THEN COALESCE(cash_portion, amount) ELSE 0 END),0) AS card
+      FROM returns
+      WHERE created_by = $1 AND created_at >= $2 AND company_id = $3 AND type = 'sales'
+    `, [shift.user_id, shift.start_time, req.user.company_id]);
+    sales.cash = Math.round((parseFloat(sales.cash) - parseFloat(ret.cash)) * 100) / 100;
+    sales.card = Math.round((parseFloat(sales.card) - parseFloat(ret.card)) * 100) / 100;
 
     await db.query(`
       UPDATE shifts SET

@@ -1,3 +1,4 @@
+const { canSeeCost } = require('../utils/costVisibility');
 const db = require('../config/db');
 const { todayLocalDateStr } = require('../utils/date.util');
 
@@ -12,7 +13,7 @@ exports.dashboard = async (req, res, next) => {
         SELECT
           COALESCE(SUM(grand_total),0) AS total_month,
           COALESCE(SUM(CASE WHEN status='paid' THEN grand_total END),0) AS collected,
-          COALESCE(SUM(CASE WHEN status IN ('issued','partial') THEN grand_total - paid_amount END),0) AS receivable,
+          COALESCE(SUM(CASE WHEN status IN ('issued','partial','unpaid') THEN grand_total - paid_amount - COALESCE(credited_amount,0) END),0) AS receivable,
           COUNT(*) AS count
         FROM invoices WHERE company_id=$1 AND date >= $2 AND status != 'cancelled'
       `, [cid, monthStart]),
@@ -83,7 +84,7 @@ exports.vatReport = async (req, res, next) => {
     const [salesVat, purchasesVat, journalVat] = await Promise.all([
       db.query(`
         SELECT
-          COALESCE(SUM(taxable_amount),0) AS taxable_sales,
+          COALESCE(SUM(grand_total - COALESCE(vat_amount,0)),0) AS taxable_sales,
           COALESCE(SUM(vat_amount),0)     AS vat_collected,
           COUNT(*)                         AS invoice_count
         FROM invoices
@@ -213,9 +214,17 @@ exports.branchPerformance = async (req, res, next) => {
   try {
     const { from, to } = req.query;
     const { rows } = await db.query(`
+      -- الإيراد = الإجمالي − الضريبة (taxable_amount فاضي لبعض المسارات) ناقص مرتجعات
+      -- المبيعات المربوطة بفواتير الفرع، والتكلفة ناقص تكلفة المرتجعات — يطابق الدفتر
       SELECT b.id AS branch_id, b.name AS branch_name, b.is_main,
-        COALESCE(SUM(i.taxable_amount),0) AS revenue,
-        COALESCE(SUM(i.cogs_total),0) AS cogs,
+        COALESCE(SUM(i.grand_total - COALESCE(i.vat_amount,0)),0)
+          - COALESCE((SELECT SUM(r.base_amount) FROM returns r JOIN invoices ri ON ri.id = r.linked_invoice_id
+                      WHERE r.company_id = $1 AND r.type = 'sales' AND ri.branch_id = b.id
+                        AND ($2::date IS NULL OR r.date >= $2) AND ($3::date IS NULL OR r.date <= $3)),0) AS revenue,
+        COALESCE(SUM(i.cogs_total),0)
+          - COALESCE((SELECT SUM(r.cogs_reversal) FROM returns r JOIN invoices ri ON ri.id = r.linked_invoice_id
+                      WHERE r.company_id = $1 AND r.type = 'sales' AND ri.branch_id = b.id
+                        AND ($2::date IS NULL OR r.date >= $2) AND ($3::date IS NULL OR r.date <= $3)),0) AS cogs,
         COUNT(i.id) AS invoices_count
       FROM branches b
       LEFT JOIN invoices i ON i.branch_id = b.id AND i.status != 'cancelled'
@@ -363,5 +372,112 @@ exports.lowStock = async (req, res, next) => {
     `, [req.user.company_id]);
 
     res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
+// ملخص "قسمي" — كل موظف يشوف أرقام قسمه فقط، محسوبة من سجلات السيرفر نفسها (مصدر
+// واحد للمنشأة كلها): نفس الرقم يطلع للمالك ولمسؤول القسم بنفس اللحظة. الجهاز ما
+// يحسب أي رصيد من بياناته المحلية (كانت ناقصة لمن ما عنده صلاحية الدفاتر)
+exports.mySummary = async (req, res, next) => {
+  try {
+    const cid = req.user.company_id, uid = req.user.sub;
+    const isOwner = req.user.role === 'owner';
+    const perms = req.user.perms || [];
+    const can = p => isOwner || perms.includes(p);
+    const today = todayLocalDateStr();
+    const monthStart = today.slice(0, 7) + '-01';
+    // فلتر الفرع (اختياري) — للمبيعات والمشتريات والخزينة
+    const bid = req.query.branch_id ? parseInt(req.query.branch_id) : null;
+    const out = { at: new Date().toISOString(), today, sections: [] };
+    const num = v => Math.round((parseFloat(v) || 0) * 100) / 100;
+
+    if (can('sales.view') || can('pos.access')) {
+      // من عنده نقطة بيع بس (كاشير) يشوف مبيعاته هو؛ مسؤول المبيعات يشوف الكل
+      const mine = !can('sales.view');
+      const p = [cid, today, monthStart, mine ? uid : null, bid];
+      const [s] = (await db.query(`
+        SELECT
+          COALESCE(SUM(grand_total) FILTER (WHERE created_at::date = $2),0) AS today_total,
+          COALESCE(SUM(grand_total - COALESCE(vat_amount,0)) FILTER (WHERE created_at::date = $2),0) AS today_net,
+          COUNT(*) FILTER (WHERE created_at::date = $2) AS today_count,
+          COALESCE(SUM(grand_total) FILTER (WHERE created_at::date >= $3),0) AS month_total,
+          COALESCE(SUM(grand_total - COALESCE(vat_amount,0)) FILTER (WHERE created_at::date >= $3),0) AS month_net,
+          COUNT(*) FILTER (WHERE created_at::date >= $3) AS month_count,
+          COALESCE(SUM(grand_total - COALESCE(advance_applied,0)) FILTER (WHERE created_at::date = $2 AND payment_method IN ('نقدي','cash')),0) AS today_cash,
+          COALESCE(SUM(grand_total - COALESCE(advance_applied,0)) FILTER (WHERE created_at::date = $2 AND payment_method IN ('شبكة','card')),0) AS today_card,
+          COALESCE(SUM(grand_total) FILTER (WHERE created_at::date = $2 AND payment_method IN ('آجل','credit')),0) AS today_credit,
+          COALESCE(SUM(grand_total - paid_amount - COALESCE(credited_amount,0)) FILTER (WHERE status IN ('issued','unpaid','partial') AND grand_total - paid_amount - COALESCE(credited_amount,0) > 0.005),0) AS open_credit
+        FROM invoices
+        WHERE company_id = $1 AND COALESCE(status,'') <> 'cancelled'
+          AND ($4::int IS NULL OR created_by = $4) AND ($5::int IS NULL OR branch_id = $5)`, p)).rows;
+      const [r] = (await db.query(`
+        SELECT COALESCE(SUM(amount) FILTER (WHERE created_at::date = $2),0) AS today,
+               COALESCE(SUM(amount) FILTER (WHERE created_at::date >= $3),0) AS month
+        FROM returns WHERE company_id = $1 AND type = 'sales' AND ($4::int IS NULL OR created_by = $4)`, p.slice(0, 4))).rows;
+      out.sections.push({ key: mine ? 'my_sales' : 'sales',
+        today_total: num(s.today_total), today_net: num(s.today_net), today_count: +s.today_count,
+        month_total: num(s.month_total), month_net: num(s.month_net), month_count: +s.month_count,
+        today_cash: num(s.today_cash), today_card: num(s.today_card), today_credit: num(s.today_credit),
+        returns_today: num(r.today), returns_month: num(r.month), open_credit: mine ? undefined : num(s.open_credit) });
+      if (can('pos.access')) {
+        const [sh] = (await db.query(`SELECT id, opening_cash, start_time, branch_id FROM shifts WHERE company_id = $1 AND user_id = $2 AND status = 'open' LIMIT 1`, [cid, uid])).rows;
+        if (sh) {
+          const [x] = (await db.query(`
+            SELECT COALESCE(SUM(grand_total) FILTER (WHERE payment_method IN ('نقدي','cash')),0) AS cash,
+                   COALESCE(SUM(grand_total) FILTER (WHERE payment_method IN ('شبكة','card')),0) AS card, COUNT(*) AS cnt
+            FROM invoices WHERE company_id = $1 AND created_by = $2 AND created_at >= $3 AND COALESCE(status,'') <> 'cancelled'`, [cid, uid, sh.start_time])).rows;
+          // نفس معادلة إغلاق الوردية بالسيرفر: مرتجعات النقدي تنطرح من الدرج، ومرتجعات الشبكة من الشبكة
+          const [rr] = (await db.query(`SELECT COALESCE(SUM(COALESCE(cash_portion, amount)) FILTER (WHERE COALESCE(payment_method,'نقدي') IN ('نقدي','cash')),0) AS cash, COALESCE(SUM(COALESCE(cash_portion, amount)) FILTER (WHERE payment_method IN ('شبكة','card')),0) AS card FROM returns WHERE company_id = $1 AND created_by = $2 AND created_at >= $3 AND type = 'sales'`, [cid, uid, sh.start_time])).rows;
+          out.sections.push({ key: 'shift', opening_cash: num(sh.opening_cash), start_time: sh.start_time,
+            sales_cash: num(x.cash), sales_card: num(parseFloat(x.card) - parseFloat(rr.card)), invoices: +x.cnt, returns_cash: num(rr.cash), returns_card: num(rr.card),
+            expected_cash: num(parseFloat(sh.opening_cash) + parseFloat(x.cash) - parseFloat(rr.cash)) });
+        }
+      }
+    }
+    if (can('customers.view')) {
+      const [c] = (await db.query(`SELECT COALESCE(SUM(balance) FILTER (WHERE balance > 0),0) AS owed, COUNT(*) FILTER (WHERE balance > 0) AS n FROM customers WHERE company_id = $1`, [cid])).rows;
+      const top = (await db.query(`SELECT name, balance FROM customers WHERE company_id = $1 AND balance > 0 ORDER BY balance DESC LIMIT 5`, [cid])).rows;
+      const [od] = (await db.query(`SELECT COALESCE(SUM(grand_total - paid_amount - COALESCE(credited_amount,0)),0) AS v FROM invoices WHERE company_id = $1 AND status IN ('issued','unpaid','partial') AND grand_total - paid_amount - COALESCE(credited_amount,0) > 0.005 AND created_at < NOW() - INTERVAL '30 days'`, [cid])).rows;
+      out.sections.push({ key: 'customers', receivables: num(c.owed), owing_count: +c.n, overdue_30: num(od.v), top: top.map(t => ({ name: t.name, balance: num(t.balance) })) });
+    }
+    if (can('purchases.view')) {
+      const [pu] = (await db.query(`
+        SELECT COALESCE(SUM(total) FILTER (WHERE created_at::date = $2),0) AS today, COUNT(*) FILTER (WHERE created_at::date = $2) AS today_n,
+               COALESCE(SUM(total) FILTER (WHERE created_at::date >= $3),0) AS month, COUNT(*) FILTER (WHERE created_at::date >= $3) AS month_n,
+               COALESCE(SUM(remaining),0) AS unpaid, COUNT(*) FILTER (WHERE remaining > 0) AS unpaid_n
+        FROM purchases WHERE company_id = $1 AND COALESCE(status,'') NOT IN ('reversed','cancelled') AND ($4::int IS NULL OR branch_id = $4)`, [cid, today, monthStart, bid])).rows;
+      const [sp] = (await db.query(`SELECT COALESCE(SUM(balance) FILTER (WHERE balance > 0),0) AS v FROM suppliers WHERE company_id = $1`, [cid])).rows;
+      out.sections.push({ key: 'purchases', today_total: num(pu.today), today_count: +pu.today_n, month_total: num(pu.month), month_count: +pu.month_n,
+        unpaid_total: num(pu.unpaid), unpaid_count: +pu.unpaid_n, payables: num(sp.v) });
+    }
+    if (can('inventory.view')) {
+      const [iv] = (await db.query(`SELECT COALESCE(SUM(qty_remaining * unit_cost),0) AS v FROM stock_lots WHERE company_id = $1`, [cid])).rows;
+      const low = (await db.query(`SELECT name, qty, min_qty FROM products WHERE company_id = $1 AND is_active AND min_qty > 0 AND qty <= min_qty ORDER BY qty LIMIT 10`, [cid])).rows;
+      const [pc] = (await db.query(`SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE qty <= 0) AS out FROM products WHERE company_id = $1 AND is_active`, [cid])).rows;
+      const byWh = (await db.query(`SELECT w.name, COALESCE(SUM(l.qty_remaining * l.unit_cost),0) AS v FROM warehouses w LEFT JOIN stock_lots l ON l.warehouse_id = w.id WHERE w.company_id = $1 GROUP BY w.id, w.name ORDER BY w.id`, [cid])).rows;
+      // قيمة المخزون بالتكلفة لمن له صلاحية التكلفة فقط (الكاشير يشوف الأصناف والنواقص)
+      const _cost = canSeeCost(req.user);
+      out.sections.push({ key: 'inventory', stock_value: _cost ? num(iv.v) : null, products: +pc.n, out_of_stock: +pc.out,
+        low_stock: low.map(l => ({ name: l.name, qty: num(l.qty), min_qty: num(l.min_qty) })), by_warehouse: _cost ? byWh.map(w => ({ name: w.name, value: num(w.v) })) : [] });
+    }
+    if (can('treasury.view')) {
+      const acc = (await db.query(`SELECT name, type, balance FROM treasury_accounts WHERE company_id = $1 AND is_active AND ($2::int IS NULL OR branch_id = $2 OR branch_id IS NULL) ORDER BY id`, [cid, bid])).rows;
+      out.sections.push({ key: 'treasury', total: num(acc.reduce((t, a) => t + parseFloat(a.balance), 0)), accounts: acc.map(a => ({ name: a.name, type: a.type, balance: num(a.balance) })) });
+    }
+    if (can('reports.view') || can('accounts.view')) {
+      // الأرباح والضريبة من دفتر اليومية نفسه (نفس مصدر القوائم المالية)
+      const g = Object.fromEntries((await db.query(`
+        SELECT ji.account_code c, SUM(CASE WHEN ji.side='debit' THEN ji.amount ELSE -ji.amount END) b
+        FROM journal_items ji JOIN journal_entries je ON je.id = ji.entry_id
+        WHERE je.company_id = $1 AND je.date::date >= $2 AND COALESCE(je.source_type,'') NOT IN ('period_close','period_close_reversal')
+        GROUP BY 1`, [cid, monthStart])).rows.map(r => [r.c, parseFloat(r.b)]));
+      const sum = f => Object.entries(g).filter(([c]) => f(c)).reduce((t, [, v]) => t + v, 0);
+      const revenue = -sum(c => c.startsWith('4'));
+      const cogs = sum(c => c === '5100');
+      const expenses = sum(c => c.startsWith('5') && c !== '5100');
+      out.sections.push({ key: 'finance', month_revenue: num(revenue), month_cogs: num(cogs), month_gross: num(revenue - cogs),
+        month_expenses: num(expenses), month_net: num(revenue - cogs - expenses), month_vat_net: num(-(g['2200'] || 0) - (g['2210'] || 0)) });
+    }
+    res.json({ success: true, data: out });
   } catch (err) { next(err); }
 };

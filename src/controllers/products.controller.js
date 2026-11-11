@@ -1,3 +1,4 @@
+const { stripCost, canSeeCost } = require('../utils/costVisibility');
 const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
@@ -26,7 +27,7 @@ exports.list = async (req, res, next) => {
       ORDER BY p.name
     `, params);
 
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: rows.map(r => stripCost(req.user, r)) });
   } catch (err) { next(err); }
 };
 
@@ -37,7 +38,7 @@ exports.getOne = async (req, res, next) => {
       [req.params.id, req.user.company_id]
     );
     if (!rows[0]) return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
-    res.json({ success: true, data: rows[0] });
+    res.json({ success: true, data: stripCost(req.user, rows[0]) });
   } catch (err) { next(err); }
 };
 
@@ -73,6 +74,20 @@ exports.create = async (req, res, next) => {
       RETURNING *
     `, [req.user.company_id, code, barcode, name, name_en, category_id, unit_id,
         buy_price || 0, sell_price || 0, min_qty || 0, max_qty, tax_rate ?? 15, notes, client_local_id || null]);
+
+    // سياسة التسعير الديناميكي من نافذة إضافة المنتج نفسها — كانت تُرسَل فقط عند تعديل
+    // منتج موجود، فتضيع لمنتج جديد (السعر يتحسب محليًا مرة، والسياسة نفسها ما تنحفظ)
+    if (req.body.auto_price_update && (req.user.role === 'owner' || (req.user.perms || []).includes('pricing.manage'))) {
+      const { rows: [co] } = await client.query(`SELECT plan FROM companies WHERE id = $1`, [req.user.company_id]);
+      const PLAN_FEATURES = require('../middleware/planGuard').PLAN_FEATURES;
+      const val = parseFloat(req.body.profit_policy_value) || 0;
+      if ((PLAN_FEATURES[co?.plan] || []).includes('pricing_policy') && val > 0) {
+        await client.query(
+          `UPDATE products SET auto_price_update = true, profit_policy_type = 'percentage_on_cost', profit_policy_value = $1 WHERE id = $2`,
+          [val, product.id]);
+        Object.assign(product, { auto_price_update: true, profit_policy_type: 'percentage_on_cost', profit_policy_value: val });
+      }
+    }
 
     const openingQty = parseFloat(qty) || 0;
     if (openingQty > 0) {
@@ -221,6 +236,7 @@ exports.setPricingPolicy = async (req, res, next) => {
 
 exports.getPriceHistory = async (req, res, next) => {
   try {
+    if (!canSeeCost(req.user)) return res.status(403).json({ success: false, message: 'ليس لديك صلاحية لهذه العملية' });
     const { rows } = await db.query(`
       SELECT h.*, u.full_name AS changed_by_name, pu.purchase_no
       FROM product_price_history h

@@ -1,3 +1,4 @@
+const { stripInvoiceCost } = require('../utils/costVisibility');
 const db     = require('../config/db');
 const stock  = require('../services/stock.service');
 const branch = require('../services/branch.service');
@@ -12,6 +13,7 @@ const { createCreditNote } = require('../services/creditNote.service');
 const { nextDocNumber } = require('../services/docNumber.service');
 const { submitInvoice, submitInvoiceBestEffort, submitCreditNoteBestEffort } = require('../services/zatcaSubmit.service');
 const periodClose = require('../services/periodClose.service');
+const customerAdvance = require('../services/customerAdvance.service');
 const { todayLocalDateStr } = require('../utils/date.util');
 
 exports.list = async (req, res, next) => {
@@ -52,7 +54,7 @@ exports.list = async (req, res, next) => {
 
     res.json({
       success: true,
-      data:  rows,
+      data:  rows.map(r => stripInvoiceCost(req.user, r)),
       total: parseInt(rows[0]?.total_count || 0),
       page:  parseInt(page),
       limit: parseInt(limit)
@@ -74,7 +76,7 @@ exports.getOne = async (req, res, next) => {
       `SELECT * FROM invoice_items WHERE invoice_id = $1 ORDER BY sort_order`,
       [req.params.id]
     );
-    res.json({ success: true, data: { ...invoice, items } });
+    res.json({ success: true, data: stripInvoiceCost(req.user, { ...invoice, items }) });
   } catch (err) { next(err); }
 };
 
@@ -87,7 +89,7 @@ exports.create = async (req, res, next) => {
     const {
       customer_id, customer_name, customer_vat, invoice_type,
       date, due_date, items = [], discount_type, discount_value,
-      payment_method, notes, client_local_id
+      payment_method, notes, client_local_id, use_advance
     } = req.body;
     // cogs_total لم يعد يُقبَل من الـclient إطلاقًا — كان تمريرًا مباشرًا بلا
     // أي تحقق، والسيرفر الآن مصدر الحقيقة الوحيد (عبر stock.deduct وطبقات
@@ -212,8 +214,10 @@ exports.create = async (req, res, next) => {
     const disc_amt    = discount_type === 'percent' ? subtotal * disc_val / 100 : disc_val;
     const taxable     = subtotal - disc_amt;
     const rawItemVat  = processedItems.reduce((s, it) => s + it.vat_amount, 0);
-    const vat_amount  = subtotal > 0 ? rawItemVat * (taxable / subtotal) : 0;
-    const grand       = taxable + vat_amount;
+    // مقرّبة لهللتين قبل أي استخدام: الإجمالي غير المقرّب (8.625) كان يُقرَّب مرتين برصيد العميل
+    // (+8.63 ثم −8.62) فيزيد هللة مع كل فاتورة نقدية — والإجمالي = الخاضع + الضريبة بالضبط
+    const vat_amount  = Math.round((subtotal > 0 ? rawItemVat * (taxable / subtotal) : 0) * 100) / 100;
+    const grand       = Math.round((Math.round(taxable * 100) / 100 + vat_amount) * 100) / 100;
 
     // ── رقم الفاتورة — عدّاد مستقل لكل شركة (لا تسلسل عام مشترك) ──────────
     const invSeqN = await nextDocNumber(client, company_id, 'invoice');
@@ -382,7 +386,15 @@ exports.create = async (req, res, next) => {
       invoice.zatca_status = clearResult.status;
     }
 
-    // ── تحديث رصيد العميل ────────────────────
+    // ── فاتورة آجلة لعميل له دفعة مقدمة: تُسوّى منها بقيد مستقل (2160 → 1200) ──
+    let advanceEntry = null;
+    // الآجل يُسوّى تلقائيًا دائمًا؛ النقدي/الشبكة لما تطلبه شاشة الفاتورة (نقطة البيع ما تطلبه)
+    const isCredit = payment_method === 'credit' || payment_method === 'آجل';
+    if (customer_id && (isCredit || use_advance)) {
+      advanceEntry = await customerAdvance.applyToInvoice(client, { companyId: company_id, userId: user_id, invoice });
+    }
+
+    // ── تحديث رصيد العميل (بكامل الفاتورة — المقدم كان رصيدًا دائنًا له فيُقاص تلقائيًا) ──
     if (customer_id) {
       await client.query(
         `UPDATE customers SET balance = balance + $1 WHERE id = $2`,
@@ -393,9 +405,12 @@ exports.create = async (req, res, next) => {
     // ── إذا مدفوع نقداً الآن → تحديث paid_amount و status ─────────────────
     if (payment_method && payment_method !== 'credit' && payment_method !== 'آجل' && grand > 0) {
       await client.query(`UPDATE invoices SET paid_amount = $1, status = 'paid' WHERE id = $2`, [grand, invoice.id]);
-      if (customer_id) {
-        await client.query(`UPDATE customers SET balance = balance - $1 WHERE id = $2`, [grand, customer_id]);
+      // الكاش المقبوض = الفاتورة − المخصوم من الدفعة المقدمة
+      const cashPart = grand - (parseFloat(invoice.advance_applied) || 0);
+      if (customer_id && cashPart > 0) {
+        await client.query(`UPDATE customers SET balance = balance - $1 WHERE id = $2`, [cashPart, customer_id]);
       }
+      Object.assign(invoice, { paid_amount: grand, status: 'paid' });
     }
 
     await client.query(`
@@ -404,7 +419,7 @@ exports.create = async (req, res, next) => {
     `, [company_id, user_id, `فاتورة جديدة: ${invoice_no} — ${Number(grand).toFixed(2)} ر.س`]);
 
     await client.query('COMMIT');
-    res.status(201).json({ success: true, data: { ...invoice, items: processedItems } });
+    res.status(201).json({ success: true, data: { ...invoice, items: processedItems, advance_entry: advanceEntry } });
 
     logAudit({
       companyId: company_id, userId: user_id, action: 'invoice_create',
@@ -575,16 +590,17 @@ exports.cancel = async (req, res, next) => {
       });
     }
 
-    // عكس رصيد العميل
+    // عكس رصيد العميل — المسوّى من دفعة مقدمة يرجع رصيدًا دائنًا له (بقيد عكسي)
+    const advanceReversal = await customerAdvance.reverseForInvoice(client, { companyId: req.user.company_id, userId: req.user.sub, invoice: inv });
     if (inv.customer_id) {
       await client.query(
         `UPDATE customers SET balance = balance - $1 WHERE id = $2`,
-        [parseFloat(inv.grand_total) - parseFloat(inv.paid_amount), inv.customer_id]
+        [parseFloat(inv.grand_total) - parseFloat(inv.paid_amount) + (parseFloat(inv.advance_applied) || 0), inv.customer_id]
       );
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, credit_note_no: creditNote?.note_no || null });
+    res.json({ success: true, credit_note_no: creditNote?.note_no || null, advance_reversal: advanceReversal });
 
     logAudit({
       companyId: req.user.company_id, userId: req.user.sub, action: 'invoice_cancel',

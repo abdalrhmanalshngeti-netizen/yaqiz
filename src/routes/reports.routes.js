@@ -5,6 +5,8 @@ const requireFeature = require('../middleware/planGuard');
 const ctrl         = require('../controllers/reports.controller');
 
 router.use(auth);
+// ملخص القسم: لكل موظف حسب صلاحياته (يُصفّى داخل المتحكم) — قبل شرط التقارير
+router.get('/my-summary', ctrl.mySummary);
 router.use(can('reports.view'));
 
 router.get('/dashboard',         ctrl.dashboard);

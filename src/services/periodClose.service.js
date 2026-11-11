@@ -51,9 +51,9 @@ async function assertPeriodNotClosed(client, companyId, dateStr, overrideToken) 
     FROM companies c WHERE c.id = $1
   `, [companyId, monthKey, yearKey]);
 
-  // كلمة تجاوز غير مضبوطة بعد → الإقفال غير مُنفَّذ إطلاقاً — يطابق نص الواجهة
-  // الحالي بالضبط ("لن يُنفَّذ الإقفال حتى تضبط كلمة المرور")
-  if (!row?.enforced || !row.is_closed) return { blocked: false };
+  // الفترة المقفلة مقفلة على الكل — كان الإقفال يُتجاهل كليًا لو المالك ما ضبط كلمة
+  // التجاوز، فيسجّل الموظفون داخل شهر مقفل. كلمة التجاوز طريق استثناء فقط
+  if (!row?.is_closed) return { blocked: false };
 
   if (verifyPeriodOverrideToken(overrideToken, companyId)) return { blocked: false };
 
