@@ -105,7 +105,17 @@ exports.create = async (req, res, next) => {
     // بلا عميل محفوظ ولا اسم مُدخَل يدويًا، فيخرج XML بعميل "عميل نقدي" مجهول
     // على فاتورة يُفترض بها تعريف الطرف الآخر. الفاتورة المبسّطة (نقاط البيع)
     // تبقى بلا أي قيد كالمعتاد — هذا النوع بالتحديد مصمَّم أصلًا للعميل المجهول
-    if ((invoice_type || 'simplified') !== 'simplified' && !customer_id && !String(customer_name || '').trim()) {
+    // مشتري له رقم ضريبي = تعامل بين منشأتين (B2B) → فاتورة ضريبية (قياسية) دائمًا، مو مبسّطة —
+    // من الرقم المرسل أو من سجل العميل نفسه (الرقم الضريبي السعودي 15 رقم يبدأ وينتهي بـ3)
+    const VAT_RE = /^3\d{13}3$/;
+    let buyerVat = VAT_RE.test(String(customer_vat || '').trim()) ? String(customer_vat).trim() : null;
+    if (!buyerVat && customer_id) {
+      const { rows: [cv] } = await client.query(`SELECT vat_number FROM customers WHERE id = $1 AND company_id = $2`, [customer_id, company_id]);
+      if (VAT_RE.test(String(cv?.vat_number || '').trim())) buyerVat = String(cv.vat_number).trim();
+    }
+    const effInvoiceType = buyerVat ? 'tax' : (invoice_type || 'simplified');
+    const effCustomerVat = buyerVat || customer_vat || null;
+    if (effInvoiceType !== 'simplified' && !customer_id && !String(customer_name || '').trim()) {
       await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'الفاتورة الضريبية القياسية تتطلب تحديد بيانات المشتري (اختيار عميل محفوظ أو إدخال اسم العميل على الأقل)' });
     }
@@ -240,8 +250,8 @@ exports.create = async (req, res, next) => {
          zatca_uuid, icv, previous_invoice_hash, issue_time, branch_id, client_local_id)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'issued',$18,$19,$20,$21,$22,$23,$24,$25)
       RETURNING *
-    `, [company_id, invoice_no, invoice_type || 'simplified',
-        customer_id, customer_name, customer_vat,
+    `, [company_id, invoice_no, effInvoiceType,
+        customer_id, customer_name, effCustomerVat,
         date, due_date, subtotal, discount_type, disc_val, disc_amt,
         taxable, vat_amount, grand, payment_method, notes, user_id,
         0, // cogs_total الحقيقي يُحسَب أدناه بعد خصم المخزون فعليًا، ثم يُحدَّث

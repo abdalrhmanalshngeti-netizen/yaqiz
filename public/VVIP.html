@@ -3922,7 +3922,7 @@ async function doCheckout() {
     items: withServerItemCosts(draftInv.items, srv),
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, status:posPayment==='آجل'?'آجل':'مسددة',
-    invoice_type:'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
+    invoice_type:srv.invoice_type||'simplified', zatca_status:false, paid_amount:posPayment==='آجل'?0:total,
     branch_id:activeBranchId, warehouse_id:activeWarehouseId,
     created_at: srv.created_at || draftInv.created_at,
     cogs_total: parseFloat(srv.cogs_total)||0,
@@ -4674,6 +4674,8 @@ function onNiCustomerInput(val) {
   if(found) {
     warn.style.display='none';
     if(found.vat_num && el('ni-customer-vat')) el('ni-customer-vat').value = found.vat_num;
+    // عميل له رقم ضريبي = بين منشأتين (B2B) → فاتورة ضريبية (قياسية) تلقائيًا
+    if(/^3\d{13}3$/.test(String(found.vat_num||'').trim()) && el('ni-type') && el('ni-type').value!=='tax'){ el('ni-type').value='tax'; setNewInvType('tax'); if(el('ni-customer-vat')) el('ni-customer-vat').value=found.vat_num; }
   } else {
     warn.style.display='block';
     warn.innerHTML = `⚠️ ${lang==='ar'?'العميل غير موجود':'Customer not found'} &nbsp;
@@ -4981,7 +4983,8 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
 
   const customerName = el('ni-customer').value;
   const customerVat  = el('ni-customer-vat')?.value||'';
-  const invoiceType  = el('ni-type').value;
+  // رقم ضريبي للمشتري → فاتورة ضريبية دائمًا (نفس قاعدة السيرفر)
+  const invoiceType  = /^3\d{13}3$/.test(String(customerVat||'').trim()) ? 'tax' : el('ni-type').value;
   const notes        = el('ni-notes')?.value?.trim()||'';
   const dateVal      = el('ni-date').value;
   const items        = newInvItems.map(i=>({...i,line_total:i.qty*i.price}));
@@ -5039,7 +5042,7 @@ async function _saveNewInvoiceActual(printAfter, overrideToken) {
     items: withServerItemCosts(items, srv),
     subtotal:afterDisc, discount:discVal, vat_total:vat, grand_total:total,
     payment_method:payment, status,
-    invoice_type:invoiceType,
+    invoice_type:srv.invoice_type||invoiceType,
     notes,
     zatca_status:false, paid_amount:partialPaid,
     branch_id:activeBranchId, warehouse_id:activeWarehouseId,
@@ -5646,7 +5649,7 @@ function renderPurchContent() {
             <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
           </td>
           <td><b>${sanitize(p.vendor)}</b></td>
-          <td style="color:var(--text-muted);font-size:12px;">${sanitize(_itemDesc||p.description)}</td>
+          <td style="color:var(--text-muted);font-size:12px;">${sanitize(dl(_itemDesc||p.description))}</td>
           <td><span class="badge ${isGoods?'badge-amber':'badge-blue'}">${sanitize(dl(p.category))}</span></td>
           <td>${fmtMoney(p.amount)}</td>
           <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
@@ -7206,7 +7209,7 @@ function renderTreasury(c) {
       <tbody>${[...scopedMoves].map(m=>`<tr>
         <td>${fmtDate(m.date)}</td>
         <td><span class="badge ${m.type==='in'?'badge-green':'badge-red'}">${m.type==='in'?(lang==='ar'?'وارد':'In'):(lang==='ar'?'صادر':'Out')}</span></td>
-        <td>${sanitize(m.description)}</td><td>${sanitize(m.reference)||'-'}</td>
+        <td>${sanitize(dl(m.description))}</td><td>${sanitize(m.reference)||'-'}</td>
         <td style="color:${m.type==='in'?'var(--success)':'var(--danger)'};font-weight:700;">${m.type==='in'?'+':'−'}${fmtMoney(m.amount)}</td>
       </tr>`).join('')}</tbody>
     </table></div></div>
@@ -7301,7 +7304,44 @@ const _DATA_EN = { 'الفرع الرئيسي':'Main branch', 'المستودع 
   'بضاعة جاهزة':'Finished goods', 'مواد تغليف':'Packaging', 'نقدي':'Cash', 'شبكة':'Card', 'تحويل بنكي':'Bank transfer', 'آجل':'Credit',
   'قطعة':'pcs', 'مواد غذائية':'Groceries', 'مشروبات':'Beverages', 'إلكترونيات':'Electronics', 'ملابس':'Clothing', 'أخرى':'Other',
   'قيود افتتاحية — أرصدة بداية النشاط':'Opening entries — starting balances' };
-const dl = v => (lang === 'ar' || v == null) ? v : (_DATA_EN[String(v).trim()] || v);
+// أوصاف القيود والخزينة يولّدها النظام بالعربي وتُحفظ كذا (الدفتر ما يتغيّر) — بالوضع الإنجليزي
+// تُترجم العبارات المعروفة داخل النص وقت العرض، والأسماء والأرقام تبقى كما هي. الأطول أولًا
+// عشان «عكس مرتجع مبيعات» ما تنترجم «مرتجع مبيعات» منها قبلها
+const _DESC_EN = [
+  ['عكس تسوية دفعة مقدمة — إلغاء الفاتورة','Reverse advance settlement — invoice cancelled'],
+  ['تسوية دفعة مقدمة على الفاتورة','Advance settlement on invoice'],
+  ['قيد تصحيحي — تكلفة بضاعة مباعة فعلية (FIFO) للفاتورة','Correcting entry — actual FIFO COGS for invoice'],
+  ['ترحيل بضاعة بالطريق إلى المخزون','Goods in transit posted to inventory'],
+  ['فاتورة من تحويل عرض سعر','Invoice from quote'],
+  ['فاتورة مستوردة من PDF','Invoice imported from PDF'],
+  ['عكس مرتجع مبيعات','Reverse sales return'], ['عكس مرتجع مشتريات','Reverse purchase return'], ['عكس مرتجع','Reverse return'],
+  ['مرتجع مبيعات','Sales return'], ['مرتجع مشتريات','Purchase return'],
+  ['عكس سند قبض ملغى','Reverse cancelled receipt'], ['عكس سند صرف ملغى','Reverse cancelled payment'],
+  ['عكس سند قبض محذوف','Reverse deleted receipt'], ['عكس سند صرف محذوف','Reverse deleted payment'],
+  ['عكس قيد يدوي','Reverse manual entry'], ['عكس قيد إقفال','Reverse closing entry'], ['قيد إقفال السنة المالية','Year-end closing entry'],
+  ['عكس فاتورة شراء','Reverse purchase invoice'], ['فاتورة شراء بضاعة','Goods purchase invoice'], ['مشتريات بضاعة','Goods purchase'],
+  ['فاتورة شراء','Purchase invoice'], ['فاتورة مبيعات','Sales invoice'], ['مبيعات POS','POS sale'],
+  ['عكس مصروف','Reverse expense'], ['مصروف إداري','Admin expense'],
+  ['عكس راتب موظف','Reverse salary'], ['عكس راتب','Reverse salary'], ['راتب موظف','Salary'],
+  ['تعديل رصيد افتتاحي','Opening balance adjustment'], ['رصيد افتتاحي','Opening balance'],
+  ['تسوية مخزون يدوية','Manual stock adjustment'],
+  ['عكس القيد الأصلي','reversal of the original entry'], ['استرداد للعميل','refund to customer'], ['إلغاء فاتورة','Invoice cancelled'],
+  ['سداد التزام كامل','Full obligation payment'], ['سداد التزام جزئي','Partial obligation payment'], ['سداد التزام','Obligation payment'],
+  ['سداد كامل','Full payment'], ['سداد جزئي','Partial payment'], ['تحصيل فاتورة','Invoice collection'],
+  ['إعادة فتح السنة','year reopened'], ['اشتراك يقظ — باقة','Yaqiz subscription — plan'],
+  ['سند قبض','Receipt'], ['سند صرف','Payment'], ['قيد يدوي','Manual entry'], ['عميل نقدي','Walk-in customer'],
+  ['السبب','Reason'], ['محذوف','deleted'], ['ملغى','cancelled'], ['راتب','Salary'], ['عكس','Reverse'],
+];
+const _hasAr = v => /[؀-ۿ]/.test(v);
+const dl = v => {
+  if (lang === 'ar' || v == null) return v;
+  const str = String(v), exact = _DATA_EN[str.trim()];
+  if (exact) return exact;
+  if (!_hasAr(str)) return v;
+  let out = str;
+  for (const [ar, en] of _DESC_EN) if (out.includes(ar)) out = out.split(ar).join(en);
+  return out;
+};
 const ACC_TYPE_EN = { 'أصول':'Assets', 'التزامات':'Liabilities', 'حقوق الملكية':'Equity', 'حقوق ملكية':'Equity', 'إيرادات':'Revenue', 'مصروفات':'Expenses', 'أخرى':'Other' };
 const accType = t => lang === 'ar' ? t : (ACC_TYPE_EN[t] || t);
 const _ACC_CATS = [
@@ -9354,7 +9394,7 @@ function renderBankRecon(db) {
           <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th></tr></thead>
           <tbody>${bankOnly.map(r=>`<tr>
             <td style="font-size:12px;">${fmtDate(r.date)}</td>
-            <td>${sanitize(r.description)||'—'}</td>
+            <td>${sanitize(dl(r.description))||'—'}</td>
             <td style="font-weight:700;color:${r.credit>0?'var(--success)':'var(--danger)'};">${r.credit>0?'+':'-'}${fmtMoney(r.credit>0?r.credit:r.debit)}</td>
           </tr>`).join('')}</tbody>
         </table></div>
@@ -9368,7 +9408,7 @@ function renderBankRecon(db) {
           <thead><tr><th>${lang==='ar'?'التاريخ':'Date'}</th><th>${lang==='ar'?'البيان':'Description'}</th><th>${lang==='ar'?'المبلغ':'Amount'}</th></tr></thead>
           <tbody>${systemOnly.map(m=>`<tr>
             <td style="font-size:12px;">${fmtDate(m.date)}</td>
-            <td>${sanitize(m.description)||'—'}</td>
+            <td>${sanitize(dl(m.description))||'—'}</td>
             <td style="font-weight:700;color:${m.type==='in'?'var(--success)':'var(--danger)'};">${m.type==='in'?'+':'-'}${fmtMoney(m.amount)}</td>
           </tr>`).join('')}</tbody>
         </table></div>
@@ -10802,7 +10842,7 @@ function renderGeneralExpenses(c) {
                 <div style="font-size:10px;color:var(--text-muted);">${fmtHijri(p.created_at)}</div>
               </td>
               <td><b>${sanitize(p.vendor)}</b></td>
-              <td style="color:var(--text-muted);font-size:12px;">${sanitize(p.description)}</td>
+              <td style="color:var(--text-muted);font-size:12px;">${sanitize(dl(p.description))}</td>
               <td><span class="badge badge-blue">${sanitize(dl(p.category))}</span></td>
               <td>${fmtMoney(p.amount)}</td>
               <td style="color:var(--text-muted);">${fmtMoney(p.vat)}</td>
@@ -11161,7 +11201,7 @@ function renderReceiptContent() {
           <td><b>${r.voucher_no}</b></td>
           <td>${fmtDate(r.date)}</td>
           <td><b>${sanitize(r.party)}</b>${r.ref?`<div style="font-size:10px;color:var(--text-muted);">${sanitize(r.ref)}</div>`:''}</td>
-          <td style="color:var(--text-muted);font-size:12px;">${sanitize(r.description)}</td>
+          <td style="color:var(--text-muted);font-size:12px;">${sanitize(dl(r.description))}</td>
           <td><span class="badge badge-blue">${sanitize(r.method)||(lang==='ar'?'نقدي':'Cash')}</span></td>
           <td style="font-weight:800;color:${isReceipt?'var(--success)':'var(--danger)'};">${isReceipt?'+':'−'}${fmtMoney(r.amount)}</td>
           <td style="display:flex;gap:4px;">
@@ -12688,7 +12728,7 @@ async function convertQuoteToInvoice(id) {
     subtotal: parseFloat(srv.subtotal)||q.subtotal, discount:0,
     vat_total: parseFloat(srv.vat_amount)||q.vat_total, grand_total: parseFloat(srv.grand_total)||q.grand_total,
     payment_method:'آجل', status:'آجل',
-    invoice_type:'simplified', zatca_status:false,
+    invoice_type:srv.invoice_type||'simplified', zatca_status:false,
     paid_amount:0, quote_ref:q.quote_no,
     branch_id: srv.branch_id||activeBranchId, warehouse_id:activeWarehouseId,
     created_at: srv.created_at || new Date().toISOString(),
@@ -15515,7 +15555,7 @@ async function renderAdminSessionsTab(mc) {
       return `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
         <div style="width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${isRevoke?'#22c55e':'#f97316'};"></div>
         <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;">${sanitize(r.description)||'—'}</div>
+          <div style="font-size:13px;font-weight:700;">${sanitize(dl(r.description))||'—'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${fmtDate(r.created_at)}</div>
         </div>
       </div>`;
@@ -17225,7 +17265,7 @@ function renderBankStatementView(c) {
         <tbody>${st.rows.length===0?`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">${lang==='ar'?'لا توجد حركات':'No movements'}</td></tr>`:
           st.rows.map(r=>`<tr>
             <td style="font-size:12px;">${fmtDate(r.date)}</td>
-            <td>${sanitize(r.description)}</td>
+            <td>${sanitize(dl(r.description))}</td>
             <td><span class="badge badge-blue">${sanitize(r.method)}</span></td>
             <td style="font-weight:700;color:${r.type==='in'?'var(--success)':'var(--danger)'};">${r.type==='in'?'+':'-'}${fmtMoney(r.amount)}</td>
             <td style="font-weight:800;">${fmtMoney(r.balance)}</td>

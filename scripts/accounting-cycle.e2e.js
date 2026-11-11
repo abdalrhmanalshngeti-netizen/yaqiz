@@ -212,9 +212,13 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   await op('12e. Delete that purchase return (full reversal)', () => page.evaluate(id => deleteReturn(id), ret12d.id),
     { g: { ap: 13.8, vatIn: 1.8, inv: 12 }, qty: { 'صنف أ': 1 }, supp: { 'مورد الخليج': 13.8 }, wait: 4000 });
 
-  await op('13a. Credit invoice to شركة الأفق: A×4', () => newInvoice({ customer: 'شركة الأفق', type: 'tax', items: [[A, 4]], payment: 'آجل' }),
+  await op('13a. Credit invoice to شركة الأفق (VAT-registered) left as simplified → saved as a tax invoice: A×4', () => newInvoice({ customer: 'شركة الأفق', type: 'simplified', items: [[A, 4]], payment: 'آجل' }),
     { g: { ar: 92, rev: 80, vatOut: 12, cogs: 40, inv: -40 }, qty: { 'صنف أ': -4 }, cust: { 'شركة الأفق': 92 } });
   const inv13 = await lastInv();
+  {
+    const srvType = (await pool.query('select invoice_type from invoices where id=$1', [inv13.id])).rows[0]?.invoice_type;
+    ok(inv13.invoice_type === 'tax' && srvType === 'tax', 'buyer with a VAT number → B2B tax invoice automatically (app ' + inv13.invoice_type + ', server ' + srvType + ')');
+  }
   await op('13b. Cancel that invoice (full reversal)', () => page.evaluate(id => cancelInvoice(id), inv13.id),
     { g: { ar: -92, rev: -80, vatOut: -12, cogs: -40, inv: 40 }, qty: { 'صنف أ': 4 }, cust: { 'شركة الأفق': -92 } });
 
