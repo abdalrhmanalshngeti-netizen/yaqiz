@@ -622,6 +622,32 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   console.log('    final app groups:', JSON.stringify(fin.g));
 
   // ══ محتوى الفواتير المطبوعة ══
+  console.log('\n▶ VAT return — Excel export');
+  {
+    // نعترض الكتابة ونقرأ المصنف نفسه بالمتصفح (نفس مكتبة التصدير)
+    const xl = await page.evaluate(() => {
+      reportPeriod = 'all'; vatPeriodKey = null;
+      let wb = null; const orig = XLSX.writeFile; XLSX.writeFile = w => { wb = w; };
+      try { exportVATReportExcel(); } finally { XLSX.writeFile = orig; }
+      if (!wb) return null;
+      const rows = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1 });
+      const sum = rows(wb.SheetNames[0]);
+      const val = k => (sum.find(r => String(r[0]).startsWith(k)) || [])[1];
+      return { names: wb.SheetNames, out: val('ضريبة المخرجات'), inp: val('ضريبة المدخلات'), docOut: val('مطابقة: ضريبة المبيعات'),
+        sales: rows(wb.SheetNames[1]), purch: rows(wb.SheetNames[3]), invCount: getDB().invoices.filter(i => i.status !== 'ملغاة').length };
+    });
+    ok(!!xl && xl.names.length === 5, 'Excel has 5 sheets → ' + (xl && xl.names.join(' | ')));
+    if (xl) {
+      ok(Math.abs(xl.out - srvGroups.vatOut) < 0.01 && Math.abs(xl.inp - srvGroups.vatIn) < 0.01, `Excel summary VAT = server ledger (out ${xl.out} / ${srvGroups.vatOut}, in ${xl.inp} / ${srvGroups.vatIn})`);
+      const salesRows = xl.sales.slice(1, -1), total = xl.sales[xl.sales.length - 1];
+      ok(salesRows.length === xl.invCount, 'one row per sales invoice → ' + salesRows.length + ' / ' + xl.invCount);
+      ok(salesRows.every(r => typeof r[5] === 'number' && typeof r[6] === 'number' && Math.abs(r[5] + r[6] - r[7]) < 0.011), 'every invoice row: taxable + VAT = total (numeric cells)');
+      ok(Math.abs(total[6] - salesRows.reduce((t, r) => t + r[6], 0)) < 0.01, 'sales sheet total row = sum of its rows');
+      ok(Math.abs(xl.docOut - xl.out) < 0.01, `documents reconcile with the ledger (invoices − returns VAT ${xl.docOut} = ${xl.out})`);
+      ok(xl.purch.length > 2 && /^\d{4}-\d{2}-\d{2}$/.test(String(xl.purch[1][1])), 'purchases sheet filled, dates as YYYY-MM-DD');
+    }
+  }
+
   console.log('\n▶ Printed invoices');
   const printed = async (id) => { const [pp] = await Promise.all([ctx.waitForEvent('page', { timeout: 15000 }), page.evaluate(id => printSalesInvoice(id), id)]); await pp.waitForTimeout(2500); const r = await pp.evaluate(() => ({ t: document.body.innerText, qr: document.querySelectorAll('canvas, img[src^="data:image"], svg').length })); await pp.close(); return r; };
   const b2b = await printed(inv3.id);

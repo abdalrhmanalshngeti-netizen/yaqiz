@@ -7325,6 +7325,7 @@ const _DESC_EN = [
   ['عكس راتب موظف','Reverse salary'], ['عكس راتب','Reverse salary'], ['راتب موظف','Salary'],
   ['تعديل رصيد افتتاحي','Opening balance adjustment'], ['رصيد افتتاحي','Opening balance'],
   ['تسوية مخزون يدوية','Manual stock adjustment'],
+  ['عجز صندوق — وردية','Cash shortage — shift'], ['زيادة صندوق — وردية','Cash overage — shift'], ['عجز صندوق وردية','Shift cash shortage'], ['زيادة صندوق وردية','Shift cash overage'],
   ['عكس القيد الأصلي','reversal of the original entry'], ['استرداد للعميل','refund to customer'], ['إلغاء فاتورة','Invoice cancelled'],
   ['سداد التزام كامل','Full obligation payment'], ['سداد التزام جزئي','Partial obligation payment'], ['سداد التزام','Obligation payment'],
   ['سداد كامل','Full payment'], ['سداد جزئي','Partial payment'], ['تحصيل فاتورة','Invoice collection'],
@@ -8847,6 +8848,7 @@ function renderReportsInner(c) {
           ${vatPeriodSelectHtml()}
           <span style="font-size:12px;color:var(--text-muted);">${reportPeriod==='custom'&&reportFrom&&reportTo?`${fmtDate(reportFrom)} → ${fmtDate(reportTo)}`:(lang==='ar'?'تعرض الآن كل الفترات':'Showing all periods')}</span>
           <button class="btn btn-primary btn-sm" style="margin-inline-start:auto;" data-action="exportVATReportPDF">${icon('file-text',14)} ${lang==='ar'?'تصدير الإقرار':'Export return'}</button>
+          <button class="btn btn-outline btn-sm" data-action="exportVATReportExcel">${icon('download',14)} ${lang==='ar'?'تصدير Excel':'Export Excel'}</button>
         </div></div>
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-icon green">${icon('trending-up',22)}</div><div class="stat-label">${lang==='ar'?'ضريبة المبيعات (المخرجات)':'Output VAT (sales)'}</div><div class="stat-value">${fmtMoney(vatOutput)}</div></div>
@@ -16912,6 +16914,72 @@ function exportVATReportPDF() {
   <div class="footer"><span>${X('يقظ — نظام محاسبي متوافق مع ZATCA','Yaqiz — ZATCA-compliant accounting')}</span><span>${now.toLocaleDateString(loc)} ${now.toLocaleTimeString(loc,{hour:'2-digit',minute:'2-digit'})}</span></div>
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
+}
+
+// تصدير الإقرار الضريبي Excel — نفس بيانات الـPDF بالضبط (calcReportData)، كل مستند بسطر:
+// ملخص (من الدفتر) + فواتير المبيعات + مرتجعات المبيعات + المشتريات والمصاريف + مرتجعات المشتريات.
+// الأرقام خلايا رقمية (تنجمع وتتفلتر)، والتاريخ YYYY-MM-DD ما يلتبس فيه اليوم بالشهر
+function exportVATReportExcel() {
+  if (typeof XLSX === 'undefined') { showToast(lang==='ar'?'مكتبة Excel لم تُحمَّل — تأكد من الاتصال':'Excel library not loaded','error'); return; }
+  const db = getDB(); const st = db.settings||{};
+  const A = lang==='ar', X = (a, e) => A ? a : e;
+  const periodFilter = reportPeriodFilterFn(reportPeriod, reportFrom, reportTo);
+  const d = calcReportData(db, reportPeriod==='all'?null:periodFilter);
+  const r2 = v => Math.round((Number(v)||0)*100)/100;
+  const day = v => v ? String(v).slice(0,10) : '';
+  const custVat = i => i.customer_vat || (db.customers||[]).find(c=>c.id===i.customer_id || c.name===i.customer_name)?.vat_num || '';
+  const supVat = p => (db.suppliers||[]).find(x=>x.id===p.supplier_id || x.name===p.vendor)?.vat_num || '';
+  const _vp = vatPeriodKey ? vatPeriods().find(p=>p.key===vatPeriodKey) : null;
+  const periodTxt = reportPeriod==='all' ? X('كل الفترات','All periods') : (_vp && reportPeriod==='custom' ? _vp.label + ' (' + reportFrom + ' → ' + reportTo + ')' : (reportFrom||'') + ' → ' + (reportTo||''));
+  const sheet = (header, rows, sumCols) => {
+    const data = [header, ...rows];
+    if (sumCols && rows.length) data.push(header.map((_, c) => c === 0 ? X('الإجمالي','Total') : (sumCols.includes(c) ? r2(rows.reduce((t, r) => t + (Number(r[c])||0), 0)) : '')));
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = header.map(h => ({ wch: Math.max(12, String(h).length + 4) }));
+    return ws;
+  };
+  const wb = XLSX.utils.book_new();
+  if (A) wb.Workbook = { Views: [{ RTL: true }] };
+
+  const sales = d.invs.map(i => [i.invoice_no, day(i.created_at), i.customer_name||X('عميل نقدي','Walk-in customer'), custVat(i),
+    i.invoice_type==='tax' ? X('ضريبية (B2B)','Tax (B2B)') : X('مبسطة','Simplified'), r2(invNet(i)), r2(i.vat_total), r2(i.grand_total)]);
+  const salesRet = (d.rets||[]).filter(r=>r.type==='sales').map(r => { const base = r.base_amount!=null ? r.base_amount : (r.amount||0)/1.15;
+    return [r.return_no||'', day(r.date||r.created_at), r.party||'', (db.invoices||[]).find(i=>i.id===r.linked_id)?.invoice_no||'', -r2(base), -r2(r.vat_amount), -r2(r.amount)]; });
+  const purch = d.purchs.map(p => [p.purchase_no||p.supplier_ref||'', day(p.reversed_at && String(p.id).startsWith('rev-') ? p.reversed_at : p.created_at), p.vendor||'', supVat(p),
+    dl(p.description||p.category||''), p.purchase_type==='opex' ? X('مصروف','Expense') : X('بضاعة','Goods'),
+    r2(p.amount), r2(p.vat), r2(p.total!=null ? p.total : (Number(p.amount)||0)+(Number(p.vat)||0)), p.deductible===false ? X('لا','No') : X('نعم','Yes')]);
+  const purchRet = (d.rets||[]).filter(r=>r.type==='purchases').map(r => { const base = r.base_amount!=null ? r.base_amount : (r.amount||0)/1.15;
+    return [r.return_no||'', day(r.date||r.created_at), r.party||'', (db.purchases||[]).find(p=>p.id===r.linked_id)?.purchase_no||'', -r2(base), -r2(r.vat_amount), -r2(r.amount)]; });
+
+  // الملخص: الأرقام الرسمية من الدفتر + مطابقتها بمجاميع المستندات
+  const docOut = r2(sales.reduce((t,r)=>t+r[6],0) + salesRet.reduce((t,r)=>t+r[5],0));
+  const docIn  = r2(purch.filter(r=>r[9]===X('نعم','Yes')).reduce((t,r)=>t+r[7],0) + purchRet.reduce((t,r)=>t+r[5],0));
+  const net = r2(d.vatNet);
+  const summary = [
+    [X('تقرير ضريبة القيمة المضافة','VAT return'), ''],
+    [X('المنشأة','Company'), st.company_name||''],
+    [X('الرقم الضريبي','VAT number'), st.vat_number||''],
+    [X('الفترة','Period'), periodTxt],
+    [X('تاريخ التصدير','Exported'), new Date().toISOString().slice(0,16).replace('T',' ')],
+    ['', ''],
+    [X('ضريبة المخرجات (المبيعات)','Output VAT (sales)'), r2(d.vatOutput)],
+    [X('ضريبة المدخلات (المشتريات)','Input VAT (purchases)'), r2(d.vatInput)],
+    [net > 0.005 ? X('المستحق للهيئة','Payable to ZATCA') : X('رصيد مسترد / مرحّل لصالحك','Refundable / carried forward'), Math.abs(net)],
+    ['', ''],
+    [X('مطابقة: ضريبة المبيعات من المستندات (فواتير − مرتجعات)','Check: output VAT from documents'), docOut],
+    [X('مطابقة: ضريبة المشتريات القابلة للخصم من المستندات','Check: deductible input VAT from documents'), docIn],
+    [X('عدد فواتير المبيعات','Sales invoices'), sales.length],
+    [X('عدد المشتريات والمصاريف','Purchases & expenses'), purch.length],
+  ];
+  const wsSum = XLSX.utils.aoa_to_sheet(summary); wsSum['!cols'] = [{ wch: 52 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, wsSum, X('الملخص','Summary'));
+  XLSX.utils.book_append_sheet(wb, sheet([X('رقم الفاتورة','Invoice no.'), X('التاريخ','Date'), X('العميل','Customer'), X('الرقم الضريبي للعميل','Customer VAT no.'), X('النوع','Type'), X('المبلغ قبل الضريبة','Taxable amount'), X('الضريبة','VAT'), X('الإجمالي','Total')], sales, [5,6,7]), X('فواتير المبيعات','Sales invoices'));
+  XLSX.utils.book_append_sheet(wb, sheet([X('رقم المرتجع','Return no.'), X('التاريخ','Date'), X('العميل','Customer'), X('الفاتورة الأصلية','Original invoice'), X('المبلغ قبل الضريبة','Taxable amount'), X('الضريبة','VAT'), X('الإجمالي','Total')], salesRet, [4,5,6]), X('مرتجعات المبيعات','Sales returns'));
+  XLSX.utils.book_append_sheet(wb, sheet([X('الرقم','No.'), X('التاريخ','Date'), X('المورد','Supplier'), X('الرقم الضريبي للمورد','Supplier VAT no.'), X('البيان','Description'), X('النوع','Type'), X('المبلغ قبل الضريبة','Taxable amount'), X('الضريبة','VAT'), X('الإجمالي','Total'), X('قابلة للخصم','Deductible')], purch, [6,7,8]), X('المشتريات والمصاريف','Purchases'));
+  XLSX.utils.book_append_sheet(wb, sheet([X('رقم المرتجع','Return no.'), X('التاريخ','Date'), X('المورد','Supplier'), X('فاتورة الشراء','Purchase invoice'), X('المبلغ قبل الضريبة','Taxable amount'), X('الضريبة','VAT'), X('الإجمالي','Total')], purchRet, [4,5,6]), X('مرتجعات المشتريات','Purchase returns'));
+  const fileKey = (vatPeriodKey || (reportFrom && reportTo ? reportFrom + '_' + reportTo : 'all')).replace(/[^0-9A-Za-z_-]/g, '');
+  XLSX.writeFile(wb, 'yaqiz-vat-' + fileKey + '.xlsx');
+  showToast(X('✅ تم تصدير ملف Excel','✅ Excel exported'));
 }
 
 function exportIncomeStatementPDF() {
