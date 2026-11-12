@@ -6038,7 +6038,7 @@ function _saveGoodsPurchaseActual(overrideToken) {
   if(paidNow>0){
     db.treasury.balance-=paidNow;
     db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:paidNow,
-      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment,branch_id:_activeBranchId});
+      description:`مشتريات بضاعة: ${p.vendor}`,reference:p.supplier_ref||'',date:new Date().toISOString(),method:payment,branch_id:_activeBranchId,_pid:p.id});
   }
 
   // Journal entry — يُدين "بضاعة بالطريق" مؤقتاً وليس "المخزون" مباشرة، لأن الكمية لم
@@ -6057,7 +6057,7 @@ function _saveGoodsPurchaseActual(overrideToken) {
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`فاتورة شراء بضاعة - ${p.vendor}`,
     entries:pgEntries,
-    ref:`PUR-${p.id}`
+    ref:`PUR-${p.id}`, _pid:p.id
   };
   db.journal.push(_pgJournalEntry);
   if (overrideToken) window._periodOverrideTokens[`journal:${_pgJournalEntry.id}`] = overrideToken;
@@ -6195,7 +6195,7 @@ function doInventoryUpdate() {
         {account:lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'debit', amount:Math.round(transferredValue*100)/100},
         {account:lang==='ar'?'بضاعة بالطريق':'Goods in Transit', account_code:'1350', side:'credit', amount:Math.round(transferredValue*100)/100},
       ],
-      ref:`PUR-${_pendingPurchaseId}-IN`
+      ref:`PUR-${_pendingPurchaseId}-IN`, _pid:_pendingPurchaseId
     });
   }
   saveDB(db);
@@ -6337,7 +6337,7 @@ function savePurchase(purchase_type) {
   // Treasury
   db.treasury.balance -= p.total;
   db.treasury.moves.unshift({id:nextId(db,'treasury'),type:'out',amount:p.total,
-    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString(),method:p.payment_method,branch_id:resolveActiveBranchId()});
+    description:`مصروف إداري: ${p.vendor} — ${p.category}`,reference:'',date:new Date().toISOString(),method:p.payment_method,branch_id:resolveActiveBranchId(),_pid:p.id});
 
   // Journal entry: Dr. Expense + Dr. Input VAT / Cr. Cash
   if(!db.journal)db.journal=[];
@@ -6351,7 +6351,7 @@ function savePurchase(purchase_type) {
       ...(vat>0 ? [{account:lang==='ar'?'ضريبة المدخلات':'Input VAT', account_code:'2210', side:'debit', amount:vat}] : []),
       {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'credit', amount:p.total},
     ],
-    ref:`EXP-${p.id}`
+    ref:`EXP-${p.id}`, _pid:p.id
   });
 
   saveDB(db);
@@ -10984,13 +10984,17 @@ function confirmObligationPayment(id, type, amount, method) {
   method = method || 'نقدي';
   if(!amount||amount<=0){showToast(lang==='ar'?'أدخل مبلغاً صحيحاً':'Enter valid amount','error');return;}
   const db=getDB(); const o=db.obligations.find(x=>x.id===id); if(!o)return;
+  // رقم المصروف المحلي يُحجز أولًا: يُعلَّم به القيد وحركة الخزينة، ولو رفض السيرفر المصروف
+  // يُلغى الثلاثة معًا ويرجع الالتزام كما كان (تاريخ الاستحقاق وسجل السداد)
+  const _oblPid = nextId(db,'purchase');
+  const _oblUndo = { id, next_due: o.next_due, n: (o.payments||[]).length };
 
   // ── الخزينة ──────────────────────────────────────────────
   if(!db.treasury)db.treasury={balance:0,moves:[]};
   if(!db.treasury.moves)db.treasury.moves=[];
   db.treasury.balance-=amount;
   db.treasury.moves.unshift({
-    id:nextId(db,'treasury'),type:'out',amount,
+    _pid:_oblPid, id:nextId(db,'treasury'),type:'out',amount,
     description:`${lang==='ar'?'سداد التزام':'Obligation payment'} ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}: ${o.name}`,
     reference:`OBL-${id}`,date:new Date().toISOString(),method,branch_id:resolveActiveBranchId()
   });
@@ -11009,7 +11013,7 @@ function confirmObligationPayment(id, type, amount, method) {
   const _oblBase = _vatOnObligation ? Math.round(amount/1.15*100)/100 : amount;
   const _oblVat  = _vatOnObligation ? Math.round((amount-_oblBase)*100)/100 : 0;
   db.purchases.push({
-    id:nextId(db,'purchase'),
+    id:_oblPid, _oblUndo,
     vendor:o.vendor||o.name, description:`${type==='full'?(lang==='ar'?'سداد كامل':'Full payment'):(lang==='ar'?'سداد جزئي':'Partial payment')}: ${o.name}`,
     category:o.category, purchase_type:'opex',
     amount:_oblBase, vat:_oblVat,
@@ -11035,7 +11039,7 @@ function confirmObligationPayment(id, type, amount, method) {
     id:db.nextId.journal++,date:new Date().toISOString(),
     description:`${lang==='ar'?'سداد التزام':'Obligation'}: ${o.name} — ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}`,
     entries:_journalEntries,
-    ref:`OBL-${id}`
+    ref:`OBL-${id}`, _pid:_oblPid
   });
 
   // ── تسجيل السداد في سجل الالتزام ──────────────────────────
@@ -21094,7 +21098,7 @@ async function runAISearchQuery(q) {
               const _pr=_ldb2.products.find(x=>x.id===it.product_id)||_ldb2.products.find(x=>x.name===it.name);
               return {product_id:_pr?.id||it.product_id||null, name:it.name||_pr?.name||'', qty:parseFloat(it.qty)||1, unit_cost:parseFloat(it.price||it.unit_price||it.unit_cost||0)};
             }).filter(it=>it.name||it.product_id)
-          }, _pTok ? { 'X-Period-Override-Token': _pTok } : undefined).catch(e => { console.warn('purchase create:', e.message); return null; });
+          }, _pTok ? { 'X-Period-Override-Token': _pTok } : undefined).catch(e => { console.warn('purchase create:', e.message); return e.status >= 400 && e.status < 500 ? { _rejected: e.message } : null; });
           if (res?.data?.id) {
             if (res.data.id !== p.id) _replaceLocalId('purchases', p.id, res.data.id);
             if (res.data.purchase_no) {
@@ -21107,6 +21111,31 @@ async function runAISearchQuery(q) {
             if (_isPartialCreate && parseFloat(p.paid_amount||0) > 0) {
               await apiFetch('POST', `/api/purchases/${res.data.id}/payment`, { amount: parseFloat(p.paid_amount) }).catch(e => console.warn('purchase initial partial payment:', e.message));
             }
+          } else if (res?._rejected) {
+            // السيرفر رفض المشتريات/المصروف نهائيًا (صلاحية، فترة مقفلة...): قيدها وحركة خزينتها
+            // (تُرسل بعدها بنفس التمريرة) وطبقات مخزونها تُلغى، والالتزام يرجع كما كان — بدل
+            // ما يبقى القيد بالدفتر بلا مستنده. الأرصدة والكميات ترجع من السيرفر بالسحب القادم
+            const _pid = p.id, _lotRef = 'PUR-' + p.id;
+            const _undoP = d => {
+              if (!d) return;
+              d.purchases = (d.purchases || []).filter(x => x.id !== _pid);
+              d.journal = (d.journal || []).filter(j => j._serverId || j._pid !== _pid);
+              if (d.treasury?.moves) {
+                for (const m of d.treasury.moves.filter(m => !m._serverId && m._pid === _pid))
+                  d.treasury.balance = Math.round(((d.treasury.balance || 0) + (m.type === 'in' ? -1 : 1) * (Number(m.amount) || 0)) * 100) / 100;
+                d.treasury.moves = d.treasury.moves.filter(m => m._serverId || m._pid !== _pid);
+              }
+              for (const pr of d.products || []) if (Array.isArray(pr.lots)) {
+                const gone = pr.lots.filter(l => l.ref === _lotRef);
+                if (gone.length) { pr.lots = pr.lots.filter(l => l.ref !== _lotRef); pr.qty = Math.round(((pr.qty || 0) - gone.reduce((t, l) => t + (Number(l.qty) || 0), 0)) * 1000) / 1000; }
+              }
+              d.stock_moves = (d.stock_moves || []).filter(m => m._serverId || m.reference !== _lotRef);
+              const u = p._oblUndo, o = u && (d.obligations || []).find(x => x.id === u.id);
+              if (o) { o.next_due = u.next_due; if (Array.isArray(o.payments)) o.payments = o.payments.slice(0, u.n); }
+            };
+            try { const _db = getDB(); _undoP(_db); _origSaveDB(_db); } catch (e) {}
+            _undoP(_currentPassDB); _undoP(_snap); _persistSnap();
+            try { showToast((lang==='ar' ? '❌ رفض السيرفر ' + (p.purchase_type==='opex' ? 'المصروف' : 'فاتورة الشراء') + ' (' + (p.vendor||'') + '): ' : '❌ Purchase rejected: ') + res._rejected + (lang==='ar' ? ' — أُلغي أثره' : ' — undone'), 'error'); } catch (e) {}
           } else {
             _revertSnapEntity('purchases', p.id, null);
           }

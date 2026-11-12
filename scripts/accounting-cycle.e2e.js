@@ -16,7 +16,8 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
 
 (async () => {
   const b = await chromium.launch({ channel: 'msedge' });
-  const ctx = await b.newContext({ viewport: { width: 1366, height: 860 } });
+  // عامل الخدمة (sw.js) يمرّر الطلبات من غير ما يشوفها page.route — نوقفه بالاختبار فقط
+  const ctx = await b.newContext({ viewport: { width: 1366, height: 860 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const errs = [], toastErr = [], popups = [];
   page.on('pageerror', e => errs.push('PAGEERR ' + e.message + ' @ ' + String(e.stack).split(String.fromCharCode(10)).slice(1,3).join(' / ')));
@@ -386,6 +387,23 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   // ══ المصاريف والرواتب والالتزامات ══
   await op('19. Admin expense 500 + VAT 75, cash', async () => { await page.evaluate(() => goTo('obligations')); await page.waitForTimeout(300); await page.evaluate(() => showAddOpexPurchase()); await page.waitForTimeout(400); await page.evaluate(() => { el('p-vendor').value = 'شركة الكهرباء'; el('p-amount').value = '500'; savePurchase('opex'); }); },
     { g: { exp: 500, vatIn: 75, cash: -575 }, treasury: -575 });
+
+  // السيرفر يرفض المصروف (نحاكي رفضًا 403) → القيد وحركة الخزينة والمصروف نفسه يُلغون محليًا،
+  // وما يوصل للسيرفر أي قيد بلا مستنده
+  {
+    let blocked = 0;
+    await page.route(u => new URL(u).pathname === '/api/purchases', route => {
+      if (route.request().method() === 'POST' && !blocked) { blocked++; return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false, message: 'ليس لديك صلاحية لهذه العملية' }) }); }
+      return route.continue();
+    });
+    const nBefore = await page.evaluate(() => getDB().purchases.filter(p => p.vendor === 'مصروف مرفوض').length);
+    await op('19b. Admin expense rejected by the server → its entry and cash movement are undone', async () => { await page.evaluate(() => showAddOpexPurchase()); await page.waitForTimeout(400); await page.evaluate(() => { el('p-vendor').value = 'مصروف مرفوض'; el('p-amount').value = '40'; savePurchase('opex'); }); },
+      { g: { exp: 0, vatIn: 0, cash: 0 }, treasury: 0, wait: 5000 });
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    const after = await page.evaluate(() => ({ p: getDB().purchases.filter(p => p.vendor === 'مصروف مرفوض').length, j: getDB().journal.filter(j => (j.description || '').includes('مصروف مرفوض')).length }));
+    const srvJ = (await pool.query("select count(*)::int n from journal_entries where company_id=(select company_id from users where username=$1) and description like '%مصروف مرفوض%'", ['cyc' + sfx])).rows[0].n;
+    ok(blocked === 1 && after.p === nBefore && after.j === 0 && srvJ === 0, 'rejected expense removed locally, no orphan entry on the server → ' + JSON.stringify({ blocked, after, srvJ }));
+  }
   await op('20. Recurring obligation (rent 2000) paid in full', async () => {
     await page.evaluate(() => goTo('obligations')); await page.waitForTimeout(300);
     await page.evaluate(() => { showObligationModal(); }); await page.waitForTimeout(400);
