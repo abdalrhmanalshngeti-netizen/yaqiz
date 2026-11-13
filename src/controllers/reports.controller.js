@@ -20,7 +20,7 @@ exports.dashboard = async (req, res, next) => {
 
       db.query(`
         SELECT
-          COALESCE(SUM(total),0) AS total_month,
+          COALESCE(SUM(total) FILTER (WHERE COALESCE(purchase_type,'goods') <> 'opex'),0) AS total_month,
           COALESCE(SUM(remaining),0) AS payable
         FROM purchases WHERE company_id=$1 AND date >= $2 AND COALESCE(status,'') NOT IN ('reversed','cancelled')
       `, [cid, monthStart]),
@@ -442,10 +442,12 @@ exports.mySummary = async (req, res, next) => {
     }
     if (can('purchases.view')) {
       const [pu] = (await db.query(`
-        SELECT COALESCE(SUM(total) FILTER (WHERE created_at::date = $2),0) AS today, COUNT(*) FILTER (WHERE created_at::date = $2) AS today_n,
-               COALESCE(SUM(total) FILTER (WHERE created_at::date >= $3),0) AS month, COUNT(*) FILTER (WHERE created_at::date >= $3) AS month_n,
+        SELECT COALESCE(SUM(total) FILTER (WHERE created_at::date = $2 AND is_goods),0) AS today, COUNT(*) FILTER (WHERE created_at::date = $2 AND is_goods) AS today_n,
+               COALESCE(SUM(total) FILTER (WHERE created_at::date >= $3 AND is_goods),0) AS month, COUNT(*) FILTER (WHERE created_at::date >= $3 AND is_goods) AS month_n,
                COALESCE(SUM(remaining),0) AS unpaid, COUNT(*) FILTER (WHERE remaining > 0) AS unpaid_n
-        FROM purchases WHERE company_id = $1 AND COALESCE(status,'') NOT IN ('reversed','cancelled') AND ($4::int IS NULL OR branch_id = $4)`, [cid, today, monthStart, bid])).rows;
+        FROM (SELECT *, COALESCE(purchase_type,'goods') <> 'opex' AS is_goods FROM purchases) p
+        WHERE company_id = $1 AND COALESCE(status,'') NOT IN ('reversed','cancelled') AND ($4::int IS NULL OR branch_id = $4)`, [cid, today, monthStart, bid])).rows;
+      // اليوم/الشهر = مشتريات بضاعة فقط (المصاريف التشغيلية مستبعدة)؛ المستحق يشمل الكل
       const [sp] = (await db.query(`SELECT COALESCE(SUM(balance) FILTER (WHERE balance > 0),0) AS v FROM suppliers WHERE company_id = $1`, [cid])).rows;
       out.sections.push({ key: 'purchases', today_total: num(pu.today), today_count: +pu.today_n, month_total: num(pu.month), month_count: +pu.month_n,
         unpaid_total: num(pu.unpaid), unpaid_count: +pu.unpaid_n, payables: num(sp.v) });

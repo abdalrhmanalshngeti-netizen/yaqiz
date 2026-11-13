@@ -96,8 +96,18 @@ exports.create = async (req, res, next) => {
       return res.status(periodCheck.status).json({ success: false, code: periodCheck.code, message: periodCheck.message });
     }
 
-    const seqN = await nextDocNumber(client, company_id, 'voucher');
-    const voucher_no = `${type === 'receipt' ? 'RCP' : 'PAY'}-${String(seqN).padStart(6, '0')}`;
+    // عدّاد مستقل للقبض وآخر للصرف (كان عدّادًا واحدًا مشتركًا فتظهر فجوات بكل نوع).
+    // أول استخدام يبدأ بعد أعلى رقم موجود لنفس البادئة حتى لا يتكرر رقم قديم
+    const prefix = type === 'receipt' ? 'RCP' : 'PAY';
+    const seqType = type === 'receipt' ? 'voucher_receipt' : 'voucher_payment';
+    await client.query(`
+      INSERT INTO doc_number_counters (company_id, doc_type, last_number)
+      SELECT $1, $2, COALESCE(MAX(split_part(voucher_no, '-', 2)::int), 0)
+      FROM vouchers WHERE company_id = $1 AND voucher_no ~ ('^' || $3 || '-[0-9]{1,9}$')
+      ON CONFLICT (company_id, doc_type) DO NOTHING
+    `, [company_id, seqType, prefix]);
+    const seqN = await nextDocNumber(client, company_id, seqType);
+    const voucher_no = `${prefix}-${String(seqN).padStart(6, '0')}`;
 
     const { rows: [voucher] } = await client.query(`
       INSERT INTO vouchers

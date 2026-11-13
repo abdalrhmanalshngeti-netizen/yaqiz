@@ -47,7 +47,7 @@ exports.list = async (req, res, next) => {
     lines.forEach(l => { (byEntry[l.entry_id] = byEntry[l.entry_id] || []).push(l); });
 
     const data = entries.map(e => ({
-      id: e.id, description: e.description, ref: e.reference, date: e.date,
+      id: e.id, entry_no: e.entry_no, description: e.description, ref: e.reference, date: e.date,
       entries: (byEntry[e.id] || []).map(l => ({ account: l.account_name, account_code: l.account_code, side: l.side, amount: l.amount }))
     }));
     res.json({ success: true, data });
@@ -74,12 +74,12 @@ exports.create = async (req, res, next) => {
     // نمط بقية المستندات (راجع 053_client_local_id_dedup.sql)
     if (client_local_id) {
       const { rows: [existing] } = await client.query(
-        `SELECT id, description, reference, date FROM journal_entries WHERE company_id = $1 AND client_local_id = $2`,
+        `SELECT id, entry_no, description, reference, date FROM journal_entries WHERE company_id = $1 AND client_local_id = $2`,
         [req.user.company_id, client_local_id]
       );
       if (existing) {
         await client.query('COMMIT');
-        return res.status(201).json({ success: true, data: { id: existing.id, description: existing.description, ref: existing.reference, date: existing.date, entries } });
+        return res.status(201).json({ success: true, data: { id: existing.id, entry_no: existing.entry_no, description: existing.description, ref: existing.reference, date: existing.date, entries } });
       }
     }
     const debit  = entries.filter(e => e.side === 'debit').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -125,7 +125,7 @@ exports.create = async (req, res, next) => {
       );
     }
     await client.query('COMMIT');
-    res.status(201).json({ success: true, data: { id: entry.id, description: entry.description, ref: entry.reference, date: entry.date, entries } });
+    res.status(201).json({ success: true, data: { id: entry.id, entry_no: entry.entry_no, description: entry.description, ref: entry.reference, date: entry.date, entries } });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

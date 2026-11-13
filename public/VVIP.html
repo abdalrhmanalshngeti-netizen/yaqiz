@@ -1187,6 +1187,14 @@ function nextReceiptId(db) {
   db.nextId.receipt = num + 1;
   return num;
 }
+// رقم السند المعروض: عدّاد مستقل لكل نوع (قبض/صرف) — يتبع آخر رقم من نفس النوع
+// (المحلي أو رقم السيرفر بعد المزامنة) بدل العدّاد المشترك مع معرّف السجل
+function nextVoucherSerial(db, type) {
+  return (db.receipts||[]).filter(r=>r.type===type).reduce((m, r) => {
+    const n = parseInt(String(r.voucher_no||'').split('-').pop(), 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0) + 1;
+}
 function clientKey(localId) {
   const n = Number(localId);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -1384,6 +1392,10 @@ function fmtDate(s) {
 // و02:59 بتوقيت السعودية (UTC+3)، فيضع مبيعات بداية اليوم بحساب اليوم السابق
 // خطأً بتقارير حدود الشهر (الضريبة/الدخل/أداء الفروع). تواريخ بدون وقت (نصية
 // خام مثل حقول تاريخ المرتجعات) تُرجَع كما هي بلا تحويل، لأنها بلا منطقة زمنية أصلًا
+// تاريخ مطبوع لا يلتبس فيه اليوم بالشهر (10 نوفمبر 2026 بدل 11/10/2026)
+function fmtDatePrint(s) {
+  try { return new Date(s).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn',{year:'numeric',month:'long',day:'numeric'}); } catch { return s; }
+}
 function localDateStr(input) {
   if (!input) return '';
   if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
@@ -3167,8 +3179,10 @@ function renderDashboard(c) {
   const todaySales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).toDateString()===today).reduce((s,i)=>s+i.grand_total,0);
   const monthSales  = dashInvoices.filter(i=>i.status!=='ملغاة'&&new Date(i.created_at).getMonth()===month&&new Date(i.created_at).getFullYear()===year).reduce((s,i)=>s+i.grand_total,0);
   const lastMSales  = dashInvoices.filter(i=>new Date(i.created_at).getMonth()===lastMonth&&new Date(i.created_at).getFullYear()===lastMonthYear).reduce((s,i)=>s+i.grand_total,0);
-  const monthPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
-  const lastMPurch  = dashPurchases.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
+  // "مشتريات الشهر" = بضاعة فقط — المصاريف التشغيلية (إيجار/كهرباء...) لها تقاريرها
+  const dashGoods   = dashPurchases.filter(p=>p.purchase_type==='goods'||p.category==='بضاعة');
+  const monthPurch  = dashGoods.filter(p=>new Date(p.created_at).getMonth()===month&&new Date(p.created_at).getFullYear()===year).reduce((s,p)=>s+p.total,0);
+  const lastMPurch  = dashGoods.filter(p=>new Date(p.created_at).getMonth()===lastMonth&&new Date(p.created_at).getFullYear()===lastMonthYear).reduce((s,p)=>s+p.total,0);
   const receivables = db.customers.reduce((s,c)=>s+Math.max(0,c.balance||0),0);
   const payables    = db.suppliers.reduce((s,sup)=>s+Math.max(0,sup.balance||0),0);
   const lowStock    = db.products.filter(p=>p.qty<=p.min_qty);
@@ -3802,6 +3816,10 @@ function invOutstanding(inv) {
   if (!inv) return 0;
   return Math.max(0, Math.round(((inv.grand_total||0) - (inv.paid_amount||0) - (inv.credited_amount||0)) * 100) / 100);
 }
+// مرتجعات المبيعات المربوطة بفاتورة — تظهر بالفاتورة المطبوعة مع الصافي بعدها
+function invReturns(db, inv) {
+  return (db.returns||[]).filter(r=>r.type==='sales' && r.linked_id!=null && r.linked_id===inv.id);
+}
 function purOutstanding(p) {
   if (!p) return 0;
   return Math.max(0, Math.round((p.remaining_amount != null ? p.remaining_amount : (p.total||0) - (p.paid_amount||0)) * 100) / 100);
@@ -3813,7 +3831,7 @@ function _addServerJournal(db, e) {
   db.journal = db.journal || [];
   if (db.journal.some(j => j._serverId === e.id)) return;
   db.journal.push({ id: 'srv-' + e.id, date: e.date || new Date().toISOString(), description: e.description || '',
-    ref: e.ref || '', entries: (e.entries || []).map(l => ({ ...l, amount: parseFloat(l.amount) || 0 })), _serverId: e.id });
+    ref: e.ref || '', entries: (e.entries || []).map(l => ({ ...l, amount: parseFloat(l.amount) || 0 })), _serverId: e.id, entry_no: e.entry_no || null });
 }
 // بعد إنشاء فاتورة آجلة: السيرفر سوّاها من دفعة العميل المقدمة (لو له) — نطابق محليًا
 function _applyServerAdvance(db, inv, srv) {
@@ -4053,7 +4071,7 @@ function showInvoiceModal(inv) {
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
             <span style="color:#64748b;">التاريخ والوقت:</span>
-            <span>${new Date(inv.created_at).toLocaleString('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+            <span>${fmtDatePrint(inv.created_at)} ${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
             <span style="color:#64748b;">العميل:</span>
@@ -4229,7 +4247,7 @@ function printPOSReceipt(id) {
   </div>
   <div class="dashed"></div>
   <div class="row"><span class="muted">رقم الفاتورة:</span><span class="bold">${inv.invoice_no}</span></div>
-  <div class="row"><span class="muted">التاريخ:</span><span>${new Date(inv.created_at).toLocaleDateString('en-US')}</span></div>
+  <div class="row"><span class="muted">التاريخ:</span><span>${fmtDatePrint(inv.created_at)}</span></div>
   <div class="row"><span class="muted">التاريخ الهجري:</span><span>${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</span></div>
   <div class="row"><span class="muted">الوقت:</span><span>${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="row"><span class="muted">العميل:</span><span class="bold">${sanitize(inv.customer_name)}</span></div>
@@ -4248,6 +4266,9 @@ function printPOSReceipt(id) {
   ${inv.discount?`<div class="row" style="color:#dc2626;"><span>الخصم:</span><span>- ${Number(inv.discount).toFixed(2)}</span></div>`:''}
   <div class="row muted"><span>ضريبة القيمة المضافة (15%):</span><span>${Number(inv.vat_total).toFixed(2)}</span></div>
   <div class="total-line"><span>الإجمالي النهائي:</span><span>${Number(inv.grand_total).toFixed(2)}</span></div>
+  ${(()=>{ const rs=invReturns(db,inv); if(!rs.length) return ''; const tot=rs.reduce((t,r)=>t+(Number(r.amount)||0),0);
+    return rs.map(r=>`<div class="row" style="color:#dc2626;"><span>مرتجع ${sanitize(r.return_no||'')}:</span><span>- ${Number(r.amount).toFixed(2)}</span></div>`).join('')
+      + `<div class="row bold"><span>الصافي بعد المرتجع:</span><span>${(Number(inv.grand_total)-tot).toFixed(2)}</span></div>`; })()}
   <div class="dashed"></div>
   <div id="qr-div"></div>
   <div class="center muted" style="font-size:10px;margin-bottom:4px;">امسح رمز QR للتحقق من الفاتورة</div>
@@ -5153,6 +5174,7 @@ function printSalesInvoice(id) {
   // Phase-1 محلي بسيط. هذي الشاشة ما كان فيها أي رمز QR إطلاقًا قبل هذا التعديل
   const qrData = inv.zatca_qr_phase2 || generateZATCAQR(s, inv);
   const _hasRealSig = !!inv.zatca_qr_phase2;
+  const _rets=invReturns(getDB(),inv); const _retTotal=Math.round(_rets.reduce((t,r)=>t+(Number(r.amount)||0),0)*100)/100;
   const win=window.open('','_blank','width=850,height=700');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
@@ -5204,7 +5226,7 @@ function printSalesInvoice(id) {
     })()}</div>
     <div class="info-box">
       <div class="info-label">طريقة الدفع</div><div class="info-val">${inv.payment_method}</div>
-      <div style="margin-top:6px;"><span class="badge ${inv.status==='مسددة'?'badge-paid':'badge-pending'}">${inv.status}</span></div>
+      ${inv.status!==inv.payment_method?`<div style="margin-top:6px;"><span class="badge ${inv.status==='مسددة'?'badge-paid':'badge-pending'}">${inv.status}</span></div>`:''}
     </div>
   </div>
   <table>
@@ -5221,7 +5243,9 @@ function printSalesInvoice(id) {
       ${inv.discount?`<div class="tot-row" style="color:#dc2626;"><span>الخصم:</span><span>−${fmtMoney(inv.discount)}</span></div>`:''}
       <div class="tot-row"><span>ضريبة القيمة المضافة 15%:</span><span>${fmtMoney(inv.vat_total)}</span></div>
       <div class="tot-row tot-final"><span>الإجمالي النهائي:</span><span>${fmtMoney(inv.grand_total)}</span></div>
-      ${inv.paid_amount<inv.grand_total?`<div class="tot-row" style="color:#16a34a;"><span>المسدد:</span><span>${fmtMoney(inv.paid_amount||0)}</span></div>
+      ${_rets.map(r=>`<div class="tot-row" style="color:#dc2626;"><span>مرتجع ${sanitize(r.return_no||'')} (${fmtDatePrint(r.date||r.created_at)}):</span><span>−${fmtMoney(r.amount)}</span></div>`).join('')}
+      ${_rets.length?`<div class="tot-row" style="font-weight:800;"><span>الصافي بعد المرتجع:</span><span>${fmtMoney(inv.grand_total-_retTotal)}</span></div>`:''}
+      ${(_rets.length?invOutstanding(inv)>0.005:inv.paid_amount<inv.grand_total)?`<div class="tot-row" style="color:#16a34a;"><span>المسدد:</span><span>${fmtMoney(inv.paid_amount||0)}</span></div>
       <div class="tot-row" style="color:#dc2626;font-weight:700;"><span>المتبقي:</span><span>${fmtMoney(invOutstanding(inv))}</span></div>`:''}
     </div>
   </div>
@@ -8046,7 +8070,7 @@ function renderTrialBalance(c) {
           <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setTBAsOfDate" />
           ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetTBAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
-          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <b>${fmtDate(new Date())}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
         <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportTrialBalancePDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
@@ -8324,7 +8348,7 @@ function renderZakatReport(c) {
           <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setZakatAsOfDate" />
           ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetZakatAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
-          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <b>${fmtDate(new Date())}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
         <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportZakatReportPDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
@@ -11276,7 +11300,7 @@ function showVoucherModal(type) {
         <div style="font-weight:800;font-size:12px;margin-bottom:8px;">🔗 ${lang==='ar'?'ربط بمشتريات مستحقة (اختياري):':'Link to pending purchase (optional):'}</div>
         <select class="select" id="v-purchase-link" data-onchange="onPurchaseLinkChange">
           <option value="">${lang==='ar'?'— بدون ربط —':'— No link —'}</option>
-          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${sanitize(p.vendor)}" data-party-id="${p.supplier_id||''}">${sanitize(p.vendor)} — ${sanitize(p.description)} — ${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
+          ${pendingPurchases.map(p=>`<option value="${p.id}" data-amount="${p.remaining_amount}" data-party="${sanitize(p.vendor)}" data-party-id="${p.supplier_id||''}">${p.purchase_no?`${sanitize(p.purchase_no)} — `:''}${sanitize(p.vendor)}${p.supplier_ref?` (${lang==='ar'?'مرجع المورد':'Supplier ref'}: ${sanitize(p.supplier_ref)})`:''} — ${sanitize(dl(p.description))} —${lang==='ar'?'المتبقي:':'Remaining:'} ${fmtMoney(p.remaining_amount)}</option>`).join('')}
         </select>
       </div>` : ''}
 
@@ -11427,7 +11451,7 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     : db.suppliers.find(s => s.name === _voucherParty)?.id || null);
   const voucher = {
     id: num, type,
-    voucher_no: `${isReceipt?'RCV':'PAY'}-${String(num).padStart(4,'0')}`,
+    voucher_no: `${isReceipt?'RCV':'PAY'}-${String(nextVoucherSerial(db, isReceipt?'receipt':'payment')).padStart(4,'0')}`,
     party: _voucherParty,
     party_type: isReceipt ? 'customer' : 'supplier',
     party_id: _voucherPartyId,
@@ -12382,12 +12406,22 @@ function deleteReturn(id){
 function renderAgingReport() {
   const db = getDB();
   const now = new Date();
+  const _age = d => { const days = Math.max(0, Math.floor((now-new Date(d))/(1000*60*60*24))); return { days, bucket: days<=30?'0-30':days<=60?'31-60':days<=90?'61-90':'90+' }; };
   const aging = db.invoices.filter(i=>i.status==='آجل'||i.status==='جزئي').map(i=>{
-    const days = Math.floor((now-new Date(i.created_at))/(1000*60*60*24));
-    const bucket = days<=30?'0-30':days<=60?'31-60':days<=90?'61-90':'90+';
-    const outstanding = Math.max(0, Math.round(((i.grand_total||0)-(i.paid_amount||0))*100)/100);
-    return {...i, days, bucket, outstanding};
+    return {...i, ..._age(i.created_at), outstanding: invOutstanding(i)};
   }).filter(i=>i.outstanding>0);
+  // الرصيد الافتتاحي للعميل دين قديم أيضًا — الباقي منه = رصيد العميل ناقص فواتيره
+  // المفتوحة (بحد أقصى الرصيد الافتتاحي)، فأي سند قبض غير مربوط بفاتورة يسدّد الأقدم أولًا
+  const obList = db.settings?.opening_balances_data?.customers || [];
+  const obDate = db.settings?.opening_balances_date || now.toISOString();
+  (db.customers||[]).forEach(c=>{
+    const ob = obList.find(x=>x.id!=null && x.id===c.id) || obList.find(x=>(x.id==null || !db.customers.some(p=>p.id===x.id)) && x.name===c.name);
+    const obBal = Number(ob?.balance)||0;
+    if (obBal <= 0) return;
+    const invOpen = aging.filter(i=>_matchParty(i,'customer_id','customer_name',c)).reduce((s,i)=>s+i.outstanding,0);
+    const left = Math.round(Math.min(obBal, (Number(c.balance)||0) - invOpen)*100)/100;
+    if (left > 0.005) aging.push({ invoice_no: lang==='ar'?'رصيد افتتاحي':'Opening balance', customer_name: c.name, created_at: obDate, ..._age(obDate), outstanding: left, isOpening: true });
+  });
   const buckets = {'0-30':[],'31-60':[],'61-90':[],'90+':[]};
   aging.forEach(i=>buckets[i.bucket].push(i));
 
@@ -12399,13 +12433,13 @@ function renderAgingReport() {
         <div style="background:${b==='0-30'?'#dcfce7':b==='31-60'?'#fef3c7':b==='61-90'?'#fed7aa':'#fee2e2'};padding:14px;border-radius:10px;">
           <div style="font-weight:800;font-size:13px;margin-bottom:6px;">${b} ${lang==='ar'?'يوم':'days'}</div>
           <div style="font-size:20px;font-weight:900;">${fmtMoney(items.reduce((s,i)=>s+i.outstanding,0))}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${items.length} ${lang==='ar'?'فاتورة':'invoices'}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${items.length} ${lang==='ar'?'بند':'items'}</div>
         </div>`).join('')}
     </div>
     ${aging.length>0?`<div class="tbl-wrap"><table class="tbl">
       <thead><tr><th>${t('invoiceNo')}</th><th>${t('customer')}</th><th>${lang==='ar'?'تاريخ الفاتورة':'Invoice Date'}</th><th>${lang==='ar'?'عدد الأيام':'Days'}</th><th>${lang==='ar'?'المتبقي':'Outstanding'}</th></tr></thead>
       <tbody>${aging.sort((a,b)=>b.days-a.days).map(i=>`<tr>
-        <td><b>${i.invoice_no}</b></td><td>${sanitize(i.customer_name)}</td><td>${fmtDate(i.created_at)}</td>
+        <td><b>${sanitize(i.invoice_no)}</b></td><td>${sanitize(i.customer_name)}</td><td>${fmtDate(i.created_at)}${i.isOpening?` <span style="font-size:11px;color:var(--text-muted);">(${lang==='ar'?'تاريخ إدخال الرصيد':'entry date'})</span>`:''}</td>
         <td><span class="badge ${i.days<=30?'badge-green':i.days<=60?'badge-amber':i.days<=90?'badge-red':'badge-red'}">${i.days} ${lang==='ar'?'يوم':'d'}</span></td>
         <td style="font-weight:800;color:var(--danger);">${fmtMoney(i.outstanding)}</td>
       </tr>`).join('')}</tbody>
@@ -13299,7 +13333,7 @@ function printPartyStatement(partyName){
   <style>body{font-family:'Tajawal',sans-serif;padding:30px;}table{width:100%;border-collapse:collapse;}th{background:#0f766e;color:white;padding:8px;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;}.header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #0f766e;}@media print{body{padding:10px;}}</style>
   </head><body>
   <div class="header"><div><b style="font-size:18px;color:#0f766e;">${sanitize(s.company_name)||'يقظ'}</b>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}</div>
-  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${sanitize(partyName)}</div><div style="font-size:11px;color:#64748b;">${new Date().toLocaleDateString('en-US')}</div></div></div>
+  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${sanitize(partyName)}</div><div style="font-size:11px;color:#64748b;">${fmtDatePrint(new Date())}</div></div></div>
   ${table.outerHTML}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
@@ -14243,17 +14277,18 @@ function reverseManualJournal(id) {
       const db2 = getDB();
       const j2 = (db2.journal || []).find(x => x.id === id);
       if (!j2 || jeReversalOf(db2, j2)) return;
-      const rev = postReversalEntry(db2, j2, `عكس قيد يدوي #${j2.id}: ${j2.description} — السبب: ${reason}`);
+      const jNo = j2.entry_no || `#${j2.id}`;
+      const rev = postReversalEntry(db2, j2, `عكس قيد يدوي ${jNo}: ${j2.description} — السبب: ${reason}`);
       const cashNet = Math.round(rev.entries.filter(e=>String(e.account_code)==='1100')
         .reduce((s,e)=>s+(e.side==='debit'?1:-1)*(Number(e.amount)||0),0)*100)/100;
       if (Math.abs(cashNet) >= 0.01) {
         db2.treasury.balance = Math.round((db2.treasury.balance + cashNet)*100)/100;
         db2.treasury.moves.unshift({ id:nextId(db2,'treasury'), type:cashNet>0?'in':'out', amount:Math.abs(cashNet),
-          description:`عكس قيد يدوي #${j2.id}`, reference:`REV-JE-${j2.id}`, date:new Date().toISOString(),
+          description:`عكس قيد يدوي ${jNo}`, reference:`REV-JE-${j2.id}`, date:new Date().toISOString(),
           method:'نقدي', _manual:true, branch_id:resolveActiveBranchId() });
       }
       saveDB(db2);
-      logActivity('قيود يومية', `عكس قيد يدوي #${j2.id} — السبب: ${reason}`);
+      logActivity('قيود يومية', `عكس قيد يدوي ${jNo} — السبب: ${reason}`);
       showToast(lang==='ar'?'✅ انعكس القيد — سجّل القيد الصحيح الحين':'✅ Entry reversed — now record the correct one');
       closeModal(); renderPage();
     }));
@@ -14281,7 +14316,7 @@ function renderJournal(c) {
         <tbody>${entries.length===0
           ?`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">${lang==='ar'?'لا توجد قيود':'No journal entries'}</td></tr>`
           :entries.flatMap(e=>e.entries.map((row,i)=>`<tr style="${i===0?'border-top:2px solid var(--border-strong)':''}">
-            ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${e.id}</td>
+            ${i===0?`<td rowspan="${e.entries.length}" style="font-weight:800;color:var(--primary);vertical-align:top;">${sanitize(e.entry_no||e.id)}</td>
             <td rowspan="${e.entries.length}" style="font-size:11px;vertical-align:top;">${fmtDate(e.date)}</td>
             <td rowspan="${e.entries.length}" style="font-size:12px;vertical-align:top;">${sanitize(dl(e.description))}
               ${jeReversalOf(db, e)?`<div><span class="badge badge-red" style="font-size:10px;">${lang==='ar'?'معكوس':'Reversed'}</span></div>`:''}
@@ -16317,7 +16352,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
   const num = nextReceiptId(db);
   const voucher = {
     id: num, type:'receipt',
-    voucher_no: `RCV-${String(num).padStart(4,'0')}`,
+    voucher_no: `RCV-${String(nextVoucherSerial(db,'receipt')).padStart(4,'0')}`,
     party: inv.customer_name,
     amount,
     description: `سداد فاتورة ${inv.invoice_no}`,
@@ -16429,7 +16464,7 @@ function saveQuickPayPurchase(purchaseId) {
   const num = nextReceiptId(db);
   const voucher = {
     id: num, type:'payment',
-    voucher_no: `PAY-${String(num).padStart(4,'0')}`,
+    voucher_no: `PAY-${String(nextVoucherSerial(db,'payment')).padStart(4,'0')}`,
     party: p.vendor,
     amount,
     description: `سداد مشتريات ${p.invoice_no||'#'+p.id}`,
@@ -20559,6 +20594,9 @@ async function runAISearchQuery(q) {
       if (journalRes?.data?.length) {
         db.journal = db.journal || [];
         const _knownJIds = new Set(db.journal.map(j => j._serverId).filter(Boolean));
+        // رقم القيد الحقيقي (JE-...) للقيود المعروفة محليًا قبل ما يصير السيرفر يرجّعه
+        const _jNoById = new Map(journalRes.data.map(row => [row.id, row.entry_no]));
+        db.journal.forEach(j => { if (j._serverId && !j.entry_no && _jNoById.get(j._serverId)) j.entry_no = _jNoById.get(j._serverId); });
         const _jFromServer = journalRes.data
           .filter(row => !_knownJIds.has(row.id))
           .map(row => ({
@@ -20568,6 +20606,7 @@ async function runAISearchQuery(q) {
             date: row.date,
             entries: row.entries || [],
             _serverId: row.id,
+            entry_no: row.entry_no || null,
           }));
         if (_jFromServer.length) {
           db.journal = [..._jFromServer, ...db.journal]
@@ -21686,9 +21725,9 @@ async function runAISearchQuery(q) {
           try {
             const _db = getDB();
             const _je = (_db.journal || []).find(x => x.id === j.id);
-            if (_je) { _je._serverId = res.data.id; _origSaveDB(_db); }
+            if (_je) { _je._serverId = res.data.id; _je.entry_no = res.data.entry_no || null; _origSaveDB(_db); }
             const _sje = (_snap?.journal || []).find(x => x.id === j.id);
-            if (_sje) _sje._serverId = res.data.id;
+            if (_sje) { _sje._serverId = res.data.id; _sje.entry_no = res.data.entry_no || null; }
           } catch (e) { /* ignore */ }
         } else {
           _revertSnapEntity('journal', j.id, null);
