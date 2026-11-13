@@ -4067,7 +4067,7 @@ function showInvoiceModal(inv) {
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
             <span style="color:#64748b;">التاريخ والوقت:</span>
-            <span>${new Date(inv.created_at).toLocaleString('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+            <span>${localDateStr(inv.created_at)} ${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;">
             <span style="color:#64748b;">العميل:</span>
@@ -4243,7 +4243,7 @@ function printPOSReceipt(id) {
   </div>
   <div class="dashed"></div>
   <div class="row"><span class="muted">رقم الفاتورة:</span><span class="bold">${inv.invoice_no}</span></div>
-  <div class="row"><span class="muted">التاريخ:</span><span>${new Date(inv.created_at).toLocaleDateString('en-US')}</span></div>
+  <div class="row"><span class="muted">التاريخ:</span><span>${localDateStr(inv.created_at)}</span></div>
   <div class="row"><span class="muted">التاريخ الهجري:</span><span>${new Date(inv.created_at).toLocaleDateString('ar-SA-u-ca-islamic-nu-latn',{year:'numeric',month:'long',day:'numeric'})}</span></div>
   <div class="row"><span class="muted">الوقت:</span><span>${new Date(inv.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span></div>
   <div class="row"><span class="muted">العميل:</span><span class="bold">${sanitize(inv.customer_name)}</span></div>
@@ -5239,7 +5239,7 @@ function printSalesInvoice(id) {
       ${inv.discount?`<div class="tot-row" style="color:#dc2626;"><span>الخصم:</span><span>−${fmtMoney(inv.discount)}</span></div>`:''}
       <div class="tot-row"><span>ضريبة القيمة المضافة 15%:</span><span>${fmtMoney(inv.vat_total)}</span></div>
       <div class="tot-row tot-final"><span>الإجمالي النهائي:</span><span>${fmtMoney(inv.grand_total)}</span></div>
-      ${_rets.map(r=>`<div class="tot-row" style="color:#dc2626;"><span>مرتجع ${sanitize(r.return_no||'')} (${new Date(r.date||r.created_at).toLocaleDateString('en-US')}):</span><span>−${fmtMoney(r.amount)}</span></div>`).join('')}
+      ${_rets.map(r=>`<div class="tot-row" style="color:#dc2626;"><span>مرتجع ${sanitize(r.return_no||'')} (${localDateStr(r.date||r.created_at)}):</span><span>−${fmtMoney(r.amount)}</span></div>`).join('')}
       ${_rets.length?`<div class="tot-row" style="font-weight:800;"><span>الصافي بعد المرتجع:</span><span>${fmtMoney(inv.grand_total-_retTotal)}</span></div>`:''}
       ${(_rets.length?invOutstanding(inv)>0.005:inv.paid_amount<inv.grand_total)?`<div class="tot-row" style="color:#16a34a;"><span>المسدد:</span><span>${fmtMoney(inv.paid_amount||0)}</span></div>
       <div class="tot-row" style="color:#dc2626;font-weight:700;"><span>المتبقي:</span><span>${fmtMoney(invOutstanding(inv))}</span></div>`:''}
@@ -8066,7 +8066,7 @@ function renderTrialBalance(c) {
           <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setTBAsOfDate" />
           ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetTBAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
-          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <b>${localDateStr(new Date())}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
         <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportTrialBalancePDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
@@ -8344,7 +8344,7 @@ function renderZakatReport(c) {
           <input type="date" class="input" style="width:160px;" value="${asOf}" data-onchange="setZakatAsOfDate" />
           ${!isToday?`<button class="btn btn-sm btn-outline" data-action="resetZakatAsOfDate">${lang==='ar'?'اليوم':'Today'}</button>`:''}
         `:`
-          <b>${new Date().toLocaleDateString('en-US')}</b>
+          <b>${localDateStr(new Date())}</b>
           <span style="font-size:11px;color:var(--text-muted);">🔒 ${lang==='ar'?'رجّع التاريخ لأي يوم سابق متاح بباقة النمو والاحترافية':'Viewing a past date is available on Growth & Pro'}</span>
         `}
         <button class="btn btn-outline btn-sm" style="margin-inline-start:auto;" data-action="exportZakatReportPDF">${icon('file-text',14)} ${lang==='ar'?'تصدير PDF':'Export PDF'}</button>
@@ -13329,7 +13329,7 @@ function printPartyStatement(partyName){
   <style>body{font-family:'Tajawal',sans-serif;padding:30px;}table{width:100%;border-collapse:collapse;}th{background:#0f766e;color:white;padding:8px;}td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;}.header{display:flex;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #0f766e;}@media print{body{padding:10px;}}</style>
   </head><body>
   <div class="header"><div><b style="font-size:18px;color:#0f766e;">${sanitize(s.company_name)||'يقظ'}</b>${s.vat_number?`<div style="font-size:11px;color:#64748b;">الرقم الضريبي: ${sanitize(s.vat_number)}</div>`:''}</div>
-  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${sanitize(partyName)}</div><div style="font-size:11px;color:#64748b;">${new Date().toLocaleDateString('en-US')}</div></div></div>
+  <div style="text-align:end;"><b style="font-size:16px;">كشف حساب</b><div style="font-size:13px;">${sanitize(partyName)}</div><div style="font-size:11px;color:#64748b;">${localDateStr(new Date())}</div></div></div>
   ${table.outerHTML}
   <script>window.onload=()=>{window.print();}<\/script></body></html>`);
   win.document.close();
