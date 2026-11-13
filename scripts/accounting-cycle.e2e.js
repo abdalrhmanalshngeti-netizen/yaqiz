@@ -75,10 +75,11 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   await page.goto('http://localhost:3000/');
   const sfx = Date.now().toString().slice(-6);
   const VAT = '3' + sfx + '12345673';
-  await page.evaluate(async ({ sfx }) => {
+  await page.evaluate(async ({ sfx, uiLang }) => {
     const r = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: 'دورة محاسبية ' + sfx, username: 'cyc' + sfx, password: 'Cycle@1234', full_name: 'مدقق الدورة', contact_phone: '0551234567', plan: 'pro', vat_registered: true }) });
     const d = await r.json(); localStorage.setItem('yaqiz_access_token', d.accessToken); localStorage.setItem('yaqiz_refresh_token', d.refreshToken);
-  }, { sfx });
+    localStorage.setItem('yaqiz_lang', uiLang);
+  }, { sfx, uiLang: process.env.E2E_LANG || 'ar' });
   await page.goto('http://localhost:3000/VVIP.html');
   await page.waitForSelector('.qs-shell', { timeout: 20000 });
   await page.evaluate((VAT) => {
@@ -622,6 +623,21 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   console.log('    final app groups:', JSON.stringify(fin.g));
 
   // ══ محتوى الفواتير المطبوعة ══
+  console.log('\n▶ Session token expires while the app is open');
+  {
+    // نخرّب توكن الدخول (كأن صلاحيته انتهت) ونطلق السحب الكامل (~20 طلب سوا): التجديد يصير
+    // مرة وحدة والكل يكمل — كان كل طلب يجدد بنفسه، والتجديد الثاني يفشل فيُطلَع المستخدم
+    await page.waitForTimeout(11000);
+    const r = await page.evaluate(async () => {
+      const rtBefore = localStorage.getItem('yaqiz_refresh_token');
+      localStorage.setItem('yaqiz_access_token', 'expired.token.value');
+      window._pullIfStale?.();
+      await new Promise(res => setTimeout(res, 6000));
+      return { user: !!currentUser, token: localStorage.getItem('yaqiz_access_token') !== 'expired.token.value', rotated: localStorage.getItem('yaqiz_refresh_token') !== rtBefore };
+    });
+    ok(r.user && r.token && r.rotated, 'expired access token renewed once; still logged in → ' + JSON.stringify(r));
+  }
+
   console.log('\n▶ VAT return — Excel export');
   {
     // نعترض الكتابة ونقرأ المصنف نفسه بالمتصفح (نفس مكتبة التصدير)
@@ -632,8 +648,8 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
       if (!wb) return null;
       const rows = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1 });
       const sum = rows(wb.SheetNames[0]);
-      const val = k => (sum.find(r => String(r[0]).startsWith(k)) || [])[1];
-      return { names: wb.SheetNames, out: val('ضريبة المخرجات'), inp: val('ضريبة المدخلات'), docOut: val('مطابقة: ضريبة المبيعات'),
+      const val = i => (sum[i] || [])[1];
+      return { names: wb.SheetNames, out: val(6), inp: val(7), docOut: val(10),
         sales: rows(wb.SheetNames[1]), purch: rows(wb.SheetNames[3]), invCount: getDB().invoices.filter(i => i.status !== 'ملغاة').length };
     });
     ok(!!xl && xl.names.length === 5, 'Excel has 5 sheets → ' + (xl && xl.names.join(' | ')));
@@ -675,10 +691,11 @@ const ok = (c, m) => { if (c) passes++; else fails++; console.log((c ? '  ✓ ' 
   console.log('\n▶ 25b. Reopen ' + year + ' → closing entry reversed, not deleted');
   const cpId = (await q(`select id from closed_periods where company_id=$1 and period_type='year' and period_key=$2`, [cid, year]))[0]?.id;
   // الشهر مقفل أيضًا — يُفتح أولًا (السنة ما تنفتح وشهر بداخلها مقفل؟ لا شرط) ثم السنة
-  await page.evaluate(async id => {
+  await page.evaluate(async ({ id, y }) => {
     await window._cloudApiFetch('DELETE', '/api/closed-periods/' + id);
-    const d = getDB(); d.closed_periods = (d.closed_periods || []).filter(x => String(x.id) !== String(id)); saveDB(d); // نفس ما تسويه شاشة فتح الفترة
-  }, cpId);
+    // بالفترة نفسها لا بالمعرّف: النسخة المسحوبة من السيرفر معرّفها «srv-…»
+    const d = getDB(); d.closed_periods = (d.closed_periods || []).filter(x => !(x.period_type === 'year' && x.period_key === y)); saveDB(d); // نفس ما تسويه شاشة فتح الفترة
+  }, { id: cpId, y: year });
   await page.waitForTimeout(1500);
   const ce = await q(`select source_type, count(*)::int n from journal_entries where company_id=$1 and source_type in ('period_close','period_close_reversal') group by 1 order by 1`);
   ok(JSON.stringify(ce) === JSON.stringify([{ source_type: 'period_close', n: 1 }, { source_type: 'period_close_reversal', n: 1 }]), 'closing entry kept + one reversing entry → ' + JSON.stringify(ce));

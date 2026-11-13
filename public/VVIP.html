@@ -3878,7 +3878,7 @@ async function doCheckout() {
 
   // فاتورة مبدئية — بلا أي تعديل على db بعد — تُستخدم فقط لبناء طلب السيرفر
   const draftInv = {
-    customer_name:posCustomer||t('cashCustomer'), customer_vat:'',
+    customer_name:canonParty(posCustomer)||'عميل نقدي', customer_vat:'',
     items:cart.map(i=>({id:i.id,name:i.name,code:i.code||'',qty:i.qty,price:i.price,line_total:i.qty*i.price})),
     subtotal:afterDisc, discount:disc, vat_total:vat, grand_total:total,
     payment_method:posPayment, invoice_type:'simplified',
@@ -3974,7 +3974,7 @@ async function doCheckout() {
   // update shift stats
   if(currentUser?.shift_enabled) updateShiftOnSale(inv);
   // loyalty points
-  if(inv.customer_name && inv.customer_name!==t('cashCustomer')) addLoyaltyPoints(inv.customer_name, inv.subtotal, inv.customer_id);
+  if(inv.customer_name && inv.customer_name!=='عميل نقدي') addLoyaltyPoints(inv.customer_name, inv.subtotal, inv.customer_id);
   logActivity('مبيعات POS',`${inv.invoice_no} — ${inv.customer_name} — ${fmtMoney(total)}`);
   yq('Track', 'sale_completed', { items: cart.length, payment: posPayment, first_sale: db.invoices.length===1 });
   // لو تخطّى الإعداد السريع، الاقتراح يجي مع أول بيعة (مرة وحدة لكل شركة)
@@ -6011,7 +6011,7 @@ function _saveGoodsPurchaseActual(overrideToken) {
     id:nextId(db,'purchase'),
     vendor: _vendorName,
     supplier_id: _vendorRec?.id || null,
-    description: _goodsItems.map(i=>i.name).join('، ') || (lang==='ar'?'فاتورة بضاعة':'Goods Invoice'),
+    description: _goodsItems.map(i=>i.name).join('، ') || 'فاتورة بضاعة',
     category:'بضاعة', purchase_type:'goods',
     items:[..._goodsItems].map(i=>({...i, stocked:false})),
     amount:sub, vat, total,
@@ -6262,7 +6262,7 @@ function saveMissingProducts() {
       id: nextId(db, 'product'),
       code,
       name: item.name,
-      category: lang==='ar'?'بضاعة':'Goods',
+      category: 'بضاعة',
       buy_price: item.price || 0,
       sell_price: sellPrice,
       qty: item.qty,
@@ -7268,7 +7268,7 @@ function saveTreasuryMove(type) {
   if(!db.nextId.journal)db.nextId.journal=1;
   db.journal.push({
     id:db.nextId.journal++, date:new Date().toISOString(),
-    description:`${type==='in'?(lang==='ar'?'إيداع خزينة':'Treasury Deposit'):(lang==='ar'?'صرف خزينة':'Treasury Withdrawal')}: ${el('tr-desc').value}`,
+    description:`${type==='in'?'إيداع خزينة':'صرف خزينة'}: ${el('tr-desc').value}`,
     // إيداع/سحب المالك يمس حقوق الملكية لا الأرباح — كان كل إيداع يُقيَّد إيرادًا
     // وكل سحب مصروفًا، فيتضخّم الربح أو المصروف بتمويل المالك ومسحوباته
     entries: type==='in' ? [
@@ -7332,10 +7332,26 @@ const _DESC_EN = [
   ['إعادة فتح السنة','year reopened'], ['اشتراك يقظ — باقة','Yaqiz subscription — plan'],
   ['سند قبض','Receipt'], ['سند صرف','Payment'], ['قيد يدوي','Manual entry'], ['عميل نقدي','Walk-in customer'],
   ['السبب','Reason'], ['محذوف','deleted'], ['ملغى','cancelled'], ['راتب','Salary'], ['عكس','Reverse'],
+  ['فاتورة بضاعة','Goods invoice'], ['إيداع خزينة','Treasury deposit'], ['صرف خزينة','Treasury withdrawal'],
+  ['سداد للمورد','Supplier payment -'], ['سداد فاتورة','Payment for invoice'], ['سداد مشتريات','Purchase payment'], ['— كامل','— full'], ['— جزئي','— partial'],
+  ['زيادة صندوق','Cash overage'], ['عجز صندوق','Cash shortage'], ['صندوق — وردية','cash — shift'], ['صندوق وردية','shift cash'],
 ];
+// الاتجاه المعاكس (نصوص قديمة انحفظت بالإنجليزي من مستخدم بالوضع الإنجليزي قبل توحيد الحفظ)
+const _DESC_AR = [
+  ['Correcting entry — actual FIFO COGS for invoice','قيد تصحيحي — تكلفة بضاعة مباعة فعلية (FIFO) للفاتورة'],
+  ['Treasury Deposit','إيداع خزينة'], ['Treasury Withdrawal','صرف خزينة'],
+  ['Obligation payment full','سداد التزام كامل'], ['Obligation payment partial','سداد التزام جزئي'], ['Obligation payment','سداد التزام'], ['Obligation:','سداد التزام:'],
+  ['Supplier payment -','سداد للمورد'], ['Full payment','سداد كامل'], ['Partial payment','سداد جزئي'], ['Payment for invoice','سداد فاتورة'], ['Purchase payment','سداد مشتريات'],
+  ['Goods Invoice','فاتورة بضاعة'], ['Overage صندوق','زيادة صندوق'], ['Shortage صندوق','عجز صندوق'], ['Cash Customer','عميل نقدي'], ['Walk-in customer','عميل نقدي'],
+  ['— full','— كامل'], ['— partial','— جزئي'],
+];
+const _toAr = str => { let out = str; for (const [en, ar] of _DESC_AR) if (out.includes(en)) out = out.split(en).join(ar); return out; };
+// اسم «العميل النقدي» بأي لغة كُتب → يُحفظ بالعربي
+function canonParty(v) { const t = String(v||'').trim(); return /^(cash customer|walk-in customer|عميل نقدي)$/i.test(t) ? 'عميل نقدي' : t; }
 const _hasAr = v => /[؀-ۿ]/.test(v);
 const dl = v => {
-  if (lang === 'ar' || v == null) return v;
+  if (v == null) return v;
+  if (lang === 'ar') return /[A-Za-z]/.test(String(v)) ? _toAr(String(v)) : v;
   const str = String(v), exact = _DATA_EN[str.trim()];
   if (exact) return exact;
   if (!_hasAr(str)) return v;
@@ -10997,7 +11013,7 @@ function confirmObligationPayment(id, type, amount, method) {
   db.treasury.balance-=amount;
   db.treasury.moves.unshift({
     _pid:_oblPid, id:nextId(db,'treasury'),type:'out',amount,
-    description:`${lang==='ar'?'سداد التزام':'Obligation payment'} ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}: ${o.name}`,
+    description:`سداد التزام ${type==='full'?'كامل':'جزئي'}: ${o.name}`,
     reference:`OBL-${id}`,date:new Date().toISOString(),method,branch_id:resolveActiveBranchId()
   });
 
@@ -11016,7 +11032,7 @@ function confirmObligationPayment(id, type, amount, method) {
   const _oblVat  = _vatOnObligation ? Math.round((amount-_oblBase)*100)/100 : 0;
   db.purchases.push({
     id:_oblPid, _oblUndo,
-    vendor:o.vendor||o.name, description:`${type==='full'?(lang==='ar'?'سداد كامل':'Full payment'):(lang==='ar'?'سداد جزئي':'Partial payment')}: ${o.name}`,
+    vendor:o.vendor||o.name, description:`${type==='full'?'سداد كامل':'سداد جزئي'}: ${o.name}`,
     category:o.category, purchase_type:'opex',
     amount:_oblBase, vat:_oblVat,
     total:amount, payment_method:method, paid_amount:amount,
@@ -11039,7 +11055,7 @@ function confirmObligationPayment(id, type, amount, method) {
   _journalEntries.push({account:'النقدية والخزينة', account_code:'1100', side:'credit', amount});
   db.journal.push({
     id:db.nextId.journal++,date:new Date().toISOString(),
-    description:`${lang==='ar'?'سداد التزام':'Obligation'}: ${o.name} — ${type==='full'?(lang==='ar'?'كامل':'full'):(lang==='ar'?'جزئي':'partial')}`,
+    description:`سداد التزام: ${o.name} — ${type==='full'?'كامل':'جزئي'}`,
     entries:_journalEntries,
     ref:`OBL-${id}`, _pid:_oblPid
   });
@@ -11415,7 +11431,8 @@ function _saveVoucherActual(type, printAfter, num, isReceipt, linkedInvoiceId, l
     party: _voucherParty,
     party_type: isReceipt ? 'customer' : 'supplier',
     party_id: _voucherPartyId,
-    amount, description: el('v-desc').value,
+    // العبارات اللي يعبّيها النموذج بلغة المستخدم تُحفظ بالعربي (لغة الدفاتر) — والعرض يترجمها
+    amount, description: _toAr(el('v-desc').value||''),
     method: el('v-method').value, ref: el('v-ref').value,
     linked_invoice_id: linkedInvoiceId,
     linked_purchase_id: linkedPurchaseId,
@@ -12065,7 +12082,7 @@ function _saveReturnActual(type, amount, linkedId, partyIdVal, overrideToken) {
   // ورّث طريقة الدفع من الفاتورة/الفاتورة المرتبطة إن وُجدت
   const linkedRec = linkedId ? (isSales ? db.invoices.find(i=>i.id===linkedId) : db.purchases.find(p=>p.id===linkedId)) : null;
   const retMethod = linkedRec?.payment_method || null;
-  const _retParty = el('rt-party').value;
+  const _retParty = canonParty(el('rt-party').value);
   // نفس مبدأ السندات: نفضّل معرّف الفاتورة/فاتورة الشراء المرتبطة (أدق، محلولة
   // فعليًا وقت تلك الفاتورة)، ثم المعرّف الملتقَط وقت اختيار الطرف من القائمة
   // (partyIdVal)، وإلا مطابقة بالاسم كخيار احتياطي أخير فقط — بدون partyIdVal
@@ -13590,7 +13607,7 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
       db.treasury.balance = Math.round((db.treasury.balance + cashVariance) * 100) / 100;
       db.treasury.moves.unshift({
         id: nextId(db,'treasury'), type: cashVariance>0?'in':'out', amount: Math.abs(cashVariance),
-        description: `${cashVariance>0?(lang==='ar'?'زيادة':'Overage'):(lang==='ar'?'عجز':'Shortage')} صندوق وردية — ${user.username}`,
+        description: `${cashVariance>0?'زيادة':'عجز'} صندوق وردية — ${user.username}`,
         reference: `SHIFT-${shift._serverId||("L"+shift.id)}`, date: new Date().toISOString(), method:'نقدي',
         branch_id: shift.branch_id || resolveActiveBranchId()
       });
@@ -13598,7 +13615,7 @@ function endShift(user, closingCash, closingCard, closingTransfer) {
       if (!db.nextId.journal) db.nextId.journal = 1;
       db.journal.push({
         id: db.nextId.journal++, date: new Date().toISOString(),
-        description: `${cashVariance>0?(lang==='ar'?'زيادة':'Overage'):(lang==='ar'?'عجز':'Shortage')} صندوق — وردية ${user.username} #${shift.id}`,
+        description: `${cashVariance>0?'زيادة':'عجز'} صندوق — وردية ${user.username} #${shift.id}`,
         entries: cashVariance>0 ? [
           {account:lang==='ar'?'النقدية':'Cash', account_code:'1100', side:'debit', amount:cashVariance},
           {account:lang==='ar'?'إيرادات أخرى':'Other Income', account_code:'4900', side:'credit', amount:cashVariance},
@@ -16303,7 +16320,7 @@ function saveQuickReceipt(invoiceId, printAfter=true) {
     voucher_no: `RCV-${String(num).padStart(4,'0')}`,
     party: inv.customer_name,
     amount,
-    description: lang==='ar'?`سداد فاتورة ${inv.invoice_no}`:`Payment for invoice ${inv.invoice_no}`,
+    description: `سداد فاتورة ${inv.invoice_no}`,
     method: el('qr-method').value,
     ref: inv.invoice_no,
     linked_invoice_id: invoiceId,
@@ -16415,7 +16432,7 @@ function saveQuickPayPurchase(purchaseId) {
     voucher_no: `PAY-${String(num).padStart(4,'0')}`,
     party: p.vendor,
     amount,
-    description: lang==='ar'?`سداد مشتريات ${p.invoice_no||'#'+p.id}`:`Purchase payment ${p.invoice_no||'#'+p.id}`,
+    description: `سداد مشتريات ${p.invoice_no||'#'+p.id}`,
     method: el('qpp-method').value,
     ref: p.invoice_no||'',
     linked_purchase_id: p.id, party_id: p.supplier_id || null,
@@ -19726,7 +19743,7 @@ function reverseSalaryPayment(jid, eid) {
     (reason) => guardClosedPeriod(localDateStr(new Date()), () => {
       const db2 = getDB(); const j2 = (db2.journal || []).find(x => x.id === jid); const e2 = db2.employees.find(x => x.id === eid);
       if (!j2 || jeReversalOf(db2, j2)) return;
-      postReversalEntry(db2, j2, `عكس راتب موظف: ${e2?.name||''} (${fmtDate(j2.date)}) — السبب: ${reason}`);
+      postReversalEntry(db2, j2, `عكس راتب موظف: ${e2?.name||''} (${String(j2.date||'').slice(0,10)}) — السبب: ${reason}`);
       const cash = Math.round((j2.entries || []).filter(x => String(x.account_code) === '1100' && x.side === 'credit').reduce((s, x) => s + (Number(x.amount) || 0), 0) * 100) / 100;
       if (cash > 0) {
         const orig = (db2.treasury.moves || []).find(m => m.reference === j2.ref && m.type === 'out');
@@ -20117,7 +20134,7 @@ async function runAISearchQuery(q) {
         window.close();
         return null;
       }
-      const refreshed = await _tryRefresh();
+      const refreshed = await _tryRefresh() || (localStorage.getItem(TOKEN_KEY) && localStorage.getItem(TOKEN_KEY) !== token);
       if (refreshed) {
         opts.headers['Authorization'] = `Bearer ${localStorage.getItem(TOKEN_KEY)}`;
         res = await fetch(API_BASE + path, opts);
@@ -20131,7 +20148,14 @@ async function runAISearchQuery(q) {
     return res.json();
   }
 
-  async function _tryRefresh() {
+  // تجديد واحد بنفس اللحظة: السحب يطلق ~20 طلب سوا، ولو انتهت صلاحية الدخول كانت كلها تجدد
+  // بنفس توكن التجديد — أولها يدوّره والباقي يفشل فيُطلَع المستخدم رغم نجاح التجديد
+  let _refreshing = null;
+  function _tryRefresh() {
+    if (!_refreshing) _refreshing = _doRefresh().finally(() => { setTimeout(() => { _refreshing = null; }, 0); });
+    return _refreshing;
+  }
+  async function _doRefresh() {
     const rt = localStorage.getItem(REFRESH_KEY);
     if (!rt) return false;
     try {
@@ -21279,7 +21303,7 @@ async function runAISearchQuery(q) {
                     const absDiff = Math.abs(diff);
                     _db3.journal.push({
                       id: _db3.nextId.journal++, date: new Date().toISOString(),
-                      description: `${lang==='ar'?'قيد تصحيحي — تكلفة بضاعة مباعة فعلية (FIFO) للفاتورة':'Correcting entry — actual FIFO COGS for invoice'} ${_iv3.invoice_no}`,
+                      description: `${'قيد تصحيحي — تكلفة بضاعة مباعة فعلية (FIFO) للفاتورة'} ${_iv3.invoice_no}`,
                       entries: diff > 0 ? [
                         {account: lang==='ar'?'تكلفة البضاعة المباعة':'Cost of Goods Sold', account_code:'5100', side:'debit', amount: absDiff},
                         {account: lang==='ar'?'المخزون':'Inventory', account_code:'1300', side:'credit', amount: absDiff},
